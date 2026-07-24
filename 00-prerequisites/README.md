@@ -51,6 +51,7 @@ git clone https://github.com/ishs-cloud-computing/skills-2026.git
 | 4 | 컨테이너/이미지/레지스트리 개념을 안다 | Docker getting-started 2h |
 | 5 | grep/sed/jq, heredoc을 쓸 수 있다 | 셸 원라이너 연습 1h |
 | 6 | Git clone/branch/diff를 쓸 수 있다 | 생략 가능 |
+| 7 | Pod/Deployment/Service 차이를 설명할 수 있다 | k8s-basics.md로 보충 |
 
 Kubernetes·Terraform·eksctl은 선수 지식 아님 — PART 1~2에서 배운다.
 
@@ -73,3 +74,4 @@ Kubernetes·Terraform·eksctl은 선수 지식 아님 — PART 1~2에서 배운�
 | [docker-basics.md](docker-basics.md) | 4 | CloudShell 빌드·ECR, PART-1 모듈 03 |
 | [shell-basics.md](shell-basics.md) | 5 | 30% 변동 드릴, PART-5 모듈 11 |
 | [awscli-basics.md](awscli-basics.md) | 3 | mark.sh 채점 역추적 |
+| [k8s-basics.md](k8s-basics.md) | 7 (권장) | PART-2 모듈 05 k8s 워크로드 |

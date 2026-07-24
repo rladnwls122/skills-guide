@@ -59,6 +59,7 @@
 
 ## reference/
 
+- [ai-study-guide.md](reference/ai-study-guide.md) — 학습 중 AI(Claude·Gemini)에게 묻는 법 (질문 공식·패턴 5종·의존 방지)
 - [cheatsheet.md](reference/cheatsheet.md) — kubectl·eksctl·helm·aws·terraform 명령 치트시트
 - [cleanup-check.md](reference/cleanup-check.md) — destroy 후 잔존 리소스 점검 (매일 종료 루틴)
 - [troubleshooting.md](reference/troubleshooting.md) — 증상→원인→확인 명령 플레이북

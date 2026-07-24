@@ -20,14 +20,14 @@
 
 ## 학습 로드맵 (14일)
 
-| PART | 모듈 | 일차 | 주제 | 종료 조건 |
-|---|---|---|---|---|
-| [0](00-prerequisites/) | 00 | D0 | 계정·도구·비용 가드레일·자가진단 | 자가진단 통과 |
-| [1](PART-1-Foundation-IaC/) | 01–03 | D1~3 | Terraform·VPC·KMS·S3/CF·컨테이너·Lambda·DynamoDB | 미니 스택 배포 |
-| [2](PART-2-EKS-Core/) | 04–06 | D4~7 | eksctl·k8s·LBC·CloudFront 심화 → **set-02 1과제 완주** | mark.sh 80%+ |
-| [3](PART-3-Observability-HardMode/) | 07–08 | D8~9 | 관측성·fully-private EKS·IAM 심화 | No Data 0개 + 부분 재현 |
-| [4](PART-4-Task2-Patterns/) | 09–10 | D10~11 | 2과제 5유형 패턴 | 유형별 1회 배포 |
-| [5](PART-5-Battle-Drills/) | 11–13 | D12~14 | 변동 드릴·파괴/복구·모의 대회 | 모의 대회 90%+ |
+| PART                                | 모듈    | 일차     | 주제                                               | 종료 조건              |
+| ----------------------------------- | ----- | ------ | ------------------------------------------------ | ------------------ |
+| [0](00-prerequisites/)              | 00    | D0     | 계정·도구·비용 가드레일·자가진단                               | 자가진단 통과            |
+| [1](PART-1-Foundation-IaC/)         | 01–03 | D1~3   | Terraform·VPC·KMS·S3/CF·컨테이너·Lambda·DynamoDB     | 미니 스택 배포           |
+| [2](PART-2-EKS-Core/)               | 04–06 | D4~7   | eksctl·k8s·LBC·CloudFront 심화 → **set-02 1과제 완주** | mark.sh 80%+       |
+| [3](PART-3-Observability-HardMode/) | 07–08 | D8~9   | 관측성·fully-private EKS·IAM 심화                     | No Data 0개 + 부분 재현 |
+| [4](PART-4-Task2-Patterns/)         | 09–10 | D10~11 | 2과제 5유형 패턴                                       | 유형별 1회 배포          |
+| [5](PART-5-Battle-Drills/)          | 11–13 | D12~14 | 변동 드릴·파괴/복구·모의 대회                                | 모의 대회 90%+         |
 
 하루 8~10h 기준: 이론 2h + 실습 6~7h + 회고·정리 1h(고정).
 
@@ -57,6 +57,8 @@
 
 ## reference/
 
+- [cheatsheet.md](reference/cheatsheet.md) — kubectl·eksctl·helm·aws·terraform 명령 치트시트
+- [cleanup-check.md](reference/cleanup-check.md) — destroy 후 잔존 리소스 점검 (매일 종료 루틴)
 - [troubleshooting.md](reference/troubleshooting.md) — 증상→원인→확인 명령 플레이북
 - [mark-script-guide.md](reference/mark-script-guide.md) — 채점 스크립트 읽는 법·판단 원칙
 - [timings.md](reference/timings.md) — 리소스별 소요 시간 (긴 것부터 던지는 순서)

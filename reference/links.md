@@ -25,3 +25,18 @@
 | 13 | `set-07/task-2/` docs `setlist/set-07/task-2/*` | 모의 대회 대체 세트 |
 
 문서 사이트(Astro Starlight): `skills-2026/docs/` — set-03·set-06·set-07 task-2에 notes/runbook 상세.
+
+## 공식 문서 (대회장에서 AI 대신 여는 곳)
+
+대회장은 AI 불가·공식 문서 허용. 문서에 없는 요구는 결국 여기서 찾는다 —
+연습 때부터 검색이 아니라 **문서 구조로** 찾는 습관을 들일 것.
+
+- EKS User Guide: https://docs.aws.amazon.com/eks/latest/userguide/
+- eksctl (ClusterConfig 스키마): https://eksctl.io/usage/schema/
+- kubectl Quick Reference: https://kubernetes.io/docs/reference/kubectl/quick-reference/
+- AWS Load Balancer Controller (annotation 목록): https://kubernetes-sigs.github.io/aws-load-balancer-controller/
+- CloudFront Developer Guide: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/
+- Terraform AWS Provider: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
+- Karpenter: https://karpenter.sh/docs/
+- KEDA Scalers: https://keda.sh/docs/latest/scalers/
+- Fluent Bit: https://docs.fluentbit.io/manual

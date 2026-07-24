@@ -29,9 +29,18 @@ PowerShell 함정 미리 각인: `curl`은 Invoke-WebRequest 별칭 → 항상 `
 
 ## 3. 비용 가드레일
 
-- AWS Budgets 월 $50 알람 생성 (콘솔 5분).
+- AWS Budgets 월 $50 알람 생성 (콘솔 5분, 또는 아래 CLI 한 방):
+
+  ```bash
+  ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+  aws budgets create-budget --account-id "$ACCOUNT_ID" \
+    --budget '{"BudgetName":"skills-guide-budget","BudgetLimit":{"Amount":"50","Unit":"USD"},"TimeUnit":"MONTHLY","BudgetType":"COST"}' \
+    --notifications-with-subscribers '[{"Notification":{"NotificationType":"ACTUAL","ComparisonOperator":"GREATER_THAN","Threshold":80,"ThresholdType":"PERCENTAGE"},"Subscribers":[{"SubscriptionType":"EMAIL","Address":"본인이메일@example.com"}]}]'
+  ```
 - 시간당 과금 목록 암기: **NAT GW, EKS 클러스터($0.1/h), MSK, ALB, EC2**.
 - 원칙: 모듈 종료 = destroy. 예외는 모듈 README에 명시된 날만 (D4→D5 클러스터 유지).
+- destroy 후 잔존 리소스 일괄 점검: [reference/cleanup-check.md](../reference/cleanup-check.md)
+  블록을 매일 학습 종료 시 실행 — 빈 출력이어야 그날이 끝난 것.
 
 ## 4. 저장소 클론
 

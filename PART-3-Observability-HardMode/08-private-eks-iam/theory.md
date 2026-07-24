@@ -1,5 +1,7 @@
 # 08. 이론 — Fully-Private EKS 운용과 IAM 심화
 
+> 문서 유형: explanation
+
 이 모듈은 "네트워크가 닫힌 클러스터를 어떻게 만들고·접근하고·채점받는가"와 "IAM 정책이 실제로 어떻게 평가되는가"를 다룬다. 둘 다 실측 함정이 많은 하드모드 영역이다.
 
 ---
@@ -72,7 +74,7 @@ private 클러스터 과제에서 역할별로 실행 위치를 나누는 운영
 
 ### ② 왜 (채점 관점)
 
-- 채점 스크립트 자체가 VPC 내부 셸에서 돈다(mark-sg → cp-extra SG 443 허용).
+- mark 스크립트 자체가 VPC 내부 셸에서 돈다(mark-sg → cp-extra SG 443 허용).
 - **생성자 신원 = 채점 신원 원칙**: `bootstrapClusterCreatorAdminPermissions: true`로 클러스터 생성자는 자동 admin. terraform/eksctl/채점을 같은 IAM 신원으로 실행하면 access entry 추가가 불필요하고, root-less KMS 키 정책(배포자 신원에만 CreateGrant 허용 — 모듈 02)과도 정합된다. 신원이 다르면 `create-access-entry` + `associate-access-policy`(ClusterAdmin)로 보정.
 
 ### ③ 원리
@@ -89,7 +91,9 @@ flowchart LR
 - tfstate·`.terraform/`은 절대 릴레이에 올리지 않는다 — `terraform output -json > outputs.json`만 넘겨 jq로 읽는다.
 - set-07 변형: CloudShell 대신 **SSM bastion**(private 서브넷 EC2, 인바운드 0, 프로파일은 SSM 전용) — 30분 타임아웃·비영속을 피한다. 단 bastion은 **채점 전 삭제**(인스턴스+프로파일+role까지).
 
-### ④ 세트별 차이: set-03 = VPC CloudShell, set-07 = bastion(+ fallback으로 채점용 CloudShell 겸용).
+### ④ 세트별 차이
+
+set-03 = VPC CloudShell, set-07 = bastion(+ fallback으로 채점용 CloudShell 겸용).
 
 ---
 
@@ -117,7 +121,9 @@ flowchart TD
 - **coredns addon을 업데이트하면 Corefile이 초기화**될 수 있다 → 업데이트 금지, 했다면 패치 재적용 후 grep 재확인.
 - kps의 Alertmanager도 `clusterDomain` 설정이 있어 함께 맞춘다(모듈 07 연계).
 
-### ④ 세트별 차이: 도메인 문자열만 다르다. 커스텀 도메인 요구가 없는 세트는 건드리지 않는다.
+### ④ 세트별 차이
+
+도메인 문자열만 다르다. 커스텀 도메인 요구가 없는 세트는 건드리지 않는다.
 
 ---
 
@@ -148,7 +154,9 @@ flowchart TD
 - **요구 목록 외 권한 추가는 수동 채점 리스크**: 테이블이 CMK 암호화라 조회에 `kms:Decrypt`가 실제로 필요하지만, 요구 목록에 없는 액션 추가는 "최소권한 위반"으로 읽힐 수 있다. 넣는다면 리소스를 해당 키 ARN 하나로 못박고 sid로 사유를 명시한다.
 - **root-less KMS 재확인(모듈 02 연계)**: 유의사항에 root/`kms:*` 금지가 있는 세트(set-03)는 키 정책을 배포자 신원(`aws_iam_session_context`) + 서비스별 최소 statement로 구성 — root 자격증명으로는 plan 단계부터 차단된다. 대회 지급 계정이 root면 **step 0에서 IAM 사용자를 만들어 전 과정을 그 신원으로** 실행한다.
 
-### ④ 세트별 차이: set-07만 audit role이 명시 요구. set-03은 대신 root-less KMS가 하드 포인트.
+### ④ 세트별 차이
+
+set-07만 audit role이 명시 요구. set-03은 대신 root-less KMS가 하드 포인트.
 
 ---
 
@@ -175,7 +183,9 @@ flowchart LR
 
 - ALB SG 인바운드를 `com.amazonaws.global.cloudfront.origin-facing` **managed prefix list**로만 열면 직접 접근은 차단된다 — 채점 기대값이 403 또는 000(타임아웃/연결 불가)인 이유. 000 유도는 prefix list SG로 달성한다.
 
-### ④ 세트별 차이: set-03은 internet-facing ALB + CloudFront prefix list SG(직접 curl 000), set-07은 internal ALB + VPC Origin. 모듈 02·06의 CloudFront 내용과 교차 확인.
+### ④ 세트별 차이
+
+set-03은 internet-facing ALB + CloudFront prefix list SG(직접 curl 000), set-07은 internal ALB + VPC Origin. 모듈 02·06의 CloudFront 내용과 교차 확인.
 
 ---
 

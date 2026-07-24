@@ -1,5 +1,7 @@
 # 01. Terraform 문법 + VPC (Day 1)
 
+> 문서 유형: 개요
+
 ## 학습 목표
 
 - [ ] provider / variable / tfvars / output / data source / locals / `for_each` / `aws_iam_policy_document` 문법을 남의 코드 없이 직접 쓸 수 있다

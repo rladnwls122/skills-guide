@@ -1,5 +1,7 @@
 # 02. KMS + S3 + CloudFront (Day 2)
 
+> 문서 유형: 개요
+
 ## 학습 목표
 
 - [ ] CMK 키 정책 구조(admin 액션 vs use 액션 분리)와 envelope encryption 을 설명할 수 있다

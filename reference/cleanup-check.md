@@ -1,5 +1,7 @@
 # destroy 검증 — 잔존 리소스 점검
 
+> 문서 유형: reference
+
 `terraform destroy`·`eksctl delete cluster`가 끝나도 **과금은 끝나지 않았을 수 있다.**
 매일 학습 종료 시 아래 블록을 통째로 실행하고, 출력이 비어 있어야 그날이 끝난 것이다.
 

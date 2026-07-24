@@ -1,5 +1,7 @@
 # 05. 이론 — k8s 워크로드와 ALB 연동
 
+> 문서 유형: explanation
+
 > 교재 원본: `skills-2026/set-02/task-1/k8s/app/*`, `terraform/alb.tf`
 
 ---

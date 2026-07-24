@@ -1,12 +1,14 @@
 # 01. Terraform 문법 + VPC — 실습
 
+> 문서 유형: tutorial
+
 **방식**: 정답지를 보지 않고 백지에서 tf 코드를 쓴다 → apply·검증 → 마지막에 `skills-2026` 정답과 diff 해서 설계 차이를 복기한다.
 
 ## 실습 목표
 
 - [ ] set-02 VPC 스펙을 변수화된 tf 코드로 직접 작성 (vpc/subnet/igw/nat/rtb)
 - [ ] `terraform fmt` / `validate` / `plan` / `apply` 사이클을 몸에 붙이기
-- [ ] AWS CLI 로 RTB↔서브넷 매핑을 직접 검증 (채점 스크립트와 같은 방식)
+- [ ] AWS CLI 로 RTB↔서브넷 매핑을 직접 검증 (채점 스크립트 mark.sh와 같은 방식)
 - [ ] output → outputs.json → .env 영속화
 - [ ] 당일 destroy 로 NAT 과금 차단
 
@@ -52,7 +54,7 @@ terraform apply
 
 기대: `Apply complete! Resources: 20 added` (NAT 생성으로 2~3분 소요).
 
-### 3) 검증 — 채점 스크립트가 보는 방식으로
+### 3) 검증 — mark.sh가 보는 방식으로
 
 ```powershell
 $env:VPC_ID = terraform output -raw vpc_id
@@ -114,7 +116,7 @@ diff 에서 확인할 관점 (기능이 같아도 설계 차이를 본다):
 | NAT 에 `depends_on = [aws_internet_gateway.this]` 누락 | 간헐적 생성 실패 (IGW 없는 상태에서 NAT 프로비저닝) |
 | for_each 에 list 직접 전달 | `The given "for_each" argument value is unsuitable` — `toset()` 필요 |
 | Name 태그 오타 | 이름 정확 일치 채점 항목 전부 실패. 변수 default 를 과제지에서 복사해 넣기 |
-| 리전 미변수화 / 오리전 apply | 채점 스크립트가 리소스를 못 찾음 — 전 항목 0점 |
+| 리전 미변수화 / 오리전 apply | mark.sh가 리소스를 못 찾음 — 전 항목 0점 |
 
 ## 통과 기준 (mark 항목 연결)
 

@@ -1,5 +1,7 @@
 # 08. Fully-Private EKS + IAM 심화
 
+> 문서 유형: 개요
+
 ## 학습 목표
 
 - [ ] fully-private EKS의 생성 메커니즘(생성 중 퍼블릭 엔드포인트 임시 on → 완료 시 off)과 중단 시 잔존 위험을 설명할 수 있다

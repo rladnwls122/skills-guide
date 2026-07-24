@@ -1,5 +1,7 @@
 # 08. 실습 — Audit Role 이중 평가 재현 + Private EKS 드릴
 
+> 문서 유형: tutorial
+
 실습 A는 IAM만 사용(무료, 클러스터 불필요) — 반드시 수행.
 실습 B는 PART-2 클러스터가 떠 있을 때 수행하는 private 운용 드릴.
 

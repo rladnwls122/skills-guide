@@ -1,5 +1,7 @@
 # 04. eksctl 클러스터 — ClusterConfig 완전 정복
 
+> 문서 유형: 개요
+
 ## 학습 목표
 
 - [ ] eksctl ClusterConfig의 5대 블록(metadata / vpc / iam / managedNodeGroups / addons)을 백지에 쓸 수 있다

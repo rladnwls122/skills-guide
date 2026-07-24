@@ -1,22 +1,24 @@
 # 파괴/복구 이론 — 진단 방법론
 
+> 문서 유형: explanation
+
 이 PART는 적용이 전부다. 원칙만 짧게.
 
-## 원칙 1: 추측으로 고치지 않는다
+## 원칙 1 — 추측으로 고치지 않는다
 
 증상을 보면 손이 먼저 나간다 — 그게 시간을 태운다. **증상 → 1순위 확인 명령 → 출력 해석 → 조치.** 확인 명령이 원인을 말해주기 전에는 아무것도 바꾸지 않는다. [../../reference/troubleshooting.md](../../reference/troubleshooting.md)의 표가 그 순서 그대로다.
 
-## 원칙 2: 경로를 분리해서 진단한다
+## 원칙 2 — 경로를 분리해서 진단한다
 
 CloudFront 403처럼 다층 경로의 오류는 **오리진 직접 curl로 계층을 분리**한다: S3 presign / ALB 직접 / Function URL 직접. 어느 계층에서 처음 깨지는지 찾으면 원인 후보가 1~2개로 준다.
 
-## 원칙 3: Events와 로그가 1차 소스다
+## 원칙 3 — Events와 로그가 1차 소스다
 
 - k8s: `kubectl describe pod` Events 최하단 → 그 다음 `kubectl logs --previous`
 - AWS: 해당 서비스의 CloudWatch Logs / CloudTrail (IAM 계열은 AssumeRole 오류 검색)
 - LB: `aws elbv2 describe-target-health` reason 필드
 
-## 원칙 4: 시간 지연을 오류로 착각하지 않는다
+## 원칙 4 — 시간 지연을 오류로 착각하지 않는다
 
 TG healthy 2~3분, CloudFront 전파 수 분, Config 첫 평가 5~10분 — [../../reference/timings.md](../../reference/timings.md). "고장"의 절반은 그냥 아직 안 된 것이다. 대기해야 하는 상황인지부터 판단.
 

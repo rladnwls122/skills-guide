@@ -1,5 +1,7 @@
 # 05. k8s 워크로드 + ALB 연동 — Deployment / Helm / TargetGroupBinding
 
+> 문서 유형: 개요
+
 ## 학습 목표
 
 - [ ] probe 3종·nodeSelector·topologySpread·PDB·graceful shutdown이 들어간 Deployment를 백지에 쓸 수 있다

@@ -1,5 +1,7 @@
 # 07. 관측성 — Fluent Bit + kube-prometheus-stack + Grafana
 
+> 문서 유형: 개요
+
 ## 학습 목표
 
 - [ ] 관측성 파이프라인 전체(앱 로그 → Fluent Bit → CloudWatch + 로그→메트릭 → Prometheus → Grafana/알람)를 백지에 그릴 수 있다

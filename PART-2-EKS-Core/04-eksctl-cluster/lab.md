@@ -1,5 +1,7 @@
 # 04. 실습 — set-02 클러스터 생성
 
+> 문서 유형: tutorial
+
 ## 목표
 
 - [ ] terraform output → 환경변수 → cluster.rendered.yaml 렌더 파이프라인을 손으로 완주

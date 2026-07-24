@@ -1,5 +1,7 @@
 # 02. KMS + S3 + CloudFront — 이론
 
+> 문서 유형: explanation
+
 암호화(KMS)와 정적 웹 서빙(S3+CloudFront)은 거의 모든 세트에 나온다. 채점은 "alias 이름 역조회", "정책 텍스트 grep", "퍼블릭 차단 상태" 같은 기계적 검사이므로, 정확한 구조를 암기 수준으로 익힌다.
 
 ---
@@ -100,7 +102,7 @@ root principal 은 "계정의 IAM 정책에 권한 위임"을 의미 — 이게 
 
 ---
 
-## 3. 심화: set-03 root-less 키 정책
+## 3. 심화 — set-03 root-less 키 정책
 
 **① 한 줄 정의** — 유의사항이 "키 정책에 root principal 과 `kms:*` 액션 금지"를 걸면, 배포자 IAM 신원을 admin principal 로 명시하고 액션을 전부 나열해야 한다.
 

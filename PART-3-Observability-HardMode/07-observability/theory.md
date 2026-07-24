@@ -1,5 +1,7 @@
 # 07. 관측성 이론 — 로그 파이프라인과 로그 기반 메트릭
 
+> 문서 유형: explanation
+
 대회 관측성 요구는 항상 같은 뼈대다: **① 앱 로그를 CloudWatch로 보내라(형식 정확히), ② 메트릭을 Prometheus로 모아라, ③ Grafana 대시보드/알람을 만들어라.** 함정은 "앱이 /metrics를 노출하지 않는다"는 데서 나온다.
 
 ---
@@ -13,7 +15,7 @@
 
 ### ② 왜 (채점 관점)
 
-- 채점 스크립트는 CloudWatch 로그의 **키/형식 정확 일치**를 grep 한다 (set-07 11-1-A: 키가 정확히 `client_ip,method,path,status_code,timestamp` 5개 + `/health` 로그 **0건**).
+- mark 스크립트는 CloudWatch 로그의 **키/형식 정확 일치**를 grep 한다 (set-07 11-1-A: 키가 정확히 `client_ip,method,path,status_code,timestamp` 5개 + `/health` 로그 **0건**).
 - Grafana 대시보드는 패널 존재만이 아니라 **데이터 표시 여부**까지 본다 — No Data 패널 하나라도 있으면 오답.
 - 알람(11-4)은 실제 Firing 여부를 검사한다. HTTP 계열 알람의 유일한 소스가 로그 기반 메트릭이므로 파이프라인이 끊기면 알람 점수도 통째로 날아간다.
 

@@ -1,5 +1,7 @@
 # 명령 치트시트 — kubectl · eksctl · helm · aws · terraform
 
+> 문서 유형: reference
+
 대회장 손가락 반사용. mark.sh가 치는 검증 명령(describe/jq/jsonpath)을 그대로 손에 붙인다.
 PowerShell 함정(`curl.exe`, 작은따옴표)은 [troubleshooting.md](troubleshooting.md) 참고.
 

@@ -1,5 +1,7 @@
 # 04. 이론 — eksctl ClusterConfig
 
+> 문서 유형: explanation
+
 > 교재 원본: `skills-2026/set-02/task-1/eksctl/cluster.yaml`, `set-03/task-1/eksctl/cluster.yaml`
 
 ---

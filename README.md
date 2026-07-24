@@ -1,5 +1,7 @@
 # skills-guide — 전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드
 
+> 문서 유형: 개요
+
 > AWS 기초만 아는 상태에서 14일 만에 **수상 과제 스택을 런북(자기 문서) 기반으로
 > 신속·정확하게 배포**하고, **문서에 없는 상황(오류·신규 요구)을 AI 없이 해결**하는 것이 목표.
 > 대회장에서는 AI를 쓸 수 없다 — 문서가 커버하는 부분은 문서로 빠르게, 문서 밖은 개념으로 메운다.
@@ -60,9 +62,10 @@
 - [cheatsheet.md](reference/cheatsheet.md) — kubectl·eksctl·helm·aws·terraform 명령 치트시트
 - [cleanup-check.md](reference/cleanup-check.md) — destroy 후 잔존 리소스 점검 (매일 종료 루틴)
 - [troubleshooting.md](reference/troubleshooting.md) — 증상→원인→확인 명령 플레이북
-- [mark-script-guide.md](reference/mark-script-guide.md) — 채점 스크립트 읽는 법·판단 원칙
+- [mark-script-guide.md](reference/mark-script-guide.md) — mark 스크립트 읽는 법·판단 원칙
 - [timings.md](reference/timings.md) — 리소스별 소요 시간 (긴 것부터 던지는 순서)
 - [links.md](reference/links.md) — 모듈 ↔ skills-2026 과제 경로 매핑
+- [STYLE.md](STYLE.md) — 문서 스타일 가이드 (Diátaxis 유형·문장 규칙·용어 표준화)
 
 ## 진행 체크
 

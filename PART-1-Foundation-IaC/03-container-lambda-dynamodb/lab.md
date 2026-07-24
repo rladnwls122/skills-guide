@@ -1,5 +1,7 @@
 # 03. 컨테이너 + Lambda + DynamoDB — 실습
 
+> 문서 유형: tutorial
+
 **방식**: Dockerfile·tf·index.py 를 직접 쓴다 → apply·직접 invoke 검증 → `skills-2026` 정답과 diff. ALB 는 이 모듈 범위 밖이므로 Lambda 는 `aws lambda invoke` 로 ALB 이벤트를 흉내 내 검증한다.
 
 ## 실습 목표
@@ -41,7 +43,7 @@ docker run --rm book-test        # 기대: ... KST  (UTC 가 나오면 tzdata/TZ
 docker run --rm --entrypoint id book-test   # 기대: uid=10001(book) — 비루트 확인
 ```
 
-### 3) tf 작성: ECR + DynamoDB + KMS
+### 3) tf 작성 — ECR + DynamoDB + KMS
 
 | 리소스 | 스펙 (set-02 실측) |
 |---|---|

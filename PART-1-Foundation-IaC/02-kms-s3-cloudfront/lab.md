@@ -1,5 +1,7 @@
 # 02. KMS + S3 + CloudFront — 실습
 
+> 문서 유형: tutorial
+
 **방식**: 스펙만 보고 tf 코드를 직접 쓴다 → apply·검증 → `skills-2026` 정답과 diff. Day 1 실습 디렉토리와 별개의 새 디렉토리에서 진행 (VPC 불필요 — 이 3개 서비스는 VPC 밖 리소스).
 
 ## 실습 목표

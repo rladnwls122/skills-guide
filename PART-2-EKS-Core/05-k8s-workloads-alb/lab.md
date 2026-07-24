@@ -1,5 +1,7 @@
 # 05. 실습 — book 앱 배포와 ALB 연결
 
+> 문서 유형: tutorial
+
 ## 목표
 
 - [ ] LBC를 helm으로 addon 노드에 설치

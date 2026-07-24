@@ -1,5 +1,7 @@
 # 03. 컨테이너(ECR) + Lambda + DynamoDB (Day 3)
 
+> 문서 유형: 개요
+
 ## 학습 목표
 
 - [ ] Dockerfile 베이스 선택(scratch/alpine/distroless)이 ECR 스캔·TLS·타임존에 미치는 영향을 설명할 수 있다

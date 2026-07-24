@@ -1,5 +1,7 @@
 # 10. 오토스케일링 + 로깅 + 스트리밍 (Day 11)
 
+> 문서 유형: 개요
+
 2과제 유형 세 개를 다룬다: **유형 3 — 오토스케일링**(SQS→KEDA→Karpenter, set-07 task-2 module-3), **유형 4 — 로깅**(OTel→Loki→Grafana, set-07 task-2 module-4), **유형 5 — 스트리밍**(Kinesis/Flink Studio·MSK, set-02 task-2 module-2·4 — **개념+함정 암기만, 실습 생략**).
 
 ## 학습 목표

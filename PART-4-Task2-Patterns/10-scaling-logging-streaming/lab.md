@@ -1,5 +1,7 @@
 # Lab 10 — 오토스케일링 + 로깅 (유형 5 스트리밍은 실습 생략)
 
+> 문서 유형: tutorial
+
 정답지: `skills-2026/set-07/task-2/`. terraform은 본 PC(PowerShell), 클러스터/헬름/이미지 빌드는 CloudShell(Docker 내장)에서 한다 — 채점과 같은 셸이라 클러스터 생성자 신원 = 채점 신원이 자동 일치한다. 상세 명령 전문은 각 모듈 README 런북에 있다. 이 랩은 순서·검증·함정에 집중한다.
 
 ## 실습 목표
@@ -11,7 +13,7 @@
 
 ---
 
-## Part A — 유형 3: 오토스케일링 (ap-northeast-2, skm-)
+## Part A — 유형 3 · 오토스케일링 (ap-northeast-2, skm-)
 
 ### A-1. 절차 (순서 요약)
 
@@ -60,7 +62,7 @@ kubectl get nodes -l karpenter.sh/nodepool=skm-app-nodepool   # 1대로 수렴
 
 ---
 
-## Part B — 유형 4: 로깅 파이프라인 (ap-northeast-1, o11y-)
+## Part B — 유형 4 · 로깅 파이프라인 (ap-northeast-1, o11y-)
 
 ### B-1. 절차 (순서 요약 — 순서 의존이 많다)
 
@@ -113,7 +115,7 @@ kill %1
 
 ---
 
-## Part C — 유형 5: 스트리밍 (실습 생략 — 암기 체크)
+## Part C — 유형 5 · 스트리밍 (실습 생략 — 암기 체크)
 
 MSK 생성 ~30분 + 시간당 과금이 커서 실습하지 않는다. 아래를 보지 않고 말할 수 있으면 통과:
 

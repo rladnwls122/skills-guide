@@ -1,5 +1,7 @@
 # 06. 이론 — set-02 전체 아키텍처와 CloudFront
 
+> 문서 유형: explanation
+
 > 교재 원본: `skills-2026/set-02/task-1/` (README.md, mark.md, terraform/cloudfront.tf, cloudfront/book-rewrite.js)
 
 ---

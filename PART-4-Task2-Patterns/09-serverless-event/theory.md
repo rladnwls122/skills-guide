@@ -1,5 +1,7 @@
 # 2과제 유형별 아키텍처 패턴 1장 요약 — 서버리스 워크플로 · 이벤트 자동복구
 
+> 문서 유형: explanation
+
 2과제는 독립 모듈 여러 개로 구성되며, 모듈마다 "패턴"이 반복된다. 이 문서는 그중 유형 1·2를 다룬다. 각 유형은 ① 도식 ② 언제 나오나 ③ 핵심 연결 고리 ④ 채점이 보는 상태 ⑤ 퀴즈 순서다.
 
 ---
@@ -94,7 +96,7 @@ flowchart TB
 ### ② 언제 이 패턴이 나오나
 
 - 과제지에 "자동 복구", "정책 위반 감지", "EventBridge", "CloudTrail", "Config 룰", "관리자에게 알림(SNS)" 키워드가 보일 때.
-- 채점 스크립트가 "일부러 망가뜨리고 → sleep → 원상태 확인" 구조면 확정 (예: stop 후 sleep 30에 running 기대).
+- mark 스크립트가 "일부러 망가뜨리고 → sleep → 원상태 확인" 구조면 확정 (예: stop 후 sleep 30에 running 기대).
 
 ### ③ 핵심 연결 고리
 
@@ -108,7 +110,7 @@ flowchart TB
 
 ### ④ 채점이 보는 상태
 
-- **task.md ∪ mark 합집합 구현.** task.md/lambda.md는 sg/role/terminate/type 함수 4개·룰 4개를, mark 스크립트는 stop/terminate/sg/tag 함수 4개·stop/terminate 룰·Config 룰 2개를 요구 → 불일치. 채점 스크립트가 1순위지만 task.md 항목은 수동 채점 가능성이 있어 **함수 6개·룰 6개 전부** 만든다.
+- **task.md ∪ mark 합집합 구현.** task.md/lambda.md는 sg/role/terminate/type 함수 4개·룰 4개를, mark 스크립트는 stop/terminate/sg/tag 함수 4개·stop/terminate 룰·Config 룰 2개를 요구 → 불일치. mark 스크립트가 1순위지만 task.md 항목은 수동 채점 가능성이 있어 **함수 6개·룰 6개 전부** 만든다.
 - **Config 스코프는 EC2 Instance·SecurityGroup만 기록.** 스코프를 넓히면 태그 없는 관리형 리소스(자동 생성 SG, ENI 등)가 required-tags에서 NON_COMPLIANT로 잡혀 "NON_COMPLIANT 0건(None)" 채점이 깨진다.
 - **CloudTrail·Config 첫 평가는 5~10분** — apply 직후 바로 채점하지 말 것. 급하면 `aws configservice start-config-rules-evaluation`으로 강제 트리거.
 - 기대 출력: stop+SSH 인바운드 추가 후 sleep 90 → `EC2 State: running`, `SG Inbound Count: 0`, required-tags NON_COMPLIANT 조회 결과 `None`.

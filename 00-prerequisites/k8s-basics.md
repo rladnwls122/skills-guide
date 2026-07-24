@@ -1,5 +1,7 @@
 # Kubernetes 기초 (선수 학습, 약 2~3시간)
 
+> 문서 유형: explanation
+
 > eks-study PART-1 Kubernetes Basics의 4개 모듈(core-concepts / services-networking / config-storage / rbac-helm)을 선수 지식 수준으로 압축한 파일이다. 심화는 전부 PART-2에서 EKS로 다룬다.
 
 ## ① 학습 목표
@@ -14,7 +16,7 @@
 
 ### 2-1. 클러스터 구조
 
-Kubernetes = **컨트롤 플레인**(두뇌)이 **노드**(작업자, EC2)에 컨테이너를 배치·감시하는 시스템. EKS에서는 컨트롤 플레인을 AWS가 관리해 주고, 우리는 노드와 그 위의 리소스만 다룬다.
+Kubernetes = **컨트롤 플레인**(두뇌)이 **노드**(작업자, EC2)에 컨테이너를 배치·감시하는 시스템. EKS에서는 AWS가 컨트롤 플레인을 관리하므로 노드와 그 위의 리소스만 다룬다.
 
 ```mermaid
 flowchart TB
@@ -150,7 +152,7 @@ flowchart TB
 - **ConfigMap**으로 앱 설정(DB 호스트 등)을 주입하고, **Secret**은 KMS envelope 암호화(모듈 08)의 대상이 된다.
 - **ServiceAccount**는 IRSA/Pod Identity로 AWS IAM 권한과 연결된다 — "Pod이 S3에 접근하는 방법". 개념만 잡고 PART-2 모듈 04에서 심화.
 - **Helm**은 AWS Load Balancer Controller, kube-prometheus-stack 설치에 쓴다. **차트 버전 고정**이 원칙(버전 미고정 = 대회 당일 다른 버전이 설치되는 사고).
-- **Namespace**: 채점 스크립트가 "특정 ns에 Pod이 있는가"를 검사한다. ns를 틀리면 리소스가 멀쩡해도 0점.
+- **Namespace**: 채점 스크립트(mark.sh)는 "특정 ns에 Pod이 있는가"를 검사한다. ns를 틀리면 리소스가 멀쩡해도 0점.
 - **kubectl 필수 명령** (손에 익혀야 하는 것):
 
 ```bash

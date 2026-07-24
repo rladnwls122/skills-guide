@@ -1,5 +1,7 @@
 # AWS CLI 기초 (선수 학습, 약 1시간)
 
+> 문서 유형: explanation
+
 ## ① 학습 목표
 
 - [ ] 프로파일과 리전이 어디서 결정되는지 안다 (`~/.aws/config`, `--profile`, `--region`)
@@ -31,7 +33,7 @@ flowchart LR
 ```
 
 - `--query`는 JMESPath 문법 (`Vpcs[0].VpcId`), jq는 jq 문법 (`.Vpcs[0].VpcId` — 맨 앞에 점).
-- 채점 스크립트는 주로 **jq**를 쓰므로 둘 다 읽을 수 있어야 한다.
+- 채점 스크립트(mark.sh)는 주로 **jq**를 쓰므로 둘 다 읽을 수 있어야 한다.
 
 **CloudShell**: 콘솔에서 바로 여는 브라우저 셸. aws cli/자격증명이 콘솔 로그인 신원으로 자동 설정됨.
 
@@ -40,7 +42,7 @@ flowchart LR
 
 ## ③ 대회에서 어떻게 쓰이나
 
-- **채점 스크립트(mark.sh)가 전부 aws cli + jq다.** `aws eks describe-cluster ... | jq -r '...'` 같은 줄을 읽을 줄 알면 "채점이 정확히 어떤 필드를 보는지" 역추적할 수 있다 — 대회 전 최대 무기.
+- **mark.sh가 전부 aws cli + jq다.** `aws eks describe-cluster ... | jq -r '...'` 같은 줄을 읽을 줄 알면 "채점이 정확히 어떤 필드를 보는지" 역추적할 수 있다 — 대회 전 최대 무기.
 - 대회 작업 환경 자체가 CloudShell인 유형이 많다. 프로파일/리전이 잘못돼 있으면 모든 명령이 엉뚱한 곳을 보게 된다 — 시작 시 `sts get-caller-identity`와 리전 확인이 루틴.
 
 ## ④ 미니 실습 (15분, 조회만 — 과금 없음)

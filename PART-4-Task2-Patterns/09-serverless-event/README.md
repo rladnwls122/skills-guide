@@ -1,5 +1,7 @@
 # 09. 서버리스 워크플로 + 이벤트 자동복구 (Day 10)
 
+> 문서 유형: 개요
+
 2과제 단골 유형 두 개를 하루에 잡는다: **유형 1 — 서버리스 워크플로**(S3 → Lambda → Step Functions → DynamoDB, set-02 task-2 module-1)와 **유형 2 — 이벤트 자동복구**(EventBridge/CloudTrail/Config → Lambda 복구, set-02 task-2 module-3).
 
 ## 학습 목표
@@ -22,7 +24,7 @@
 
 | 리소스 | 과금 | 방침 |
 |---|---|---|
-| Lambda / Step Functions / EventBridge / SNS | 프리티어 내 사실상 무료 | destroy로 정리 |
+| Lambda / Step Functions / EventBridge / SNS | 프리티어 내 무료 수준 | destroy로 정리 |
 | DynamoDB (온디맨드) / S3 | 실습 규모에서 무시 가능 | destroy로 정리 |
 | CloudTrail (trail 1개) | 무료 (관리 이벤트 1카피) | destroy로 정리 |
 | **AWS Config 레코더** | **기록 항목당 과금** — 스코프를 EC2 Instance·SG로 좁혀도 켜져 있는 동안 과금 | **실습 종료 즉시 destroy** |

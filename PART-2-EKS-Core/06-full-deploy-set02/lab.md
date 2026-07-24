@@ -1,5 +1,7 @@
 # 06. 실습 — set-02 1과제 완주 런북 (배포 10단계)
 
+> 문서 유형: tutorial
+
 ## 목표
 
 - [ ] 10단계를 런북 없이(막히면만 참조) 완주
@@ -29,7 +31,7 @@ BOOK_APP/LBC/FLUENT_BIT_POLICY_ARN, ECR, APP_TG, GRAFANA_TG, BUCKET, ALB_DNS, GR
 
 **검증**: `terraform output` 에러 없음, `.env.ps1` 존재. 새 터미널에선 `. .\.env.ps1`만 재실행.
 
-## ② 이미지 빌드 & push — **기본 CloudShell** (VPC CloudShell 불가: 인터넷 없음)
+## ② 이미지 빌드 & push — **기본 CloudShell** (VPC CloudShell 불가 — 인터넷 없음)
 
 콘솔 기본 CloudShell에서 Actions → Upload file로 `book`(shared\provided\task-1)과 `app\Dockerfile` 업로드 후:
 

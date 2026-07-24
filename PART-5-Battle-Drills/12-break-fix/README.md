@@ -1,5 +1,7 @@
 # 12. 파괴/복구 훈련 — Break & Fix (Day 13)
 
+> 문서 유형: 개요
+
 [../../reference/troubleshooting.md](../../reference/troubleshooting.md)의 12개 증상을 **고의로 재현하고 자력으로 복구**한다. 대회장에서 AI는 못 쓰고 문서(자기 런북)만 쓸 수 있다 — 문서를 찾는 시간조차 아까우니, 증상→확인 명령→원인→조치의 사슬을 손에 붙인다.
 
 ## 목표

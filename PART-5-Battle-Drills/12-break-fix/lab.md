@@ -1,0 +1,55 @@
+# 파괴/복구 실습 — 12 시나리오
+
+## 규칙
+
+- set-02 1과제 스택이 **mark 통과 상태**로 떠 있는 데서 시작.
+- 시나리오마다: **망가뜨린다 → 증상 관찰 → 문서 없이 복구 → 복구 확인 → 다음**.
+- 복구 순서는 반드시 **확인 명령 → 원인 → 조치**. 확인 없이 고치면 그 시나리오는 실패 처리.
+- 목표 시간 초과 또는 문서를 열었으면 실패 표시(회고에서 다룬다). [../../reference/troubleshooting.md](../../reference/troubleshooting.md)는 **복구 후 답 맞추기용**으로만.
+
+## 시나리오 표
+
+| # | 망가뜨리는 방법 | 기대 증상 | 목표 | 복구 확인 |
+|---|---|---|---|---|
+| ① | deployment의 readinessProbe path를 `/healthz-x` 등으로 오타 후 apply | TG unhealthy, ALB 5xx | 15분 | `describe-target-health` 전 타깃 healthy |
+| ② | ALB→노드/Pod SG의 인바운드 룰 삭제 (`aws ec2 revoke-security-group-ingress`) | TG unhealthy (timeout) | 15분 | 룰 복원 후 healthy + curl 200 |
+| ③ | terraform에서 CF 커스텀 헤더 값만 변경 후 apply (ALB 룰은 그대로) | CF 경유 403, ALB 기본 액션 403 동작 확인 | 15분 | 헤더 원복 → CF 경유 200, ALB 직접 403 유지 |
+| ④ | deployment 이미지 태그를 `stable`→`stble` 오타 후 apply | ImagePullBackOff | 10분 | 태그 원복 → Pod Running |
+| ⑤ | deployment에서 필수 env(예: TABLE_NAME) 삭제 후 apply | CrashLoopBackOff | 10분 | `kubectl logs --previous`로 원인 특정 → env 복원 → Running |
+| ⑥ | nodeSelector 라벨 값 오타(`app`→`ap`) 후 apply | Pending | 10분 | describe Events로 특정 → 원복 → Running |
+| ⑦ | 다른 IAM 신원(임시 프로필/역할)로 `aws eks update-kubeconfig` 후 kubectl | Unauthorized | 15분 | `sts get-caller-identity` 대조 → 원 신원 kubeconfig 복원 → get nodes 성공 |
+| ⑧ | ServiceAccount의 IRSA annotation(`eks.amazonaws.com/role-arn`) 제거 + Pod 재시작 | 앱 AWS 호출 AccessDenied | 15분 | `kubectl describe sa` → annotation 복원 + Pod 재시작 → 호출 성공 |
+| ⑨ | Lambda 응답 dict에서 `statusDescription` 제거 후 배포 | ALB 경유 502 | 15분 | CloudWatch Logs 확인 → 필드 복원 → 200 |
+| ⑩ | 컨테이너에서 `TZ` env 제거 후 재빌드·재배포, POST 1건 | DynamoDB에 UTC 시각 저장 | 20분 | `dynamodb scan --max-items 1` 실측 → TZ 복원·재배포 → KST 저장 |
+| ⑪ | CloudFront의 OAC(또는 Lambda) 오리진 ORP를 `AllViewer`로 변경 | 해당 오리진 403 (SigV4/Authorization 충돌) | 20분(전파 대기 포함) | ORP 원복 + `wait distribution-deployed` → 200 |
+| ⑫ | terraform 사본에서 LBC가 만들 ALB 의존 리소스(CF 오리진 등)를 1차 apply에 포함시키고 plan/apply | 순환·참조 오류 체험 | 15분 | 2회 apply 패턴으로 재구성(1차 CDN 제외 → 2차 `-var enable_cdn=true`)한 plan 통과 |
+
+체크박스 진행표:
+
+- [ ] ① probe 경로  - [ ] ② SG 차단  - [ ] ③ 커스텀 헤더  - [ ] ④ 이미지 태그
+- [ ] ⑤ env 삭제  - [ ] ⑥ nodeSelector  - [ ] ⑦ 신원 불일치  - [ ] ⑧ IRSA annotation
+- [ ] ⑨ statusDescription  - [ ] ⑩ TZ/UTC  - [ ] ⑪ ORP AllViewer  - [ ] ⑫ 순환 체험
+
+## 팁
+
+- ①②는 증상이 같다(TG unhealthy) — describe-target-health의 **reason이 다르다**(health check failed vs timeout). 이 차이를 몸으로 확인하는 게 핵심.
+- ⑦은 실수로 본 자격증명을 날리지 않게 `AWS_PROFILE` 임시 지정으로만 흉내낼 것.
+- ⑪⑫는 대기가 길다 — 다른 시나리오와 병렬 진행 ([../../reference/timings.md](../../reference/timings.md)의 "긴 것 먼저").
+
+## 판정 기준
+
+- **12개 중 8개 이상**을 문서 안 보고, 목표 시간 내에, 확인→원인→조치 순서로 복구하면 통과.
+- 8개 미만이면 실패 항목만 다음날 재도전.
+
+## 회고 양식
+
+```
+## Break-Fix 회고 (날짜: )
+| # | 성공/실패 | 소요 | 문서 참조 | 막힌 지점 |
+|---|---|---|---|---|
+- 실패 항목의 증상→확인 명령→원인→조치를 자기 언어로 작성해
+  ../../reference/troubleshooting.md 에 추가한다 (기존 항목과 병합).
+- 정상 출력 vs 고장 출력에서 새로 외운 차이:
+```
+
+종료 후 스택 destroy 잊지 말 것 (README의 과금 절차).

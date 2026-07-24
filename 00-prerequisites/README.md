@@ -1,0 +1,75 @@
+# 00 — 사전 준비 (Day 0, 반나절)
+
+## 목표
+
+- 학습용 AWS 계정·도구·비용 알람 준비 완료
+- 선수 지식 자가진단 — **아니오 3개 이상이면 "기초 다지기" 1일 추가**하고 전체 일정 하루 순연
+
+## 1. 계정과 신원
+
+- 학습용 AWS 계정 준비. **root 상시 사용 금지** — IAM 사용자(AdministratorAccess) 생성 후 액세스 키 발급.
+  - 이유: set-03 유형은 root-less KMS 키 정책이라 root로 apply하면 이후 KMS 사용 전부 거부됨 (모듈 08에서 체험).
+- `aws configure` → `aws sts get-caller-identity`로 신원 확인 습관화.
+  - 대회 핵심 원칙: **클러스터 생성자 = kubectl 신원 = 채점 신원**. 지금부터 하나의 신원만 쓴다.
+
+## 2. 도구 설치 (본 PC, Windows 기준)
+
+| 도구 | 확인 명령 |
+|---|---|
+| AWS CLI v2 | `aws --version` |
+| Terraform | `terraform version` |
+| eksctl | `eksctl version` |
+| kubectl | `kubectl version --client` |
+| helm | `helm version` |
+| git, jq | `git --version`, `jq --version` |
+| PowerShell 7 | `$PSVersionTable` — **5.1 금지** (CP949 인코딩이 terraform/jq를 깨뜨림) |
+
+PowerShell 함정 미리 각인: `curl`은 Invoke-WebRequest 별칭 → 항상 `curl.exe`.
+`$` 포함 문자열(Grafana 비번 등)은 작은따옴표.
+
+## 3. 비용 가드레일
+
+- AWS Budgets 월 $50 알람 생성 (콘솔 5분).
+- 시간당 과금 목록 암기: **NAT GW, EKS 클러스터($0.1/h), MSK, ALB, EC2**.
+- 원칙: 모듈 종료 = destroy. 예외는 모듈 README에 명시된 날만 (D4→D5 클러스터 유지).
+
+## 4. 저장소 클론
+
+```bash
+git clone https://github.com/ishs-cloud-computing/skills-2026.git
+```
+
+모든 모듈이 이 저장소의 수상 과제 코드를 참조한다. 경로 매핑: [reference/links.md](../reference/links.md)
+
+## 5. 선수 지식 자가진단
+
+| # | 질문 | 부족 시 보충 (반나절 내) |
+|---|---|---|
+| 1 | VPC/서브넷/RTB/IGW·NAT 차이를 그림으로 그릴 수 있다 | AWS VPC 공식 워크숍 2h |
+| 2 | IAM 사용자/역할/정책(JSON) 구조를 안다 | IAM 정책 문서 1h |
+| 3 | aws cli 자격증명 설정·호출을 해봤다 | 위 2번 실습 |
+| 4 | 컨테이너/이미지/레지스트리 개념을 안다 | Docker getting-started 2h |
+| 5 | grep/sed/jq, heredoc을 쓸 수 있다 | 셸 원라이너 연습 1h |
+| 6 | Git clone/branch/diff를 쓸 수 있다 | 생략 가능 |
+
+Kubernetes·Terraform·eksctl은 선수 지식 아님 — PART 1~2에서 배운다.
+
+## 완료 체크
+
+- [ ] IAM 사용자로 `sts get-caller-identity` 성공
+- [ ] 도구 7종 버전 확인
+- [ ] Budgets 알람 생성
+- [ ] skills-2026 클론
+- [ ] 자가진단 통과 (또는 기초 다지기 일정 반영)
+
+## 선수 학습 가이드
+
+자가진단에서 "아니오"가 나온 항목은 아래 가이드로 보충한다 (각 30분~2시간).
+
+| 가이드 | 자가진단 항목 | 대회 연결 |
+|---|---|---|
+| [vpc-basics.md](vpc-basics.md) | 1 | RTB↔서브넷 매핑 채점, PART-1 모듈 01 |
+| [iam-basics.md](iam-basics.md) | 2, 3 | root-less KMS·채점 신원, PART-3 모듈 08 |
+| [docker-basics.md](docker-basics.md) | 4 | CloudShell 빌드·ECR, PART-1 모듈 03 |
+| [shell-basics.md](shell-basics.md) | 5 | 30% 변동 드릴, PART-5 모듈 11 |
+| [awscli-basics.md](awscli-basics.md) | 3 | mark.sh 채점 역추적 |

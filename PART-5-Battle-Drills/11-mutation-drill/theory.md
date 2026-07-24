@@ -1,0 +1,63 @@
+# 변동 대응 이론 — 판단 원칙과 방법론
+
+이 PART는 적용이 전부다. 이론은 판단 원칙만 짧게.
+
+## 왜 30% 변동인가
+
+사전 공개된 과제는 대회 당일 약 30%가 수정·추가된다. 주로 바뀌는 축: **이름 접두어**(`wskorea26-` → 다른 접두어), CIDR, 인스턴스 타입, 개수, 경로/헤더 값. 아키텍처 골격은 대부분 유지된다. 따라서 승부는 "새로 설계하는 능력"이 아니라 **바뀐 값을 코드베이스 전체에서 누락 없이 빠르게 갈아끼우는 능력**이다.
+
+## 판단 원칙 3가지
+
+1. **mark 스크립트가 1순위.** 과제지와 채점지가 다르면 mark를 따른다. set-02에서 처리 Lambda 이름이 task엔 없고 mark에만 등장 — mark 이름으로 생성해야 득점.
+2. **오타도 사양이다.** set-02 실측: 역할명 `wsc2026-alaytics-ec2-role` (analytics 오타). 고치면 오답. 변동 반영 시에도 새 과제지의 오타를 "교정"하지 말 것.
+3. **둘 다 애매하면 합집합 구현.** 함수 6개·룰 6개 전부 생성하고 mark가 그중 일부만 채점하게 둔다. 빼는 쪽이 잃는다.
+
+상세는 [../../reference/mark-script-guide.md](../../reference/mark-script-guide.md).
+
+## 이름이 숨는 곳 (치환 누락 다발 지점)
+
+`grep -rl`이 못 잡는 곳은 없지만, **어디에 있는지 알아야 grep 결과를 믿을 수 있다.** 실측 목록:
+
+| 위치 | 예시 (실측) |
+|---|---|
+| `terraform.tfvars` | 접두어·CIDR·리전 변수값 |
+| YAML 리터럴 | 라벨 키 `wsc2026/node`, `node-type` 셀렉터 값 |
+| JS/앱 코드 | 쿠키명 `x-sp-ab`, KVS 키명 `weight` (set-07 CDN 함수) |
+| Grafana dashboard JSON | 대시보드 uid/title `wskorea26-monitoring`, 패널 쿼리 내 라벨 |
+| mark.sh 자체 | `--names wskorea26-book-alb` 등 리터럴 수십 개 — 변동 과제지의 새 mark와 대조 |
+| eksctl `cluster.yaml` | 클러스터명 `wskorea26-cluster`, 노드그룹명 `wskorea26-app-ng`, 라벨 |
+| userdata 템플릿 | 유닛명, 버킷/스트림 이름이 셸 스크립트 안에 문자열로 |
+| Lambda env | `TABLE_NAME=wskorea26-data-table` 같은 환경변수 값 |
+
+## 방법론: 기계 치환 + 사람 검증
+
+```bash
+grep -rl '옛이름' . | xargs sed -i 's/옛이름/새이름/g'   # 기계가 치환
+grep -rn '옛이름' .                                      # 사람이 0건 확인
+```
+
+- 접두어 단위(`wskorea26` 전체)와 개별 이름 단위(경로가 바뀐 것)를 구분해서 돌린다.
+- tfvars는 sed에 걸리지만 **의미 확인** 필수 — CIDR·타입 변동은 이름 치환으로 안 잡힌다.
+- 바이너리·`.terraform/`은 제외 (`--exclude-dir=.terraform`).
+
+## 아키텍처 이해가 치환 속도를 결정한다
+
+요구사항 변경 → 영향 파일이 즉시 보이는가? "헬스체크 경로가 `/health`→`/healthz`로 변경"이면 deployment probe + TG 헬스체크 + (있다면) mark의 curl 세 곳. 이 매핑이 머리에 없으면 grep 결과를 해석하는 데 시간을 다 쓴다. 훈련 ②가 이걸 검증한다.
+
+---
+
+## 퀴즈 (5문)
+
+1. 과제지와 mark 스크립트의 리소스 이름이 다르다. 어느 쪽을 따르는가?
+2. 새 과제지에 `wsc2026-alaytics-ec2-role`이라는 오타성 이름이 있다. 어떻게 하는가?
+3. `grep -rl 옛이름 | xargs sed -i` 후 반드시 해야 하는 확인은?
+4. sed 치환으로 잡히지 않는 변동 축 2가지는?
+5. Grafana 대시보드에서 이름이 숨는 곳은 구체적으로 어디인가?
+
+### 정답
+
+1. **mark 스크립트.** 채점은 mark가 한다 (set-02 Lambda 이름 실측).
+2. **그대로 쓴다.** 오타도 사양 — 고치면 문자열 정확 일치 채점에서 오답.
+3. `grep -rn 옛이름 .`으로 **잔존 0건** 확인 (치환 누락 검증).
+4. **CIDR·인스턴스 타입·개수·스펙** 등 이름이 아닌 값 — tfvars를 의미 단위로 직접 대조해야 한다.
+5. **dashboard JSON**의 uid/title과 패널 쿼리 안의 라벨 셀렉터 문자열.

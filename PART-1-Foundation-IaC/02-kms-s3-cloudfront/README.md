@@ -1,0 +1,35 @@
+# 02. KMS + S3 + CloudFront (Day 2)
+
+## 학습 목표
+
+- [ ] CMK 키 정책 구조(admin 액션 vs use 액션 분리)와 envelope encryption 을 설명할 수 있다
+- [ ] set-02 방식(서비스별 CMK 3개 + ECR 은 관리형 aws/ecr)의 "불필요 리소스 감점 회피" 판단을 할 수 있다
+- [ ] set-03 root-less 키 정책(root·`kms:*` 금지, 배포자 신원 admin, lockout safety check)을 직접 작성할 수 있다
+- [ ] 퍼블릭 차단 4종 + SSE-KMS + BucketKey 버킷과 CloudFront OAC 연동(SourceArn 버킷 정책)을 구성할 수 있다
+- [ ] key→distribution→bucket→key 순환 참조를 `aws:SourceAccount` 조건으로 우회하는 이유를 안다
+
+## 소요 시간 / 일차
+
+- Day 2, 약 5~6시간 (이론 2h + 실습 3h + 정답 diff 1h)
+
+## 과금 리소스와 destroy 방침
+
+| 리소스 | 과금 | 방침 |
+|---|---|---|
+| KMS CMK ×3 | **키당 월 $1 (일할)** + API 호출 | destroy 시 `deletion_window_in_days = 7` 대기 상태로 전환 — 대기 중엔 과금 없음 |
+| S3 | 저장/요청 소액 | 객체 몇 개 수준이라 무시 가능, destroy 로 정리 |
+| CloudFront | 요청/전송량 과금, 배포 자체는 무료 | destroy 시 disable→삭제로 5~10분 소요 |
+
+이 모듈은 NAT 같은 시간당 폭탄은 없지만 **KMS 키가 세트마다 쌓이면 월 과금이 늘어난다** — 실습 종료 시 반드시 destroy.
+
+## 선행 모듈
+
+- `01-terraform-vpc` (Terraform 문법·변수화·output 패턴을 전제)
+
+## 참고 경로 (정답지)
+
+- `skills-2026/set-02/task-1/terraform/kms.tf` — root 정책 + 서비스별 CMK 3개(s3/dynamodb/eks)
+- `skills-2026/set-02/task-1/terraform/s3.tf` — 퍼블릭 차단·SSE-KMS·OAC 버킷 정책
+- `skills-2026/set-02/task-1/terraform/cloudfront.tf` — OAC·오리진 2개·behavior
+- `skills-2026/set-03/task-1/terraform/kms.tf` — root-less 키 정책 (심화)
+- `skills-2026/set-02/task-1/terraform/ecr.tf` — 관리형 aws/ecr 판단 근거 주석

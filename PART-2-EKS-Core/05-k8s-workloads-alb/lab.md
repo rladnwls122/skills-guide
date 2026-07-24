@@ -1,0 +1,131 @@
+# 05. 실습 — book 앱 배포와 ALB 연결
+
+## 목표
+
+- [ ] LBC를 helm으로 addon 노드에 설치
+- [ ] book 앱 5종 manifest(ns→configmap→deployment→service/pdb→TGB)를 순서대로 apply
+- [ ] TG 타깃 healthy 확인 + ALB 403/규칙 채점 명령 셀프 검증
+- [ ] Pod 강제 삭제로 self-healing과 graceful shutdown 관찰
+
+전제: 04의 클러스터가 떠 있고 `.env.ps1` 로드됨. 컨테이너 이미지가 ECR에 `stable` 태그로 존재
+(아직이면 06 lab의 2단계를 먼저 — 기본 CloudShell에서 docker build/push).
+
+## 1. AWS Load Balancer Controller
+
+```powershell
+cd C:\Users\kryuk\practice\skills-2026\set-02\task-1
+. .\.env.ps1
+
+helm repo add eks https://aws.github.io/eks-charts; helm repo update
+helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller `
+  --version 3.4.0 -n kube-system `
+  --set clusterName=wskorea26-cluster `
+  --set serviceAccount.create=false `
+  --set serviceAccount.name=aws-load-balancer-controller `
+  --set region=ap-northeast-2 --set vpcId="$env:VPC_ID" `
+  --set nodeSelector.node-type=addon
+```
+
+**검증:**
+
+```powershell
+kubectl -n kube-system get deploy aws-load-balancer-controller
+kubectl -n kube-system get pod -l app.kubernetes.io/name=aws-load-balancer-controller -o wide
+```
+
+기대: `2/2 READY`, 두 Pod 모두 **addon 노드** 위 (NODE 열의 노드를 `kubectl get node -L node-type`로 확인).
+
+## 2. book 앱 배포 (순서 중요)
+
+```powershell
+cd k8s
+kubectl apply -f 00-namespaces.yaml
+kubectl apply -f app/configmap.yaml
+(Get-Content app/deployment.yaml -Raw).Replace('<ECR_REPOSITORY_URL>', $env:ECR) | kubectl apply -f -
+kubectl apply -f app/service.yaml -f app/pdb.yaml
+(Get-Content app/targetgroupbinding.yaml -Raw).Replace('<APP_TARGET_GROUP_ARN>', $env:APP_TG) | kubectl apply -f -
+```
+
+순서 이유: ns가 먼저(리소스의 소속), configmap이 deployment보다 먼저(envFrom 참조), TGB는 service 이후(serviceRef).
+
+**검증:**
+
+```powershell
+kubectl -n wskorea26 get pod -o wide
+```
+
+기대: `wskorea26-book-deploy-...` 2개 `Running 1/1`, 서로 **다른 AZ의 app 노드**.
+
+```powershell
+aws elbv2 wait target-in-service --target-group-arn "$env:APP_TG"
+aws elbv2 describe-target-health --target-group-arn "$env:APP_TG" `
+  --query "TargetHealthDescriptions[].[Target.Id,TargetHealth.State]" --output text
+```
+
+기대: Pod IP 2개 모두 `healthy`.
+
+## 3. ALB 규칙 셀프 채점 (mark 7-1 / 7-2)
+
+```powershell
+$ALB_ARN = aws elbv2 describe-load-balancers --names wskorea26-book-alb --query "LoadBalancers[0].LoadBalancerArn" --output text
+$LISTENER_ARN = aws elbv2 describe-listeners --load-balancer-arn $ALB_ARN --query "Listeners[0].ListenerArn" --output text
+
+aws elbv2 describe-rules --listener-arn $LISTENER_ARN --query "Rules[*].Conditions[*].HttpHeaderConfig.Values[]" --output text
+curl.exe -o NUL -s -w "%{http_code}`n" "http://$env:ALB_DNS/book"
+```
+
+기대 출력 (정확 일치):
+
+```
+wskorea26-cf
+wskorea26-cf
+403
+```
+
+헤더를 붙여 직접 Pod까지 뚫어보기 (CloudFront 흉내):
+
+```powershell
+curl.exe -s -X POST -H "X-Origin-Verify: wskorea26-cf" -H "Content-Type: application/json" `
+  -d '{"client_id":"T0001","username":"lab","email":"l@l.com","concert_name":"LAB"}' `
+  "http://$env:ALB_DNS/v1/book"
+```
+
+기대: `{"booking_id": "..."}` (경로가 `/v1/book`인 이유 — 앱은 `/v1/book`만 서빙, CloudFront Function 재작성은 06에서).
+
+## 4. 무중단 동작 관찰
+
+```powershell
+kubectl -n wskorea26 delete pod -l app=wskorea26-book --wait=false
+kubectl -n wskorea26 get pod -w      # Ctrl+C로 중단
+```
+
+관찰 포인트: Terminating 상태가 preStop 15초 동안 유지 → 새 Pod가 Ready 된 후 타깃 교체. `describe-target-health`를 반복 실행하면 draining → healthy 전환이 보인다.
+
+## 5. 함정
+
+| 함정 | 증상 | 대응 |
+|---|---|---|
+| PowerShell `curl` = Invoke-WebRequest 별칭 | 옵션 에러 | 항상 **`curl.exe`** 명시 |
+| `<ECR_REPOSITORY_URL>` / `<APP_TARGET_GROUP_ARN>` 미치환 | ImagePullBackOff / TGB 에러 | Replace 파이프 확인 |
+| LBC nodeSelector 누락 | LBC Pod가 app 노드 → mark 5-4 감점 | `--set nodeSelector.node-type=addon` |
+| SA를 helm이 새로 생성 | IRSA annotation 없는 SA → AccessDenied | `serviceAccount.create=false` (eksctl IRSA SA 재사용) |
+| TG health check 경로 불일치 | 타깃 unhealthy | TG `/health` = 앱 헬스 경로 확인 |
+| 규칙 추가 실험 후 미삭제 | mark 7-2 줄 수 초과 | 규칙은 2개로 원복 |
+
+## 6. 통과 기준 (mark 대응)
+
+- [ ] mark 5-4: wskorea26 파드 전부 app 노드, kube-system 파드(예외 제외) 전부 addon 노드
+- [ ] mark 7-1: `wskorea26-book-alb internet-facing` / `80 HTTP`
+- [ ] mark 7-2: `wskorea26-cf` 2줄 + 403
+- [ ] TG 타깃 2개 healthy
+
+## 7. 정리
+
+06으로 이어가면 **전부 유지**. 여기서 끝내면:
+
+```powershell
+helm -n kube-system uninstall aws-load-balancer-controller
+eksctl delete cluster -f eksctl/cluster.rendered.yaml --disable-nodegroup-eviction
+aws dynamodb update-table --table-name wskorea26-data-table --no-deletion-protection-enabled
+cd terraform; terraform destroy -var "player_number=$env:NUM"
+```

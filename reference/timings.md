@@ -1,0 +1,30 @@
+# 리소스별 소요 시간 — "긴 것부터 던져라"
+
+대회 4시간에서 대기 시간은 곧 점수. 아래 순서대로 먼저 시작하고 병렬 작업.
+
+| 리소스/작업 | 소요 | 비고 |
+|---|---|---|
+| MSK 클러스터 | **~30분** | producer EC2가 브로커 주소 참조 → `-target`으로 EC2 먼저 만들지 말 것 |
+| EKS 클러스터 (eksctl) | **~20분** | 생성 중 다른 작업. fully-private는 완료 후 퍼블릭 엔드포인트 off 확인 |
+| CloudFront 배포/변경 전파 | 수 분 | `aws cloudfront wait distribution-deployed` |
+| CloudTrail·Config 첫 평가 | 5~10분 | 배포 직후 이벤트 테스트 금지. `start-config-rules-evaluation` 가능 |
+| CloudTrail 경유 EventBridge 이벤트 | 수십 초~1분 | 네이티브 이벤트(수 초)와 구분 |
+| ECR 이미지 스캔 | 수 분 | 스캔 완료 대기 후 Critical/High 확인 |
+| TG 헬스체크 healthy | 2~3분 | userdata/앱 기동 포함 |
+| Grafana/Prometheus helm | 수 분 | 대시보드 sidecar import 약간 지연 |
+| Flink Studio (CFN) | 수 분~10분 | 노트북 READY 상태 확인 |
+| NAT GW 생성 | 1~2분 | 시간당 과금 시작점 |
+
+## 권장 착수 순서 (1과제 기준)
+
+1. terraform apply (VPC·데이터·ECR 등) 시작
+2. 완료 즉시 **eksctl create cluster 던지기** (~20분)
+3. 그 사이 CloudShell에서 docker build/push + 스캔 확인
+4. 클러스터 완료 → helm/k8s
+5. CloudFront는 ALB 확보 후 2차 apply → 전파 대기 중 검증 시드 준비
+
+## 세션·환경 수명
+
+- CloudShell 세션은 **브라우저 탭에 묶임** — eksctl 20분 동안 탭 유지.
+- VPC CloudShell 홈은 비영속 — 세션 초기화 대비 멱등 셋업 블록 준비.
+- terraform output은 `.env`/`.env.ps1`로 영속화 — 재접속 대비.

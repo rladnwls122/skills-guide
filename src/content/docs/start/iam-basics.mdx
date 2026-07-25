@@ -82,6 +82,8 @@ aws sts get-caller-identity
 <Quiz title="신뢰 정책의 필수 요소">
 역할(Role)에만 존재하고 사용자에게는 없는 정책이 **신뢰 정책**이다. 그 안에 반드시 들어가야 하는, "누가 이 역할을 Assume할 수 있는지"를 지정하는 요소는 [[Principal]] 이다.
 
+---
+
 신뢰 정책은 역할의 문지기다. 권한 정책이 "이 신원이 **무엇을** 할 수 있나"(Action/Resource)를 정한다면, 신뢰 정책은 "이 역할을 **누가** 쓸 수 있나"를 `Principal`로 정한다. AssumeRole이 성립하려면 두 조건이 동시에 만족돼야 한다 — ① 역할의 신뢰 정책이 호출자를 `Principal`로 인정하고, ② 호출자에게 `sts:AssumeRole` 권한이 있어야 한다. 한쪽만 있으면 실패한다.
 </Quiz>
 
@@ -115,8 +117,8 @@ EKS 클러스터를 root 사용자로 생성하면 대회에서 어떤 문제가
 
 ## ⑥ 다음 단계
 
-- [../PART-3-Observability-HardMode/](/part-3/07-observability/) — 모듈 08 IAM 심화 (IRSA, KMS 키 정책)
-- 다음 선수 학습: [docker-basics.md](/start/docker-basics/)
+- [PART 3 — 관측성·Hard Mode](/part-3/07-observability/) — 모듈 08 IAM 심화 (IRSA, KMS 키 정책)
+- 다음 선수 학습: [Docker 기초](/start/docker-basics/)
 
 ## 공식 문서
 

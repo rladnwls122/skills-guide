@@ -90,6 +90,8 @@ jq -r '.subnet_ids.value[0]' out.json  # subnet-1
 <Quiz title="파일 목록만 뽑는 grep 옵션">
 디렉터리 전체에서 `old-name` 이 들어 있는 **파일 목록만** 출력하는 명령은 grep -[[rl]] "old-name" . 이다. (빈칸에는 하이픈을 뺀 옵션 문자 두 개를 붙여 쓴다)
 
+---
+
 `-r`은 하위 디렉터리까지 재귀 검색, `-l`은 매칭된 **파일명만** 출력한다(매칭 줄은 안 보여 줌). 30% 변동 드릴의 표준 콤보가 여기서 나온다 — `grep -rl` 로 바꿀 파일을 찾고, `sed -i 's/old-name/new-name/g'` 로 일괄 치환한다. `-l` 없이 `grep -r` 만 쓰면 매칭 줄이 쏟아져 파일 목록을 눈으로 골라야 한다.
 </Quiz>
 
@@ -123,8 +125,8 @@ PowerShell은 `curl`·`wget`을 각각 `Invoke-WebRequest`의 별칭으로 잡�
 
 ## ⑥ 다음 단계
 
-- [../PART-5-Battle-Drills/](/part-5/11-mutation-drill/) — 모듈 11 30% 변동 드릴
-- 다음 선수 학습: [awscli-basics.md](/start/awscli-basics/)
+- [PART 5 — Battle Drills](/part-5/11-mutation-drill/) — 모듈 11 30% 변동 드릴
+- 다음 선수 학습: [AWS CLI 기초](/start/awscli-basics/)
 
 ## 공식 문서
 

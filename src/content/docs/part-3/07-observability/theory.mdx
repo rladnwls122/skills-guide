@@ -179,6 +179,8 @@ Fluent Bit `log_to_metrics` 필터로 액세스 로그에서 requests/errors cou
 <Quiz title="log_to_metrics 자동 접두어">
 `log_to_metrics` counter를 `wsc2026_requests_total`이라는 이름으로 정의했다. Prometheus에서 실제로 조회되는 메트릭 이름은 [[log_metric_counter_wsc2026_requests_total]] 이다.
 
+---
+
 노출되는 이름에는 `log_metric_counter_` / `log_metric_histogram_` 접두어가 자동으로 붙는다 — histogram이면 `log_metric_histogram_wsc2026_request_duration_seconds_{bucket,sum,count}`. 다만 접두어 규칙은 빌드에 따라 달라질 수 있으므로 **실측이 원칙**이다: 배포 후 fluent-bit 파드에서 `kubectl exec ... -- curl -s localhost:2021/metrics`로 실제 이름을 확인하고, prometheus-rules.yaml / dashboard.json의 이름과 대조·수정한다.
 </Quiz>
 

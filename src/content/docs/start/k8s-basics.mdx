@@ -265,6 +265,8 @@ Pod이 `CrashLoopBackOff` 다. 가장 먼저 실행할 두 명령은? **모두**
 <Quiz title="Secret은 무엇으로 보강하나">
 Secret은 base64 인코딩일 뿐 암호화가 아니다. EKS/대회에서는 이것을 [[KMS]] envelope 암호화로 보강한다.
 
+---
+
 base64는 누구나 되돌릴 수 있는 **인코딩**이지 암호화가 아니다. EKS 클러스터의 Secret 암호화 설정으로 **KMS envelope 암호화**를 켜면, etcd에 저장되는 Secret이 KMS 키로 감싼 데이터 키로 암호화된다. PART-3 모듈 08에서 실습하며, 이때 쓰는 KMS 키 정책이 대회 유형의 **root-less** 정책이다 — root로 리소스를 만들어 두면 여기서 전부 막힌다.
 </Quiz>
 
@@ -272,8 +274,8 @@ base64는 누구나 되돌릴 수 있는 **인코딩**이지 암호화가 아니
 
 ## ⑦ 다음 단계
 
-- [../PART-2-EKS-Core/](/part-2/04-eksctl-cluster/) — 모듈 04(EKS·IRSA), 모듈 05(k8s 워크로드 심화)에서 이 내용을 EKS 위에서 실전 수준으로 확장
-- 다음 선수 학습: [awscli-basics.md](/start/awscli-basics/)
+- [PART 2 — EKS Core](/part-2/04-eksctl-cluster/) — 모듈 04(EKS·IRSA), 모듈 05(k8s 워크로드 심화)에서 이 내용을 EKS 위에서 실전 수준으로 확장
+- 다음 선수 학습: [AWS CLI 기초](/start/awscli-basics/)
 
 ## 공식 문서
 

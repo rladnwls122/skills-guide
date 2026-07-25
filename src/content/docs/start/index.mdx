@@ -44,7 +44,7 @@ PowerShell 함정 미리 각인: `curl`은 Invoke-WebRequest 별칭 → 항상 `
   ```
 - 시간당 과금 목록 암기: **NAT GW, EKS 클러스터($0.1/h), MSK, ALB, EC2**.
 - 원칙: 모듈 종료 = destroy. 예외는 모듈 README에 명시된 날만 (D4→D5 클러스터 유지).
-- destroy 후 잔존 리소스 일괄 점검: [reference/cleanup-check.md](/reference/cleanup-check/)
+- destroy 후 잔존 리소스 일괄 점검: [잔존 리소스 점검](/reference/cleanup-check/)
   블록을 매일 학습 종료 시 실행 — 빈 출력이어야 그날이 끝난 것.
 
 ## 4. 저장소 클론
@@ -53,7 +53,7 @@ PowerShell 함정 미리 각인: `curl`은 Invoke-WebRequest 별칭 → 항상 `
 git clone https://github.com/ishs-cloud-computing/skills-2026.git
 ```
 
-모든 모듈이 이 저장소의 수상 과제 코드를 참조한다. 경로 매핑: [reference/links.md](/reference/links/)
+모든 모듈이 이 저장소의 수상 과제 코드를 참조한다. 경로 매핑: [과제 경로 매핑](/reference/links/)
 
 ## 5. 선수 지식 자가진단
 
@@ -85,9 +85,9 @@ Kubernetes·Terraform·eksctl은 선수 지식 아님 — PART 1~2에서 배운�
 
 | 가이드 | 자가진단 항목 | 대회 연결 |
 |---|---|---|
-| [vpc-basics.md](/start/vpc-basics/) | 1 | RTB↔서브넷 매핑 채점, PART-1 모듈 01 |
-| [iam-basics.md](/start/iam-basics/) | 2, 3 | root-less KMS·채점 신원, PART-3 모듈 08 |
-| [docker-basics.md](/start/docker-basics/) | 4 | CloudShell 빌드·ECR, PART-1 모듈 03 |
-| [shell-basics.md](/start/shell-basics/) | 5 | 30% 변동 드릴, PART-5 모듈 11 |
-| [awscli-basics.md](/start/awscli-basics/) | 3 | mark.sh 채점 역추적 |
-| [k8s-basics.md](/start/k8s-basics/) | 7 (권장) | PART-2 모듈 05 k8s 워크로드 |
+| [VPC 기초](/start/vpc-basics/) | 1 | RTB↔서브넷 매핑 채점, PART-1 모듈 01 |
+| [IAM 기초](/start/iam-basics/) | 2, 3 | root-less KMS·채점 신원, PART-3 모듈 08 |
+| [Docker 기초](/start/docker-basics/) | 4 | CloudShell 빌드·ECR, PART-1 모듈 03 |
+| [셸 기초](/start/shell-basics/) | 5 | 30% 변동 드릴, PART-5 모듈 11 |
+| [AWS CLI 기초](/start/awscli-basics/) | 3 | mark.sh 채점 역추적 |
+| [Kubernetes 기초](/start/k8s-basics/) | 7 (권장) | PART-2 모듈 05 k8s 워크로드 |

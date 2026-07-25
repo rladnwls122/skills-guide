@@ -71,6 +71,8 @@ flowchart LR
 <Quiz title="scaleDown 기본 안정화 창">
 HPA `behavior.scaleDown.stabilizationWindowSeconds`를 명시하지 않으면 기본값 [[300]] 초가 적용된다.
 
+---
+
 기본값이면 purge 후 Pod 5→1 축소만 5분 이상 걸려, 최대 2.5분 대기인 스케일인 채점(Final Pods 1 / Final Nodes 1)에 실패한다. 스케일인 시간 예산은 세 값이 한 쌍이다: ScaledObject `pollingInterval: 10`(빠른 감지) + HPA `scaleDown.stabilizationWindowSeconds: 30`(기본 300 → 30) + NodePool `consolidateAfter: 60s`. **어느 값도 늘리지 않는다.**
 </Quiz>
 
@@ -162,22 +164,72 @@ flowchart LR
 
 ### ⑤ 퀴즈
 
-1. 제공 Dockerfile을 그대로 쓰면 어떻게 되고, 무엇을 지켜야 하나?
-2. 채점 LogQL의 라벨이 `k8s_namespace_name`인 것은 어떤 두 메커니즘의 합작인가?
-3. OTel에서 로그 본문에 파서를 하나 더 얹어 필드를 추출하면 왜 위험한가?
-4. TargetGroupBinding apply가 실패한다. 순서 관점에서 원인은?
-5. Grafana 패널 하나가 No Data다. 코드 수정 없이 통과시키는 방법은?
+<Quiz title="제공 Dockerfile 결함">
+제공된 Dockerfile을 그대로 써서 log-generator를 빌드하면 어떻게 되고, 무엇을 지켜야 하나?
 
-<details>
-<summary>답</summary>
+- [x] flask 미설치 + requirements.txt 없음 → Pod가 CrashLoop. 자체 Dockerfile로 빌드하되 제공 `app.py`는 수정 금지(당일 제공본이 고쳐져 있으면 제공본 우선)
+- [ ] `app.py` 상단에 `pip install flask`를 실행하는 코드를 넣어 런타임에 설치한다
+  > 제공 `app.py`는 수정 금지 대상이다. 결함은 Dockerfile 쪽에서 고친다.
+- [ ] requirements.txt만 추가하면 제공 Dockerfile이 자동으로 설치한다
+  > 제공 Dockerfile에는 `pip install -r requirements.txt` 단계 자체가 없다. 파일만 추가해도 설치되지 않는다.
+- [ ] 베이스 이미지를 `python:slim`으로 바꾸면 flask가 포함되어 해결된다
 
-1. flask 미설치라 Pod CrashLoop. 자체 Dockerfile로 빌드하되 제공 app.py는 수정 금지(당일 제공본이 고쳐져 있으면 제공본 사용).
-2. (a) filelog container 파서가 파일 경로에서 k8s.namespace.name 리소스 속성 추출, (b) Loki 3.x의 OTLP 인제스트가 그 속성을 인덱스 라벨 k8s_namespace_name으로 자동 승격.
-3. body 원본 JSON이 변형되면 채점 쿼리의 `| json` 파싱이 깨진다. container 파서 외 본문 변형 금지.
-4. TGB는 LBC가 제공하는 CRD — LBC helm 설치 전에는 CRD가 없어 apply 불가. LBC 설치 후 TGB apply.
-5. 해당 레벨로 `/log?level=...`를 호출해 데이터를 생성한 뒤 채점받는다. 3레벨 모두 미리 호출해 두는 게 정석.
+고치는 곳과 건드리면 안 되는 곳을 구분하는 문제다. Dockerfile은 자체 작성, `app.py`는 원본 유지.
+</Quiz>
 
-</details>
+<Quiz title="k8s_namespace_name 라벨의 출처">
+채점 LogQL이 `{k8s_namespace_name="o11y"}`로 조회된다. 이 라벨이 존재하게 만드는 메커니즘을 **모두** 고르시오.
+
+- [x] filelog의 `container` 파서가 파일 경로에서 `k8s.namespace.name`을 리소스 속성으로 추출
+- [x] Loki 3.x의 OTLP 인제스트가 그 리소스 속성을 인덱스 라벨 `k8s_namespace_name`으로 자동 승격
+- [ ] otlphttp exporter의 `resource_to_telemetry_conversion`이 리소스 속성을 라벨로 변환
+  > Loki 쪽 자동 승격으로 이미 해결된다. 이 옵션은 메트릭 파이프라인의 설정이다.
+- [ ] Grafana 데이터소스의 derived field가 점(`.`)을 밑줄(`_`)로 치환
+
+OTel 쪽 추출과 Loki 쪽 승격의 **합작**이다. 둘 중 하나라도 빠지면 채점 쿼리의 라벨 셀렉터가 아무것도 반환하지 않는다.
+</Quiz>
+
+<Quiz title="본문에 파서를 더 얹으면">
+OTel filelog 파이프라인에서 로그 본문(body)에 파서를 하나 더 얹어 필드를 추출하면 왜 위험한가?
+
+- [x] body의 원본 JSON 한 줄이 변형되면 채점 쿼리의 `| json` 파싱이 깨진다 — `container` 파서 외 본문 변형 금지
+- [ ] 추출된 필드가 Loki에서 인덱스 라벨로 자동 승격돼 카디널리티가 폭발한다
+  > 자동 승격 대상은 **리소스 속성**이다. 로그 속성은 승격되지 않으므로 카디널리티 문제는 생기지 않는다. 진짜 문제는 body 훼손이다.
+- [ ] 파서 체인이 길어져 콜렉터 CPU가 올라가 로그가 유실된다
+  > 성능 이슈일 수는 있으나 채점이 깨지는 이유는 아니다.
+- [ ] level 값이 소문자로 정규화되어 `level="ERROR"` 조건에 걸리지 않는다
+
+`container` 파서는 CRI 포맷(타임스탬프/스트림 접두어)을 벗기고 파일 경로에서 k8s 메타데이터를 뽑는 데까지만 관여하고, **body는 앱이 찍은 원본 JSON 한 줄 그대로** 남긴다. Loki에서 `| json`이 그 원본을 파싱한다.
+</Quiz>
+
+<Quiz title="TargetGroupBinding apply 실패">
+`TargetGroupBinding` apply가 실패한다. 순서 관점에서 원인은?
+
+- [x] TGB는 LBC(AWS Load Balancer Controller)가 제공하는 CRD라서, LBC helm 설치 전에는 CRD가 없어 apply할 수 없다
+- [ ] terraform이 ALB/TG를 아직 만들지 않아 참조할 ARN이 없어서
+  > 그것도 순서 문제지만 오류 메시지가 다르다. `no matches for kind "TargetGroupBinding"`은 리소스 타입 자체가 없다는 뜻, 즉 CRD 부재 신호다.
+- [ ] 대상 Pod가 아직 Ready가 아니라 타깃 등록이 되지 않아서
+  > TGB apply 자체는 성공하고, 타깃이 unhealthy로 남을 뿐이다.
+- [ ] TGB는 클러스터 스코프 리소스라 네임스페이스를 지정하면 실패해서
+
+순서 의존: LBC helm 설치 → CRD 등록 → TGB apply. ALB/TG 이름이 채점 대상이므로 LBC Ingress(이름 지정 불가) 대신 terraform ALB + TGB 패턴을 쓰는데, 그 대가가 이 순서 제약이다.
+</Quiz>
+
+<Quiz title="No Data 패널">
+Grafana Log Overview의 패널 하나가 No Data다. 코드 수정 없이 통과시키는 방법은?
+
+- [x] 해당 레벨로 `/log?level=...`를 호출해 데이터를 만든 뒤 채점받는다 — info/warn/error 3레벨을 모두 미리 호출해 두는 것이 정석
+- [ ] 패널의 시간 범위를 24시간으로 늘려 과거 데이터를 잡는다
+  > 그 레벨의 로그가 애초에 생성된 적이 없으면 범위를 늘려도 없다.
+- [ ] legendFormat을 `{level="ERROR"}` 형태로 바꾸면 표시된다
+  > 범례 형식은 No Data와 무관하고, 오히려 그 형태로 뜨면 그 자체가 오답이다. legendFormat은 `{{level}}`을 유지한다.
+- [ ] No Data 패널을 삭제해 감점을 피한다
+  > Log Overview는 3패널 요구다. 삭제하면 패널 누락으로 오답이다.
+
+Grafana는 웹 수동 채점 항목이 있고, **No Data 패널이 하나라도 있으면 오답**이다. 채점 전 3레벨 데이터를 미리 만들어 두고, ALB 타깃이 healthy인지도 `curl /healthz`로 확인한다. level 값은 **대문자 ERROR**다.
+</Quiz>
+
+<QuizResults confetti />
 
 ---
 
@@ -233,21 +285,74 @@ flowchart LR
 
 ### ⑤ 퀴즈
 
-1. Flink Studio를 terraform으로 어떻게 만드나? 왜 그렇게 하나?
-2. Zeppelin에서 `Could not find any factory for identifier 'kinesis'`의 원인과 해법은?
-3. 채점 직전 Flink 노트북 상태는 무엇이어야 하고, 시연 결과(DDL)는 사라지나?
-4. MSK 모듈에서 temperature를 Number로 저장하면?
-5. `%flink.conf parallelism.default 1`이 안 먹는 상황과 대처는?
-6. producer와 consumer의 브로커 env 이름 차이는?
+<Quiz title="Flink Studio를 terraform으로">
+Managed Flink Studio(`wsc2026-analytics-flink`)를 terraform으로 만들려면?
 
-<details>
-<summary>답</summary>
+- [x] `aws_cloudformation_stack`으로 래핑해 생성한다 — provider의 `aws_kinesisanalyticsv2_application`이 zeppelin 설정 블록을 지원하지 않기 때문
+- [ ] `aws_kinesisanalyticsv2_application`의 `application_configuration`에 zeppelin 블록을 넣는다
+  > 바로 그 블록이 provider에 없어서 CFN 래핑이 필요한 것이다.
+- [ ] 콘솔 위저드로 만든 뒤 `terraform import`로 state에 가져온다
+  > 위저드가 자동 주입하는 커스텀 아티팩트(커넥터)까지 state로 재현되지 않아 재생성이 불가능해진다.
+- [ ] v1 리소스인 `aws_kinesisanalytics_application`을 쓴다
+  > v1은 SQL 애플리케이션용이다. Studio(Zeppelin) 노트북이 아니다.
 
-1. `aws_cloudformation_stack`으로 래핑. provider가 Studio(Zeppelin) 설정 블록을 지원하지 않기 때문.
-2. bare CFN엔 Kinesis SQL 커넥터가 없다. CustomArtifactsConfiguration에 Maven 의존성 `flink-sql-connector-kinesis:1.15.4` 주입, 변경 후 노트북 새 세션.
-3. READY (RUNNING이면 오답). CREATE TABLE/VIEW는 Glue DB에 저장되므로 Stop해도 유지된다.
-4. mark가 `temperature.S`를 조회하므로 0점. 전 속성 String 저장.
-5. 인터프리터가 이미 기동된 세션에서는 %flink.conf가 적용되지 않는다 — 인터프리터 재시작 후 첫 문단으로 실행.
-6. producer `BOOTSTRAP_SERVERS`(복수), consumer `BOOTSTRAP_SERVER`(단수) — 제공 문서 원문 그대로 따른다.
+provider 미지원 기능을 CFN 스택으로 우회하는 전형적인 패턴이다. 채점은 런타임 `ZEPPELIN-FLINK-3_0`을 본다.
+</Quiz>
 
-</details>
+<Quiz title="factory for identifier 'kinesis'">
+Zeppelin에서 `Could not find any factory for identifier 'kinesis'` 오류가 났다. 원인과 해법은?
+
+- [x] bare CFN으로 만든 애플리케이션에는 Kinesis SQL 커넥터가 없다 — `CustomArtifactsConfiguration`에 Maven 의존성 `flink-sql-connector-kinesis:1.15.4`를 주입하고, 변경 후에는 노트북을 새 세션으로 시작한다
+- [ ] Flink 실행 역할에 `kinesis:GetRecords` 권한이 없어서
+  > 권한 문제라면 `AccessDenied` 계열 오류가 난다. factory 없음은 클래스패스에 커넥터 JAR이 없다는 뜻이다.
+- [ ] 스트림이 ON_DEMAND 모드라 SQL 커넥터가 프로비저닝 모드만 지원해서
+  > 커넥터는 용량 모드를 가리지 않는다.
+- [ ] `%flink.ssql` 대신 `%flink` 인터프리터로 실행해서
+
+콘솔 위저드는 커넥터를 자동 추가하지만 bare CFN은 아니다. 커넥터를 바꾼 뒤 기존 세션에 그대로 실행하면 여전히 실패하므로, 반드시 새 세션에서 확인한다.
+</Quiz>
+
+<Quiz title="채점 직전 Flink 상태">
+시연(Run)을 마친 뒤 채점 직전 Flink Studio 애플리케이션의 상태는 [[READY]] 여야 한다.
+
+---
+
+RUNNING이면 오답이므로 시연 후 반드시 Stop해 복귀시킨다. 시연 결과인 DDL(`CREATE TABLE` / `CREATE VIEW`)은 **Glue DB에 저장되므로 Stop해도 사라지지 않는다** — 안심하고 멈춰도 된다. 런타임은 `ZEPPELIN-FLINK-3_0`이며, task.md가 "Flink 1.19"라고 적혀 있어도 mark가 `ZEPPELIN-FLINK-3_0`을 채점하면 **mark 우선**이다.
+</Quiz>
+
+<Quiz title="DynamoDB 속성 타입">
+MSK 모듈에서 Lambda consumer가 `temperature`를 Number 타입으로 저장하면?
+
+- [x] mark가 `temperature.S`(String)를 조회하므로 값이 안 잡혀 0점 — 전 속성을 String으로 저장해야 한다
+- [ ] DynamoDB가 Number 타입을 거부해 put-item 자체가 실패한다
+  > 저장은 정상적으로 성공한다. 그래서 더 발견하기 어렵다 — 테이블에 항목은 있는데 채점만 0점이다.
+- [ ] 숫자 비교 방식이 달라져 이상치 판정이 뒤집히고 SNS 알림이 잘못 나간다
+  > 이상치 판정은 Lambda 코드 안에서 끝난다. 저장 타입과 무관하다.
+- [ ] 문제없다 — mark는 속성 값만 비교한다
+  > mark는 `.S` / `.N` 타입 접두어까지 포함된 경로로 조회한다.
+
+`temperature.S` / `status.S`로 조회한다는 사실이 곧 "전 속성 String 저장" 요구다.
+</Quiz>
+
+<Quiz title="%flink.conf가 안 먹을 때">
+`%flink.conf parallelism.default 1`을 넣었는데 적용되지 않는다. 원인과 대처는?
+
+- [x] 인터프리터가 이미 기동된 세션에서는 `%flink.conf`가 적용되지 않는다 — 인터프리터를 재시작한 뒤 **첫 문단**으로 실행한다
+- [ ] parallelism은 shard 수에 맞춰 자동 조정되므로 설정이 무시된다
+  > 자동으로 맞춰지지 않기 때문에 `ShardConsumer RejectedExecutionException`이 나는 것이다.
+- [ ] `%flink.conf`는 노트북이 아니라 애플리케이션의 `PropertyGroups`에만 넣을 수 있다
+  > 노트북 첫 문단이 정상적인 위치다. 문제는 위치가 아니라 시점(인터프리터 기동 전/후)이다.
+- [ ] Stop → Start 하면 노트북 문단이 초기화되므로 매번 다시 입력해야 한다
+
+`%flink.conf`는 인터프리터 기동 **전에만** 적용된다. shard보다 서브태스크가 많을 때 나는 `ShardConsumer RejectedExecutionException`을 원천 차단하는 설정이므로, 세션이 망가졌으면 인터프리터를 재시작하고 처음부터 다시 실행한다.
+</Quiz>
+
+<Quiz title="브로커 env 이름">
+제공 문서 원문 그대로 따라야 한다. producer는 `BOOTSTRAP_SERVERS`(복수)이고, consumer의 환경변수 이름은 [[BOOTSTRAP_SERVER]](단수)다.
+
+---
+
+한 글자 차이지만 통일하거나 "고쳐주면" 동작이 깨진다. 이름을 원문 그대로 유지하는 원칙은 과제지 오타에도 그대로 적용된다 — set-02의 `wsc2026-alaytics-ec2-role`(alaytics)을 고치면 이름 정확 일치 채점에서 오답이다.
+</Quiz>
+
+<QuizResults confetti />

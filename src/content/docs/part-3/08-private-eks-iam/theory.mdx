@@ -206,13 +206,7 @@ set-03은 internet-facing ALB + CloudFront prefix list SG(직접 curl 000), set-
   > eksctl은 생성 후 애드온·aws-auth 등을 위해 실제로 API 서버에 붙는다. 그래서 생성 구간에 퍼블릭이 필요하다.
 - [ ] eksctl이 자동으로 SSM 터널을 뚫어 VPC 내부에서 API를 호출한다
 
-eksctl이 생성 중 퍼블릭 엔드포인트를 임시로 켰다가 완료 시 자동으로 끈다. 그래서 밖에서도 만들 수 있다. 생성이 중단되면 퍼블릭이 열린 채 남고, mark 4-1은 `describe-cluster`로 `[endpointPublicAccess, endpointPrivateAccess]`가 `[false, true]`인지 직접 확인한다. 생성 직후 습관화할 것:
-
-```bash
-aws eks describe-cluster --name <cluster> \
-  --query 'cluster.resourcesVpcConfig.[endpointPublicAccess,endpointPrivateAccess]'   # false, true
-aws eks update-cluster-config --name <cluster> --resources-vpc-config endpointPublicAccess=false
-```
+eksctl이 생성 중 퍼블릭 엔드포인트를 임시로 켰다가 완료 시 자동으로 끈다. 그래서 밖에서도 만들 수 있다. 생성이 중단되면 퍼블릭이 열린 채 남고, mark 4-1은 `describe-cluster`로 `[endpointPublicAccess, endpointPrivateAccess]`가 `[false, true]`인지 직접 확인한다. 생성 직후 습관화할 것 — 확인은 `aws eks describe-cluster --name <cluster> --query 'cluster.resourcesVpcConfig.[endpointPublicAccess,endpointPrivateAccess]'`, 재차단은 `aws eks update-cluster-config --name <cluster> --resources-vpc-config endpointPublicAccess=false`.
 </Quiz>
 
 <Quiz title="eks / eks-auth Endpoint 금지">
@@ -243,6 +237,8 @@ trust policy가 `Principal: arn:aws:iam::<acct>:root`인 역할을, 같은 계�
 
 <Quiz title="ExternalId 정확 일치">
 mark 9-1은 audit role의 ExternalId를 문자열 **정확 일치**로 본다. ExternalId는 `unicorn-audit-2026` + 선수등번호이며, 채점 셸이 export하는 등번호와 반드시 같아야 하는 terraform 변수 이름은 [[player_number]] 이다.
+
+---
 
 대회 당일 맞춰야 하는 두 값은 **terraform apply에 넣는 `player_number`**와 **채점 셸에서 export하는 등번호(`number`)**다. 둘이 다르면 mark 9-1의 문자열 비교와 mark 9-2의 assume이 **모두** 실패한다. 9-2는 성공과 실패 양쪽이 다 채점 대상이라는 점도 기억할 것 — ExternalId 없이 assume하면 `AccessDenied`, 붙여서 assume한 뒤 `describe-vpcs`는 성공하고 `describe-instances`는 거부되어야 한다. 참고로 `get-role`은 `MaxSessionDuration=3600`도 함께 본다.
 </Quiz>

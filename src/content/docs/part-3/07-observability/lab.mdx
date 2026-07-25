@@ -93,7 +93,7 @@ curl -s -u admin:'Skills$#$@!' "http://$GRAFANA_LB/api/search?query=wsc2026" | j
 # 브라우저로 대시보드 열어 전 패널 데이터 표시 확인 — No Data 패널 0개
 ```
 
-## 함정
+## 관측성 파이프라인 :badge[함정]{variant=danger}
 
 - **메트릭명 불일치**: `Metric_name wsc2026_requests_total`로 정의해도 실제 이름은 `log_metric_counter_` 접두어가 붙는다. 검증 (b) 없이 rules/dashboard를 짜면 알람·패널이 조용히 죽는다.
 - **aws-for-fluent-bit에 log_to_metrics 없음**: 필터 로드 에러가 나면(`kubectl logs`로 확인) 이미지를 upstream `fluent/fluent-bit` 최신 안정 태그로 교체. 설정은 그대로 호환.

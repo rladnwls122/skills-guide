@@ -3,6 +3,8 @@ title: 07. 관측성 이론 — 로그 파이프라인과 로그 기반 메트�
 description: "앱이 /metrics 를 노출하지 않는 조건에서 로그를 메트릭으로 바꾸는 파이프라인 구조."
 ---
 
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+
 > 문서 유형: explanation
 
 대회 관측성 요구는 항상 같은 뼈대다: **① 앱 로그를 CloudWatch로 보내라(형식 정확히), ② 메트릭을 Prometheus로 모아라, ③ Grafana 대시보드/알람을 만들어라.** 함정은 "앱이 /metrics를 노출하지 않는다"는 데서 나온다.
@@ -161,16 +163,63 @@ flowchart TD
 
 ## 자기 점검 퀴즈 (5문)
 
-1. 앱이 /metrics를 노출하지 않는데 HighErrorRate 알람을 만들어야 한다. 데이터 소스를 어떻게 확보하나?
-2. `log_to_metrics`로 `wsc2026_requests_total` counter를 만들었다. Prometheus에서 실제 조회할 메트릭 이름은? 그리고 이를 확정하는 실무 절차는?
-3. Fluent Bit DaemonSet이 workload 노드에는 안 뜬다. 원인과 수정은?
-4. Grafana에 dashboard.json을 넣었는데 대시보드가 안 보인다. 점검할 두 가지는?
-5. Go 로그의 `duration=136.048µs`를 histogram에 넣으려면 왜, 어떻게 변환하나?
+<Quiz title="/metrics 없는 앱의 알람 소스">
+제공 앱 바이너리가 `/metrics`를 노출하지 않는데 HighErrorRate 알람(에러율 5%/1m)을 만들어야 한다. 데이터 소스를 어떻게 확보하나?
 
-### 정답
+- [x] Fluent Bit `log_to_metrics` 필터로 액세스 로그에서 requests/errors counter를 만들고, `prometheus_exporter` OUTPUT(:2021)을 PodMonitor로 Prometheus에 수집시킨다
+- [ ] Grafana cloudwatch datasource로 CloudWatch Logs Insights 쿼리를 알람 조건에 건다
+  > 알람은 PrometheusRule(PromQL)로 평가된다. Grafana datasource는 대시보드 조회용이지 Prometheus 룰의 입력이 아니다.
+- [ ] kube-state-metrics가 이미 HTTP 상태코드별 카운터를 노출하므로 그대로 쓴다
+  > kube-state-metrics는 Deployment/Pod 같은 k8s 오브젝트 상태만 노출한다. 애플리케이션 HTTP 코드는 없다.
+- [ ] 앱 컨테이너에 exporter 사이드카를 붙이고 앱 코드에 `/metrics` 핸들러를 추가한다
 
-1. Fluent Bit `log_to_metrics` 필터로 액세스 로그에서 requests/errors counter를 생성 → `prometheus_exporter :2021` → PodMonitor로 Prometheus에 수집시킨다 (set-03 패턴).
-2. `log_metric_counter_wsc2026_requests_total`(자동 접두어). 배포 후 fluent-bit 파드에 `kubectl exec ... -- curl -s localhost:2021/metrics`로 실명을 확인하고 prometheus-rules.yaml/dashboard.json과 대조·수정한다.
-3. workload 노드그룹의 taint(`NoSchedule`) 때문. DaemonSet 스펙에 `tolerations: [operator: Exists]` 추가.
-4. ① configmap에 `grafana_dashboard=1` 라벨이 있는가(sidecar가 라벨로 watch), ② sidecar `searchNamespace`가 configmap의 네임스페이스와 일치하는가.
-5. histogram `Value_field`는 숫자만 받으므로 Lua에서 단위표(ns/µs/us/ms/s, `1m30s` 패턴 별도)로 초 단위 float(`duration_seconds`)로 변환해 넣는다.
+Fluent Bit `log_to_metrics` 필터로 액세스 로그에서 requests/errors counter를 생성 → `prometheus_exporter :2021` → PodMonitor로 Prometheus에 수집시킨다 (set-03 패턴). 제공 바이너리는 수정 대상이 아니므로, 이미 흐르고 있는 stdout 로그를 메트릭으로 바꾸는 것이 유일한 경로다. 이 파이프라인이 끊기면 트래픽 패널과 HighErrorRate/HighLatency 알람이 통째로 No Data가 된다.
+</Quiz>
+
+<Quiz title="log_to_metrics 자동 접두어">
+`log_to_metrics` counter를 `wsc2026_requests_total`이라는 이름으로 정의했다. Prometheus에서 실제로 조회되는 메트릭 이름은 [[log_metric_counter_wsc2026_requests_total]] 이다.
+
+노출되는 이름에는 `log_metric_counter_` / `log_metric_histogram_` 접두어가 자동으로 붙는다 — histogram이면 `log_metric_histogram_wsc2026_request_duration_seconds_{bucket,sum,count}`. 다만 접두어 규칙은 빌드에 따라 달라질 수 있으므로 **실측이 원칙**이다: 배포 후 fluent-bit 파드에서 `kubectl exec ... -- curl -s localhost:2021/metrics`로 실제 이름을 확인하고, prometheus-rules.yaml / dashboard.json의 이름과 대조·수정한다.
+</Quiz>
+
+<Quiz title="Fluent Bit이 workload 노드에 안 뜰 때">
+Fluent Bit DaemonSet이 addon 노드에는 떴는데 workload 노드에는 파드가 하나도 없다. 원인과 수정은?
+
+- [x] workload 노드그룹의 taint(`NoSchedule`) 때문 — DaemonSet 파드 스펙에 `tolerations: [operator: Exists]`를 추가한다
+- [ ] DaemonSet의 `replicas`를 노드 수만큼 올리지 않아서
+  > DaemonSet에는 `replicas` 필드가 없다. 스케줄 가능한 노드마다 자동으로 1개씩 뜬다.
+- [ ] fluent-bit SA에 Pod Identity 연결이 빠져서
+  > 인증 누락은 `logs:PutLogEvents` 실패로 나타난다. 파드는 정상적으로 스케줄된다.
+- [ ] hostPath `/var/log` 마운트 권한이 없어서
+  > 마운트 실패면 파드가 그 노드에 생성은 되고 Error/CrashLoop 상태가 된다. 파드 자체가 없다는 건 스케줄 단계 문제다.
+
+workload 노드그룹의 taint(`NoSchedule`) 때문이다. DaemonSet 스펙에 `tolerations: [operator: Exists]`를 추가한다. 앱 파드는 workload 노드에 있으므로, 여기에 Fluent Bit이 안 뜨면 앱 로그가 아예 수집되지 않는다 — 대표 실수.
+</Quiz>
+
+<Quiz title="대시보드가 import 되지 않을 때">
+Grafana에 dashboard.json을 ConfigMap으로 넣었는데 대시보드가 보이지 않는다. 점검할 것을 **모두** 고르시오.
+
+- [x] ConfigMap에 `grafana_dashboard=1` 라벨이 붙어 있는가
+- [x] 대시보드 sidecar의 `searchNamespace`가 ConfigMap의 네임스페이스를 포함하는가
+- [ ] kps values의 `additionalDataSources`에 대시보드 uid를 등록했는가
+  > `additionalDataSources`는 datasource(prometheus/alertmanager/cloudwatch) 프로비저닝용이다. 대시보드 import 경로와 무관하다.
+- [ ] Grafana 파드를 재시작했는가
+  > sidecar가 라벨을 watch해 실시간으로 import하므로 재시작은 필요 없다. 라벨이 없으면 재시작해도 안 뜬다.
+
+대시보드 import는 **① configmap 생성 → ② `grafana_dashboard=1` 라벨** 두 단계다. 라벨을 빼먹으면 sidecar가 아예 무시한다. 라벨이 맞는데도 안 뜨면 sidecar `searchNamespace`가 그 ConfigMap의 네임스페이스와 일치하는지 본다. 참고로 채점은 패널 존재가 아니라 **데이터 표시 여부**까지 보므로, import된 뒤 No Data 패널이 없는지도 확인해야 한다.
+</Quiz>
+
+<Quiz title="Go duration을 histogram에 넣기">
+Go 로그가 `duration=136.048µs`, `89.8ms`, `1m30s`처럼 단위 붙은 문자열을 찍는다. 이걸 `log_to_metrics` histogram에 넣으려면?
+
+- [x] histogram `Value_field`는 숫자만 받으므로, Lua에서 단위표(ns/µs/us/ms/s + `NmM.Ns` 패턴 별도)로 초 단위 float(`duration_seconds`)로 변환해 넣는다
+- [ ] parsers.conf의 `Types duration:float`로 캐스팅하면 된다
+  > `136.048µs`는 뒤에 단위 문자가 붙어 있어 float 캐스팅이 실패하거나 단위를 잃은 값이 된다. 문자열 파싱이 먼저다.
+- [ ] Prometheus recording rule로 단위를 나눠 초 단위로 만든다
+  > 값이 histogram에 들어가지 못하면 recording rule이 참조할 시계열 자체가 없다. 변환은 Fluent Bit 단계에서 끝나야 한다.
+- [ ] Go의 duration은 이미 초 단위 실수라 그대로 넣어도 된다
+
+histogram의 `Value_field`는 숫자여야 하므로 초 단위 float로 변환한다. Lua에서 단위표(ns/µs/us/ms/s)를 두고, `1m30s` 같은 `NmM.Ns` 패턴은 별도로 처리한다(set-03 `prepare.lua`). 결과를 `duration_seconds` 필드로 넣고 histogram의 `Value_field`가 이를 가리킨다.
+</Quiz>
+
+<QuizResults confetti />

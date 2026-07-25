@@ -3,6 +3,8 @@ title: IAM 기초 (선수 학습, 약 1시간)
 description: 사용자·역할·정책 JSON과 AssumeRole 흐름, 대회에서 root 사용이 금지인 이유를 정리한 선수 학습.
 ---
 
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+
 > 문서 유형: explanation
 
 ## ① 학습 목표
@@ -77,18 +79,39 @@ aws sts get-caller-identity
 
 ## ⑤ 자기 점검 퀴즈
 
-1. 역할(Role)에만 있고 사용자에게는 없는 정책은 무엇이며, 그 안에 반드시 들어가는 요소는?
-2. Allow 정책과 Deny 정책이 같은 Action에 충돌하면 결과는?
-3. EKS 클러스터를 root로 생성하면 대회에서 어떤 문제가 생기나? (2가지)
+<Quiz title="신뢰 정책의 필수 요소">
+역할(Role)에만 존재하고 사용자에게는 없는 정책이 **신뢰 정책**이다. 그 안에 반드시 들어가야 하는, "누가 이 역할을 Assume할 수 있는지"를 지정하는 요소는 [[Principal]] 이다.
 
-<details>
-<summary>정답</summary>
+신뢰 정책은 역할의 문지기다. 권한 정책이 "이 신원이 **무엇을** 할 수 있나"(Action/Resource)를 정한다면, 신뢰 정책은 "이 역할을 **누가** 쓸 수 있나"를 `Principal`로 정한다. AssumeRole이 성립하려면 두 조건이 동시에 만족돼야 한다 — ① 역할의 신뢰 정책이 호출자를 `Principal`로 인정하고, ② 호출자에게 `sts:AssumeRole` 권한이 있어야 한다. 한쪽만 있으면 실패한다.
+</Quiz>
 
-1. 신뢰 정책. `Principal` (누가 이 역할을 Assume할 수 있는지).
-2. 명시적 Deny가 이긴다 (Deny > Allow > 암묵적 Deny).
-3. ① root-less KMS 키 정책 아래서 KMS 사용이 전부 거부됨 ② 생성자 신원 ≠ 채점 신원이 되어 kubectl/채점 접근 불가.
+<Quiz title="정책 평가 — 충돌 시 결과">
+같은 Action에 대해 Allow 정책과 Deny 정책이 동시에 걸려 있다. 결과는?
 
-</details>
+- [x] 명시적 Deny가 이긴다 (Deny > Allow > 암묵적 Deny)
+- [ ] 더 구체적인 Resource ARN을 가진 정책이 이긴다
+  > 라우팅 테이블의 longest-prefix match와 헷갈리기 쉬운 지점이다. IAM 평가에는 "구체성" 개념이 없다 — 명시적 Deny가 하나라도 있으면 끝이다.
+- [ ] 나중에 연결(attach)된 정책이 이긴다
+  > IAM 정책에는 적용 순서가 없다. 연결된 모든 정책을 합쳐서 한 번에 평가한다.
+- [ ] Allow가 이긴다 — 명시적 허용이 암묵적 거부보다 우선하기 때문
+
+평가 순서는 **명시적 Deny → 명시적 Allow → 암묵적 Deny(기본 거부)**. "명시적 허용이 암묵적 거부를 이긴다"는 맞는 말이지만, 명시적 Deny 앞에서는 무력하다. SCP·권한 경계·리소스 정책 중 어느 하나에라도 Deny가 있으면 그대로 차단된다.
+</Quiz>
+
+<Quiz title="root로 클러스터를 만들면">
+EKS 클러스터를 root 사용자로 생성하면 대회에서 어떤 문제가 생기나? 옳은 것을 **모두** 고르시오.
+
+- [x] root-less KMS 키 정책 아래서 KMS 사용이 전부 거부되어 복구 불가에 가까워진다
+- [x] 생성자 신원과 채점 신원이 달라져 kubectl·채점 스크립트 접근이 실패한다
+- [ ] root 사용자에게는 EKS 클러스터 생성 권한이 없어 생성 단계에서 바로 실패한다
+  > root는 모든 권한을 가지므로 생성 자체는 **성공한다**. 그래서 더 위험하다 — 문제가 채점 단계에 가서야 드러난다.
+- [ ] root로 만든 클러스터는 `aws-auth` ConfigMap이 아예 생성되지 않는다
+  > ConfigMap은 정상 생성된다. 문제는 그 안에 root 신원만 매핑되어, 이후 IAM 사용자로는 접근 경로가 없다는 점이다.
+
+**① root-less KMS**: 대회 유형의 KMS 키 정책은 Principal에서 root를 뺀다. root로 만든 리소스는 이후 KMS 사용이 전부 거부된다. **② 생성자 = 채점자 신원**: EKS 클러스터를 만든 IAM 신원만 기본 kubectl 접근을 가진다. 처음부터 IAM 사용자 하나(`skills-admin`)로 통일하는 습관이 곧 점수다. `aws sts get-caller-identity`의 `Arn`에 `root`가 보이면 즉시 멈춘다.
+</Quiz>
+
+<QuizResults confetti />
 
 ## ⑥ 다음 단계
 

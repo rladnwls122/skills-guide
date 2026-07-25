@@ -3,6 +3,8 @@ title: 2과제 유형별 아키텍처 패턴 1장 요약 — 오토스케일링 
 description: 2과제 유형 3·4는 실습 기준으로, 유형 5는 개념과 함정 암기 기준으로 도식·연결 고리·채점 상태를 정리한다.
 ---
 
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+
 > 문서 유형: explanation
 
 유형 3·4는 실습까지, 유형 5는 개념+함정 암기만 한다. 각 유형은 ① 도식 ② 언제 나오나 ③ 핵심 연결 고리 ④ 채점이 보는 상태 ⑤ 퀴즈 순서다.
@@ -52,22 +54,68 @@ flowchart LR
 
 ### ⑤ 퀴즈
 
-1. 채점 기대 "Node ≥ 2"는 어떤 숫자 계산에서 나오나?
-2. stabilizationWindowSeconds를 기본값(300)으로 두면 어떤 채점이 왜 깨지나?
-3. KEDA가 SQS 큐 길이를 읽을 때 쓰는 자격증명은 무엇인가?
-4. Karpenter가 노드를 아예 안 띄운다. 태그 관점에서 무엇을 확인하나?
-5. Deployment에 configMapRef로 env를 하나 더 얹으면?
+<Quiz title="Node ≥ 2 가 나오는 계산">
+채점 기대 "Max App Nodes ≥ 2"는 어떤 숫자 계산에서 나오나?
 
-<details>
-<summary>답</summary>
+- [x] Pod requests 500m × 5 Pod = 2.5 vCPU > t3.medium allocatable ~1.9 vCPU → 한 대에 다 못 들어가 Pending 발생 → Karpenter가 2대째를 프로비저닝
+- [ ] queueLength 5에 메시지 100건이면 목표 Pod가 20이고, 노드당 10 Pod씩 배치되어 2대가 된다
+  > 목표 20은 ScaledObject `max 5`에서 캡된다. 실제로 뜨는 Pod는 5개이고, 노드 수는 Pod 수가 아니라 requests 합으로 결정된다.
+- [ ] NodePool에 최소 노드 수 2가 설정돼 있어서
+  > Karpenter NodePool에는 최소 노드 수 개념이 없다. 노드는 Pending Pod가 있을 때만 생긴다.
+- [ ] Multi-AZ 요구가 있어 2개 AZ에 최소 1대씩 배치되기 때문
+  > topologySpreadConstraints를 걸지 않았으므로 AZ 분산이 노드 수를 강제하지 않는다.
 
-1. requests 500m × 5 Pod = 2.5 vCPU > t3.medium allocatable ~1.9 vCPU → 1대 수용 불가 → 2대째 프로비저닝.
-2. purge 후 Pod 5→1 축소가 5분 이상 걸려, 최대 2.5분 대기인 스케일인 채점(Final Pods 1/Nodes 1)에 실패한다. 30으로 줄이고 consolidateAfter 60s와 한 쌍으로 유지.
-3. `identityOwner: operator` — keda-operator SA의 IRSA(skm-keda-policy).
-4. 서브넷의 `karpenter.sh/discovery: skm-eks-cluster` 태그와 SG의 `aws:eks:cluster-name` 태그. NodeClass의 selectorTerms가 이 태그로 디스커버리한다.
-5. 채점이 env를 name=value로 정확 비교하므로 리터럴 3개 외 무엇이든(추가 env, valueFrom) 오답.
+`requests`를 줄이면 5 Pod가 한 대에 다 들어가 노드가 안 늘어나고, "Node ≥ 2"가 깨진다. 이 채점 항목은 리소스 요청량으로 설계된 것이다.
+</Quiz>
 
-</details>
+<Quiz title="scaleDown 기본 안정화 창">
+HPA `behavior.scaleDown.stabilizationWindowSeconds`를 명시하지 않으면 기본값 [[300]] 초가 적용된다.
+
+기본값이면 purge 후 Pod 5→1 축소만 5분 이상 걸려, 최대 2.5분 대기인 스케일인 채점(Final Pods 1 / Final Nodes 1)에 실패한다. 스케일인 시간 예산은 세 값이 한 쌍이다: ScaledObject `pollingInterval: 10`(빠른 감지) + HPA `scaleDown.stabilizationWindowSeconds: 30`(기본 300 → 30) + NodePool `consolidateAfter: 60s`. **어느 값도 늘리지 않는다.**
+</Quiz>
+
+<Quiz title="KEDA의 SQS 조회 자격증명">
+KEDA가 `skm-order-queue`의 큐 길이를 폴링할 때 쓰는 자격증명은?
+
+- [x] `identityOwner: operator` — keda-operator SA에 연결된 IRSA(skm-keda-policy)
+- [ ] `identityOwner: workload` — 스케일 대상인 order-processor Pod의 SA IRSA
+  > 대표 오개념. 큐를 읽는 주체는 앱 Pod가 아니라 KEDA 오퍼레이터다. workload로 두면 앱 SA에 SQS 권한이 없어 메트릭 조회가 실패하고 스케일아웃이 아예 일어나지 않는다.
+- [ ] TriggerAuthentication에 Secret으로 넣은 액세스 키/시크릿
+  > 정적 키는 최소권한·자격증명 관리 양쪽에서 감점 소지다. IRSA로 해결되는 문제다.
+- [ ] 노드 인스턴스 프로파일(노드 역할)에 붙인 SQS 권한
+  > 그 노드의 모든 Pod가 SQS 권한을 얻는다. 최소권한 위반이며 IRSA를 쓰는 이유가 사라진다.
+
+SQS 조회 자격증명은 keda-operator SA의 IRSA에서 가져온다. 앱 Pod의 권한과는 무관하다.
+</Quiz>
+
+<Quiz title="Karpenter 디스커버리 태그">
+Karpenter가 Pending Pod가 있는데도 노드를 아예 안 띄운다. 태그 관점에서 확인할 것을 **모두** 고르시오.
+
+- [x] 서브넷의 `karpenter.sh/discovery: skm-eks-cluster` 태그
+- [x] 보안 그룹의 `aws:eks:cluster-name` 태그
+- [ ] 프로비저닝될 노드의 `karpenter.sh/nodepool` 라벨
+  > 이건 Karpenter가 노드를 만든 **뒤에** 붙이는 결과 라벨이다. 디스커버리 입력이 아니다.
+- [ ] 서브넷의 `kubernetes.io/role/internal-elb` 태그
+  > LBC가 내부 ALB 서브넷을 고를 때 쓰는 태그다. Karpenter의 NodeClass 디스커버리와는 무관하다.
+
+NodeClass의 `selectorTerms`가 이 태그들로 서브넷·SG를 찾는다. 태그가 없으면 NodeClass가 대상을 못 찾아 노드가 생성되지 않는다. 서브넷 태그는 terraform이 부착한다.
+</Quiz>
+
+<Quiz title="Deployment env 정확 3개">
+Deployment `order-processor`에 configMapRef나 valueFrom으로 env를 하나 더 얹으면?
+
+- [x] 채점이 env를 name=value로 정확 비교하므로 리터럴 3개(`AWS_REGION`, `SQS_QUEUE_URL`, `PROCESSING_TIME`) 외에 무엇이든 추가되면 오답이다
+- [ ] `AWS_REGION`을 valueFrom의 fieldRef로 바꿔도 최종 값이 같으니 통과한다
+  > 비교 대상은 컨테이너 스펙의 리터럴 name=value다. valueFrom은 값이 스펙에 없으므로 불일치로 잡힌다.
+- [ ] 추가된 env는 비교 대상 밖이라 무시되고 3개만 대조된다
+  > 정확 비교이므로 개수 초과도 불일치다.
+- [ ] Pod가 정상 기동하면 스케일링 채점만 통과하면 되므로 env는 영향이 없다
+  > env는 스케일링과 별개의 채점 항목이다.
+
+리터럴 3개만 둔다. valueFrom·envFrom·추가 env 모두 금지다. 이름도 정확 일치 대상이다: `skm-order-queue`, `skm-eks-cluster`, `order-processor`, `order-scaler`, `skm-app-nodepool`, `skm-app-nodeclass`.
+</Quiz>
+
+<QuizResults confetti />
 
 ---
 

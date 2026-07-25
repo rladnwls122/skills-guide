@@ -162,7 +162,7 @@ kubectl run dns-test --rm -it --restart=Never --image=busybox \
 # 기대: 해석 성공. 한쪽만 적용돼 있으면 여기서 실패한다.
 ```
 
-## 함정
+## 프라이빗 EKS·IAM :badge[함정]{variant=danger}
 
 - **`:root` trust를 "전원 허용"으로 오해**: A-2에서 재현했듯 호출자 identity policy가 없으면 실패. 반대로, 계정에 admin 사용자가 많으면 그들 모두 assume 가능하다는 뜻이기도 하다.
 - **ExternalId 불일치**: apply 시 `player_number`와 채점 셸 export `number`가 한 글자라도 다르면 9-1 문자열 비교·9-2 assume 모두 실패. 당일 등번호 확정 즉시 tfvars 반영 → apply.

@@ -3,6 +3,8 @@ title: Kubernetes 기초 (선수 학습, 약 2~3시간)
 description: Pod·Deployment·Service·ConfigMap·ServiceAccount 등 대회에 필요한 쿠버네티스 개념을 압축한 선수 학습.
 ---
 
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+
 > 문서 유형: explanation
 
 > eks-study PART-1 Kubernetes Basics의 4개 모듈(core-concepts / services-networking / config-storage / rbac-helm)을 선수 지식 수준으로 압축한 파일이다. 심화는 전부 PART-2에서 EKS로 다룬다.
@@ -208,22 +210,65 @@ kind delete cluster    # 정리
 
 ## ⑥ 자기 점검 퀴즈
 
-1. Pod을 직접 만들지 않고 Deployment로 만드는 이유 두 가지는?
-2. ConfigMap을 수정했는데 Pod의 환경변수가 그대로다. 무엇을 해야 하나?
-3. 대회에서 앱을 외부에 노출할 때 Ingress를 쓰지 않는 이유는?
-4. Pod이 CrashLoopBackOff다. 가장 먼저 볼 두 가지 명령은?
-5. Secret이 base64라서 안전하지 않다면, EKS/대회에서는 무엇으로 보강하나?
+<Quiz title="왜 Pod 대신 Deployment인가">
+Pod을 직접 만들지 않고 Deployment로 만드는 이유를 **모두** 고르시오.
 
-<details>
-<summary>정답</summary>
+- [x] Pod이 죽어도 ReplicaSet이 개수를 유지한다 (자가 복구)
+- [x] 롤링 업데이트와 롤백이 가능하다
+- [ ] Deployment로 만든 Pod만 Service의 라벨 셀렉터에 잡힌다
+  > Service는 **라벨만** 본다. 누가 만들었는지는 상관없다 — 라벨만 맞으면 직접 만든 Pod도 그대로 엔드포인트에 등록된다.
+- [ ] 단독 Pod은 Namespace에 속할 수 없어 `-n` 지정이 불가능하다
+  > 모든 Pod은 Namespace에 속한다. Deployment와 무관한 성질이다.
 
-1. ① Pod이 죽어도 ReplicaSet이 개수를 유지(자가 복구) ② 롤링 업데이트·롤백이 가능.
-2. `kubectl rollout restart deploy/<name>` — 환경변수 주입은 Pod 시작 시점에만 일어난다.
-3. Ingress가 만드는 ALB는 이름을 지정할 수 없어 ALB 이름 채점을 통과할 수 없다. 대신 Terraform으로 ALB를 만들고 TargetGroupBinding으로 Pod IP를 타깃그룹에 직접 등록한다.
-4. `kubectl describe pod <pod>`(Events 섹션)과 `kubectl logs <pod> --previous`(죽기 직전 로그).
-5. KMS envelope 암호화(EKS 클러스터의 Secret 암호화 설정) — PART-3 모듈 08에서 실습.
+관계는 **Deployment → ReplicaSet → Pod**. 단독 Pod은 죽으면 그걸로 끝이고(스스로 부활하지 않음) 이미지 태그를 바꿔 무중단으로 교체할 방법도 없다. 실무·대회에서 Pod은 거의 항상 Deployment로 만든다 — 그래야 replicas·probe·topologySpread·롤백 같은 채점 항목이 성립한다.
+</Quiz>
 
-</details>
+<Quiz title="ConfigMap을 고쳤는데 반영이 안 될 때">
+ConfigMap을 수정했는데 Pod의 환경변수가 예전 값 그대로다. 무엇을 해야 하나?
+
+- [x] `kubectl rollout restart deploy/<name>` — Pod을 새로 띄워 값을 다시 주입한다
+- [ ] `kubectl apply -f configmap.yaml` 을 한 번 더 실행한다
+  > ConfigMap 자체는 이미 갱신되어 있다. 문제는 **이미 떠 있는 Pod**이 옛 값을 들고 있다는 것이므로, ConfigMap을 다시 적용해도 아무 변화가 없다.
+- [ ] `kubectl delete pod -l app=<name>` 으로 Pod을 지운다
+  > 결과적으로는 새 Pod이 뜨므로 값은 반영된다. 다만 한꺼번에 죽여 순단이 생기고 PDB·롤링 전략을 우회한다 — `rollout restart` 가 순차 교체라 안전하다.
+- [ ] ConfigMap에 `reloadOnChange: true` 를 추가한다
+
+**환경변수 주입(`envFrom.configMapRef`)은 Pod 시작 시점에 딱 한 번 일어난다.** 이후 ConfigMap이 바뀌어도 실행 중인 컨테이너의 환경변수는 절대 바뀌지 않는다. `kubectl rollout restart deploy/<name>` 으로 Pod을 순차 재생성해야 한다. (참고: **볼륨 마운트**로 주입한 경우는 파일 내용이 자동 갱신되지만, 앱이 파일을 다시 읽어야 의미가 있다.)
+</Quiz>
+
+<Quiz title="대회에서 Ingress를 쓰지 않는 이유">
+대회에서 앱을 외부에 노출할 때 Ingress를 쓰지 않는 이유는?
+
+- [x] Ingress가 만드는 ALB는 이름을 지정할 수 없어 "ALB 이름 채점"을 통과할 수 없다. 대신 Terraform으로 ALB를 만들고 TargetGroupBinding으로 Pod IP를 타깃그룹에 직접 등록한다
+- [ ] Ingress를 쓰면 AWS Load Balancer Controller를 추가로 설치해야 하는데 그 시간이 아깝기 때문
+  > LBC는 **어느 쪽이든 필요하다**. TargetGroupBinding을 읽어 Pod IP를 타깃그룹에 등록해 주는 것도 LBC다. 설치 여부가 아니라 **ALB 이름을 누가 정하느냐**가 갈림길이다.
+- [ ] Ingress는 ClusterIP Service를 백엔드로 쓸 수 없어 NodePort로 바꿔야 하기 때문
+  > 타깃 타입 `ip` 모드에서는 ClusterIP Service를 그대로 쓴다. NodePort가 필수였던 것은 `instance` 모드 이야기다.
+- [ ] EKS는 Ingress 리소스를 지원하지 않는다
+
+채점이 **ALB의 이름**을 보기 때문이다. Ingress가 생성하는 ALB는 이름이 자동 생성되어 지정할 수 없다. 그래서 ALB는 **Terraform으로 이름까지 정해서** 만들고, 그 타깃그룹에 `TargetGroupBinding`으로 Service 뒤의 Pod IP를 직접 등록한다. 흐름: CloudFront → ALB(Terraform) → TargetGroup ← TargetGroupBinding ← Service(ClusterIP) → Pod.
+</Quiz>
+
+<Quiz title="CrashLoopBackOff 1차 진단">
+Pod이 `CrashLoopBackOff` 다. 가장 먼저 실행할 두 명령은? **모두** 고르시오.
+
+- [x] `kubectl describe pod <pod>` — Events 섹션에서 이미지 pull 실패·스케줄 실패·probe 실패 원인을 본다
+- [x] `kubectl logs <pod> --previous` — 죽기 직전 컨테이너의 로그를 본다
+- [ ] `kubectl exec -it <pod> -- sh` — 컨테이너 안에 들어가 확인한다
+  > 컨테이너가 계속 죽는 중이라 붙을 대상이 없다. `error: unable to upgrade connection` 만 보고 시간을 버린다.
+- [ ] `kubectl logs <pod>` — 현재 컨테이너 로그를 본다
+  > 재시작 대기(BackOff) 중에는 현재 컨테이너가 없거나 방금 시작된 상태라 로그가 비어 있기 쉽다. 원인은 **죽기 직전** 로그에 있으므로 `--previous` 가 필요하다.
+
+`describe` 의 **Events 섹션이 디버깅 1순위**다(ImagePullBackOff, Insufficient cpu, Readiness probe failed 등이 여기 찍힌다). 그다음이 `logs --previous` — 앱이 왜 스스로 종료했는지는 죽기 직전 로그에만 남는다.
+</Quiz>
+
+<Quiz title="Secret은 무엇으로 보강하나">
+Secret은 base64 인코딩일 뿐 암호화가 아니다. EKS/대회에서는 이것을 [[KMS]] envelope 암호화로 보강한다.
+
+base64는 누구나 되돌릴 수 있는 **인코딩**이지 암호화가 아니다. EKS 클러스터의 Secret 암호화 설정으로 **KMS envelope 암호화**를 켜면, etcd에 저장되는 Secret이 KMS 키로 감싼 데이터 키로 암호화된다. PART-3 모듈 08에서 실습하며, 이때 쓰는 KMS 키 정책이 대회 유형의 **root-less** 정책이다 — root로 리소스를 만들어 두면 여기서 전부 막힌다.
+</Quiz>
+
+<QuizResults confetti />
 
 ## ⑦ 다음 단계
 

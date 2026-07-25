@@ -3,6 +3,8 @@ title: 08. 이론 — Fully-Private EKS 운용과 IAM 심화
 description: "닫힌 클러스터의 생성·접근·이미지 pull 경로와 IAM 정책 이중 평가 원리 정리."
 ---
 
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+
 > 문서 유형: explanation
 
 이 모듈은 "네트워크가 닫힌 클러스터를 어떻게 만들고·접근하고·채점받는가"와 "IAM 정책이 실제로 어떻게 평가되는가"를 다룬다. 둘 다 실측 함정이 많은 하드모드 영역이다.
@@ -194,16 +196,68 @@ set-03은 internet-facing ALB + CloudFront prefix list SG(직접 curl 000), set-
 
 ## 자기 점검 퀴즈 (5문)
 
-1. `eksctl create cluster`가 노트북(퍼블릭 네트워크)에서 fully-private 클러스터를 만들 수 있는 이유는? 생성이 중간에 끊기면 무엇을 확인해야 하나?
-2. fully-private 클러스터에서 `eks`/`eks-auth` Interface Endpoint를 만들면 안 되는 이유는?
-3. trust policy가 `Principal: arn:aws:iam::<acct>:root`인 역할을, 아무 정책도 없는 IAM 사용자가 assume하면 결과는? 이유는?
-4. audit role의 ExternalId에서 대회 당일 반드시 맞춰야 하는 두 값은?
-5. CoreDNS 커스텀 도메인이 "패치했는데 어느 순간 되돌아가 있는" 대표 원인은?
+<Quiz title="노트북에서 private 클러스터 생성">
+`eksctl create cluster`를 퍼블릭 네트워크의 본 PC에서 실행했는데 fully-private 클러스터가 만들어진다. 그 이유와, 생성이 중간에 끊겼을 때 해야 할 일은?
 
-### 정답
+- [x] eksctl이 생성 중 퍼블릭 엔드포인트를 임시로 켰다가 완료 시 자동으로 끈다 — 중단되면 퍼블릭이 열린 채 남으므로 `describe-cluster`로 `[false, true]`를 확인하고 필요하면 `update-cluster-config`로 재차단한다
+- [ ] `privateCluster.enabled`는 노드그룹에만 적용되고 컨트롤 플레인 엔드포인트는 apply 후 수동으로 닫는 게 정상 절차다
+  > `privateCluster.enabled`는 컨트롤 플레인 엔드포인트 설정을 포함한다. 수동 마감이 정상 절차인 게 아니라, 중단 시에만 남는 잔여 상태다.
+- [ ] eksctl은 CloudFormation만 호출하고 클러스터에는 접근하지 않으므로 엔드포인트가 열릴 일이 없다
+  > eksctl은 생성 후 애드온·aws-auth 등을 위해 실제로 API 서버에 붙는다. 그래서 생성 구간에 퍼블릭이 필요하다.
+- [ ] eksctl이 자동으로 SSM 터널을 뚫어 VPC 내부에서 API를 호출한다
 
-1. eksctl이 생성 중 퍼블릭 엔드포인트를 임시로 켰다가 완료 시 자동으로 끈다. 중단되면 퍼블릭이 열린 채 남으므로 `describe-cluster`로 `[false, true]` 확인 후 `update-cluster-config --resources-vpc-config endpointPublicAccess=false`로 재차단.
-2. `private_dns_enabled` Endpoint의 PHZ가 OIDC/eks-auth 도메인 해석을 가로채 Pod Identity/IRSA가 깨진다(set-03 실측). NAT 경유 호출로 충분하다.
-3. AccessDenied. AssumeRole은 trust policy와 호출자의 identity-based `sts:AssumeRole` 허용 **둘 다** 통과해야 한다(이중 평가). `:root` trust는 후보 범위를 계정으로 넓힐 뿐 권한을 주지 않는다.
-4. terraform apply에 넣는 `player_number`와 채점 셸에서 export하는 등번호(`number`). 둘이 다르면 mark 9-1 문자열 비교와 9-2 assume이 모두 실패한다.
-5. coredns addon 업데이트 — Corefile이 addon 기본값으로 초기화된다. 업데이트 금지, 했다면 패치 재적용 후 grep 재확인.
+eksctl이 생성 중 퍼블릭 엔드포인트를 임시로 켰다가 완료 시 자동으로 끈다. 그래서 밖에서도 만들 수 있다. 생성이 중단되면 퍼블릭이 열린 채 남고, mark 4-1은 `describe-cluster`로 `[endpointPublicAccess, endpointPrivateAccess]`가 `[false, true]`인지 직접 확인한다. 생성 직후 습관화할 것:
+
+```bash
+aws eks describe-cluster --name <cluster> \
+  --query 'cluster.resourcesVpcConfig.[endpointPublicAccess,endpointPrivateAccess]'   # false, true
+aws eks update-cluster-config --name <cluster> --resources-vpc-config endpointPublicAccess=false
+```
+</Quiz>
+
+<Quiz title="eks / eks-auth Endpoint 금지">
+fully-private 클러스터라도 `eks` / `eks-auth` Interface Endpoint는 만들지 않는다. 왜인가?
+
+- [x] `private_dns_enabled` Endpoint가 만드는 PHZ가 OIDC/eks-auth 도메인 해석을 가로채 Pod Identity/IRSA가 깨진다
+- [ ] `eks` / `eks-auth`는 Interface Endpoint를 지원하지 않아 생성 자체가 실패한다
+  > 생성은 정상적으로 된다. 문제는 만들어진 뒤 DNS 해석이 가로채이는 것이라 더 찾기 어렵다.
+- [ ] Endpoint가 있으면 컨트롤 플레인이 퍼블릭 엔드포인트를 다시 열어버린다
+- [ ] Interface Endpoint는 시간당 과금이라 비용 pillar에서 감점된다
+  > 비용은 부수적 이유다. 이 둘을 만들지 않는 결정적 사유는 인증 파괴다.
+
+`private_dns_enabled` Endpoint의 PHZ가 OIDC/eks-auth 도메인 해석을 가로채 Pod Identity/IRSA가 깨진다(set-03 실측, endpoints.tf 주석). fully private여도 이 호출은 NAT 경유로 충분하므로 이 둘은 만들지 않는다. 반대로 "인터넷 미경유" 요구가 있을 때 필요한 것은 `s3`(Gateway) / `ecr.api` / `ecr.dkr` 쪽이다.
+</Quiz>
+
+<Quiz title="AssumeRole 이중 평가">
+trust policy가 `Principal: arn:aws:iam::<acct>:root`인 역할을, 같은 계정의 **아무 정책도 붙어 있지 않은** IAM 사용자가 assume하면?
+
+- [x] `AccessDenied` — trust policy와 호출자의 identity-based `sts:AssumeRole` 허용을 **둘 다** 통과해야 한다
+- [ ] 성공한다 — `:root`는 그 계정의 모든 principal에게 assume을 허용한다는 뜻이다
+  > 가장 흔한 오개념. `:root`는 "후보 범위를 계정 전체로 넓힌다"는 위임 선언일 뿐, 호출자에게 권한을 부여하지 않는다.
+- [ ] trust에 ExternalId 조건이 없으면 성공하고, 조건이 있으면 실패한다
+  > ExternalId는 평가 2(trust) 안의 추가 조건일 뿐이다. 조건이 없어도 평가 1(호출자 정책)에서 이미 막힌다.
+- [ ] 성공하지만 세션이 `max_session_duration` 없이 기본 1시간으로 제한된다
+
+`AccessDenied`. AssumeRole은 **평가 1: 호출자의 identity-based policy에 `sts:AssumeRole` 허용** → **평가 2: 역할 trust policy의 Principal 매칭 + ExternalId 조건**을 순서대로 모두 통과해야 임시 자격증명이 발급된다. `:root` trust는 후보 범위를 계정으로 넓힐 뿐 권한을 주지 않는다 — 이것이 같은 계정 `:root` trust가 안전하게 쓰이는 이유다.
+</Quiz>
+
+<Quiz title="ExternalId 정확 일치">
+mark 9-1은 audit role의 ExternalId를 문자열 **정확 일치**로 본다. ExternalId는 `unicorn-audit-2026` + 선수등번호이며, 채점 셸이 export하는 등번호와 반드시 같아야 하는 terraform 변수 이름은 [[player_number]] 이다.
+
+대회 당일 맞춰야 하는 두 값은 **terraform apply에 넣는 `player_number`**와 **채점 셸에서 export하는 등번호(`number`)**다. 둘이 다르면 mark 9-1의 문자열 비교와 mark 9-2의 assume이 **모두** 실패한다. 9-2는 성공과 실패 양쪽이 다 채점 대상이라는 점도 기억할 것 — ExternalId 없이 assume하면 `AccessDenied`, 붙여서 assume한 뒤 `describe-vpcs`는 성공하고 `describe-instances`는 거부되어야 한다. 참고로 `get-role`은 `MaxSessionDuration=3600`도 함께 본다.
+</Quiz>
+
+<Quiz title="Corefile이 되돌아가는 이유">
+CoreDNS 커스텀 도메인(`wsc2026.skills.local`)을 패치했는데 어느 순간 Corefile이 원래대로 돌아가 있다. 대표 원인은?
+
+- [x] coredns addon을 업데이트해서 — Corefile이 addon 기본값으로 초기화된다
+- [ ] `kubectl rollout restart`가 ConfigMap을 차트 기본값으로 재생성해서
+  > restart는 파드만 다시 띄운다. ConfigMap은 건드리지 않으며, 오히려 패치를 반영하려면 필요한 단계다.
+- [ ] kubelet의 `clusterDomain` 설정이 주기적으로 Corefile에 동기화돼서
+  > kubelet과 Corefile은 서로를 덮어쓰지 않는다. 둘 다 수동으로 맞춰야 하는 **독립된 두 군데**라서 문제가 되는 것이다.
+- [ ] Karpenter가 노드를 교체할 때 coredns가 기본 설정으로 재배포돼서
+
+coredns addon 업데이트가 Corefile을 addon 기본값으로 초기화한다. 업데이트 금지, 이미 했다면 패치를 재적용하고 grep으로 재확인한다. 커스텀 도메인은 **① kubelet clusterDomain**(eksctl `overrideBootstrapCommand`의 nodeadm NodeConfig, 노드그룹 **모두**에)과 **② CoreDNS Corefile** 두 군데를 함께 바꿔야 하며, mark 4-1은 kubelet configz와 Corefile을 각각 grep한다. kps의 Alertmanager `clusterDomain`도 같이 맞춘다.
+</Quiz>
+
+<QuizResults confetti />

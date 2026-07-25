@@ -3,6 +3,8 @@ title: 02. KMS + S3 + CloudFront — 이론
 description: "alias 역조회·정책 grep·퍼블릭 차단 검사를 통과하는 KMS/S3/CloudFront 구조 정리."
 ---
 
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+
 > 문서 유형: explanation
 
 암호화(KMS)와 정적 웹 서빙(S3+CloudFront)은 거의 모든 세트에 나온다. 채점은 "alias 이름 역조회", "정책 텍스트 grep", "퍼블릭 차단 상태" 같은 기계적 검사이므로, 정확한 구조를 암기 수준으로 익힌다.
@@ -313,19 +315,89 @@ origin {
 
 ## 자기 점검 퀴즈
 
-1. 키 정책의 admin 액션과 use 액션을 각각 3개 이상 대고, 왜 분리하는가?
-2. set-02 에서 ECR 에 CMK 를 만들면 안 되는 이유는?
-3. set-03 root-less 키 정책에서 `kms:Create*`/`kms:Put*` 를 나열하는 이유와, root 로 apply 하면 생기는 일은?
-4. KMS 키 정책에 CloudFront 배포 ARN 을 직접 넣으면 어떤 문제가 나고 어떻게 우회하는가?
-5. 퍼블릭 차단 4종이 전부 true 인 버킷을 CloudFront 가 읽을 수 있는 이유는?
+<Quiz title="키 정책 — use 액션 골라내기">
+키 정책의 **use(사용)** statement 에 들어가는 액션을 모두 고르라.
 
-<details>
-<summary>정답</summary>
+- [x] `kms:Decrypt`
+- [x] `kms:GenerateDataKey*`
+- [x] `kms:Encrypt`
+- [ ] `kms:ScheduleKeyDeletion`
+  > 키 삭제 예약은 관리(admin) 액션이다. 사용자 역할에 이걸 주면 최소권한이 깨지고, 채점도 이 구조를 본다.
+- [ ] `kms:PutKeyPolicy`
+  > 키 정책 자체를 갈아끼우는 관리(admin) 액션. use 쪽에 섞이면 "키를 쓰는 역할이 키 정책을 다시 쓸 수 있다"는 권한 상승이 된다.
 
-1. admin: `kms:Create*`, `kms:Put*`, `kms:ScheduleKeyDeletion`(외 Enable*/Disable*/TagResource 등) / use: `kms:Encrypt`, `kms:Decrypt`, `kms:GenerateDataKey*`(외 DescribeKey, CreateGrant). 관리 주체와 사용 주체가 다르므로 분리해 최소권한을 만든다 — 채점도 이 구조를 본다.
-2. 과제에 ECR 용 CMK 이름이 없고 mark 3-1 은 `encryptionType == KMS` 만 검사한다. 관리형 `aws/ecr` 로 충분하며, CMK 를 만들면 "불필요 리소스 생성" 감점(유의사항 10).
-3. `kms:*` 를 못 쓰는 조건에서 관리 액션을 개별 나열해야 KMS lockout safety check(관리 불능 정책 거부)를 통과한다. 배포자 신원만 admin 이므로 root 로 apply 하면 이후 그 키의 모든 작업(사용·수정·삭제)이 거부된다 — eksctl/docker/kubectl 도 같은 자격증명으로.
-4. key→distribution→bucket→key 순환 참조로 Terraform 이 실패한다. 키 정책은 배포 ARN 대신 principal=cloudfront.amazonaws.com + `aws:SourceAccount = 계정ID` 조건으로 우회한다.
-5. OAC 가 SigV4 로 서명한 요청은 "퍼블릭"이 아니라 인증된 서비스 요청이며, 버킷 정책의 `AWS:SourceArn = 배포 ARN` Allow statement 가 그 요청만 허용하기 때문.
+**use**: `kms:Encrypt`, `kms:Decrypt`, `kms:GenerateDataKey*`, `kms:DescribeKey`, `kms:CreateGrant` — 키를 실제로 쓰는 역할/서비스 principal 에게.
+**admin**: `kms:Create*`, `kms:Put*`, `kms:Enable*`/`Disable*`, `kms:ScheduleKeyDeletion`, `kms:TagResource` — 계정 root 또는 배포자 IAM 신원에게.
 
-</details>
+관리 주체와 사용 주체가 다르므로 분리해 최소권한을 만든다. IAM 정책과 달리 KMS 는 **키 정책이 없으면 그 누구도(관리자 포함) 키에 접근하지 못한다**는 점이 분리의 전제다. 소비자에게 보통 필요한 최소 조합은 읽기면 `kms:Decrypt`, 쓰기까지면 `+ kms:GenerateDataKey`.
+</Quiz>
+
+<Quiz title="ECR 에 CMK 를 만들면 안 되는 이유">
+set-02 에서 ECR 에 전용 CMK 를 만들면 안 되는 이유는?
+
+- [x] 과제지에 ECR 용 CMK 이름이 없고 mark 3-1 은 `encryptionType == KMS` 만 검사한다 — CMK 를 만들면 유의사항 10 "불필요 리소스 생성" 감점
+- [ ] ECR 은 고객 관리 키(CMK)를 지원하지 않는다
+  > 지원한다. set-03 은 실제로 `wsc2026-ecr-kms` CMK 를 만들어 지정한다. 판단 기준은 기술적 가능 여부가 아니라 **과제지의 이름 명시 여부**다.
+- [ ] CMK 를 지정하면 `encryptionType` 이 `KMS` 가 아닌 값으로 나와 mark 3-1 검사에 실패한다
+  > 그럴듯하지만 사실이 아니다. CMK 를 지정해도 `encryptionType` 은 `KMS` 다. 감점 사유는 순전히 "요구되지 않은 리소스를 만들었다"는 것.
+- [ ] 계정당 CMK 개수 제한에 걸려 s3/dynamodb/eks 키를 못 만든다
+
+과제에 ECR 용 CMK 이름이 없고 mark 3-1 은 `encryptionType == KMS` 만 검사한다. 관리형 `aws/ecr` 로 충분하며, CMK 를 만들면 "불필요 리소스 생성" 감점(유의사항 10)이다.
+
+```hcl
+# ecr.tf — encryption_type 만 KMS, kms_key 미지정 = aws/ecr 관리형
+encryption_configuration {
+  encryption_type = "KMS"
+}
+```
+
+set-02 에서 CMK 를 만드는 대상은 과제지에 이름이 있는 셋뿐이다: `wskorea26-s3-key`, `wskorea26-dynamodb-key`, `wskorea26-eks-key`.
+</Quiz>
+
+<Quiz title="set-03 root-less 키 정책">
+set-03 유형(키 정책에 root principal·`kms:*` 금지)에 대해 옳은 것을 모두 고르라.
+
+- [x] `kms:*` 를 못 쓰므로 `kms:Create*`/`kms:Put*` 등 관리 액션을 개별 나열해야 KMS lockout safety check(관리 불능 정책 거부)를 통과한다
+- [x] 배포자 신원만 admin 이므로, root 로 apply 하면 이후 그 키에 대한 모든 작업이 거부된다
+- [ ] root principal 을 넣되 Condition 으로 제한하면 mark 의 grep 을 피할 수 있다
+  > set-03 mark 의 check_kms 는 정책 **텍스트를 grep** 한다. Condition 이 붙어 있든 말든 `:root` 문자열이 남으면 실격이다.
+- [ ] 관리 액션을 전부 빼면 "최소권한"이 되어 lockout safety check 도 함께 통과한다
+  > 정반대다. 관리 액션이 하나도 없으면 KMS 가 "누구도 관리할 수 없는 키"로 판단해 apply 자체를 거부한다.
+- [ ] root 위임이 없어도 서비스 principal 은 자동으로 키를 쓸 수 있다
+  > root 위임이 없으면 키 소비자(EKS Pod 역할, Lambda 실행 역할, 서비스 principal)를 키 정책에 **직접** 나열해야 한다. set-03 은 db 키에 `book_pod`/`book_function` 역할을, function 키에 lambda 서비스 principal(EncryptionContext 조건)까지 명시한다.
+
+`kms:*` 를 못 쓰는 조건에서 관리 액션을 개별 나열해야 KMS lockout safety check 를 통과한다. 그리고 배포자 신원만 admin 이므로 **root 로 apply 하면 이후 그 키의 모든 작업(사용·수정·삭제)이 거부**된다.
+
+치명 함정의 실무 결론: eksctl·docker push·kubectl 도 terraform 과 **같은 자격증명**으로 실행해야 한다.
+
+root-less 는 set-03 유형의 유의사항이 있을 때만 쓴다. 평상시(set-02)는 root 위임이 단순하고 안전하다 — 과제지 유의사항을 먼저 읽고 결정할 것.
+</Quiz>
+
+<Quiz title="순환 참조 우회">
+KMS 키 정책에 CloudFront 배포 ARN 을 직접 넣으면 `key → distribution → bucket → key` 순환 참조로 plan 이 실패한다. 우회책은 배포 ARN 대신 principal 을 `cloudfront.amazonaws.com` 으로 두고 계정 ID 를 거는 조건 키를 쓰는 것이다. 그 조건 키 이름은 [[aws:SourceAccount]] 다.
+
+---
+
+키 정책은 `aws:SourceAccount = 계정ID` 조건으로 우회한다.
+
+- **왜 순환인가**: 키 정책이 배포 ARN 참조 → 배포의 origin 이 버킷 참조 → 버킷의 SSE 설정이 키 참조 → 고리 완성. Terraform 은 그래프에 고리가 생기면 apply 를 거부한다.
+- **버킷 정책은 왜 괜찮은가**: bucket → distribution 단방향이라 배포 ARN 을 직접 참조해도 고리가 안 생긴다. 그래서 버킷 정책 쪽은 `AWS:SourceArn = 배포 ARN` 이 맞다.
+</Quiz>
+
+<Quiz title="퍼블릭 차단 4종과 OAC">
+퍼블릭 액세스 차단 4종이 전부 true 인 버킷을 CloudFront 가 읽을 수 있는 이유는?
+
+- [x] OAC 가 SigV4 로 서명한 요청은 "퍼블릭"이 아니라 인증된 서비스 요청이고, 버킷 정책의 `AWS:SourceArn = 배포 ARN` Allow statement 가 그 요청만 허용하기 때문
+- [ ] OAI(Origin Access Identity)가 특별 IAM 사용자로서 퍼블릭 차단을 우회하기 때문
+  > OAI 는 구형 방식이고 SSE-KMS 와 궁합이 나쁘다. 현행 표준은 OAC(SigV4 서명)이며, 어느 쪽도 차단을 "우회"하는 게 아니라 정식 인증 요청으로 통과하는 것이다.
+- [ ] `block_public_policy` 만 false 로 두어야 CloudFront 용 버킷 정책을 붙일 수 있기 때문
+  > 4종 **전부 true** 가 mark 2-2 검사 대상이다. 하나라도 false 면 감점이고, OAC 버킷 정책은 애초에 퍼블릭 정책이 아니라 차단되지 않는다.
+- [ ] CloudFront 가 S3 웹사이트 호스팅 엔드포인트로 접근하기 때문
+  > 웹사이트 엔드포인트는 퍼블릭 접근이 전제라 차단 4종과 양립하지 않는다. set-02 오리진은 `bucket_regional_domain_name`(REST 엔드포인트) + OAC 다.
+
+OAC 가 SigV4 로 서명한 요청은 인증된 서비스 요청이며, 버킷 정책의 `AWS:SourceArn = 배포 ARN` Allow statement 가 그 요청만 허용한다. 퍼블릭 차단 4종과 양립하는 유일한 정상 경로가 OAC 다.
+
+`get-bucket-policy-status` 가 `IsPublic: false` 를 반환하는 것도 이 구조 덕분이다. SSE-KMS 객체이므로 S3 가 대신 `kms:Decrypt` 를 호출하고, 그건 키 정책의 `cloudfront.amazonaws.com` + `aws:SourceAccount` statement 가 받아준다.
+</Quiz>
+
+<QuizResults confetti />

@@ -3,6 +3,8 @@ title: 셸 원라이너 기초 (선수 학습, 약 1시간)
 description: grep·sed·jq·heredoc 사용법과 PowerShell 환경에서의 차이를 정리한 선수 학습.
 ---
 
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+
 > 문서 유형: explanation
 
 ## ① 학습 목표
@@ -85,18 +87,39 @@ jq -r '.subnet_ids.value[0]' out.json  # subnet-1
 
 ## ⑤ 자기 점검 퀴즈
 
-1. 디렉터리 전체에서 `old-name`이 들어있는 **파일 목록만** 얻는 명령은?
-2. `jq '.a'`와 `jq -r '.a'`의 출력 차이는? 셸 변수에 넣을 때는 어느 쪽?
-3. PowerShell에서 `curl http://...`이 이상하게 동작하는 이유와 해결책은?
+<Quiz title="파일 목록만 뽑는 grep 옵션">
+디렉터리 전체에서 `old-name` 이 들어 있는 **파일 목록만** 출력하는 명령은 grep -[[rl]] "old-name" . 이다. (빈칸에는 하이픈을 뺀 옵션 문자 두 개를 붙여 쓴다)
 
-<details>
-<summary>정답</summary>
+`-r`은 하위 디렉터리까지 재귀 검색, `-l`은 매칭된 **파일명만** 출력한다(매칭 줄은 안 보여 줌). 30% 변동 드릴의 표준 콤보가 여기서 나온다 — `grep -rl` 로 바꿀 파일을 찾고, `sed -i 's/old-name/new-name/g'` 로 일괄 치환한다. `-l` 없이 `grep -r` 만 쓰면 매칭 줄이 쏟아져 파일 목록을 눈으로 골라야 한다.
+</Quiz>
 
-1. `grep -rl "old-name" .`
-2. 전자는 `"값"`(따옴표 포함), 후자는 `값`(raw). 변수 대입·문자열 비교에는 `-r`.
-3. `curl`이 Invoke-WebRequest 별칭이기 때문. `curl.exe`로 실행.
+<Quiz title="jq의 -r 옵션">
+`jq '.a'` 와 `jq -r '.a'` 의 출력 차이는? 셸 변수에 넣을 때는 어느 쪽인가?
 
-</details>
+- [x] 전자는 `"값"`(따옴표 포함), 후자는 `값`(raw). 변수 대입·문자열 비교에는 `-r`
+- [ ] `-r`은 recursive(재귀) 탐색 옵션이라 중첩 JSON을 끝까지 훑는 것이고, 따옴표와는 무관하다
+  > `-r`은 **raw output**이다. grep·sed의 `-r`(recursive/regex)과 이름만 같고 의미가 전혀 다르다 — 가장 흔한 착각.
+- [ ] 전자가 raw이고 후자가 따옴표를 붙인다. 변수 대입에는 옵션 없는 쪽
+  > 정확히 반대다. 기본 출력이 JSON 문자열(따옴표 포함)이고, `-r`이 그 껍질을 벗긴다.
+- [ ] 둘 다 출력이 같으며 `-r`은 여러 줄 결과를 한 줄로 합칠 뿐이다
+
+jq의 기본 출력은 **JSON 값**이라 문자열이면 따옴표가 붙는다. `-r`(raw)을 붙이면 따옴표가 사라진다. `VPC_ID=$(terraform output -json | jq -r '.vpc_id.value')` 처럼 변수에 담거나 문자열 비교를 할 때 `-r`을 빠뜨리면 값에 `"` 가 섞여 들어가 이후 비교·명령이 전부 어긋난다.
+</Quiz>
+
+<Quiz title="PowerShell의 curl 함정">
+Windows PowerShell에서 `curl http://...` 이 기대와 다르게 동작하는 이유와 해결책은?
+
+- [x] `curl`이 `Invoke-WebRequest`의 별칭이기 때문. 진짜 curl은 `curl.exe`로 실행한다
+- [ ] PowerShell 5.1의 CP949 인코딩 때문. PowerShell 7로 올리면 해결된다
+  > CP949 인코딩 문제는 **실재하지만 다른 증상**이다(jq·terraform 출력 깨짐). PowerShell 7에서도 `curl` 별칭은 그대로 살아 있다.
+- [ ] PowerShell에는 curl이 아예 없어서 명령을 못 찾는 것. Git Bash에서 실행한다
+  > "없어서 실패"가 아니라 "**있는데 다른 것**이라 실패"다. 그래서 에러 없이 엉뚱한 객체가 나와 더 헷갈린다.
+- [ ] curl이 관리자 권한을 요구하기 때문. 관리자 셸에서 실행한다
+
+PowerShell은 `curl`·`wget`을 각각 `Invoke-WebRequest`의 별칭으로 잡아 두었다. 문법도 출력도 다르므로 `-H`, `-d` 같은 curl 플래그가 통하지 않는다. **`curl.exe`** 로 명시하면 진짜 curl이 실행된다. 함께 기억할 PowerShell 함정: `$` 포함 문자열은 작은따옴표(`'pa$$word'`), PowerShell 7 필수(5.1은 CP949로 출력이 깨짐), `sed`/`grep`은 없으므로 Git Bash나 CloudShell에서 실행.
+</Quiz>
+
+<QuizResults confetti />
 
 ## ⑥ 다음 단계
 

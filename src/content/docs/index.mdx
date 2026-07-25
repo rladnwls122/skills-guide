@@ -2,88 +2,53 @@
 title: skills-guide
 description: 전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드 — 런북 기반 배포, 문서 밖은 개념으로.
 template: splash
+hero:
+  title: 2주 완성. 문서 기반. AI 없이.
+  tagline: AWS 기초만 아는 상태에서 14일 만에 수상 과제 스택을 런북 기반으로 신속·정확하게 배포하고, 문서에 없는 상황을 AI 없이 해결한다.
+  image:
+    html: <exquisitus-specimen />
+  actions:
+    - text: 시작하기 (D0 자가진단)
+      link: /start/
+      icon: right-arrow
+      variant: primary
+    - text: 로드맵 보기
+      link: "#학습-로드맵-14일"
+      variant: minimal
 ---
 
-<div class="apple-hero">
+import { Card } from '@astrojs/starlight/components';
+import FeatureGrid from 'starlight-theme-exquisitus/components/FeatureGrid.astro';
 
-# 2주 완성. 문서 기반. AI 없이.
-
-<p class="apple-tagline">AWS 기초만 아는 상태에서 14일 만에 수상 과제 스택을 런북 기반으로 신속·정확하게 배포하고, 문서에 없는 상황을 AI 없이 해결한다.</p>
-
-<a class="apple-pill" href="/start/">시작하기</a>
-<a class="apple-pill apple-pill--ghost" href="#학습-로드맵-14일">로드맵 보기</a>
-
-</div>
-
-<div class="apple-tile apple-tile--parchment">
-
-## PART 0 — 시작
-
-<p>계정·도구·비용 가드레일·자가진단 · D0</p>
-
-<a class="apple-pill" href="/start/">자가진단 하러 가기</a>
-
-</div>
-
-<div class="apple-tile apple-tile--dark">
-
-## PART 1 — Foundation·IaC
-
-<p>Terraform·VPC·KMS·S3/CF·컨테이너·Lambda·DynamoDB · D1~3</p>
-
-<a class="apple-pill" href="/part-1/01-terraform-vpc/">미니 스택 배포</a>
-
-</div>
-
-<div class="apple-tile">
-
-## PART 2 — EKS Core
-
-<p>eksctl·k8s·LBC·CloudFront 심화 → set-02 1과제 완주 · D4~7</p>
-
-<a class="apple-pill" href="/part-2/04-eksctl-cluster/">mark.sh 80%+</a>
-
-</div>
-
-<div class="apple-tile apple-tile--dark2">
-
-## PART 3 — 관측성·Hard Mode
-
-<p>관측성·fully-private EKS·IAM 심화 · D8~9</p>
-
-<a class="apple-pill" href="/part-3/07-observability/">No Data 0개</a>
-
-</div>
-
-<div class="apple-tile apple-tile--parchment">
-
-## PART 4 — 2과제 패턴
-
-<p>2과제 5유형 패턴 · D10~11</p>
-
-<a class="apple-pill" href="/part-4/09-serverless-event/">유형별 1회 배포</a>
-
-</div>
-
-<div class="apple-tile apple-tile--dark">
-
-## PART 5 — Battle Drills
-
-<p>변동 드릴·파괴/복구·모의 대회 · D12~14</p>
-
-<a class="apple-pill" href="/part-5/11-mutation-drill/">모의 대회 90%+</a>
-
-</div>
-
-<div class="apple-tile">
-
-## PART 6 — 3과제 운영
-
-<p>부하·운영 대응 — task3-load-ops</p>
-
-<a class="apple-pill" href="/part-6/14-task3-load-ops/">3과제 대비</a>
-
-</div>
+<FeatureGrid layout="lead">
+  <Card title="PART 2 — EKS Core · D4~7" icon="rocket">
+    eksctl·k8s·LBC·CloudFront 심화를 거쳐 **set-02 1과제를 완주**한다. 이 커리큘럼의 중심축 —
+    여기서 mark.sh 80% 이상이 나와야 나머지가 의미를 갖는다.
+    [모듈 04부터 시작](/part-2/04-eksctl-cluster/)
+  </Card>
+  <Card title="PART 0 — 시작 · D0" icon="approve-check">
+    계정·도구·비용 가드레일·자가진단. [선수 지식 7종](/start/)
+  </Card>
+  <Card title="PART 1 — Foundation·IaC · D1~3" icon="seti:terraform">
+    Terraform·VPC·KMS·S3/CloudFront·컨테이너·Lambda·DynamoDB.
+    [미니 스택 배포](/part-1/01-terraform-vpc/)
+  </Card>
+  <Card title="PART 3 — 관측성·Hard Mode · D8~9" icon="bars">
+    관측성·fully-private EKS·IAM 심화. 목표는 No Data 0개.
+    [모듈 07](/part-3/07-observability/)
+  </Card>
+  <Card title="PART 4 — 2과제 패턴 · D10~11" icon="puzzle">
+    서버리스·이벤트, 스케일링·로깅·스트리밍 — 2과제 5유형.
+    [모듈 09](/part-4/09-serverless-event/)
+  </Card>
+  <Card title="PART 5 — Battle Drills · D12~14" icon="warning">
+    30% 변동 드릴 · 파괴/복구 12종 · 4시간 모의 대회.
+    [모듈 11](/part-5/11-mutation-drill/)
+  </Card>
+  <Card title="PART 6 — 3과제 운영" icon="setting">
+    부하 시험과 운영 대응. [모듈 14](/part-6/14-task3-load-ops/)
+  </Card>
+</FeatureGrid>
 
 ## 최종 목표
 
@@ -120,7 +85,7 @@ template: splash
 
 1. **채점 스크립트 우선주의** — 구현 전 mark.sh부터. 이름·필드 순서·개수·오타까지 일치.
 2. **불필요 리소스 = 감점** — 요구 안 된 bastion/태그/latest 태그/폴더 마커 금지.
-3. **긴 작업 먼저 던지기** — EKS 20분, MSK 30분, CloudFront 전파. [timings](/reference/timings/)
+3. **긴 작업 먼저 던지기** — EKS 20분, MSK 30분, CloudFront 전파. [소요 시간표](/reference/timings/)
 4. **채점 직전 리셋 절차** — 데이터 정리 → 요구 상태 복원 → 트래픽 시드 → No Data 0개.
 5. **매일 destroy** — 삭제방지 해제 → 역순 삭제. 비용·이름 충돌 방지.
 6. **콘솔 병행 학습** — lab은 IaC(tf/manifest)로 만들되, 만든 리소스를 **콘솔에서 찾아
@@ -133,17 +98,13 @@ template: splash
 - AWS Budgets 알람 $50 설정(00 모듈에서 수행). 2주 총 예산 목표 < $100.
 - EKS 유지가 필요한 날(D4→D5)만 예외 — 모듈 인덱스에 명시된 날만.
 
-<div class="apple-footer">
+## Reference
 
-### Reference
-
-<a href="/reference/ai-study-guide/">AI 학습 활용 가이드 — 질문 공식·패턴 5종·의존 방지</a>
-<a href="/reference/cheatsheet/">치트시트 — kubectl·eksctl·helm·aws·terraform</a>
-<a href="/reference/cleanup-check/">destroy 후 잔존 리소스 점검</a>
-<a href="/reference/troubleshooting/">트러블슈팅 — 증상→원인→확인 명령</a>
-<a href="/reference/mark-script-guide/">mark 스크립트 읽는 법</a>
-<a href="/reference/timings/">리소스별 소요 시간</a>
-<a href="/reference/links/">모듈 ↔ skills-2026 과제 경로 매핑</a>
-<a href="/reference/style/">문서 스타일 가이드</a>
-
-</div>
+- [AI 학습 활용 가이드](/reference/ai-study-guide/) — 질문 공식·패턴 5종·의존 방지
+- [명령 치트시트](/reference/cheatsheet/) — kubectl·eksctl·helm·aws·terraform
+- [잔존 리소스 점검](/reference/cleanup-check/) — destroy 후 매일 종료 루틴
+- [트러블슈팅](/reference/troubleshooting/) — 증상→원인→확인 명령 플레이북
+- [mark 스크립트 가이드](/reference/mark-script-guide/) — 채점 스크립트 읽는 법·판단 원칙
+- [소요 시간표](/reference/timings/) — 긴 것부터 던지는 순서
+- [과제 경로 매핑](/reference/links/) — 모듈 ↔ skills-2026 과제 경로
+- [문서 스타일 가이드](/reference/style/) — Diátaxis 유형·문장 규칙·용어 표준화

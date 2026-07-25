@@ -10,6 +10,7 @@ import starlightScrollToTop from 'starlight-scroll-to-top';
 import starlightLlmActions from 'starlight-llm-actions';
 import starlightCodeblockFullscreen from 'starlight-codeblock-fullscreen';
 import starlightLinksValidator from 'starlight-links-validator';
+import starlightThemeExquisitus from 'starlight-theme-exquisitus';
 
 export default defineConfig({
   integrations: [
@@ -19,8 +20,8 @@ export default defineConfig({
       description: '전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드',
       defaultLocale: 'root',
       locales: { root: { label: '한국어', lang: 'ko' } },
-      customCss: ['./src/styles/apple.css'],
       plugins: [
+        starlightThemeExquisitus(),
         starlightQuiz(),
         starlightHeadingBadges(),
         starlightFullViewMode(),

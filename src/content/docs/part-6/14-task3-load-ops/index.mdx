@@ -29,23 +29,23 @@ EKS + NAT GW + ALB + CloudFront + RDS Multi-AZ(db.t3.micro) + 노드 최대 9대
 
 - 드릴 1회는 배포~부하~정리까지 3시간 안에 끝내고 **당일 destroy**한다.
 - k6 부하는 자기 CloudFront로만 주입한다. 종료 시 부하부터 멈추고 스택을 지운다.
-- 정리 순서: k6 중지 → `kubectl delete` → `eksctl delete cluster` → `terraform destroy` → [잔존 리소스 점검](/skills-2026-learn_module/reference/cleanup-check/).
+- 정리 순서: k6 중지 → `kubectl delete` → `eksctl delete cluster` → `terraform destroy` → [잔존 리소스 점검](/reference/cleanup-check/).
 :::
 
 ## 선행 지식
 
-- 파드 `requests`가 스케줄링 단위이자 HPA 이용률의 분모 — [k8s-basics](/skills-2026-learn_module/start/k8s-basics/)
-- Service·라벨 셀렉터 — TargetGroupBinding이 이 경로로 파드 IP를 등록한다 — [k8s-basics](/skills-2026-learn_module/start/k8s-basics/)
-- 이미지 크기가 스케일아웃 지연에 직결(노드 신규 생성 시 pull 시간) — [docker-basics](/skills-2026-learn_module/start/docker-basics/)
-- SG는 스테이트풀 — ALB→노드 8080만 열면 된다 — [vpc-basics](/skills-2026-learn_module/start/vpc-basics/)
-- `aws ... --query`로 타깃 상태·프록시 설정을 초 단위로 확인 — [awscli-basics](/skills-2026-learn_module/start/awscli-basics/)
+- 파드 `requests`가 스케줄링 단위이자 HPA 이용률의 분모 — [k8s-basics](/start/k8s-basics/)
+- Service·라벨 셀렉터 — TargetGroupBinding이 이 경로로 파드 IP를 등록한다 — [k8s-basics](/start/k8s-basics/)
+- 이미지 크기가 스케일아웃 지연에 직결(노드 신규 생성 시 pull 시간) — [docker-basics](/start/docker-basics/)
+- SG는 스테이트풀 — ALB→노드 8080만 열면 된다 — [vpc-basics](/start/vpc-basics/)
+- `aws ... --query`로 타깃 상태·프록시 설정을 초 단위로 확인 — [awscli-basics](/start/awscli-basics/)
 
 막히면 위 링크, 아니면 바로 다음 파일로.
 
 ## 선행 모듈
 
 - 06-full-deploy-set02 (EKS·ALB·CloudFront 배포 완주)
-- 12-break-fix ([트러블슈팅](/skills-2026-learn_module/reference/troubleshooting/) 표가 손에 붙은 상태)
+- 12-break-fix ([트러블슈팅](/reference/troubleshooting/) 표가 손에 붙은 상태)
 - 정답지 `skills-2026/task-3`의 `README.md`·`ARCHITECTURE.md` 정독
 
 ## 파일
@@ -54,16 +54,16 @@ EKS + NAT GW + ALB + CloudFront + RDS Multi-AZ(db.t3.micro) + 노드 최대 9대
   <Card title="theory" icon="open-book">
     채점 4축의 구조, 스케일 리드타임, 데이터·엣지 병목, 비용 밴드 + 퀴즈.
 
-    [읽기](/skills-2026-learn_module/part-6/14-task3-load-ops/theory/)
+    [읽기](/part-6/14-task3-load-ops/theory/)
   </Card>
   <Card title="lab" icon="rocket">
     타임라인 드릴·튜닝 노브 표·k6 3단 프로파일·부하 중 장애 대응.
 
-    [실습하기](/skills-2026-learn_module/part-6/14-task3-load-ops/lab/)
+    [실습하기](/part-6/14-task3-load-ops/lab/)
   </Card>
 </CardGrid>
 
-<LinkButton href="/skills-2026-learn_module/part-6/14-task3-load-ops/theory/" icon="right-arrow">이론부터 시작</LinkButton>
+<LinkButton href="/part-6/14-task3-load-ops/theory/" icon="right-arrow">이론부터 시작</LinkButton>
 
 ## 공식 문서
 

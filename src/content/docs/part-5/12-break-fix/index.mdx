@@ -7,7 +7,7 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: 개요
 
-[트러블슈팅](/skills-2026-learn_module/reference/troubleshooting/)의 12개 증상을 **고의로 재현하고 자력으로 복구**한다. 대회장에서 AI는 못 쓰고 문서(자기 런북)만 쓸 수 있다 — 문서를 찾는 시간조차 아까우니, 증상→확인 명령→원인→조치의 사슬을 손에 붙인다.
+[트러블슈팅](/reference/troubleshooting/)의 12개 증상을 **고의로 재현하고 자력으로 복구**한다. 대회장에서 AI는 못 쓰고 문서(자기 런북)만 쓸 수 있다 — 문서를 찾는 시간조차 아까우니, 증상→확인 명령→원인→조치의 사슬을 손에 붙인다.
 
 ## 목표
 
@@ -31,10 +31,10 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 
 ## 선행 지식
 
-- `kubectl describe`의 Events와 `logs --previous`가 1차 소스 — [k8s-basics](/skills-2026-learn_module/start/k8s-basics/)
-- Service ↔ 라벨 셀렉터 연결이 끊기면 트래픽이 사라진다 — [k8s-basics](/skills-2026-learn_module/start/k8s-basics/)
-- SG 룰이 빠지면 응답이 timeout으로 나타난다(스테이트풀 특성) — [vpc-basics](/skills-2026-learn_module/start/vpc-basics/)
-- `aws sts get-caller-identity`로 현재 신원을 먼저 확인 — [iam-basics](/skills-2026-learn_module/start/iam-basics/)
+- `kubectl describe`의 Events와 `logs --previous`가 1차 소스 — [k8s-basics](/start/k8s-basics/)
+- Service ↔ 라벨 셀렉터 연결이 끊기면 트래픽이 사라진다 — [k8s-basics](/start/k8s-basics/)
+- SG 룰이 빠지면 응답이 timeout으로 나타난다(스테이트풀 특성) — [vpc-basics](/start/vpc-basics/)
+- `aws sts get-caller-identity`로 현재 신원을 먼저 확인 — [iam-basics](/start/iam-basics/)
 
 막히면 위 링크, 아니면 바로 다음 파일로.
 
@@ -42,7 +42,7 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 
 - 11-mutation-drill (mark 표 정리 완료 상태)
 - set-02 1과제를 mark 통과 상태로 배포할 수 있을 것
-- [트러블슈팅](/skills-2026-learn_module/reference/troubleshooting/)를 최소 1회 정독
+- [트러블슈팅](/reference/troubleshooting/)를 최소 1회 정독
 
 ## 파일
 
@@ -50,16 +50,16 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
   <Card title="theory" icon="open-book">
     복구 방법론(추측 금지·분리 진단) + 퀴즈.
 
-    [읽기](/skills-2026-learn_module/part-5/12-break-fix/theory/)
+    [읽기](/part-5/12-break-fix/theory/)
   </Card>
   <Card title="lab" icon="rocket">
     12개 시나리오: 망가뜨리는 법·목표 시간·복구 확인.
 
-    [실습하기](/skills-2026-learn_module/part-5/12-break-fix/lab/)
+    [실습하기](/part-5/12-break-fix/lab/)
   </Card>
 </CardGrid>
 
-<LinkButton href="/skills-2026-learn_module/part-5/12-break-fix/theory/" icon="right-arrow">이론부터 시작</LinkButton>
+<LinkButton href="/part-5/12-break-fix/theory/" icon="right-arrow">이론부터 시작</LinkButton>
 
 ## 공식 문서
 

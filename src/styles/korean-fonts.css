@@ -3,8 +3,9 @@
  * Exquisitus 는 "두 가지 일" 구조다: 세리프가 읽는 열(본문)을, 산세리프가
  * 안내 역할(제목·사이드바·TOC·헤더)을 맡는다. 한글도 같은 구조로 짝을 붙인다.
  *
- *   제목·본문          ChosunSm        조선일보명조 — 읽는 열 전체를 이 서체로
- *   UI 크롬            Pretendard      Alegreya Sans(산세리프)의 한글 짝, 가변 굵기
+ *   제목·본문          ChosunSm             조선일보명조 — 읽는 열 전체를 이 서체로
+ *   UI 크롬            Pretendard           Alegreya Sans(산세리프)의 한글 짝, 가변 굵기
+ *   코드블록           Elice Digital Coding JetBrains Mono 의 한글 보조(고정폭)
  *
  * 이 선언들은 캐스케이드 레이어 밖에 있으므로 @layer exquisitus 안의 테마 토큰보다
  * 우선한다 — customCss 순서와 무관하게 적용된다.
@@ -18,6 +19,24 @@
 	/* 단일 굵기 파일이다. 400 만 선언해 700 은 브라우저 합성에 맡긴다 —
 	   `400 700` 으로 범위를 주면 합성이 꺼져 제목이 본문 굵기로 주저앉는다. */
 	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* 굵기가 파일로 갈려 있어 두 벌을 같은 패밀리로 묶는다 — 코드블록의 굵은 토큰이
+   합성 볼드가 아니라 진짜 Bold 로 나온다. */
+@font-face {
+	font-family: "Elice Digital Coding";
+	src: url("../fonts/elice-coding-400.woff2") format("woff2");
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "Elice Digital Coding";
+	src: url("../fonts/elice-coding-700.woff2") format("woff2");
+	font-weight: 700;
 	font-style: normal;
 	font-display: swap;
 }
@@ -40,6 +59,12 @@
 	--sl-exquisitus-font-reading:
 		"Chosun Sm", "Literata Variable", "Literata Fallback", Georgia,
 		"Times New Roman", serif;
+
+	/* 코드블록·인라인코드 — 라틴은 JetBrains Mono 유지, 한글(주석)만 Elice 로 받는다.
+	   테마가 Expressive Code 의 codeFontFamily 에 이 토큰을 넘기므로 코드블록까지 함께 적용된다. */
+	--sl-font-mono:
+		"JetBrains Mono Variable", "Elice Digital Coding", "JetBrains Mono Fallback",
+		ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
 	/* 사이드바·TOC·헤더 등 UI 크롬 — 라틴은 Alegreya Sans 유지, 한글은 Pretendard. */
 	--sl-font:

@@ -37,6 +37,20 @@ FONTS = [
         / "node_modules/pretendard/dist/public/variable/PretendardVariable.ttf",
         "hint": "`npm install` 로 받아진다",
     },
+    {
+        # 코드블록 — JetBrains Mono 에 한글이 없어 주석이 시스템 폰트로 떨어진다.
+        # 고정폭 한글 코딩 서체로 받는다. 굵기가 파일로 갈려 있어 두 벌.
+        "name": "elice-coding-400",
+        "src": Path.home()
+        / "Downloads/EliceDigitalCoding_TTF/EliceDigitalCodingverH_Regular.ttf",
+        "hint": "EliceDigitalCoding_TTF 를 Downloads 에 두거나 이 경로를 고칠 것",
+    },
+    {
+        "name": "elice-coding-700",
+        "src": Path.home()
+        / "Downloads/EliceDigitalCoding_TTF/EliceDigitalCodingverH_Bold.ttf",
+        "hint": "EliceDigitalCoding_TTF 를 Downloads 에 두거나 이 경로를 고칠 것",
+    },
 ]
 
 # 콘텐츠에 없어도 항상 포함 — 제목·UI 라벨이 나중에 이 글자들을 쓸 수 있다.

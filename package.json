@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "font": "python scripts/subset-font.py"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.41.4",

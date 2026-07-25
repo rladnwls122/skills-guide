@@ -20,6 +20,7 @@ export default defineConfig({
       description: '전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드',
       defaultLocale: 'root',
       locales: { root: { label: '한국어', lang: 'ko' } },
+      customCss: ['./src/styles/heading-font.css'],
       plugins: [
         starlightThemeExquisitus(),
         starlightQuiz(),

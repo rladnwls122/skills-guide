@@ -5,7 +5,8 @@
 **사이트: https://skills-2026-learn-module.netlify.app**
 
 - 콘텐츠: `src/content/docs/` (시작 / part-1~6 / reference)
-- 디자인: `src/styles/apple.css` (DESIGN-apple 토큰, 단일 액센트 #0066cc)
+- 디자인: [starlight-theme-exquisitus](https://github.com/anaxite/starlight-theme-exquisitus) — 팔레트·서체는 테마가 전담
+- 제목 서체: 조선일보명조(ChosunSm) 서브셋 — `src/styles/heading-font.css`
 - 설계·계획: `docs/superpowers/`
 
 ## 개발
@@ -16,6 +17,20 @@ npm run dev      # 로컬 미리보기
 npm run build    # 프로덕션 빌드 (links-validator 포함)
 ```
 
+## 제목 서체 재생성
+
+Alegreya Sans·Literata 에 한글 글리프가 없어 제목용 한글 서체를 따로 싣는다.
+원본 7.4MB TTF 를 문서에 실제로 쓰인 글자만 남겨 97KB woff2 로 굽고, 결과물은
+레포에 커밋한다 — 빌드에는 Python 이 필요 없다.
+
+```bash
+pip install fonttools brotli
+npm run font              # 기본값: ~/Downloads/ChosunSm.TTF
+npm run font -- <경로>    # 원본 위치가 다를 때
+```
+
+문서에 **새 한글 음절**이 들어오면 다시 실행할 것. 안 하면 그 글자만 시스템 폰트로 떨어진다.
+
 ## 배포
 
-Netlify — `netlify deploy --prod` (build: `npm run build`, publish: `dist/`).
+Netlify — `npm run build && npx netlify deploy --prod --no-build --dir dist`.

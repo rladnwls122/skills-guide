@@ -20,8 +20,20 @@
 }
 
 .mfs-frame > pre.mermaid svg {
-	max-width: 100%;
+	/* 도식이 본문보다 클 때 억지로 축소되어 글자가 안 보이는 현상 방지.
+	   원래 크기를 유지하고 부모(pre.mermaid)의 overflow-x: auto 로 스크롤하게 한다. */
+	max-width: none !important;
+	/* 도식이 너무 작게 렌더링되는 경우를 대비한 최소 폭 대폭 상향 */
+	min-width: 800px;
 	height: auto;
+	/* Mermaid가 텍스트 크기를 계산할 때 더 큰 폰트를 기준으로 하도록 강제 */
+	font-size: 16px !important;
+}
+
+/* 다이어그램 내부의 텍스트가 너무 작게 렌더링되는 문제 강제 보정 */
+.mfs-frame > pre.mermaid svg text,
+.mfs-frame > pre.mermaid svg .nodeLabel {
+	font-size: 16px !important;
 }
 
 .mfs-open-btn {

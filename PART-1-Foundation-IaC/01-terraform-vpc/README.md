@@ -47,3 +47,11 @@
 - `skills-2026/set-02/task-1/terraform/terraform.tfvars` — 세트 고유값 주입 패턴
 - `skills-2026/set-02/task-1/terraform/outputs.tf` — output 설계 정답
 - `skills-2026/set-02/task-1/README.md` §"작업 변수 영구화" — output → .env 영속화 실측 절차
+
+## 공식 문서
+
+- [Terraform 언어 레퍼런스](https://developer.hashicorp.com/terraform/language) — 블록·표현식·타입. 문법이 막히면 여기
+- [`for_each` 메타 인자](https://developer.hashicorp.com/terraform/language/meta-arguments/for_each) — map/set 반복과 `each` 참조
+- [AWS provider 리소스 색인](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) — `aws_vpc`·`aws_subnet`·`aws_route_table` 인자와 반환 속성(Attribute Reference)
+- [Terraform CLI 명령](https://developer.hashicorp.com/terraform/cli/commands) — `plan`/`apply`/`output`/`-target` 옵션
+- [Amazon VPC 사용 설명서](https://docs.aws.amazon.com/vpc/latest/userguide/) — 라우팅·NAT·엔드포인트 개념 원문

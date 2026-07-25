@@ -62,3 +62,12 @@
 - `skills-2026/docs/src/content/docs/setlist/set-07/task-2/notes.md` — 실측 함정 모음
 - `skills-2026/set-02/task-2/module-2-analytics/README.md` — 유형 5 Flink Studio 함정 원문
 - `skills-2026/set-02/task-2/module-4-msk/README.md` — 유형 5 MSK 함정 원문
+
+## 공식 문서
+
+- [HorizontalPodAutoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) — 이용률 계산식과 `behavior` 필드
+- [KEDA Scalers](https://keda.sh/docs/latest/scalers/) — SQS 스케일러 인자·인증 방식
+- [Karpenter NodePool](https://karpenter.sh/docs/concepts/nodepools/) — requirements·limits·consolidation
+- [OpenTelemetry Collector 설정](https://opentelemetry.io/docs/collector/configuration/) — receiver/processor/exporter 파이프라인
+- [LogQL](https://grafana.com/docs/loki/latest/query/) — 라벨 셀렉터·`| json` 파서
+- [Amazon MSK 개발자 안내서](https://docs.aws.amazon.com/msk/latest/developerguide/) — 유형 5 개념 확인용

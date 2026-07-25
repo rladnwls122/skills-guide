@@ -44,3 +44,13 @@
 
 - [theory.md](theory.md) — 채점 4축의 구조, 스케일 리드타임, 데이터·엣지 병목, 비용 밴드 + 퀴즈
 - [lab.md](lab.md) — 타임라인 드릴·튜닝 노브 표·k6 3단 프로파일·부하 중 장애 대응
+
+## 공식 문서
+
+- [HPA `behavior` 설정](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#configurable-scaling-behavior) — scaleUp/scaleDown 정책 필드
+- [EKS Auto Mode](https://docs.aws.amazon.com/eks/latest/userguide/automode.html) — 내장 컨트롤러가 대신 하는 것과 남는 설정
+- [Karpenter Disruption](https://karpenter.sh/docs/concepts/disruption/) — consolidation·budgets·PDB 상호작용
+- [RDS Proxy](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy.html) — 커넥션 풀링·피닝 조건·인증 방식
+- [CloudFront 캐시 키 제어](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/controlling-the-cache-key.html) — 캐시 정책·TTL·무효화
+- [WAF 관리형 룰 그룹 목록](https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-list.html) — 룰별 포함 규칙과 오차단 위험
+- [k6 문서](https://grafana.com/docs/k6/latest/) — options·threshold·stage 문법

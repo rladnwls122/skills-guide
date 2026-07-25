@@ -48,3 +48,11 @@
 - `C:\Users\kryuk\practice\skills-2026\set-07\task-1\k8s\logging\fluent-bit.yaml` (5키 JSON 재구성 패턴)
 - `C:\Users\kryuk\practice\skills-2026\set-02\task-1\k8s\monitoring\` (IRSA 세트의 변형)
 - `C:\Users\kryuk\practice\skills-2026\docs\src\content\docs\setlist\set-03\task-1\notes.md` (함정 실측 기록)
+
+## 공식 문서
+
+- [Fluent Bit 매뉴얼](https://docs.fluentbit.io/manual) — INPUT/FILTER/OUTPUT 문법, `log_to_metrics`, Lua 필터
+- [kube-prometheus-stack 차트](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) — values 키 전체 목록
+- [PromQL 기초](https://prometheus.io/docs/prometheus/latest/querying/basics/) — 알람 표현식 작성
+- [Grafana 프로비저닝](https://grafana.com/docs/grafana/latest/administration/provisioning/) — datasource·dashboard 파일 규격
+- [CloudWatch Logs Insights 쿼리](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/AnalyzingLogData.html) — 로그 검증용 쿼리 문법

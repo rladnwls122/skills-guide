@@ -45,3 +45,12 @@
 - `C:\Users\kryuk\practice\skills-2026\set-02\task-1\k8s\app\` (deployment/service/pdb/configmap/targetgroupbinding)
 - `C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\alb.tf` (리스너 규칙 2개 + Lambda TG)
 - `C:\Users\kryuk\practice\skills-2026\set-02\task-1\README.md` (배포 순서 4~5)
+
+## 공식 문서
+
+- [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) — 롤링 업데이트·셀렉터 규칙
+- [probe 설정](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) — liveness/readiness/startup 차이와 필드
+- [PodDisruptionBudget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/) — 노드 회수 중 가용성 보장
+- [TargetGroupBinding (AWS Load Balancer Controller)](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/targetgroupbinding/targetgroupbinding/) — spec 필드·targetType
+- [ALB 리스너 규칙](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/listener-update-rules.html) — 조건·우선순위·기본 액션
+- [Helm 문서](https://helm.sh/docs/) — repo/chart/release/values

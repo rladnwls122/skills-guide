@@ -41,3 +41,15 @@
 
 - [theory.md](theory.md) — 시험 운영 전략(시간 배분·막힘 규칙) + 퀴즈
 - [lab.md](lab.md) — 진행 절차·판정 기준·오답 노트 양식·종료 후 과제
+
+## 공식 문서
+
+시험 중 허용되는 것은 자기 문서와 **공식 문서뿐**이다(AI·검색 금지). 아래 5개를 미리 북마크하고, 시험 중에는 검색 대신 문서 구조로 찾는다.
+
+- [EKS 사용 설명서](https://docs.aws.amazon.com/eks/latest/userguide/) · [eksctl 스키마](https://eksctl.io/usage/schema/)
+- [Terraform AWS provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) · [Terraform 언어](https://developer.hashicorp.com/terraform/language)
+- [kubectl 퀵 레퍼런스](https://kubernetes.io/docs/reference/kubectl/quick-reference/)
+- [CloudFront 개발자 안내서](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/)
+- [AWS CLI 명령 레퍼런스](https://docs.aws.amazon.com/cli/latest/reference/)
+
+전체 목록은 [../../reference/links.md](../../reference/links.md).

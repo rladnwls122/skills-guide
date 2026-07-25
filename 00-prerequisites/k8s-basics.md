@@ -225,3 +225,10 @@ kind delete cluster    # 정리
 
 - [../PART-2-EKS-Core/](../PART-2-EKS-Core/) — 모듈 04(EKS·IRSA), 모듈 05(k8s 워크로드 심화)에서 이 내용을 EKS 위에서 실전 수준으로 확장
 - 다음 선수 학습: [awscli-basics.md](awscli-basics.md)
+
+## 공식 문서
+
+- [Kubernetes 개념](https://kubernetes.io/docs/concepts/) — 워크로드·서비스·설정 전반
+- [kubectl 퀵 레퍼런스](https://kubernetes.io/docs/reference/kubectl/quick-reference/) — 명령 모음
+- [API 레퍼런스](https://kubernetes.io/docs/reference/kubernetes-api/) — 매니페스트 필드의 정본
+- [Helm 문서](https://helm.sh/docs/) — 차트·values 개념

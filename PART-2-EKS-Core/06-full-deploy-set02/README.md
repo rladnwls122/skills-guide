@@ -44,3 +44,10 @@
 - `C:\Users\kryuk\practice\skills-2026\set-02\task-1\README.md` (원본 런북 — 이 모듈의 정답지)
 - `C:\Users\kryuk\practice\skills-2026\set-02\task-1\mark.md` / `mark.sh` (채점 기준)
 - `C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\cloudfront.tf`, `terraform\cloudfront\book-rewrite.js`
+
+## 공식 문서
+
+- [CloudFront 개발자 안내서](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/) — 오리진·behavior·캐시 정책 전반
+- [CloudFront Functions](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-functions.html) — 뷰어 요청 경로 재작성 문법·제약
+- [kubectl 퀵 레퍼런스](https://kubernetes.io/docs/reference/kubectl/quick-reference/) — 검증 단계에서 가장 많이 여는 페이지
+- [AWS CloudShell 사용 설명서](https://docs.aws.amazon.com/cloudshell/latest/userguide/) — VPC 환경·세션 수명·파일 전송 제약

@@ -52,3 +52,12 @@
 - `C:\Users\kryuk\practice\skills-2026\set-07\task-1\terraform\iam.tf` (audit role 완본)
 - `C:\Users\kryuk\practice\skills-2026\set-07\task-1\README.md` (머신 3분할·bastion 런북)
 - `C:\Users\kryuk\practice\skills-2026\docs\src\content\docs\setlist\set-03\task-1\notes.md` (실측 함정 기록)
+
+## 공식 문서
+
+- [EKS 프라이빗 클러스터](https://docs.aws.amazon.com/eks/latest/userguide/private-clusters.html) — 요구 엔드포인트 목록과 제약
+- [ECR용 VPC 엔드포인트](https://docs.aws.amazon.com/AmazonECR/latest/userguide/vpc-endpoints.html) — s3/ecr.api/ecr.dkr 조합
+- [IAM 정책 평가 로직](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html) — 신뢰 정책·권한 정책 이중 평가의 근거
+- [`sts:ExternalId`](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html) — audit role 실습 원문
+- [클러스터 DNS 커스터마이즈](https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/) — CoreDNS Corefile 수정
+- [CloudFront 개발자 안내서](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/) — VPC origins·prefix list 절 참조

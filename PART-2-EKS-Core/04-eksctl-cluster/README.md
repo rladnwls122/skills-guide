@@ -47,3 +47,11 @@
 - `C:\Users\kryuk\practice\skills-2026\set-02\task-1\eksctl\cluster.yaml` (IRSA 방식)
 - `C:\Users\kryuk\practice\skills-2026\set-03\task-1\eksctl\cluster.yaml` (Pod Identity + fully private)
 - `C:\Users\kryuk\practice\skills-2026\set-02\task-1\README.md` (배포 순서 3 — 치환 스크립트)
+
+## 공식 문서
+
+- [eksctl ClusterConfig 스키마](https://eksctl.io/usage/schema/) — 필드 하나하나의 정본. 버전마다 기본값이 바뀌므로 항상 여기부터
+- [EKS 사용 설명서](https://docs.aws.amazon.com/eks/latest/userguide/) — 클러스터·노드그룹·애드온 전반
+- [IRSA(서비스 계정용 IAM 역할)](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) — OIDC trust 조건 문법
+- [EKS Pod Identity](https://docs.aws.amazon.com/eks/latest/userguide/pod-identity.html) — IRSA와의 차이·에이전트 요구사항
+- [클러스터 액세스 항목(Access entries)](https://docs.aws.amazon.com/eks/latest/userguide/access-entries.html) — 생성자 외 신원에 kubectl 권한 부여

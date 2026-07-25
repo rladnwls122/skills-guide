@@ -48,3 +48,11 @@
 - `skills-2026/set-02/task-1/terraform/lambda/index.py` — ALB 통합 핸들러 정답
 - `skills-2026/set-02/task-1/README.md` §2 — CloudShell 빌드/push/스캔 확인 실측 명령
 - `skills-2026/set-02/task-2/module-1-workflow/terraform/lambda/index.py` — Decimal 평균 계산 실측
+
+## 공식 문서
+
+- [Dockerfile 레퍼런스](https://docs.docker.com/reference/dockerfile/) — `FROM`/`RUN`/`ENV`/`ENTRYPOINT` 정확한 동작
+- [Amazon ECR 사용 설명서](https://docs.aws.amazon.com/AmazonECR/latest/userguide/) — 로그인·push·이미지 스캔
+- [DynamoDB 개발자 안내서](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/) — PK/GSI 설계, PITR
+- [ALB의 Lambda 대상](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html) — 502를 만드는 응답 포맷 요구사항
+- [boto3 DynamoDB 레퍼런스](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html) — `Query` 인자와 Decimal 타입

@@ -85,3 +85,9 @@ flowchart LR
 
 - [../PART-1-Foundation-IaC/](../PART-1-Foundation-IaC/) — 모듈 01에서 이 구조를 Terraform으로 재현
 - 다음 선수 학습: [iam-basics.md](iam-basics.md)
+
+## 공식 문서
+
+- [Amazon VPC 사용 설명서](https://docs.aws.amazon.com/vpc/latest/userguide/) — 서브넷·라우팅·NAT 원문
+- [보안 그룹](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html) — 스테이트풀 동작과 규칙 형식
+- [VPC 엔드포인트](https://docs.aws.amazon.com/vpc/latest/privatelink/concepts.html) — 프라이빗 환경에서의 AWS API 접근

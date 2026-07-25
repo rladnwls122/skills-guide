@@ -98,3 +98,10 @@ jq -r '.subnet_ids.value[0]' out.json  # subnet-1
 
 - [../PART-5-Battle-Drills/](../PART-5-Battle-Drills/) — 모듈 11 30% 변동 드릴
 - 다음 선수 학습: [awscli-basics.md](awscli-basics.md)
+
+## 공식 문서
+
+- [GNU grep 매뉴얼](https://www.gnu.org/software/grep/manual/grep.html) — 재귀 검색·정규식 옵션
+- [GNU sed 매뉴얼](https://www.gnu.org/software/sed/manual/sed.html) — 치환 표현식
+- [jq 매뉴얼](https://jqlang.github.io/jq/manual/) — JSON 필터
+- [PowerShell 문서](https://learn.microsoft.com/powershell/scripting/) — 대회 환경 셸(문자열 치환·인코딩)

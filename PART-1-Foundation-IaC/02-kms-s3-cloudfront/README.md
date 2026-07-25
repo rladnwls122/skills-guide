@@ -44,3 +44,11 @@
 - `skills-2026/set-02/task-1/terraform/cloudfront.tf` — OAC·오리진 2개·behavior
 - `skills-2026/set-03/task-1/terraform/kms.tf` — root-less 키 정책 (심화)
 - `skills-2026/set-02/task-1/terraform/ecr.tf` — 관리형 aws/ecr 판단 근거 주석
+
+## 공식 문서
+
+- [KMS 키 정책](https://docs.aws.amazon.com/kms/latest/developerguide/key-policies.html) — admin/use 액션 분리, root 제외 시 주의사항
+- [CloudFront OAC로 S3 접근 제한](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html) — 버킷 정책 SourceArn 원문
+- [서비스별 액션·리소스·조건 키](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) — 정책에 쓸 수 있는 Action·Condition 전수표
+- [`aws_cloudfront_distribution`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_distribution) — behavior·오리진 인자 목록
+- [Amazon S3 사용 설명서](https://docs.aws.amazon.com/AmazonS3/latest/userguide/) — 퍼블릭 차단 4종·SSE-KMS·BucketKey

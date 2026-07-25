@@ -90,3 +90,9 @@ aws sts get-caller-identity
 
 - [../PART-3-Observability-HardMode/](../PART-3-Observability-HardMode/) — 모듈 08 IAM 심화 (IRSA, KMS 키 정책)
 - 다음 선수 학습: [docker-basics.md](docker-basics.md)
+
+## 공식 문서
+
+- [IAM 사용 설명서](https://docs.aws.amazon.com/IAM/latest/UserGuide/) — 사용자·역할·정책 전반
+- [정책 평가 로직](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html) — Deny 우선, 신뢰 정책과의 이중 평가
+- [서비스별 액션·리소스·조건 키](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) — 정책에 쓸 값의 정본

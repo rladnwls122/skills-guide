@@ -58,3 +58,11 @@
   - `terraform/config.tf` — Config 레코더 + 스코프 제한
   - `README.md` §"설계 근거 · 함정" — 레이스 컨디션·무한루프 실측 기록
 - `skills-2026/set-02/task-2/README.md` — 모듈별 리전·공통 워크플로
+
+## 공식 문서
+
+- [Amazon States Language](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-amazon-states-language.html) — 상태 타입·`Parameters`·오류 처리
+- [EventBridge 이벤트 패턴](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-event-patterns.html) — 룰 작성 문법과 네이티브 vs CloudTrail 소스
+- [AWS Config 개발자 안내서](https://docs.aws.amazon.com/config/latest/developerguide/) — 레코더 스코프·규칙 평가 시점
+- [S3 이벤트 알림](https://docs.aws.amazon.com/AmazonS3/latest/userguide/NotificationHowTo.html) — suffix 필터로 재귀 차단
+- [Lambda Python 런타임](https://docs.aws.amazon.com/lambda/latest/dg/lambda-python.html) — 핸들러 서명·환경변수

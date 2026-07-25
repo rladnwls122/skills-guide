@@ -98,3 +98,9 @@ aws ecr delete-repository --repository-name hello --force
 
 - [../PART-1-Foundation-IaC/](../PART-1-Foundation-IaC/) — 모듈 03 컨테이너 빌드·ECR
 - 다음 선수 학습: [shell-basics.md](shell-basics.md)
+
+## 공식 문서
+
+- [Dockerfile 레퍼런스](https://docs.docker.com/reference/dockerfile/) — 명령별 정확한 동작
+- [docker CLI 레퍼런스](https://docs.docker.com/reference/cli/docker/) — build·tag·push 옵션
+- [ECR에 이미지 push](https://docs.aws.amazon.com/AmazonECR/latest/userguide/docker-push-ecr-image.html) — 로그인·태그 규칙

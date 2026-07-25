@@ -84,3 +84,9 @@ aws ec2 describe-vpcs | jq -r '.Vpcs[] | "\(.VpcId) \(.CidrBlock)"'
 
 - 선수 학습 완료 → [README.md](README.md)의 완료 체크 후 [../PART-1-Foundation-IaC/](../PART-1-Foundation-IaC/) 시작
 - 채점 역추적 훈련: [../PART-5-Battle-Drills/](../PART-5-Battle-Drills/)
+
+## 공식 문서
+
+- [AWS CLI 명령 레퍼런스](https://docs.aws.amazon.com/cli/latest/reference/) — 서비스별 서브커맨드·옵션
+- [CLI 사용 설명서](https://docs.aws.amazon.com/cli/latest/userguide/) — 프로필·자격증명·출력 형식
+- [JMESPath 튜토리얼](https://jmespath.org/tutorial.html) — `--query` 표현식 문법

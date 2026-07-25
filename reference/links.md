@@ -35,13 +35,35 @@
 
 대회장은 AI 불가·공식 문서 허용. 문서에 없는 요구는 결국 여기서 찾는다 —
 연습 때부터 검색이 아니라 **문서 구조로** 찾는 습관을 들일 것.
+모듈별 심화 링크는 각 모듈 README의 "공식 문서" 절에 있다. 아래는 전 모듈 공통.
 
-- EKS User Guide: https://docs.aws.amazon.com/eks/latest/userguide/
+**IaC**
+
+- Terraform AWS Provider (리소스 인자·반환 속성): https://registry.terraform.io/providers/hashicorp/aws/latest/docs
+- Terraform 언어 (블록·표현식·메타 인자): https://developer.hashicorp.com/terraform/language
+- Terraform CLI 명령: https://developer.hashicorp.com/terraform/cli/commands
 - eksctl (ClusterConfig 스키마): https://eksctl.io/usage/schema/
+
+**Kubernetes**
+
 - kubectl Quick Reference: https://kubernetes.io/docs/reference/kubectl/quick-reference/
-- AWS Load Balancer Controller (annotation 목록): https://kubernetes-sigs.github.io/aws-load-balancer-controller/
-- CloudFront Developer Guide: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/
-- Terraform AWS Provider: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
+- Kubernetes API 레퍼런스 (매니페스트 필드 정본): https://kubernetes.io/docs/reference/kubernetes-api/
+- AWS Load Balancer Controller (annotation·TargetGroupBinding): https://kubernetes-sigs.github.io/aws-load-balancer-controller/
 - Karpenter: https://karpenter.sh/docs/
 - KEDA Scalers: https://keda.sh/docs/latest/scalers/
+- Helm: https://helm.sh/docs/
+
+**AWS**
+
+- EKS User Guide: https://docs.aws.amazon.com/eks/latest/userguide/
+- CloudFront Developer Guide: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/
+- IAM 정책 평가 로직: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html
+- 서비스별 액션·리소스·조건 키: https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html
+- AWS CLI 명령 레퍼런스: https://docs.aws.amazon.com/cli/latest/reference/
+
+**관측성·부하**
+
 - Fluent Bit: https://docs.fluentbit.io/manual
+- PromQL: https://prometheus.io/docs/prometheus/latest/querying/basics/
+- LogQL: https://grafana.com/docs/loki/latest/query/
+- k6: https://grafana.com/docs/k6/latest/

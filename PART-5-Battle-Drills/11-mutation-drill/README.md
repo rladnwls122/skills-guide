@@ -38,3 +38,11 @@
 
 - [theory.md](theory.md) — 판단 원칙과 변동 대응 방법론 + 퀴즈
 - [lab.md](lab.md) — 훈련 ①②③ 절차·판정 기준·회고 양식
+
+## 공식 문서
+
+- [AWS provider 리소스 색인](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) — 바뀐 요구사항이 어느 인자에 해당하는지 확인
+- [AWS CLI 명령 레퍼런스](https://docs.aws.amazon.com/cli/latest/reference/) — 실제 생성된 이름을 뽑아 과제지와 대조
+- [JMESPath 튜토리얼](https://jmespath.org/tutorial.html) — `--query` 표현식
+- [GNU sed 매뉴얼](https://www.gnu.org/software/sed/manual/sed.html) — 일괄 치환 표현식
+- [PowerShell 문서](https://learn.microsoft.com/powershell/scripting/) — 대회 환경 셸의 치환·인코딩 동작

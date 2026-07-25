@@ -39,3 +39,11 @@
 
 - [theory.md](theory.md) — 복구 방법론(추측 금지·분리 진단) + 퀴즈
 - [lab.md](lab.md) — 12개 시나리오: 망가뜨리는 법·목표 시간·복구 확인
+
+## 공식 문서
+
+- [애플리케이션 디버깅(kubectl)](https://kubernetes.io/docs/tasks/debug/debug-application/) — Pending·CrashLoop 진단 순서
+- [EKS 문제 해결](https://docs.aws.amazon.com/eks/latest/userguide/troubleshooting.html) — Unauthorized·노드 미조인 원문
+- [대상 그룹 헬스 체크](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html) — unhealthy reason 코드 해석
+- [CloudFront 응답 오류 해결](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/troubleshooting-response-errors.html) — 403/502의 오리진별 원인
+- [IAM 정책 평가 로직](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html) — AccessDenied 역추적

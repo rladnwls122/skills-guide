@@ -134,17 +134,10 @@ html.mfs-open {
 	cursor: grabbing;
 }
 
+/* 크기는 스크립트가 인라인 width 로 정한다(레이아웃 확대 = 화질 유지).
+   여기서 transform 이나 will-change 를 얹으면 합성 레이어가 생겨 다시 뭉개진다. */
 .mfs-canvas {
 	transform-origin: center;
-	will-change: transform;
-}
-
-/* mermaid SVG 는 viewBox 를 갖고 있어 폭만 주면 비율대로 커진다. 원본 크기 그대로
-   두면 넓은 화면에서 우표만 하게 떠서 "크게 보기"가 무의미해진다. */
-.mfs-canvas svg {
-	width: min(92vw, 1600px);
-	max-height: 82vh;
-	height: auto;
 }
 
 @media (max-width: 50rem) {
@@ -152,8 +145,7 @@ html.mfs-open {
 		display: none; /* 좁은 화면에선 버튼에 자리를 준다 */
 	}
 
-	.mfs-canvas svg {
-		width: 96vw;
-		max-height: 76vh;
+	.mfs-btn {
+		min-width: 2.75rem; /* 좁은 화면일수록 터치 타깃을 넉넉히 */
 	}
 }

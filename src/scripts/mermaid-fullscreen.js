@@ -30,18 +30,37 @@ function openViewer(svg, caption) {
 	const canvas = overlay.querySelector(".mfs-canvas");
 	const stage = overlay.querySelector(".mfs-stage");
 	const clone = svg.cloneNode(true);
-	// mermaid 가 박아둔 고정 크기를 걷어내야 CSS 로 키울 수 있다(viewBox 는 남긴다).
+	// mermaid 가 박아둔 고정 크기를 걷어내야 자유롭게 키울 수 있다(viewBox 는 남긴다).
 	clone.removeAttribute("width");
 	clone.removeAttribute("height");
 	clone.style.maxWidth = "none";
+	clone.style.maxHeight = "none";
 	canvas.appendChild(clone);
 
 	let scale = 1;
 	let x = 0;
 	let y = 0;
+
+	// 화면에 딱 맞는 기준 폭. viewBox 비율로 높이도 넘치지 않게 맞춘다.
+	const box = clone.viewBox?.baseVal;
+	const ratio = box && box.width ? box.height / box.width : 0;
+	const fitW = Math.min(innerWidth * 0.92, 1600);
+	const maxH = innerHeight * 0.78;
+	const baseW = ratio && fitW * ratio > maxH ? maxH / ratio : fitW;
+
+	/*
+	 * 확대는 transform: scale() 이 아니라 **레이아웃 폭**으로 한다.
+	 * scale() 은 이미 그려진 래스터를 늘리는 합성 연산이라 SVG 인데도 확대하면
+	 * 뭉개진다. 폭을 바꾸면 브라우저가 벡터를 그 해상도로 다시 그려서 몇 배를
+	 * 키워도 선과 글자가 또렷하다. 이동(translate)은 래스터를 늘리지 않으므로
+	 * 그대로 transform 에 둔다.
+	 */
 	const apply = () => {
-		canvas.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+		clone.style.width = `${baseW * scale}px`;
+		clone.style.height = "auto";
+		canvas.style.transform = `translate(${x}px, ${y}px)`;
 	};
+	apply();
 	const zoom = (factor, originX, originY) => {
 		const next = Math.min(8, Math.max(0.25, scale * factor));
 		// 커서(또는 손가락) 아래 지점을 고정한 채 확대한다.

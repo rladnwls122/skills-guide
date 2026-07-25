@@ -1,1 +1,160 @@
-/* Task 2 */
+/* DESIGN-apple.md 토큰 → Starlight 오버라이드 */
+@import '@fontsource-variable/inter';
+@import '@fontsource/ibm-plex-mono';
+
+:root {
+  --sl-font: 'Inter Variable', system-ui, -apple-system, sans-serif;
+  --sl-font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  /* 다크 모드 (Apple 다크 타일 팔레트) */
+  --sl-color-accent-low: #16385c;
+  --sl-color-accent: #2997ff;
+  --sl-color-accent-high: #7dbeff;
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #f5f5f7;
+  --sl-color-gray-2: #cccccc;
+  --sl-color-gray-3: #7a7a7a;
+  --sl-color-gray-4: #4a4a4c;
+  --sl-color-gray-5: #2a2a2c;
+  --sl-color-gray-6: #272729;
+  --sl-color-black: #1d1d1f;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #d6e6f9;
+  --sl-color-accent: #0066cc;
+  --sl-color-accent-high: #004999;
+  --sl-color-white: #1d1d1f;
+  --sl-color-gray-1: #333333;
+  --sl-color-gray-2: #4a4a4c;
+  --sl-color-gray-3: #7a7a7a;
+  --sl-color-gray-4: #cccccc;
+  --sl-color-gray-5: #e0e0e0;
+  --sl-color-gray-6: #f5f5f7;
+  --sl-color-gray-7: #fafafc;
+  --sl-color-black: #ffffff;
+}
+
+/* 본문 17px/1.47, Apple 자간 */
+:root {
+  --sl-text-base: 1.0625rem; /* 17px */
+  --sl-line-height: 1.47;
+}
+.sl-markdown-content {
+  font-size: 1.0625rem;
+  line-height: 1.47;
+  letter-spacing: -0.022em;
+}
+
+/* 헤드라인: weight 600, 네거티브 자간 (Inter 보정 -0.01em) */
+.sl-markdown-content :is(h1, h2, h3, h4),
+h1[data-page-title] {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.sl-markdown-content h1,
+h1[data-page-title] { line-height: 1.1; }
+.sl-markdown-content h2 { line-height: 1.19; }
+
+/* 카드: 그림자 제거, 헤어라인, 18px radius */
+.sl-markdown-content .card,
+.card {
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 18px;
+  box-shadow: none;
+}
+
+/* 링크·버튼: 단일 액센트, pill */
+.sl-markdown-content a { color: var(--sl-color-accent); }
+.sl-link-button.primary {
+  background: var(--sl-color-accent);
+  border: 0;
+  border-radius: 9999px;
+  padding: 11px 22px;
+  font-weight: 400;
+}
+.sl-link-button.primary:active { transform: scale(0.95); }
+.sl-link-button.secondary {
+  border: 1px solid var(--sl-color-accent);
+  color: var(--sl-color-accent);
+  border-radius: 9999px;
+  padding: 11px 22px;
+}
+
+/* ── 랜딩 타일 (index.mdx 사용) ── */
+.apple-hero {
+  text-align: center;
+  padding: 80px 24px 64px;
+}
+.apple-hero h1 {
+  font-size: clamp(34px, 5vw, 56px);
+  font-weight: 600;
+  line-height: 1.07;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+.apple-hero .apple-tagline {
+  font-size: clamp(21px, 3vw, 28px);
+  font-weight: 400;
+  line-height: 1.14;
+  margin: 16px auto 24px;
+  max-width: 40em;
+}
+.apple-tile {
+  padding: 80px 24px;
+  margin: 0;
+  text-align: center;
+  background: var(--sl-color-black);
+}
+.apple-tile h2 {
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+  border: 0;
+}
+.apple-tile p {
+  font-size: 21px;
+  line-height: 1.19;
+  margin: 0 0 20px;
+}
+.apple-tile--parchment { background: var(--sl-color-gray-6); }
+.apple-tile--dark { background: #272729; color: #ffffff; }
+.apple-tile--dark2 { background: #2a2a2c; color: #ffffff; }
+.apple-tile--dark h2, .apple-tile--dark2 h2 { color: #ffffff; }
+.apple-tile--dark a, .apple-tile--dark2 a { color: #2997ff; }
+.apple-pill {
+  display: inline-block;
+  background: var(--sl-color-accent);
+  color: #ffffff;
+  border-radius: 9999px;
+  padding: 11px 22px;
+  text-decoration: none;
+  margin: 0 6px;
+}
+.apple-pill:active { transform: scale(0.95); }
+.apple-pill--ghost {
+  background: transparent;
+  border: 1px solid var(--sl-color-accent);
+  color: var(--sl-color-accent);
+}
+.apple-tile--dark .apple-pill--ghost,
+.apple-tile--dark2 .apple-pill--ghost {
+  border-color: #2997ff;
+  color: #2997ff;
+}
+.apple-footer {
+  background: var(--sl-color-gray-6);
+  padding: 64px 24px;
+}
+.apple-footer a {
+  display: block;
+  font-size: 17px;
+  line-height: 2.41;
+  text-decoration: none;
+  color: var(--sl-color-gray-1);
+}
+.apple-footer h3 {
+  font-size: 14px;
+  font-weight: 600;
+}

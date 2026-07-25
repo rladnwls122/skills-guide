@@ -92,3 +92,10 @@ html {
 .hero h1 {
 	letter-spacing: -0.02em;
 }
+
+/* Elice 는 한글 글리프가 고정폭 셀을 꽉 채워서 주석이 라틴 코드보다 성기게 보인다.
+   letter-spacing 은 폰트별로 못 주므로 코드 전체를 살짝 조인다 — JetBrains Mono 쪽은
+   이 정도 값에서 거의 티가 안 난다. */
+:is(code, pre, .expressive-code) {
+	letter-spacing: -0.01em;
+}

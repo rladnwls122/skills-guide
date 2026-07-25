@@ -23,6 +23,10 @@ const mermaidFullscreen = {
 };
 
 export default defineConfig({
+  /* GitHub Pages 사용자 사이트(리포 이름 = rladnwls122.github.io)라 루트에 붙는다.
+     base 는 '/' 기본값 그대로 — 문서의 `/part-1/...` 절대 링크가 손 안 대고 그대로 산다.
+     프로젝트 리포로 되돌리면 base 가 생기고 그 링크들이 전부 깨진다. */
+  site: 'https://rladnwls122.github.io',
   integrations: [
     mermaid(),
     mermaidFullscreen,
@@ -31,7 +35,13 @@ export default defineConfig({
       description: '전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드',
       defaultLocale: 'root',
       locales: { root: { label: '한국어', lang: 'ko' } },
-      customCss: ['./src/styles/korean-fonts.css', './src/styles/mermaid.css', './src/styles/mobile.css'],
+      customCss: [
+        './src/styles/korean-fonts.css',
+        './src/styles/mermaid.css',
+        './src/styles/mobile.css',
+        './src/styles/sidebar-toggle.css',
+      ],
+      components: { SiteTitle: './src/components/SiteTitle.astro' },
       plugins: [
         starlightThemeExquisitus(),
         starlightQuiz(),

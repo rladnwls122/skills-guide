@@ -33,6 +33,8 @@ provider "aws" {
 
 `~> 6.54` 는 6.54 이상 7.0 미만. `default_tags` 는 모든 리소스에 공통 태그를 붙여준다(리소스별 `tags` 와 병합됨).
 
+블록 안에 내가 **쓰는** 값이 argument(`region = ...`), 리소스가 생성 후 **돌려주는** 값이 attribute(`aws_vpc.main.id`)다. 다른 리소스에서 참조하는 것은 항상 attribute 쪽이고, `terraform plan` 이 `(known after apply)` 로 표시하는 것도 이것이다.
+
 **④ 세트별 차이** — 세트마다 이름 prefix(`wskorea26`/`wsc2026` 등)와 리전이 다를 수 있으므로 provider 자체는 동일하되 region·prefix 를 변수로 뺀다. set-03 은 파일명이 `providers.tf`, set-02 는 `versions.tf` — 파일명은 자유, 내용이 채점 대상.
 
 ---

@@ -23,10 +23,9 @@ const mermaidFullscreen = {
 };
 
 export default defineConfig({
-  /* GitHub Pages 사용자 사이트(리포 이름 = rladnwls122.github.io)라 루트에 붙는다.
-     base 는 '/' 기본값 그대로 — 문서의 `/part-1/...` 절대 링크가 손 안 대고 그대로 산다.
-     프로젝트 리포로 되돌리면 base 가 생기고 그 링크들이 전부 깨진다. */
-  site: 'https://rladnwls122.github.io',
+  /* Vercel 은 프로젝트를 도메인 루트에 그대로 배포한다 — base 불필요, 문서의
+     `/part-1/...` 절대 링크가 손 안 대고 그대로 산다. 커스텀 도메인을 붙이면
+     여기 site 를 그 도메인으로 채울 것(사이트맵·canonical URL 용). */
   integrations: [
     mermaid(),
     mermaidFullscreen,

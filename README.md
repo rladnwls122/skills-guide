@@ -2,7 +2,7 @@
 
 전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드 — Astro Starlight 문서 사이트.
 
-**사이트: https://rladnwls122.github.io**
+**사이트: Vercel (도메인은 배포 후 확정)**
 
 - 콘텐츠: `src/content/docs/` (시작 / part-1~6 / reference)
 - 디자인: [starlight-theme-exquisitus](https://github.com/anaxite/starlight-theme-exquisitus) — 팔레트·서체는 테마가 전담
@@ -41,8 +41,7 @@ ChosunSm·Elice 원본은 `~/Downloads/` 아래를 본다(`scripts/subset-font.p
 
 ## 배포
 
-GitHub Pages — `main` 에 push 하면 `.github/workflows/deploy.yml` 이 빌드·배포한다.
-
-리포 이름이 `rladnwls122.github.io` 라서 사이트가 도메인 루트에 붙고, Astro `base` 가
-`/` 로 남는다. 프로젝트 리포로 옮기면 `base` 가 생겨 문서의 `/part-1/...` 절대 링크
-100여 곳이 전부 깨진다 — 옮길 거면 링크 일괄 수정이 같이 가야 한다.
+Vercel — 리포를 Vercel 프로젝트로 연결하면 Astro 를 자동 인식해 `main` push 마다
+빌드·배포한다(설정 파일 불필요, 빌드 커맨드 `npm run build`, 출력 `dist`). GitHub
+Pages 와 달리 리포를 public 으로 바꿀 필요가 없고, 도메인이 루트라 Astro `base`
+도 안 건드린다.

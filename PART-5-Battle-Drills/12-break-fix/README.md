@@ -20,6 +20,15 @@
 - 종료 시: `kubectl delete` → `eksctl delete cluster` → `terraform destroy` (CloudFront disable 전파 대기 포함).
 - 시나리오 ⑫(순환 체험)는 별도 디렉토리 사본에서 plan만으로도 가능 — 과금 없음.
 
+## 선행 지식
+
+- `kubectl describe`의 Events와 `logs --previous`가 1차 소스 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- Service ↔ 라벨 셀렉터 연결이 끊기면 트래픽이 사라진다 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- SG 룰이 빠지면 응답이 timeout으로 나타난다(스테이트풀 특성) — [vpc-basics](../../00-prerequisites/vpc-basics.md)
+- `aws sts get-caller-identity`로 현재 신원을 먼저 확인 — [iam-basics](../../00-prerequisites/iam-basics.md)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
 ## 선행 모듈
 
 - 11-mutation-drill (mark 표 정리 완료 상태)

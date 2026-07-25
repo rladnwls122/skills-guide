@@ -1,0 +1,200 @@
+# 3과제 부하 운영 실습 — 배포 · 부하 · 조정 드릴
+
+> 문서 유형: how-to
+
+## 규칙
+
+- 정답지(`skills-2026/task-3`)의 `README.md`를 런북으로 쓰되, **타이머를 켜고** 실행한다. 목표는 T+50분 배포 완료다.
+- 부하는 자기 CloudFront 도메인에만 주입한다. 드릴이 끝나면 부하부터 멈춘다.
+- 조정은 반드시 **관측 → 노브 1개 변경 → 재측정** 순서로 한다. 부하 중에 두 개를 동시에 바꾸면 어느 쪽이 들었는지 알 수 없다.
+- 드릴 1회는 3시간 안에 끝내고 destroy한다 ([README.md](README.md)의 과금 절차).
+
+## 준비
+
+```powershell
+# ── Windows PowerShell ──
+cd <skills-2026>/task-3
+# terraform/terraform.tfvars: player_number, db_password 설정
+$env:DB_PASSWORD = 'password'
+k6 version    # 없으면 winget install k6 --source winget
+```
+
+## 드릴 A — 배포 타임라인 (목표 T+50)
+
+시계를 0에 맞추고 아래 레인을 병렬로 돈다. 정답지 README의 STEP 번호를 그대로 따른다.
+
+| 시각 | 레인 1 (PowerShell #1) | 레인 2 (PowerShell #2) | 레인 3 (CloudShell) |
+|---|---|---|---|
+| T+0 | STEP 1 선행 apply (~3분) | — | 리포 클론, 바이너리 배치 |
+| T+3 | STEP 2 `eksctl create cluster` (~15분, 창 점유) | STEP 3 전체 `terraform apply` (~20분) | STEP 4 이미지 빌드 |
+| T+8 | 대기 | 대기 | STEP 4a~4c 검증 (링크 방식·healthcheck·env 키·멀티파트 필드명) |
+| T+20 | — | RDS 생성 완료 → STEP 7 DB 초기화 진입 | STEP 4d push |
+| T+25 | STEP 5 NodeClass/NodePool apply | STEP 6 **엔드포인트 제출** | dump 적재 (~수 분) |
+| T+30 | STEP 8 앱 배포 (dump 적재와 병행) | 인덱스 생성 확인 | — |
+| T+40 | STEP 9 스모크 6종 | — | — |
+| T+50 | 사전 워밍 + 감시 루프 시작 | — | — |
+
+**막히면 넘어가지 말고 시각을 기록한다.** 어느 레인이 임계경로를 만들었는지가 다음 드릴의 개선점이다.
+
+### 배포 직후 확인 6종 (하나라도 실패면 트래픽 전에 고친다)
+
+```powershell
+# ── Windows PowerShell ──
+$CF = "https://$(terraform -chdir=terraform output -raw cloudfront_domain)"
+$Q  = "requestid=999999999999&uuid=7c5a3c6a-758f-4bc5-9bdf-3e573a0ad729"
+function c($url) { curl.exe -s -o NUL -w "%{http_code} %{time_total}s $url`n" $url }
+
+c "$CF/v1/user?email=dbdump500001@example.org&$Q"   # 200, 0.2s 미만
+c "$CF/v1/product?id=dbdump500001&$Q"               # 200
+c "$CF/images/<업로드한 키>"                          # 200
+c "$CF/v1/none?$Q"                                  # 404 (ALB 기본 액션)
+c "$CF/v1/user?email=%27%20OR%201=1--&$Q"           # 403 (WAF)
+kubectl get targetgroupbindings                     # 3개 모두 등록
+```
+
+## 사전 워밍 (트래픽 개시 5분 전)
+
+노드 프로비저닝 2~3분을 트래픽 개시 시점에서 앞으로 당긴다. 낮은 우선순위 placeholder 파드로 노드를 미리 띄우고, 트래픽이 오면 0으로 줄여 실제 파드에 자리를 내준다.
+
+```yaml
+# warm.yaml — 드릴용. 채점 대상 리소스가 아니므로 트래픽 개시 직후 삭제한다.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: warm
+value: -10
+preemptionPolicy: Never
+globalDefault: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: warm
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: warm }
+  template:
+    metadata:
+      labels: { app: warm }
+    spec:
+      priorityClassName: warm
+      terminationGracePeriodSeconds: 0
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests: { cpu: 600m, memory: 768Mi }
+```
+
+```powershell
+# ── Windows PowerShell ──
+kubectl apply -f warm.yaml
+kubectl get nodes -w          # 노드가 목표 수만큼 Ready 되면 다음 줄
+# 트래픽 개시 시각에:
+kubectl delete -f warm.yaml   # 자리를 실제 파드에 넘긴다
+```
+
+워밍 노드는 그대로 두면 비용 ratio를 올린다. `consolidateAfter: 30s`가 회수하므로 **삭제 후 노드 수가 실제 부하를 따라가는지** 감시 루프로 확인한다.
+
+## 드릴 B — k6 3단 프로파일
+
+정답지의 `script/load.js`를 그대로 쓴다. 임계값이 채점표와 같아 빨간불이 곧 감점이다.
+
+```powershell
+# ── Windows PowerShell ──
+$env:BASE_URL = $CF
+
+# ① Ramp — 정상 부하에서 SLO를 지키는지
+$env:VUS='20'; $env:DURATION='2m'; k6 run script/load.js
+
+# ② Spike — 스텝 증가에 스케일이 따라붙는지
+$env:VUS='80'; $env:DURATION='1m'; k6 run script/load.js
+
+# ③ Soak — 지속 부하에서 DB·커넥션·크레딧이 버티는지
+$env:VUS='40'; $env:DURATION='10m'; k6 run script/load.js
+```
+
+각 회차마다 기록한다: `http_req_duration{app:*}`의 p(90), `http_req_failed` 비율, 최대 노드 수, 최대 파드 수.
+
+**정리**: k6가 만든 행을 지운다 — 남기면 다음 측정의 DB 상태가 달라진다.
+
+```sql
+DELETE FROM user WHERE username LIKE 'k6-%';
+DELETE FROM product WHERE id LIKE 'k6-%';
+```
+
+## 감시 루프 (부하 중 30초 주기)
+
+```powershell
+# ── Windows PowerShell (세 번째 창) ──
+$tg = terraform -chdir=terraform output -json tg_arns | ConvertFrom-Json
+while ($true) {
+  kubectl get hpa
+  "nodes: " + (kubectl get nodes --no-headers | Measure-Object).Count
+  aws elbv2 describe-target-health --target-group-arn $tg.user `
+    --query 'TargetHealthDescriptions[].TargetHealth.State' --output text
+  Start-Sleep 30
+}
+```
+
+CloudWatch에서는 Container Insights(파드 CPU)와 RDS Proxy 지표(`DatabaseConnections`, `DatabaseConnectionsBorrowLatency`)를 함께 연다.
+
+## 튜닝 노브 표
+
+증상을 보면 **노브 하나만** 돌린다. 위 행부터 검토한다 — 아래로 갈수록 효과 대비 위험이 크다.
+
+| 증상 | 1순위 확인 | 노브 | 파일 |
+|---|---|---|---|
+| user GET p90이 수백 ms | DB에서 `EXPLAIN SELECT ... WHERE email=` | `email` 인덱스 생성 | `db/02-index.sql` |
+| 부하 개시 직후만 5xx·타임아웃 | `kubectl get hpa` 이용률 급등 + 파드 수 정체 | `minReplicas` 상향, `scaleUp` 정책 공격적으로 | 앱 매니페스트 HPA |
+| 파드는 늘었는데 Pending | `kubectl describe pod` Events | NodePool `limits.cpu` 상향 | `k8s/01-nodepool.yaml` |
+| CPU 여유가 있는데 p99만 튐 | 파드에 CPU limit이 걸렸는지 | CPU limit 제거 | 앱 매니페스트 `resources` |
+| DB 커넥션 에러·borrow latency 상승 | RDS Proxy 지표 | `max_connections_percent` 상향(최대 100) | `terraform/rds-proxy.tf` |
+| 스케일다운 직후 502/503 | `describe-target-health`의 draining | `deregistration_delay` 축소, `preStop` sleep 정렬 | `terraform/alb.tf`, 앱 매니페스트 |
+| 이미지가 갱신 전 내용으로 나감 | 해당 키를 직접 GET, `x-cache` 헤더 | 무효화 실행 또는 short TTL 캐시 정책 | `terraform/cloudfront.tf` |
+| 정상 요청이 403 | WAF 콘솔(us-east-1) sampled requests | 문제 룰을 Count로 내리거나 `RuleActionOverrides` | `terraform/waf.tf` |
+| 비용 ratio 상단 초과 | 노드 수 추이 | HPA `maxReplicas`·NodePool `limits.cpu` 하향, `consolidateAfter` 단축 | `k8s/01-nodepool.yaml` |
+| 비용 ratio 하한 미달 | 노드 2대 미만 | `minReplicas` 상향 — 하한 아래는 0점 | 앱 매니페스트 HPA |
+
+무효화 명령:
+
+```powershell
+# ── Windows PowerShell ──
+aws cloudfront create-invalidation --distribution-id <id> --paths "/images/*"
+```
+
+## 드릴 C — 부하 중 장애 10종
+
+부하를 돌린 채로 [../../reference/troubleshooting.md](../../reference/troubleshooting.md)의 "부하 운영(3과제)" 10개 항목을 하나씩 재현하고 복구한다. 규칙은 모듈 12와 같다 — **확인 명령 → 원인 → 조치**, 추측 수리는 실패 처리.
+
+부하 중 복구는 정지 상태 복구와 다르다. 각 항목마다 두 가지를 함께 기록한다.
+
+- 복구까지 걸린 시간
+- 그 사이 k6 실패율이 얼마나 올랐는지 (= 대회장에서 잃었을 availability)
+
+## 판정 기준
+
+- 배포: 스모크 6종 통과를 **T+50분 내**
+- 성능: soak 구간에서 user·product `p(90) < 200ms`, stress `p(90) < 1000ms`
+- 가용성: 3회차 전체 `http_req_failed < 10%`
+- 비용: 부하 전 구간 노드 2~9대, 부하 종료 5분 내 2대로 회수
+- 복구: 10종 중 7개 이상을 5분 내 복구
+
+네 개 중 세 개를 만족하면 통과, 두 개 이하면 실패 축만 다음 드릴에서 재도전한다.
+
+## 회고 양식
+
+```
+## 3과제 부하 드릴 회고 (날짜: )
+
+| 회차 | VUs | user p90 | product p90 | stress p90 | 실패율 | 최대 노드 | 돌린 노브 |
+|---|---|---|---|---|---|---|---|
+
+- 배포 완료 시각(T+__), 임계경로가 된 레인:
+- 노브 1개 변경 → 지표 변화 (변경 전/후):
+- 복구 실패 항목의 증상→확인 명령→원인→조치를 자기 언어로
+  ../../reference/troubleshooting.md 에 추가
+```
+
+종료 후 부하 중지 → 스택 destroy → [../../reference/cleanup-check.md](../../reference/cleanup-check.md).

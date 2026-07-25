@@ -28,6 +28,16 @@
 
 > 실습 A(IAM audit role)는 클러스터 없이 즉시 가능하고 무료 — 먼저 한다.
 
+## 선행 지식
+
+- AssumeRole은 신뢰 정책과 호출자 권한을 **양쪽 다** 평가한다 — audit role 드릴의 핵심 — [iam-basics](../../00-prerequisites/iam-basics.md)
+- 역할·권한 정책·신뢰 정책의 구분, 명시적 Deny 우선 — [iam-basics](../../00-prerequisites/iam-basics.md)
+- NAT 없는 프라이빗 서브넷에서 나가는 유일한 길은 VPC Endpoint — [vpc-basics](../../00-prerequisites/vpc-basics.md)
+- ServiceAccount = 파드의 신원 (Pod Identity가 깨지는 지점을 이해하는 전제) — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- 재접속마다 다시 도는 멱등 셋업 스크립트 작성 — [shell-basics](../../00-prerequisites/shell-basics.md)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
 ## 선행 모듈
 
 - PART-1 (Terraform/VPC/KMS — 특히 02의 root-less KMS 키 정책, 이 모듈에서 재확인)

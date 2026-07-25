@@ -91,6 +91,75 @@
 - 원인: CloudTrail·Config 첫 평가까지 5~10분, CloudTrail 경유 이벤트는 수십 초~1분 지연
 - 조치: 대기 또는 `aws configservice start-config-rules-evaluation`. 네이티브 이벤트(수 초)와 경로 구분.
 
+## 부하 운영 (3과제)
+
+트래픽이 흐르는 중에 판단한다 — 확인 명령은 초 단위로 끝나는 것만 쓰고, 노브는 한 번에 하나만 돌린다.
+
+### 스케일다운 직후 502/503
+
+- 원인 순위: ① 타깃 draining 중 요청 유입 ② `preStop` 없이 파드가 즉시 종료 ③ deregistration delay가 길어 죽은 타깃이 남음
+- 확인: `aws elbv2 describe-target-health --target-group-arn <arn>` → `draining`/`unused` 개수
+- 조치: `deregistration_delay` 15초 + 파드 `preStop: sleep 15` + `terminationGracePeriodSeconds` 45로 정렬
+
+### 파드가 Pending인 채 노드가 안 늘어남
+
+- 원인 순위: ① NodePool `limits.cpu` 상한 도달 ② instance-type 요구사항이 너무 좁음 ③ NodeClass/NodePool 미적용
+- 확인:
+  ```powershell
+  kubectl get nodepool,nodeclaim
+  kubectl describe pod <pod>   # Events 최하단
+  ```
+- 조치: `limits.cpu` 상향 후 재확인. 급하면 placeholder 파드로 미리 띄운 노드를 회수(삭제)해 자리 확보
+
+### RDS Proxy 커넥션 고갈
+
+- 원인 순위: ① 파드 수 × 앱 커넥션 풀이 백엔드 한도 초과 ② 피닝으로 멀티플렉싱 무효화 ③ `max_connections_percent`가 낮음
+- 확인: CloudWatch RDS Proxy `DatabaseConnections`·`DatabaseConnectionsBorrowLatency`, `aws rds describe-db-proxy-targets --db-proxy-name <name>`
+- 조치: `max_connections_percent` 상향(최대 100). 대량 적재는 프록시가 아닌 **인스턴스 직결**로
+
+### 부하가 걸려도 HPA가 파드를 안 늘림
+
+- 원인 순위: ① metrics-server 미기동 ② 파드 `requests` 미선언(이용률 계산 불가) ③ `maxReplicas` 도달
+- 확인: `kubectl describe hpa <name>`, `kubectl top pods`
+- 조치: 목표 이용률 하향 또는 `scaleUp` 정책 공격적으로. `<unknown>/75%`면 metrics-server 문제
+
+### 응답시간이 DB 쿼리에서 터짐
+
+- 원인 순위: ① 조회 컬럼 인덱스 부재(풀스캔) ② 프록시 피닝 ③ DB CPU 포화
+- 확인: DB 접속 후 `EXPLAIN SELECT ...`, `SHOW PROCESSLIST;`
+- 조치: 해당 컬럼 인덱스 생성 — 벌크 적재 뒤에 만드는 것이 빠르다
+
+### 정상 요청이 403
+
+- 원인 순위: ① 관리형 룰 오차단 ② CommonRuleSet 계열 포함 ③ 요청 본문 크기·User-Agent 규칙
+- 확인: WAF 콘솔(us-east-1) sampled requests, `aws wafv2 get-sampled-requests`
+- 조치: 문제 룰만 `RuleActionOverrides`로 Count 전환. 검증 후 다시 Block
+
+### 이미지가 갱신 전 내용으로 나감
+
+- 원인: 캐시 TTL이 갱신 주기보다 김
+- 확인: `curl.exe -sI <endpoint>/images/<key>` → `x-cache`, `age` 헤더
+- 조치: `aws cloudfront create-invalidation --paths "/images/*"` (월 1000건 무료), 반복되면 short TTL 캐시 정책으로 교체
+
+### 파드 OOMKilled
+
+- 원인: 메모리 limit이 실사용보다 낮음 (메모리는 스로틀링이 아니라 kill)
+- 확인: `kubectl describe pod <pod>` → `Last State: Terminated, Reason: OOMKilled`
+- 조치: request = limit을 함께 상향. 노드당 패킹 수가 줄므로 노드 수 영향까지 계산
+
+### 노드 CPU는 여유인데 p99만 튐
+
+- 원인 순위: ① 컨테이너 CPU limit의 CFS 스로틀링 ② t 계열 크레딧 소진 ③ 노드 간 파드 쏠림
+- 확인: 매니페스트의 `limits.cpu` 존재 여부, `aws ec2 describe-instance-credit-specifications --instance-ids <id>`
+- 조치: CPU limit 제거. t3는 unlimited가 기본이므로 크레딧보다 limit을 먼저 의심
+
+### CloudFront 5xx
+
+- 원인 순위: ① 오리진(ALB) 타깃 전멸 ② 오리진 응답이 idle timeout 초과 ③ S3 OAC 권한
+- 확인: 오리진 계층 분리 — `describe-target-health` → 파드 `kubectl logs` 순
+- 조치: 타깃 복구가 먼저. 응답이 60초를 넘는 API가 있으면 ALB idle timeout 상향
+
 ## 파괴/복구 훈련 매핑
 
-모듈 12(break-fix)가 위 증상 12종을 고의로 재현한다 — 표가 손에 붙을 때까지.
+- 모듈 12(break-fix)가 위 배포 계열 증상 12종을 고의로 재현한다 — 표가 손에 붙을 때까지.
+- 모듈 14(3과제 부하 운영)가 부하 운영 10종을 **트래픽이 흐르는 중에** 재현한다.

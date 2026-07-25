@@ -16,6 +16,11 @@
 | Grafana/Prometheus helm | 수 분 | 대시보드 sidecar import 약간 지연 |
 | Flink Studio (CFN) | 수 분~10분 | 노트북 READY 상태 확인 |
 | NAT GW 생성 | 1~2분 | 시간당 과금 시작점 |
+| RDS Multi-AZ 생성 | 10~15분 | 3과제 임계경로. 생성 직후 DB 초기화 진입 |
+| dump 50만행 적재 | 수 분 | 프록시 아닌 **직결**로. 적재 중 앱 배포 병행 가능 |
+| Auto Mode 노드 프로비저닝 | 부팅 ~20초, Ready ~2분 | 스텝 트래픽 전 placeholder 파드로 선확보 |
+| 파드 기동 → TG healthy | 30~40초 | 파드 ~10초 + `interval 10s × healthy 2` |
+| CloudFront 무효화 | 수십 초~수 분 | 월 1000건 무료 |
 
 ## 권장 착수 순서 (1과제 기준)
 

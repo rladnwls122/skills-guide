@@ -24,6 +24,15 @@
 
 **절대 NAT 를 밤새 켜두지 않는다.** 실습을 이어서 하려면 다음 날 다시 apply 한다 (state 가 로컬이므로 apply 만 다시 하면 됨).
 
+## 선행 지식
+
+- 서브넷이 퍼블릭인지 결정하는 것은 이름이 아니라 **연결된 RTB** — [vpc-basics](../../00-prerequisites/vpc-basics.md)
+- 프라이빗 인스턴스의 아웃바운드 경로: 프라이빗 RTB → NAT GW → 퍼블릭 RTB → IGW — [vpc-basics](../../00-prerequisites/vpc-basics.md)
+- SG는 스테이트풀, NACL은 스테이트리스 — [vpc-basics](../../00-prerequisites/vpc-basics.md)
+- `--query`(JMESPath)와 `jq`로 출력에서 값만 뽑는 법 — [awscli-basics](../../00-prerequisites/awscli-basics.md)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
 ## 선행 모듈
 
 - 없음 (PART-1 첫 모듈). AWS 계정, Terraform ≥ 1.6, AWS CLI 자격증명만 준비.

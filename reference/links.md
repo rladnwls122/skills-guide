@@ -25,6 +25,9 @@
 | 10 | `set-02/task-2/module-2-*`, `module-4-*` | Flink Studio, MSK (개념 위주) |
 | 11–13 | 각 과제 `mark/`, `mark.md`, `mark.sh` | 변동 드릴·모의 대회 채점 |
 | 13 | `set-07/task-2/` docs `setlist/set-07/task-2/*` | 모의 대회 대체 세트 |
+| 14 | `task-3/README.md`, `ARCHITECTURE.md` | 3과제 런북·설계 근거(튜닝 표·당일 변경 시나리오) |
+| 14 | `task-3/k8s/{01-nodepool,10-user}.yaml` | NodePool 상한·consolidation, HPA behavior·CPU limit 부재 |
+| 14 | `task-3/script/load.js` | k6 부하 스크립트 (임계값 = 채점표) |
 
 문서 사이트(Astro Starlight): `skills-2026/docs/` — set-03·set-06·set-07 task-2에 notes/runbook 상세.
 

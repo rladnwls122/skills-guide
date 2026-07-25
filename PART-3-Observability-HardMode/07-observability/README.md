@@ -28,6 +28,15 @@
 > 08(Day 9)도 같은 클러스터를 쓰므로 이틀 연속이면 유지, 하루 이상 쉬면
 > `helm uninstall` + `eksctl delete cluster` 후 재생성. 클러스터 방치 ≈ **$7.4/일**.
 
+## 선행 지식
+
+- ConfigMap으로 설정을 주입하는 두 방법(환경변수 / 볼륨 마운트) — Fluent Bit·Grafana 설정이 전부 이 방식 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- Helm `install`/`upgrade --install`과 values 오버라이드 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- 라벨 셀렉터 — sidecar가 `grafana_dashboard=1` 라벨로 대시보드를 찾는다 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- 파이프·`grep`·`jq`로 로그에서 필요한 줄만 뽑는 원라이너 — [shell-basics](../../00-prerequisites/shell-basics.md)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
 ## 선행 모듈
 
 - PART-2 전체 (04 eksctl 클러스터, 05 워크로드/ALB — 앱이 떠 있어야 액세스 로그가 나온다)

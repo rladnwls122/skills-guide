@@ -33,6 +33,15 @@
 
 유형 5는 실습하지 않으므로 과금 없음 (MSK ~30분 생성·시간당 과금이 커서 개념 암기로 대체하는 것).
 
+## 선행 지식
+
+- Deployment의 `replicas`를 바깥에서 조종하는 것이 오토스케일러(KEDA/HPA)다 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- 파드 `requests`가 스케줄링 단위 — 노드 수 계산의 입력값 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- ConfigMap 주입과 라벨 셀렉터 (OTel Collector·Loki 설정에서 반복) — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- ServiceAccount에 붙는 IAM 역할이 SQS·S3 접근을 만든다 — [iam-basics](../../00-prerequisites/iam-basics.md)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
 ## 선행 모듈
 
 - PART-2 EKS-Core 전체 (eksctl, IRSA, addon 노드그룹)

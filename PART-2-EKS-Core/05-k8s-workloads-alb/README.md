@@ -26,6 +26,15 @@
 > 04에서 유지한 클러스터를 그대로 쓴다. **05 종료 시**: 06을 다음날 이어가면 유지,
 > 아니면 `eksctl delete cluster` + `terraform destroy` (DynamoDB 삭제방지 해제 선행 — 06 참고).
 
+## 선행 지식
+
+- Deployment → ReplicaSet → Pod 관계. 직접 만지는 것은 Deployment뿐 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- Service(ClusterIP)가 라벨 셀렉터로 파드에 분배한다. 대회는 LoadBalancer 타입을 쓰지 않는다 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- Helm의 repo/chart/release/values 개념 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- SG는 스테이트풀 — ALB→노드 인바운드만 열면 응답은 자동 허용 — [vpc-basics](../../00-prerequisites/vpc-basics.md)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
 ## 선행 모듈
 
 - 04-eksctl-cluster (클러스터가 떠 있어야 함)

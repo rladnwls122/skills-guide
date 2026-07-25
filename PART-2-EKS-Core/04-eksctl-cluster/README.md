@@ -28,6 +28,16 @@
 > 하루 이상 쉬면 `eksctl delete cluster -f cluster.rendered.yaml` 후 다음날 재생성(20분)한다.
 > 클러스터 하루 방치 비용 ≈ $0.10×24 + $0.21×24 ≈ **$7.4/일** — 잊지 말 것.
 
+## 선행 지식
+
+- 컨트롤 플레인(EKS가 관리) ↔ 노드(EC2) 분담. `kubectl`은 API server로 간다 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- ServiceAccount = 파드의 신원. IRSA·Pod Identity는 여기에 IAM 역할을 붙이는 방식 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- 신뢰 정책(문지기) + 호출자 권한, **둘 다** 통과해야 AssumeRole이 성립 — [iam-basics](../../00-prerequisites/iam-basics.md)
+- 클러스터를 만든 신원만 기본 kubectl 접근을 갖는다 — [iam-basics](../../00-prerequisites/iam-basics.md)
+- 노드는 프라이빗 서브넷에 있다. NAT 경로가 없으면 이미지 pull부터 실패 — [vpc-basics](../../00-prerequisites/vpc-basics.md)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
 ## 선행 모듈
 
 - PART-1 (Terraform 기초: VPC/서브넷/SG/KMS/IAM 정책이 이미 apply 되어 있어야 한다)

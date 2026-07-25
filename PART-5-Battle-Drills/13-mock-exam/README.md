@@ -22,6 +22,16 @@
 - 풀스택 4시간+ 기동 — 이 커리큘럼에서 과금이 가장 큰 날. EKS·NAT GW·ALB·CloudFront 동시 과금.
 - 회고까지 끝나면 즉시 destroy: k8s 리소스(LBC ALB 포함) 삭제 → `eksctl delete cluster` → `terraform destroy` → CloudFront disable·삭제 확인 → 콘솔에서 잔존 리소스 육안 확인.
 
+## 선행 지식
+
+시험 중에는 선수 지식 문서를 여는 시간이 없다. 전날 아래를 훑어 **막히는 항목이 있으면 시험을 하루 미룬다**.
+
+- [vpc-basics](../../00-prerequisites/vpc-basics.md) — RTB 매핑, NAT 경로
+- [k8s-basics](../../00-prerequisites/k8s-basics.md) — Deployment/Service/SA, kubectl 6종
+- [iam-basics](../../00-prerequisites/iam-basics.md) — 신뢰 정책, 생성자 = 채점 신원
+- [docker-basics](../../00-prerequisites/docker-basics.md) — build → tag → push
+- [awscli-basics](../../00-prerequisites/awscli-basics.md) · [shell-basics](../../00-prerequisites/shell-basics.md) — `--query`·`jq`·`grep`/`sed`
+
 ## 선행 모듈
 
 - 11-mutation-drill, 12-break-fix 완료 (판정 통과 상태)

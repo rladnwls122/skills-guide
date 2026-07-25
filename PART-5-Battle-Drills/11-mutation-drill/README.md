@@ -21,6 +21,14 @@
 - 훈련 ①·②의 편집 자체는 무과금(로컬 편집). mark 재통과까지 확인하려면 set-02 스택 apply 필요 — NAT GW·EKS·ALB 시간당 과금 시작.
 - 검증 후 즉시 `terraform destroy` + `eksctl delete cluster`. CloudFront는 disable→삭제 전파 대기.
 
+## 선행 지식
+
+- `grep -rn`으로 이름이 박힌 파일을 전부 찾고, `sed`로 일괄 치환하는 원라이너 — [shell-basics](../../00-prerequisites/shell-basics.md)
+- 치환 후 잔존 확인: 같은 패턴을 다시 grep해 0건인지 본다 — [shell-basics](../../00-prerequisites/shell-basics.md)
+- `aws ... --query`로 실제 생성된 리소스 이름을 뽑아 과제지와 대조 — [awscli-basics](../../00-prerequisites/awscli-basics.md)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
 ## 선행 모듈
 
 - PART-2~4의 set-02 1과제 실습 완료 (원본 스택을 한 번 올려본 상태)

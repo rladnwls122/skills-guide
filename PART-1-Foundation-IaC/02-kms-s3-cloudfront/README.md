@@ -24,6 +24,15 @@
 
 이 모듈은 NAT 같은 시간당 폭탄은 없지만 **KMS 키가 세트마다 쌓이면 월 과금이 늘어난다** — 실습 종료 시 반드시 destroy.
 
+## 선행 지식
+
+- 정책 JSON 4요소(Effect/Action/Resource/Condition)와 **명시적 Deny 우선** — [iam-basics](../../00-prerequisites/iam-basics.md)
+- 권한 정책 vs 신뢰 정책의 차이 — KMS 키 정책은 리소스에 붙는 권한 정책이다 — [iam-basics](../../00-prerequisites/iam-basics.md)
+- root를 Principal에서 빼는 이유 — root로 만든 리소스는 이후 키 사용이 막힌다 — [iam-basics](../../00-prerequisites/iam-basics.md)
+- `aws ... --query`로 배포·버킷 속성만 뽑아 확인하는 법 — [awscli-basics](../../00-prerequisites/awscli-basics.md)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
 ## 선행 모듈
 
 - `01-terraform-vpc` (Terraform 문법·변수화·output 패턴을 전제)

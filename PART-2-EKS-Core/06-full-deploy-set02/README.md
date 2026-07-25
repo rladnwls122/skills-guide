@@ -26,6 +26,15 @@
 > **Day 6 → Day 7은 전체 유지** (완주 흐름 유지가 목적).
 > **Day 7 종료 시 반드시 10단계 정리 절차로 전부 삭제** — helm → eksctl → DynamoDB 삭제방지 해제 → terraform destroy 순서를 지켜야 destroy가 안 막힌다.
 
+## 선행 지식
+
+- 이미지는 CloudShell에서 build → tag → push. 세션이 초기화되므로 명령을 붙여넣기 가능한 형태로 준비 — [docker-basics](../../00-prerequisites/docker-basics.md)
+- `kubectl apply / get / describe / logs / rollout restart` — 검증 단계의 기본기 — [k8s-basics](../../00-prerequisites/k8s-basics.md)
+- `terraform output` 값을 `.env`로 영속화하는 `--query`·`jq` 패턴 — [awscli-basics](../../00-prerequisites/awscli-basics.md)
+- 클러스터 생성 신원 = 채점 신원. 런북 전체를 한 신원으로 관통한다 — [iam-basics](../../00-prerequisites/iam-basics.md)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
 ## 선행 모듈
 
 - 04-eksctl-cluster, 05-k8s-workloads-alb (개념은 전부 선행 — 06은 통합 리허설)

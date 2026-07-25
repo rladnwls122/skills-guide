@@ -26,6 +26,15 @@
 
 시간당 폭탄 리소스는 없지만, **DynamoDB 는 `deletion_protection_enabled = true` 상태에서 destroy 가 실패한다** — 정리 절차(lab.md §정리)를 반드시 따른다.
 
+## 선행 지식
+
+- push 3단계: build → tag(레지스트리 주소 포함) → push — [docker-basics](../../00-prerequisites/docker-basics.md)
+- `RUN`은 빌드 시점, `ENTRYPOINT`/`CMD`는 실행 시점 — [docker-basics](../../00-prerequisites/docker-basics.md)
+- 베이스 이미지 크기가 pull 지연과 스캔 결과를 좌우한다 — [docker-basics](../../00-prerequisites/docker-basics.md)
+- 역할(Role) = 자격증명 없는 신원. Lambda 실행역할이 이것 — [iam-basics](../../00-prerequisites/iam-basics.md)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
 ## 선행 모듈
 
 - `01-terraform-vpc` (Terraform 기본), `02-kms-s3-cloudfront` (CMK·alias 패턴)

@@ -33,6 +33,14 @@
 
 당일 실습 종료 시 두 모듈 모두 `terraform destroy`. state가 로컬이므로 다음 날 apply만 다시 하면 된다.
 
+## 선행 지식
+
+- 역할(Role)과 신뢰 정책 — Lambda·Step Functions·EventBridge가 각각 다른 역할을 Assume한다 — [iam-basics](../../00-prerequisites/iam-basics.md)
+- 명시적 Deny 우선, Condition으로 범위를 좁히는 법 — [iam-basics](../../00-prerequisites/iam-basics.md)
+- `aws ... --query`로 실행 이력·항목을 확인하는 조회 명령 — [awscli-basics](../../00-prerequisites/awscli-basics.md)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
 ## 선행 모듈
 
 - PART-1 전체 (Terraform 문법, IAM, Lambda 배포 패턴)

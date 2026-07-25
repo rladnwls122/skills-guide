@@ -72,6 +72,20 @@
 		-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+/* 한글은 어절 중간에서 줄바꿈되면 안 된다.
+   브라우저 기본값은 한글을 음절 단위로 끊어서 "문법"이 "문 / 법"으로, "참조가"가
+   "참 / 조가"로 갈라진다 — 제목에서 특히 눈에 띈다. keep-all 은 공백(어절) 단위로만
+   끊게 만든다. 대신 긴 URL·식별자가 컨테이너를 넘칠 수 있어 overflow-wrap 으로
+   그때만 예외를 연다. 코드는 자체 줄바꿈 규칙이 있어 되돌린다. */
+html {
+	word-break: keep-all;
+	overflow-wrap: break-word;
+}
+
+:is(code, pre, kbd, samp) {
+	word-break: normal;
+}
+
 /* 명조 계열이라 Alegreya Sans 의 700 만큼 굵지 않다 — 굵기 대신 자간을 조여
    밀도로 위계를 만든다. */
 .sl-markdown-content :is(h1, h2, h3, h4, h5, h6):not(:where(.not-content *)),

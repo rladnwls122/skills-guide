@@ -1,0 +1,64 @@
+/* 한글 서체 — 테마의 라틴 서체에는 한글 글리프가 없다.
+ *
+ * Exquisitus 는 "두 가지 일" 구조다: 세리프가 읽는 열(본문)을, 산세리프가
+ * 안내 역할(제목·사이드바·TOC·헤더)을 맡는다. 한글도 같은 구조로 짝을 붙인다.
+ *
+ *   제목·register      ChosunSm        조선일보명조 — 직접 지정한 표제 서체
+ *   본문 reading       Noto Serif KR   Literata(세리프)의 한글 짝, 가변 굵기
+ *   UI 크롬            Pretendard      Alegreya Sans(산세리프)의 한글 짝, 가변 굵기
+ *
+ * 이 선언들은 캐스케이드 레이어 밖에 있으므로 @layer exquisitus 안의 테마 토큰보다
+ * 우선한다 — customCss 순서와 무관하게 적용된다.
+ *
+ * 서브셋 재생성: npm run font  (scripts/subset-font.py)
+ */
+
+@font-face {
+	font-family: "Chosun Sm";
+	src: url("../fonts/chosun-sm.woff2") format("woff2");
+	/* 단일 굵기 파일이다. 400 만 선언해 700 은 브라우저 합성에 맡긴다 —
+	   `400 700` 으로 범위를 주면 합성이 꺼져 제목이 본문 굵기로 주저앉는다. */
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "Noto Serif KR";
+	src: url("../fonts/noto-serif-kr.woff2") format("woff2");
+	font-weight: 200 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "Pretendard";
+	src: url("../fonts/pretendard.woff2") format("woff2");
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+:root {
+	/* 제목·카드/히어로 제목·aside·pagination — 한글은 조선일보명조, 라틴도 함께. */
+	--sl-exquisitus-font-register:
+		"Chosun Sm", "Alegreya Sans", "Alegreya Sans Fallback", system-ui,
+		-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+	/* 본문 — 라틴은 Literata 유지, 한글만 Noto Serif KR 로 받는다. */
+	--sl-exquisitus-font-reading:
+		"Literata Variable", "Noto Serif KR", "Literata Fallback", Georgia,
+		"Times New Roman", serif;
+
+	/* 사이드바·TOC·헤더 등 UI 크롬 — 라틴은 Alegreya Sans 유지, 한글은 Pretendard. */
+	--sl-font:
+		"Alegreya Sans", "Pretendard", "Alegreya Sans Fallback", system-ui,
+		-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* 명조 계열이라 Alegreya Sans 의 700 만큼 굵지 않다 — 굵기 대신 자간을 조여
+   밀도로 위계를 만든다. */
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6):not(:where(.not-content *)),
+.hero h1 {
+	letter-spacing: -0.02em;
+}

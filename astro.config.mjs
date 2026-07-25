@@ -9,7 +9,7 @@ import starlightFullViewMode from 'starlight-fullview-mode';
 import starlightScrollToTop from 'starlight-scroll-to-top';
 import starlightLlmActions from 'starlight-llm-actions';
 import starlightCodeblockFullscreen from 'starlight-codeblock-fullscreen';
-// Task 6에서 활성화: import starlightLinksValidator from 'starlight-links-validator';
+import starlightLinksValidator from 'starlight-links-validator';
 
 export default defineConfig({
   integrations: [
@@ -25,7 +25,6 @@ export default defineConfig({
         starlightHeadingBadges(),
         starlightFullViewMode(),
         starlightScrollToTop(),
-        
         starlightLlmActions(),
         starlightCodeblockFullscreen(),
         starlightSidebarTopics([
@@ -72,6 +71,7 @@ export default defineConfig({
             items: [{ label: 'Reference', items: [{ autogenerate: { directory: 'reference' } }] }],
           },
         ]),
+        starlightLinksValidator({ errorOnRelativeLinks: false }),
       ],
     }),
   ],

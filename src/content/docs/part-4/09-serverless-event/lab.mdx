@@ -1,0 +1,192 @@
+---
+title: Lab 09 — 서버리스 워크플로 + 이벤트 자동복구
+description: 유형 1 서버리스 워크플로와 유형 2 이벤트 자동복구를 백지에서 배포·검증하고 정답지와 diff하는 실습.
+---
+
+> 문서 유형: tutorial
+
+두 실습 모두 정답지가 `skills-2026/set-02/task-2/`에 있다. 먼저 백지에서 시도하고, 막히면 정답지와 diff한다.
+
+## 실습 목표
+
+- [ ] (유형 1) S3→Lambda→Step Functions→DynamoDB 파이프라인을 배포하고 test.csv 1회 처리로 `STU1020 96.6 A` + error 4건을 재현한다
+- [ ] (유형 1) 채점 직전 리셋 절차를 암기 수준으로 수행한다
+- [ ] (유형 2) EC2 자동복구 스택을 배포하고 stop+SSH 인바운드 위반 → 90초 내 running / 인바운드 0 복구를 재현한다
+- [ ] (유형 2) 타입 원복 시연을 레이스 없이(stop-rule 비활성화) 수행한다
+- [ ] 두 모듈 모두 terraform destroy로 정리한다
+
+---
+
+## Part A — 유형 1 · 서버리스 워크플로 (ap-southeast-1)
+
+### A-1. 배포
+
+```powershell
+cd skills-2026\set-02\task-2\module-1-workflow\terraform
+terraform init
+terraform apply -var "player_number=$env:NUM"
+terraform output -json > outputs.json
+```
+
+### A-2. 리소스 검증
+
+```powershell
+$NUM = $env:NUM
+$B = "wsc2026-student-score-bucket-$NUM"
+$env:AWS_DEFAULT_REGION = "ap-southeast-1"
+
+aws dynamodb describe-table --table-name wsc2026-student-score --query "Table.[TableName,KeySchema]" --output json
+aws lambda get-function-configuration --function-name wsc2026-student-score-function --query "[FunctionName,Runtime,Environment.Variables]" --output json
+$SM_ARN = aws stepfunctions list-state-machines --query "stateMachines[?name=='wsc2026-student-score-workflow'].stateMachineArn" --output text
+aws stepfunctions describe-state-machine --state-machine-arn $SM_ARN --query "[name,type]" --output text
+```
+
+기대 출력:
+
+- 테이블: `wsc2026-student-score`, KeySchema `studentId` HASH + `examDate` RANGE
+- Lambda: `wsc2026-student-score-function`, `python3.12`, env에 S3_BUCKET/DDB_TABLE
+- State Machine: `wsc2026-student-score-workflow  STANDARD`
+
+### A-3. 최종 실행 절차 (채점 직전 리셋 — 순서 엄수)
+
+```powershell
+# 1) 잔여물 제거
+aws s3 rm s3://$B/processed/ --recursive
+aws s3 rm s3://$B/error/ --recursive
+
+# 2) DynamoDB 비우기
+$items = aws dynamodb scan --table-name wsc2026-student-score --query "Items[].{studentId:studentId,examDate:examDate}" --output json | ConvertFrom-Json
+foreach ($i in $items) {
+  $key = ($i | ConvertTo-Json -Compress) -replace '"', '\"'
+  aws dynamodb delete-item --table-name wsc2026-student-score --key $key
+}
+
+# 3) test.csv 정확 1회 업로드
+aws s3 cp ..\..\provided\module1\test.csv s3://$B/input/test.csv
+
+# 4) 실행 확인
+aws stepfunctions list-executions --state-machine-arn $SM_ARN --query "executions[].[status,startDate]" --output text
+```
+
+### A-4. 결과 검증 + 기대 출력
+
+```powershell
+aws dynamodb get-item --table-name wsc2026-student-score --key '{\"studentId\":{\"S\":\"STU1020\"},\"examDate\":{\"S\":\"2026-05-30\"}}' --query "Item.[studentId.S,average.N,grade.S]" --output text
+# 기대: STU1020    96.6    A   (96.60000000000001 이면 Decimal 미사용)
+
+aws s3 ls s3://$B/
+# 기대: PRE error/  PRE input/  PRE processed/  — 딱 3줄
+
+aws s3 ls s3://$B/processed/
+# 기대: test.csv 한 줄만
+
+aws s3 ls s3://$B/error/
+# 기대: error_*_STU2001 / STU2002 / STU2004 / unknown .json — 정확히 4개
+```
+
+### A-5. :badge[함정]{variant=danger} (여기서 대부분 틀린다)
+
+- test.csv 2회 업로드 → error JSON 8개 → 오답. 재실행은 반드시 A-3의 1)~2)부터.
+- processed/·error/에 폴더 마커를 만들어두면 `s3 ls`에 0바이트 잉여 라인 → 오답. 마커는 `input/`만.
+- 평균을 float로 계산 → 96.60000000000001 + boto3 float 저장 거부.
+- 처리 Lambda 이름은 mark에만 있다(`wsc2026-student-score-function`) — task.md만 보고 이름을 지어내면 0점.
+- PowerShell에서 JSON 인자는 `\"` 이스케이프 필수.
+
+### A-6. 통과 기준
+
+- [ ] A-2 세 항목 모두 기대값 일치
+- [ ] SUCCEEDED 실행 정확 1건
+- [ ] STU1020 96.6 A / processed 1개 / error 4개
+
+---
+
+## Part B — 유형 2 · 이벤트 자동복구 (eu-west-1)
+
+### B-1. 배포
+
+```powershell
+cd skills-2026\set-02\task-2\module-3-event\terraform
+terraform init
+terraform apply -var "player_number=$env:NUM"
+```
+
+**apply 후 5~10분 대기** — CloudTrail 이벤트 전달 활성화 + Config 첫 평가. 급하면:
+
+```powershell
+$env:AWS_DEFAULT_REGION = "eu-west-1"
+aws configservice start-config-rules-evaluation --config-rule-names wsc2026-required-tags-rule wsc2026-sg-ssh-rule
+```
+
+### B-2. 리소스 검증
+
+```powershell
+$env:AWS_DEFAULT_REGION = "eu-west-1"
+$ACCOUNT_ID = aws sts get-caller-identity --query Account --output text
+$INSTANCE_ID = aws ec2 describe-instances --filters "Name=tag:Name,Values=wsc2026-event-ec2" "Name=instance-state-name,Values=running,stopped" --query "Reservations[0].Instances[0].InstanceId" --output text
+$SG_ID = aws ec2 describe-security-groups --filters "Name=group-name,Values=wsc2026-event-sg" --query "SecurityGroups[0].GroupId" --output text
+
+# Lambda 4개 (mark) + 2개 (task 전용) — 전부 python3.12
+foreach ($fn in "wsc2026-ec2-stop-remediation","wsc2026-ec2-terminate-alert","wsc2026-sg-remediation","wsc2026-tag-alert","wsc2026-role-remediation","wsc2026-ec2-type-remediation") { aws lambda get-function --function-name $fn --query "Configuration.[FunctionName,Runtime]" --output text }
+# EventBridge 타깃
+foreach ($rule in "wsc2026-ec2-stop-rule","wsc2026-ec2-terminate-rule") { "$rule -> $(aws events list-targets-by-rule --rule $rule --query 'Targets[0].Arn' --output text)" }
+# Config 룰 ACTIVE
+aws configservice describe-config-rules --config-rule-names wsc2026-sg-ssh-rule wsc2026-required-tags-rule --query "ConfigRules[*].[ConfigRuleName,ConfigRuleState]" --output text
+```
+
+### B-3. 복구 시연 + 기대 출력
+
+```powershell
+# 위반 주입: 중지 + SSH 인바운드 추가
+aws ec2 stop-instances --instance-ids $INSTANCE_ID | Out-Null
+aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 | Out-Null
+Start-Sleep 90
+
+"EC2 State: $(aws ec2 describe-instances --instance-ids $INSTANCE_ID --query 'Reservations[0].Instances[0].State.Name' --output text)"
+# 기대: running
+"SG Inbound Count: $(aws ec2 describe-security-groups --group-ids $SG_ID --query 'SecurityGroups[0].IpPermissions | length(@)' --output text)"
+# 기대: 0
+aws configservice get-compliance-details-by-config-rule --config-rule-name wsc2026-required-tags-rule --compliance-types NON_COMPLIANT --query "EvaluationResults[0].EvaluationResultIdentifier.EvaluationResultQualifier.ResourceId" --output text
+# 기대: None
+```
+
+### B-4. 타입 원복 시연 (task 전용, 수동 채점 대비)
+
+```powershell
+aws events disable-rule --name wsc2026-ec2-stop-rule          # 필수! 레이스 방지
+aws ec2 stop-instances --instance-ids $INSTANCE_ID
+aws ec2 wait instance-stopped --instance-ids $INSTANCE_ID
+aws ec2 modify-instance-attribute --instance-id $INSTANCE_ID --instance-type t3.small
+aws ec2 start-instances --instance-ids $INSTANCE_ID
+Start-Sleep 180
+aws ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].[InstanceType,State.Name]" --output text
+# 기대: t3.micro    running   (자동 원복)
+aws events enable-rule --name wsc2026-ec2-stop-rule
+```
+
+### B-5. :badge[함정]{variant=danger}
+
+- 배포 직후 바로 B-3 실행 → SG 복구 실패처럼 보임. CloudTrail 경로는 활성화+전달까지 수 분. 첫 시도에서 Inbound가 1이면 잠시 후 B-3만 재실행.
+- stop-rule 비활성화 없이 타입 시연 → `IncorrectInstanceState` (stop-remediation이 인스턴스를 다시 켜는 레이스).
+- 프로파일 이름에 `-profile` 접미사 → role 원복 실패. 프로파일 이름 = 역할 이름.
+- Config 스코프를 넓히면 태그 없는 관리형 리소스가 NON_COMPLIANT → "None" 기대 깨짐.
+- 타입 시연 후 plan에 diff가 보이면 `lifecycle.ignore_changes = [instance_type]` 누락.
+
+### B-6. 통과 기준
+
+- [ ] 함수 6개 전부 python3.12로 조회됨
+- [ ] stop/terminate 룰 타깃이 각각 stop-remediation / terminate-alert Lambda ARN
+- [ ] Config 룰 2개 ACTIVE
+- [ ] B-3: running / 0 / None
+- [ ] B-4: t3.micro running 자동 원복
+
+---
+
+## 정리 (당일 필수)
+
+```powershell
+cd skills-2026\set-02\task-2\module-1-workflow\terraform ; terraform destroy -var "player_number=$env:NUM"
+cd ..\..\module-3-event\terraform ; terraform destroy -var "player_number=$env:NUM"
+```
+
+- 유형 1: destroy 전 버킷이 비어 있어야 한다(`aws s3 rm s3://$B --recursive` 후 destroy가 안전).
+- 유형 2: **Config 레코더가 과금 주범** — 당일 destroy 필수.

@@ -1,0 +1,52 @@
+---
+title: 12. 파괴/복구 훈련 — Break & Fix (Day 13)
+description: troubleshooting 문서의 12개 증상을 고의로 재현하고 AI 없이 자력 복구하는 Day 13 모듈 개요.
+---
+
+> 문서 유형: 개요
+
+[../../reference/troubleshooting.md](/reference/troubleshooting/)의 12개 증상을 **고의로 재현하고 자력으로 복구**한다. 대회장에서 AI는 못 쓰고 문서(자기 런북)만 쓸 수 있다 — 문서를 찾는 시간조차 아까우니, 증상→확인 명령→원인→조치의 사슬을 손에 붙인다.
+
+## 목표
+
+- [ ] 12개 시나리오 중 8개 이상을 AI 없이 "확인 명령 → 원인 → 조치" 순서로 복구 (그중 4개+는 troubleshooting.md도 안 보고)
+- [ ] 각 증상의 1순위 확인 명령을 즉시 침 (추측 수리 금지)
+- [ ] 실패한 항목을 troubleshooting.md에 자기 언어로 추가
+
+## 소요 / 일차
+
+- Day 13, 약 4~5시간 (시나리오당 목표 10~25분 x 12개)
+
+## 과금 / destroy
+
+- **set-02 스택 전체가 떠 있어야 한다** — EKS·NAT GW·ALB·CloudFront 시간당 과금. 하루 안에 12개를 몰아서 돌리고 당일 destroy.
+- 종료 시: `kubectl delete` → `eksctl delete cluster` → `terraform destroy` (CloudFront disable 전파 대기 포함).
+- 시나리오 ⑫(순환 체험)는 별도 디렉토리 사본에서 plan만으로도 가능 — 과금 없음.
+
+## 선행 지식
+
+- `kubectl describe`의 Events와 `logs --previous`가 1차 소스 — [k8s-basics](/start/k8s-basics/)
+- Service ↔ 라벨 셀렉터 연결이 끊기면 트래픽이 사라진다 — [k8s-basics](/start/k8s-basics/)
+- SG 룰이 빠지면 응답이 timeout으로 나타난다(스테이트풀 특성) — [vpc-basics](/start/vpc-basics/)
+- `aws sts get-caller-identity`로 현재 신원을 먼저 확인 — [iam-basics](/start/iam-basics/)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
+## 선행 모듈
+
+- 11-mutation-drill (mark 표 정리 완료 상태)
+- set-02 1과제를 mark 통과 상태로 배포할 수 있을 것
+- [../../reference/troubleshooting.md](/reference/troubleshooting/)를 최소 1회 정독
+
+## 파일
+
+- [theory.md](/part-5/12-break-fix/theory/) — 복구 방법론(추측 금지·분리 진단) + 퀴즈
+- [lab.md](/part-5/12-break-fix/lab/) — 12개 시나리오: 망가뜨리는 법·목표 시간·복구 확인
+
+## 공식 문서
+
+- [애플리케이션 디버깅(kubectl)](https://kubernetes.io/docs/tasks/debug/debug-application/) — Pending·CrashLoop 진단 순서
+- [EKS 문제 해결](https://docs.aws.amazon.com/eks/latest/userguide/troubleshooting.html) — Unauthorized·노드 미조인 원문
+- [대상 그룹 헬스 체크](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html) — unhealthy reason 코드 해석
+- [CloudFront 응답 오류 해결](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/troubleshooting-response-errors.html) — 403/502의 오리진별 원인
+- [IAM 정책 평가 로직](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html) — AccessDenied 역추적

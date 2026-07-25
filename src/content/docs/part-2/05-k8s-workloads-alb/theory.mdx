@@ -1,0 +1,162 @@
+---
+title: 05. 이론 — k8s 워크로드와 ALB 연동
+description: "probe·노드 배치·무중단 스펙과 ALB/TG 고정 생성 + TargetGroupBinding 패턴 정리."
+---
+
+> 문서 유형: explanation
+
+> 교재 원본: `skills-2026/set-02/task-1/k8s/app/*`, `terraform/alb.tf`
+
+---
+
+## 1. 프로덕션급 Deployment
+
+**① 한 줄 정의** — Deployment는 Pod 복제본을 선언적으로 유지하는 컨트롤러이며, 대회에서는 "고가용성 + 노드 배치 + 무중단"을 만족하는 스펙을 요구한다.
+
+**② 왜 (채점 관점)** — mark 5-4가 wskorea26 파드의 노드 배치(app)를, mark 9-1~9-4가 실제 애플리케이션 동작을 검사한다. probe가 없으면 죽은 Pod가 타깃에 남아 9번 항목이 간헐 실패하고, 노드 배치가 틀리면 5-4 감점.
+
+**③ 원리 — set-02 deployment.yaml의 6대 요소**
+
+```mermaid
+graph TD
+    D["wskorea26-book-deploy (replicas 2)"] --> P1["probe 3종 축<br/>readiness: /health:8080 (트래픽 수신 게이트)<br/>liveness: /health:8080 (재시작 트리거)<br/>(startup: 부팅 느린 앱만 — set-02 미사용)"]
+    D --> P2["배치: nodeSelector node-type=app<br/>(taint 세트면 + toleration)"]
+    D --> P3["AZ 분산: topologySpreadConstraints<br/>topology.kubernetes.io/zone<br/>maxSkew 1, DoNotSchedule"]
+    D --> P4["자원: requests=limits 아님<br/>req 100m/128Mi, lim 500m/256Mi"]
+    D --> P5["무중단: preStop sleep 15 +<br/>terminationGracePeriodSeconds 45"]
+    D --> P6["IAM: serviceAccountName<br/>wskorea26-book-sa (IRSA, eksctl이 생성)"]
+```
+
+각 요소의 이유:
+
+| 요소 | 값 (실측) | 이유 |
+|---|---|---|
+| readinessProbe | httpGet /health:8080, delay 5, period 10 | 준비 안 된 Pod로 트래픽 차단 → TG healthy 판정과 일치 |
+| livenessProbe | httpGet /health:8080, delay 10, period 15 | 행 걸린 컨테이너 자동 재시작 |
+| nodeSelector | `node-type: app` | mark 5-4 (앱은 app 노드만) |
+| toleration | set-02 없음 / set-03은 workload taint 대응 필요 | taint 있는 NG에 스케줄 허용 |
+| topologySpread | zone 키, maxSkew 1, **DoNotSchedule** | AZ 장애에도 1개 생존. DoNotSchedule=강제(soft인 ScheduleAnyway와 구분) |
+| PDB (별도 manifest) | `minAvailable: 1` | 노드 드레인 중 최소 1개 유지 |
+| resources | requests+limits 명시 | QoS 확보. requests=limits로 맞추면 Guaranteed 클래스 |
+| preStop + grace | `sleep 15` / 45s | 아래 graceful shutdown 참조 |
+
+**graceful shutdown 흐름**: Pod 삭제 시작 → (동시에) 엔드포인트 제거 전파 & preStop 실행. `sleep 15` 동안 ALB/TGB가 타깃 등록 해제를 끝내므로 in-flight 요청 유실이 없다. 이후 SIGTERM, 최대 45초(terminationGracePeriodSeconds) 내 종료.
+
+**④ 세트별 차이** — set-03은 workload NG에 NoSchedule taint가 있어 Deployment에 toleration 필수, label 키도 `wsc2026/node`. set-02는 nodeSelector만.
+
+---
+
+## 2. Helm 기초
+
+**① 한 줄 정의** — Helm은 k8s manifest 묶음(chart)을 값(values)으로 렌더링해 설치·업그레이드하는 패키지 매니저다.
+
+**② 왜** — LBC·kube-prometheus-stack 같은 대형 컴포넌트는 manifest 수십 장 — helm 없이는 대회 시간 내 불가능.
+
+**③ 핵심 개념 / 필수 명령**
+
+| 용어 | 의미 |
+|---|---|
+| repo | 차트 저장소 (`helm repo add eks https://aws.github.io/eks-charts`) |
+| chart | 템플릿 묶음 (`eks/aws-load-balancer-controller`) |
+| release | 설치된 인스턴스 이름 (`-n kube-system aws-load-balancer-controller`) |
+| values | `--set key=val` 또는 `-f values.yaml` 로 주입하는 설정 |
+
+```powershell
+helm repo add <name> <url>; helm repo update
+helm upgrade --install <release> <repo/chart> --version <핀> -n <ns> -f values.yaml  # 멱등 — 재실행 안전
+helm -n <ns> list / helm -n <ns> uninstall <release>
+```
+
+버전은 **고정**한다(작업규칙 2, latest 금지). 예: LBC `--version 3.4.0`, kube-prometheus-stack `--version 87.5.1`.
+
+---
+
+## 3. AWS Load Balancer Controller + TargetGroupBinding 패턴
+
+**① 한 줄 정의** — LBC는 k8s 리소스를 보고 ELB API를 호출하는 컨트롤러이며, **TargetGroupBinding(TGB)** 은 "이미 존재하는 TG"에 Service 뒤 Pod IP를 등록/해제하는 CRD다.
+
+**② 왜 (채점 관점 — 수상 과제 공통 패턴)** — 채점은 `wskorea26-book-alb`, `wskorea26-book-tg` 같은 **정확한 이름**을 검사한다(mark 7-1 등). Ingress로 ALB를 만들면 **ALB 이름을 지정할 수 없다**(자동 생성 이름). 그래서:
+
+> **Terraform으로 ALB/TG를 이름 고정 생성 → k8s TGB로 Pod IP만 등록.**
+> 이름 채점이 있는 수상 과제는 전부 이 패턴이다.
+
+**③ 원리**
+
+```mermaid
+graph LR
+    TF["Terraform<br/>aws_lb + aws_lb_target_group<br/>(이름 고정, target_type=ip)"] -->|TG ARN output| TGB["TargetGroupBinding CRD<br/>serviceRef: wskorea26-book-svc:8080<br/>targetGroupARN, targetType: ip"]
+    TGB --> LBC["LBC (kube-system,<br/>nodeSelector node-type=addon)"]
+    LBC -->|RegisterTargets| TG["wskorea26-book-tg"]
+    SVC["Service ClusterIP"] -.->|엔드포인트 감시| LBC
+    TG --> Pod["book Pod IP:8080"]
+```
+
+LBC 설치 (실측 — SA는 eksctl IRSA가 이미 생성했으므로 create=false):
+
+```powershell
+helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller `
+  --version 3.4.0 -n kube-system `
+  --set clusterName=wskorea26-cluster `
+  --set serviceAccount.create=false `
+  --set serviceAccount.name=aws-load-balancer-controller `
+  --set region=ap-northeast-2 --set vpcId="$env:VPC_ID" `
+  --set nodeSelector.node-type=addon        # addon 노드 고정 (mark 5-4)
+```
+
+TGB manifest (실측):
+
+```yaml
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata: { name: wskorea26-book-tgb, namespace: wskorea26 }
+spec:
+  serviceRef: { name: wskorea26-book-svc, port: 8080 }
+  targetGroupARN: "<APP_TARGET_GROUP_ARN>"   # terraform output으로 치환
+  targetType: ip
+```
+
+**④ 세트별 차이** — 패턴 자체는 전 세트 동일. 차이는 LBC 자격증명(set-02 IRSA / set-03·07 Pod Identity)과 nodeSelector label 키뿐.
+
+---
+
+## 4. ALB 리스너 규칙 — 헤더/메서드 조건 + Lambda 타깃
+
+**① 한 줄 정의** — 리스너(80/HTTP)의 기본 액션은 fixed-response 403, 규칙 2개가 CloudFront 커스텀 헤더를 검증해 POST는 Pod TG로, 그 외는 Lambda TG로 보낸다.
+
+**② 왜 (채점 관점)** — mark 7-2가 `describe-rules`의 `HttpHeaderConfig.Values[]` 출력으로 **`wskorea26-cf` 정확히 2줄** + `curl http://<ALB>/book` = **403**을 검사한다. 규칙을 추가/삭제하면 줄 수가 달라져 즉시 감점 — **규칙 개수는 정확히 2개**.
+
+**③ 원리 (실측 alb.tf)**
+
+```mermaid
+graph TD
+    L["Listener :80"] --> R1["규칙 priority 10<br/>조건: X-Origin-Verify=wskorea26-cf<br/>AND method=POST"] --> TG1["wskorea26-book-tg (Pod)"]
+    L --> R2["규칙 priority 20<br/>조건: X-Origin-Verify=wskorea26-cf"] --> TG2["wskorea26-lambda-tg (Lambda)"]
+    L --> DEF["default: fixed-response 403<br/>(CloudFront 미경유 차단)"]
+```
+
+- 규칙 평가는 priority 순 — POST는 10에서 잡히고, 헤더만 있는 GET 등은 20으로 떨어진다.
+- **Lambda 타깃 3종 세트**: `aws_lb_target_group`(target_type="lambda") + `aws_lambda_permission`(principal=elasticloadbalancing.amazonaws.com, source_arn=TG ARN) + `aws_lb_target_group_attachment`(depends_on=permission). permission 없이 attach하면 실패한다.
+- Pod TG는 `target_type = "ip"`, health_check path `/health` — Deployment readiness와 같은 경로로 맞춘다.
+
+**④ 세트별 차이** — 규칙 수·조건은 과제지마다 다르다. set-02는 "헤더 2규칙 + 403 기본"이 채점 고정값. 다른 세트는 mark의 기대 출력(줄 수!)을 먼저 읽고 규칙 수를 역산할 것.
+
+---
+
+## 5. 자기 점검 퀴즈
+
+1. readinessProbe와 livenessProbe의 실패 시 동작 차이는?
+2. topologySpreadConstraints에서 `whenUnsatisfiable: DoNotSchedule`과 `ScheduleAnyway`의 차이는?
+3. Ingress 대신 Terraform ALB + TGB 패턴을 쓰는 결정적 이유는?
+4. mark 7-2가 기대하는 출력은 무엇이고, 규칙을 3개로 늘리면 어떻게 되는가?
+5. preStop `sleep 15`는 무엇을 기다리는 시간인가?
+
+<details>
+<summary>정답</summary>
+
+1. readiness 실패 → Service 엔드포인트(및 TG 타깃)에서 제외될 뿐 컨테이너는 유지. liveness 실패 → 컨테이너 재시작.
+2. DoNotSchedule은 제약을 못 지키면 **스케줄 자체를 거부**(하드), ScheduleAnyway는 최선 노력(소프트). AZ 분산을 강제하려면 DoNotSchedule.
+3. Ingress가 만드는 ALB는 **이름을 지정할 수 없는데** 채점이 ALB/TG 이름을 정확 비교하기 때문. Terraform으로 이름 고정 생성 후 TGB로 Pod IP만 등록한다.
+4. `wskorea26-cf` 2줄 + 403. 헤더 조건 규칙이 3개면 Values[] 가 3줄이 되어 정확 일치 실패 → 1.5점 감점.
+5. 엔드포인트/타깃 등록 해제가 ALB까지 전파되는 시간. 그동안 컨테이너가 살아서 in-flight 요청을 마저 처리한다.
+
+</details>

@@ -1,0 +1,150 @@
+---
+title: Lab 10 — 오토스케일링 + 로깅 (유형 5 스트리밍은 실습 생략)
+description: 유형 3 SQS→KEDA→Karpenter와 유형 4 OTel→Loki→Grafana를 순서·검증·함정 중심으로 배포하고, 유형 5는 암기 체크로 대체한다.
+---
+
+> 문서 유형: tutorial
+
+정답지: `skills-2026/set-07/task-2/`. terraform은 본 PC(PowerShell), 클러스터/헬름/이미지 빌드는 CloudShell(Docker 내장)에서 한다 — 채점과 같은 셸이라 클러스터 생성자 신원 = 채점 신원이 자동 일치한다. 상세 명령 전문은 각 모듈 README 런북에 있다. 이 랩은 순서·검증·함정에 집중한다.
+
+## 실습 목표
+
+- [ ] (유형 3) SQS→KEDA→Karpenter 스택을 배포하고 메시지 100건 → Pod ≥ 5 / Node ≥ 2, purge → Pod 1 / Node 1 수렴을 재현한다
+- [ ] (유형 4) OTel→Loki→Grafana 파이프라인을 배포하고 LogQL로 ERROR 로그를 조회, 대시보드 3패널을 채운다
+- [ ] 유형 5는 theory.md 함정 목록 암기로 대체한다 (실습 없음 — MSK 30분 생성·과금 회피)
+- [ ] 두 클러스터·VPC를 전부 정리한다
+
+---
+
+## Part A — 유형 3 · 오토스케일링 (ap-northeast-2, skm-)
+
+### A-1. 절차 (순서 요약)
+
+1. **본 PC**: `module-3-eks-scaling/terraform` apply → `outputs.json` → eksctl/k8s/mark/provided+outputs.json을 zip으로 CloudShell 반입.
+2. **CloudShell**: eksctl·helm 설치 → `~/.skm-env` 환경변수 영구화 → `eksctl create cluster`(~20분, **탭 닫지 말 것**).
+3. 앱 이미지 빌드/푸시 (제공 Dockerfile 그대로).
+4. **KEDA 2.20.1** 설치 — `serviceAccount.operator.create=false`(IRSA용 keda-operator 재사용) + addon taint `tolerations` 지정.
+5. **Karpenter 1.14.0** 설치(kube-system) — `controller.resources.requests.cpu=0.5, memory=512Mi`로 낮춤(addon 노드 용량).
+6. k8s 번호 순서 apply: namespace → **NodePool 먼저** → deployment(`<ECR_IMAGE>`/`<SQS_URL>` sed 치환) → ScaledObject.
+
+### A-2. 검증 + 기대 출력
+
+```bash
+kubectl get pods -n keda                                      # 3개 모두 Running (Pending이면 A-4 함정 1)
+kubectl get pods -n kube-system -l app.kubernetes.io/name=karpenter   # 1개 Running
+kubectl get nodes -l karpenter.sh/nodepool=skm-app-nodepool   # 1대
+kubectl get pods -n skillsmkt -o wide                         # order-processor 1/1 Running
+kubectl get scaledobject -n skillsmkt                         # order-scaler READY True
+
+# 스케일아웃: 메시지 100건 주입 (mark3.sh가 수행) 후 관찰
+kubectl get pods -n skillsmkt -w        # 1 → 5 (queueLength 5, max 5)
+kubectl get nodes -l karpenter.sh/nodepool=skm-app-nodepool   # 2대 이상 (500m×5 > 1.9 vCPU)
+
+# 스케일인: purge 후 최대 2.5분 관찰
+kubectl get pods -n skillsmkt           # 1개로 수렴
+kubectl get nodes -l karpenter.sh/nodepool=skm-app-nodepool   # 1대로 수렴
+```
+
+채점: `bash ~/module-3/mark/mark3.sh` — 3-6 Max Ready Pods 5 / Max App Nodes 2 이상, 3-7 Final Pods 1 / Final Nodes 1.
+
+### A-3. :badge[함정]{variant=danger}
+
+1. **KEDA Pod Pending** → 차트 tolerations 스키마 확인: `helm show values kedacore/keda --version 2.20.1 | grep -n -A3 tolerations`. 버전에 따라 키가 최상위/컴포넌트별로 바뀐다.
+2. **addon 노드 용량 초과** → Karpenter requests 0.5/512Mi 축소 설치. 그래도 Pending이면 KEDA metricServer/webhooks requests도 축소.
+3. **stabilizationWindowSeconds(30)·consolidateAfter(60s)를 늘리면** 스케일인 채점(2.5분) 실패.
+4. **deployment env는 리터럴 3개만** — valueFrom/추가 금지 (name=value 정확 비교).
+5. NodePool보다 deployment를 먼저 apply하면 앱 Pod가 스케줄될 노드가 없다 — 번호 순서 준수.
+6. 디스커버리 태그 누락(서브넷 `karpenter.sh/discovery`, SG `aws:eks:cluster-name`) → 노드가 영원히 안 뜬다.
+
+### A-4. 통과 기준
+
+- [ ] order-scaler READY True, 초기 Pod 1 / 앱 노드 1
+- [ ] 100건 주입: Pod ≥ 5, 앱 노드 ≥ 2
+- [ ] purge: 2.5분 내 Pod 1 / 노드 1
+- [ ] mark3.sh 전 항목 PASS
+
+---
+
+## Part B — 유형 4 · 로깅 파이프라인 (ap-northeast-1, o11y-)
+
+### B-1. 절차 (순서 요약 — 순서 의존이 많다)
+
+1. **본 PC**: `module-4-container-logging/terraform` apply (VPC + **이름 고정 ALB/TG** + ECR + LBC IAM) → zip 반입.
+2. **CloudShell**: `~/.o11y-env` → `eksctl create cluster`(~20분) → 노드 2대가 AZ a/c로 분산됐는지 확인.
+3. 이미지 빌드: **제공 app.py + 자체 app/Dockerfile** (제공 Dockerfile은 flask 미설치 → CrashLoop).
+4. **LBC 3.4.2 설치** ← TGB CRD가 여기서 생긴다. 이후에만 TGB apply 가능.
+5. namespace/StorageClass/앱 apply + 앱 TGB.
+6. **Loki 18.5.1** (`grafana-community` 저장소 — `grafana/loki`는 GEL 전용) → svc `o11y-loki` 3100 확인.
+7. **OTel DaemonSet apply는 Loki 이후** (otlphttp 전송 대상 먼저).
+8. **Grafana 10.5.15** + 대시보드 ConfigMap + Grafana TGB.
+
+### B-2. 검증 + 기대 출력
+
+```bash
+curl -s "http://$APP_ALB/healthz"                     # {"status":"ok"}
+curl -s "http://$APP_ALB/log?level=error&count=3"     # {"generated":3,"level":"error"}
+kubectl get ds o11y-otel -n monitoring                # DESIRED 2 / READY 2
+kubectl get svc o11y-loki -n monitoring               # ClusterIP 3100
+
+# LogQL 직접 조회 (port-forward)
+kubectl port-forward -n monitoring svc/o11y-loki 3100:3100 & sleep 2
+curl -s -G http://localhost:3100/loki/api/v1/query_range \
+  --data-urlencode 'query={k8s_namespace_name="o11y"} | json | level="ERROR"' \
+  --data-urlencode "start=$(date -d '3 minutes ago' +%s)000000000" \
+  --data-urlencode "end=$(date +%s)000000000" | jq -r '.data.result[].values[][1]' | head -3
+# 기대: {"ts":...,"level":"ERROR",...} JSON 원문 라인들
+kill %1
+```
+
+채점 전 마지막 준비: `/log?level=info`, `/log?level=warn`, `/log?level=error` 각각 호출 → Grafana Log Overview 3패널 모두 데이터 확인(범례 INFO/WARN/ERROR). 채점: `bash ~/module-4/mark/mark4.sh` (4-6은 Grafana 웹 수동 채점).
+
+### B-3. :badge[함정]{variant=danger}
+
+1. **제공 Dockerfile로 빌드 → CrashLoop.** 자체 Dockerfile 사용, app.py 수정 금지.
+2. **TGB를 LBC 설치 전에 apply → CRD 없음 오류.** 순서: LBC → TGB.
+3. **ALB를 Ingress로 만들면 이름 채점 실패** — 이름 고정이 필요하므로 terraform ALB + TGB.
+4. **level은 대문자 ERROR** — LogQL `| json | level="ERROR"`. 소문자로 찍히게 가공하면 오답.
+5. **범례가 `{level="ERROR"}` 형태 → 오답.** `sum by (level)` + legendFormat `{{level}}`.
+6. **No Data 패널 1개라도 있으면 오답** — 채점 전 3레벨 호출.
+7. OTel이 body를 가공하면 `| json` 파싱 깨짐 — container 파서 외 본문 변형 금지.
+8. mark4.sh의 `rm -rf ~/.aws`는 CloudShell(관리형 세션)에선 무해 — bastion에서 돌리지 말 것.
+
+### B-4. 통과 기준
+
+- [ ] /healthz ok, ds 2/2, svc 3100
+- [ ] LogQL ERROR 조회에 원본 JSON 라인 반환
+- [ ] Grafana 3패널 데이터 + 범례 INFO/WARN/ERROR
+- [ ] mark4.sh 자동 항목 PASS
+
+---
+
+## Part C — 유형 5 · 스트리밍 (실습 생략 — 암기 체크)
+
+MSK 생성 ~30분 + 시간당 과금이 커서 실습하지 않는다. 아래를 보지 않고 말할 수 있으면 통과:
+
+- [ ] Flink Studio terraform 생성법(CFN 래핑)과 이유
+- [ ] Kinesis 커넥터 Maven 주입, 노트북 READY 채점, TIMESTAMP(3)+LTZ CAST 우회, `%flink.conf parallelism.default 1` 첫 문단, Glue 카탈로그 전체 권한
+- [ ] MSK: IAM+비인증 TLS 병행 이유, 전 속성 String 저장, python3.14, ESM LATEST, SG 셀프 참조, BOOTSTRAP_SERVERS/BOOTSTRAP_SERVER 구분
+
+막히면 `theory.md` 유형 5와 set-02 module-2/4 README를 다시 읽는다.
+
+---
+
+## 정리 (당일 필수 — EKS 2개가 최대 과금원)
+
+```bash
+# CloudShell (각 리전에서)
+kubectl delete -f k8s/ --ignore-not-found        # TGB·NodePool 먼저 (Karpenter 노드 반환 확인)
+kubectl get nodes                                 # Karpenter 노드가 사라진 뒤
+eksctl delete cluster --name skm-eks-cluster --region ap-northeast-2
+eksctl delete cluster --name o11y-cluster --region ap-northeast-1
+```
+
+```powershell
+# 본 PC
+cd skills-2026\set-07\task-2\module-3-eks-scaling\terraform ; terraform destroy -auto-approve
+cd ..\..\module-4-container-logging\terraform ; terraform destroy -auto-approve
+```
+
+- Karpenter 노드가 남은 채 클러스터를 지우면 고아 EC2가 남을 수 있다 — NodePool 삭제 후 노드 반환을 확인하고 클러스터 삭제.
+- destroy 후 EC2/ALB/NAT가 콘솔에 안 남았는지 눈으로 확인한다.

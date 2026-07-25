@@ -1,0 +1,123 @@
+---
+title: 07. 관측성 실습 — 파이프라인 끝까지 세우고 실측으로 검증
+description: "kube-prometheus-stack·Fluent Bit·PrometheusRule·Grafana 를 세우고 실측으로 검증하는 실습."
+---
+
+> 문서 유형: tutorial
+
+PART-2 클러스터(앱 배포 완료 상태) 위에서 진행한다. 명령은 클러스터에 kubectl이 되는 셸(대회 기준: VPC CloudShell 또는 bastion) 기준 bash.
+
+## 목표 체크박스
+
+- [ ] kube-prometheus-stack을 values 파일로 설치하고 파드 Running 확인
+- [ ] Fluent Bit DaemonSet 배포 → CloudWatch에 형식 맞는 로그 도착 + /health 0건 확인
+- [ ] `:2021/metrics`에서 log_to_metrics 실제 메트릭명 확인 → rules/dashboard와 대조
+- [ ] PrometheusRule 6종 적용 → Prometheus UI/API에서 룰 로드 확인
+- [ ] Grafana datasource 3종 + 대시보드 sidecar import 확인
+- [ ] 트래픽 시드 후 대시보드 No Data 패널 0개 확인
+
+## 단계 절차
+
+### 1) kube-prometheus-stack 설치
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts && helm repo update
+# release 이름 monitoring — 채점 파드 이름 카운트와 정합 (set-03 mark 11-1)
+helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+  --version 87.2.1 -n observability --create-namespace \
+  -f monitoring/kube-prometheus-stack-values.yaml
+kubectl get pods -n observability
+```
+
+values 필수 확인 포인트: `podMonitorSelectorNilUsesHelmValues: false`, `ruleSelectorNilUsesHelmValues: false`, `additionalDataSources`(prometheus/alertmanager/cloudwatch 이름 정확 일치), Grafana `sidecar.dashboards.label: grafana_dashboard`.
+
+### 2) Fluent Bit 배포
+
+```bash
+kubectl apply -f logging/fluent-bit.yaml
+kubectl get ds -n observability fluent-bit   # DESIRED = 전체 노드 수 (workload 포함)
+```
+
+### 3) PrometheusRule + 대시보드 provisioning
+
+```bash
+kubectl apply -f monitoring/prometheus-rules.yaml
+kubectl create configmap wsc2026-grafana-dashboard -n observability \
+  --from-file=dashboard.json=monitoring/dashboard.json --dry-run=client -o yaml | kubectl apply -f -
+kubectl label configmap wsc2026-grafana-dashboard -n observability grafana_dashboard=1 --overwrite
+```
+
+### 4) 트래픽 시드 (채점 전 필수 — No Data 방지)
+
+```bash
+CF=<cloudfront_또는_alb_도메인>
+curl -s -X POST "https://$CF/booking" -H 'Content-Type: application/json' \
+  -d '{"client_id":"C001","username":"Alice","email":"kim@example.com","concert_name":"Seoul2025"}'
+for i in $(seq 1 30); do curl -s -o /dev/null "https://$CF/"; done
+```
+
+## 검증 + 기대 출력
+
+```bash
+# (a) 파드 Running — fluent-bit / prometheus / grafana / alertmanager 전부
+kubectl get pods -n observability
+# 기대: 전부 Running, fluent-bit는 노드 수만큼
+
+# (b) 로그 기반 메트릭 실명 확인 — 가장 중요한 실측 스텝
+FB_POD=$(kubectl get pods -n observability -l app=fluent-bit -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n observability "$FB_POD" -- curl -s localhost:2021/metrics | grep -o '^log_metric[a-z_0-9]*' | sort -u
+# 기대:
+#   log_metric_counter_wsc2026_errors_total
+#   log_metric_counter_wsc2026_requests_total
+#   log_metric_histogram_wsc2026_request_duration_seconds_bucket (…_sum, …_count)
+# → prometheus-rules.yaml / dashboard.json 의 메트릭명과 글자 단위로 대조. 다르면 rules/dashboard를 실측값에 맞춘다.
+
+# (c) CloudWatch 로그 형식 + /health 0건
+aws logs tail /wsc2026/eks/book-app --since 10m | head -5
+# 기대: 요구 형식 그대로 (set-03: INFO  {"level":...} / set-07: 5키 JSON)
+aws logs filter-log-events --log-group-name /wsc2026/eks/book-app \
+  --filter-pattern '"/health"' --query 'events | length(@)'
+# 기대: 0
+
+# (d) Prometheus 룰 로드 확인
+kubectl -n observability port-forward svc/prometheus-operated 9090:9090 &
+curl -s localhost:9090/api/v1/rules | grep -o '"name":"[A-Za-z]*"' | sort -u
+# 기대: PodHighCPU/PodHighMemory/PodNotReady/HighErrorRate/HighLatency/PodCrashLooping 6종
+
+# (e) Grafana datasource / 대시보드
+GRAFANA_LB=$(kubectl get svc -n observability monitoring-grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+curl -s -u admin:'Skills$#$@!' "http://$GRAFANA_LB/api/datasources" | jq -r '.[].name'
+# 기대: alertmanager cloudwatch prometheus
+curl -s -u admin:'Skills$#$@!' "http://$GRAFANA_LB/api/search?query=wsc2026" | jq -r '.[].title'
+# 기대: 대시보드 제목 출력
+# 브라우저로 대시보드 열어 전 패널 데이터 표시 확인 — No Data 패널 0개
+```
+
+## 함정
+
+- **메트릭명 불일치**: `Metric_name wsc2026_requests_total`로 정의해도 실제 이름은 `log_metric_counter_` 접두어가 붙는다. 검증 (b) 없이 rules/dashboard를 짜면 알람·패널이 조용히 죽는다.
+- **aws-for-fluent-bit에 log_to_metrics 없음**: 필터 로드 에러가 나면(`kubectl logs`로 확인) 이미지를 upstream `fluent/fluent-bit` 최신 안정 태그로 교체. 설정은 그대로 호환.
+- **No Data = 오답**: 패널이 맞아도 데이터가 없으면 감점. 채점 직전 반드시 4)의 트래픽 시드를 다시 돌린다.
+- **HighLatency 발화 불가 (set-03 11-4)**: 제공 바이너리에 `/delay`가 없어 평균 3s 초과를 만들 수 없다. **사양(3s/1m)대로 구현만** 하고 임계값을 낮추지 않는다. 나머지 5종은 채점 부하 파드로 발화된다.
+- **auto_create_group true**: Fluent Bit이 로그 그룹을 만들면 CMK 암호화가 빠진다. Terraform 선생성 + `auto_create_group false`.
+- **tolerations 누락**: workload 노드 taint 때문에 fluent-bit이 절반만 뜬다 → 앱 로그 미수집.
+- **grafana_dashboard=1 라벨 누락 / searchNamespace 불일치**: sidecar가 configmap을 무시한다.
+- **defaultRules: create: true 방치**: 기본 번들 알람 수십 개가 섞여 채점 알람 카운트가 어긋난다 → `false`.
+
+## 통과 기준
+
+- [ ] 검증 (a)~(e) 전부 기대 출력과 일치
+- [ ] CloudWatch 로그 키/형식 정확 일치 + /health 0건
+- [ ] 대시보드 No Data 패널 0개
+- [ ] 알람 6종 룰 로드 확인 (발화 테스트는 CPU 부하 파드로 PodHighCPU 1종만 재현해봐도 충분)
+
+## 정리
+
+```bash
+kubectl delete -f logging/fluent-bit.yaml
+kubectl delete -f monitoring/prometheus-rules.yaml
+kubectl delete configmap wsc2026-grafana-dashboard -n observability
+helm uninstall monitoring -n observability   # Grafana NLB도 함께 삭제됨 — 콘솔에서 잔존 LB 확인
+aws logs delete-log-group --log-group-name /wsc2026/eks/book-app   # Terraform 관리면 destroy로
+# 08을 이어서 하면 클러스터는 유지, 하루 이상 쉬면 eksctl delete cluster
+```

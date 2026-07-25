@@ -12,15 +12,26 @@ import starlightCodeblockFullscreen from 'starlight-codeblock-fullscreen';
 import starlightLinksValidator from 'starlight-links-validator';
 import starlightThemeExquisitus from 'starlight-theme-exquisitus';
 
+/** mermaid 도식에 전체화면 뷰어를 붙인다 (src/scripts/mermaid-fullscreen.js). */
+const mermaidFullscreen = {
+  name: 'mermaid-fullscreen',
+  hooks: {
+    'astro:config:setup'({ injectScript }) {
+      injectScript('page', `import '/src/scripts/mermaid-fullscreen.js';`);
+    },
+  },
+};
+
 export default defineConfig({
   integrations: [
     mermaid(),
+    mermaidFullscreen,
     starlight({
       title: 'skills-guide',
       description: '전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드',
       defaultLocale: 'root',
       locales: { root: { label: '한국어', lang: 'ko' } },
-      customCss: ['./src/styles/korean-fonts.css'],
+      customCss: ['./src/styles/korean-fonts.css', './src/styles/mermaid.css', './src/styles/mobile.css'],
       plugins: [
         starlightThemeExquisitus(),
         starlightQuiz(),

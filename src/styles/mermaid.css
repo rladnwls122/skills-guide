@@ -1,0 +1,147 @@
+/* mermaid 도식 프레임 + 전체화면 뷰어 (src/scripts/mermaid-fullscreen.js 와 한 쌍) */
+
+.mfs-frame {
+	position: relative;
+	margin: 1.5rem 0;
+	padding: 0;
+	border: 1px solid var(--sl-color-hairline, var(--sl-color-gray-5));
+	border-radius: 0.75rem;
+	background: var(--sl-color-bg-sidebar, var(--sl-color-gray-6));
+	overflow: hidden;
+}
+
+/* 본문 폭보다 넓은 도식은 프레임 안에서 가로 스크롤 — 페이지 자체가 밀리면 안 된다. */
+.mfs-frame > pre.mermaid {
+	margin: 0;
+	padding: 1rem;
+	overflow-x: auto;
+	background: none;
+	border: 0;
+}
+
+.mfs-frame > pre.mermaid svg {
+	max-width: 100%;
+	height: auto;
+}
+
+.mfs-open-btn {
+	position: absolute;
+	inset-block-start: 0.5rem;
+	inset-inline-end: 0.5rem;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35em;
+	padding: 0.35rem 0.7rem;
+	font: inherit;
+	font-size: 0.8rem;
+	line-height: 1;
+	color: var(--sl-color-gray-2);
+	background: var(--sl-color-bg, var(--sl-color-black));
+	border: 1px solid var(--sl-color-hairline, var(--sl-color-gray-5));
+	border-radius: 9999px;
+	cursor: pointer;
+	opacity: 0.75;
+	transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.mfs-open-btn:is(:hover, :focus-visible) {
+	opacity: 1;
+	color: var(--sl-color-white);
+	border-color: var(--sl-color-accent);
+}
+
+/* ── 오버레이 ───────────────────────────────────────────── */
+
+html.mfs-open {
+	overflow: hidden; /* 뒤 페이지가 같이 스크롤되지 않게 */
+}
+
+.mfs-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	flex-direction: column;
+	/* --sl-color-black 은 라이트 테마에서 흰색으로 뒤집힌다 — 스크림에 쓰면
+	   뒤 페이지가 그대로 비친다. 페이지 배경색을 불투명하게 깐다. */
+	background: var(--sl-color-bg, var(--sl-color-gray-7));
+}
+
+.mfs-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.6rem 0.9rem;
+	border-block-end: 1px solid var(--sl-color-hairline, var(--sl-color-gray-5));
+	background: var(--sl-color-bg, var(--sl-color-black));
+}
+
+.mfs-caption {
+	min-width: 0;
+	overflow: hidden;
+	font-size: 0.85rem;
+	color: var(--sl-color-gray-3);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mfs-actions {
+	display: flex;
+	flex: none;
+	gap: 0.35rem;
+}
+
+.mfs-btn {
+	min-width: 2.5rem;
+	min-height: 2.5rem; /* 터치 타깃 */
+	padding: 0 0.6rem;
+	font: inherit;
+	font-size: 0.9rem;
+	color: var(--sl-color-white);
+	background: var(--sl-color-gray-6);
+	border: 1px solid var(--sl-color-hairline, var(--sl-color-gray-5));
+	border-radius: 0.5rem;
+	cursor: pointer;
+}
+
+.mfs-btn:is(:hover, :focus-visible) {
+	border-color: var(--sl-color-accent);
+}
+
+.mfs-stage {
+	flex: 1;
+	display: grid;
+	place-items: center;
+	overflow: hidden;
+	cursor: grab;
+	touch-action: none; /* 핀치·드래그를 스크립트가 직접 처리한다 */
+}
+
+.mfs-stage:active {
+	cursor: grabbing;
+}
+
+.mfs-canvas {
+	transform-origin: center;
+	will-change: transform;
+}
+
+/* mermaid SVG 는 viewBox 를 갖고 있어 폭만 주면 비율대로 커진다. 원본 크기 그대로
+   두면 넓은 화면에서 우표만 하게 떠서 "크게 보기"가 무의미해진다. */
+.mfs-canvas svg {
+	width: min(92vw, 1600px);
+	max-height: 82vh;
+	height: auto;
+}
+
+@media (max-width: 50rem) {
+	.mfs-caption {
+		display: none; /* 좁은 화면에선 버튼에 자리를 준다 */
+	}
+
+	.mfs-canvas svg {
+		width: 96vw;
+		max-height: 76vh;
+	}
+}

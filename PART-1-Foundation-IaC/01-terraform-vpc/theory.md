@@ -6,6 +6,68 @@
 
 ---
 
+## 0. HCL 읽는 법 — Terraform 은 이 파일을 어떻게 읽나
+
+문법이 낯설면 아래 5가지만 잡으면 나머지는 전부 같은 규칙의 반복이다.
+
+### 0-1. 실행 단위는 파일이 아니라 디렉토리다
+
+`terraform apply` 는 **현재 디렉토리의 모든 `*.tf` 를 한 덩어리로 합쳐서** 읽는다. 파일을 `vpc.tf`·`s3.tf` 로 나누는 것은 사람이 찾기 쉬우라고 하는 것이고, Terraform 입장에서는 이름도 개수도 의미가 없다. 그래서 **파일 안의 순서도 의미가 없다** — 아래에 쓴 리소스를 위에서 참조해도 된다.
+
+### 0-2. 모든 블록은 같은 모양이다
+
+```hcl
+resource "aws_vpc" "this" {
+  cidr_block = "172.16.0.0/16"
+}
+```
+
+- `resource` — **블록 타입**. 이 블록이 무엇을 하는지 (`resource` 만들기 / `data` 조회 / `variable` 입력 / `locals` 계산 / `output` 출력).
+- `"aws_vpc"` — **첫째 라벨 = AWS 리소스 종류**. provider(`aws`)가 정한 이름이고, 여기 올 수 있는 값과 그 안에 쓸 인자는 provider 문서에 전부 나온다.
+- `"this"` — **둘째 라벨 = 내가 붙이는 이름**. AWS 에는 안 올라간다. 코드 안에서 이 리소스를 부르는 별명일 뿐이다. AWS 콘솔에 보이는 이름은 `tags = { Name = ... }` 쪽이다.
+- `{ ... }` 안 — **인자(argument)**. `이름 = 값` 형태로만 쓴다. 어떤 인자가 필수인지도 provider 문서 기준이다.
+
+라벨 개수는 블록 타입마다 고정이다: `resource`·`data` 는 2개, `variable`·`output`·`provider` 는 1개, `locals`·`terraform` 은 0개.
+
+### 0-3. 값을 부르는 이름표(주소)는 5종류뿐이다
+
+| 쓰는 법 | 무엇 | 예 |
+|---|---|---|
+| `var.<이름>` | `variable` 블록의 입력값 | `var.region` |
+| `local.<이름>` | `locals` 블록의 계산값 | `local.account_id` |
+| `<타입>.<내이름>.<속성>` | `resource` 가 만든 것 | `aws_vpc.this.id` |
+| `data.<타입>.<내이름>.<속성>` | `data` 로 조회한 것 | `data.aws_caller_identity.current.account_id` |
+| `each.key` / `each.value` | `for_each` 반복 중인 현재 항목 | `each.value.cidr` |
+
+`locals` 는 선언은 복수형(`locals {}`), 참조는 단수형(`local.x`)이다 — 처음에 가장 많이 틀리는 곳.
+
+### 0-4. 내가 쓰는 값(argument)과 AWS 가 돌려주는 값(attribute)
+
+```hcl
+resource "aws_vpc" "this" {
+  cidr_block = var.vpc_cidr      # argument — 내가 넣는 값
+}
+
+resource "aws_subnet" "a" {
+  vpc_id     = aws_vpc.this.id   # attribute — AWS 가 만들고 나서야 아는 값
+  cidr_block = "172.16.1.0/24"
+}
+```
+
+`id`·`arn`·`dns_name` 처럼 **만들어봐야 정해지는 값**이 attribute 다. `terraform plan` 이 `(known after apply)` 라고 찍는 것이 이것이고, 아직 몰라도 정상이다.
+
+### 0-5. 실행 순서는 참조가 정한다
+
+위 예에서 서브넷이 `aws_vpc.this.id` 를 참조하므로 Terraform 은 **VPC → 서브넷** 순서를 스스로 세운다. 순서를 내가 쓰는 게 아니라, 참조 관계로 의존성 그래프가 만들어지고 서로 무관한 리소스는 병렬로 생성된다. 참조가 없는데도 순서를 강제해야 할 때만 `depends_on` 을 쓴다 — 남발하면 병렬성이 죽어 배포가 느려진다.
+
+여기서 대회용 함정 하나가 나온다: **A 가 B 를 참조하고 B 가 다시 A 를 참조하면 그래프가 고리가 되어 apply 자체가 거부된다**(순환 참조). 모듈 02 의 KMS·CloudFront·버킷 정책이 정확히 이 함정이다.
+
+### 0-6. plan 은 세 가지를 비교한다
+
+`terraform plan` = **코드**(`*.tf`) ↔ **상태 파일**(`terraform.tfstate`, 내가 지난번에 만든 것의 기록) ↔ **실제 AWS**. 셋 중 하나만 어긋나도 diff 가 뜬다. 그래서 콘솔에서 손으로 고친 리소스는 다음 plan 에서 "되돌리겠다"고 나온다 — 대회에서 콘솔 수정과 코드 수정을 섞을 때 반드시 기억할 것. tfstate 는 로컬에 두고 커밋하지 않는다(계정 정보·시크릿 포함).
+
+---
+
 ## 1. provider / versions
 
 **① 한 줄 정의** — provider 는 Terraform 이 AWS API 를 호출할 때 쓰는 플러그인이고, `required_providers` 블록으로 버전을 고정한다.
@@ -32,8 +94,6 @@ provider "aws" {
 ```
 
 `~> 6.54` 는 6.54 이상 7.0 미만. `default_tags` 는 모든 리소스에 공통 태그를 붙여준다(리소스별 `tags` 와 병합됨).
-
-블록 안에 내가 **쓰는** 값이 argument(`region = ...`), 리소스가 생성 후 **돌려주는** 값이 attribute(`aws_vpc.main.id`)다. 다른 리소스에서 참조하는 것은 항상 attribute 쪽이고, `terraform plan` 이 `(known after apply)` 로 표시하는 것도 이것이다.
 
 **④ 세트별 차이** — 세트마다 이름 prefix(`wskorea26`/`wsc2026` 등)와 리전이 다를 수 있으므로 provider 자체는 동일하되 region·prefix 를 변수로 뺀다. set-03 은 파일명이 `providers.tf`, set-02 는 `versions.tf` — 파일명은 자유, 내용이 채점 대상.
 

@@ -4,6 +4,7 @@
 
 ## 학습 목표
 
+- [ ] HCL 블록 구조(블록 타입·라벨 2개·인자)와 참조 주소 5종을 읽고, 참조가 실행 순서를 만든다는 것을 설명할 수 있다
 - [ ] provider / variable / tfvars / output / data source / locals / `for_each` / `aws_iam_policy_document` 문법을 남의 코드 없이 직접 쓸 수 있다
 - [ ] set-02 기준 VPC(172.16.0.0/16, pub/priv 서브넷 4, IGW, NAT 2, RTB 3)를 백지에서 작성할 수 있다
 - [ ] RTB↔서브넷 매핑(공용 public RTB 1개 + AZ별 private RTB 2개)이 채점 대상임을 이해하고 정확히 연결할 수 있다

@@ -11,6 +11,7 @@ import starlightLlmActions from 'starlight-llm-actions';
 import starlightCodeblockFullscreen from 'starlight-codeblock-fullscreen';
 import starlightLinksValidator from 'starlight-links-validator';
 import starlightThemeExquisitus from 'starlight-theme-exquisitus';
+import remarkGfm from 'remark-gfm';
 
 /** mermaid 도식에 전체화면 뷰어를 붙인다 (src/scripts/mermaid-fullscreen.js). */
 const mermaidFullscreen = {
@@ -26,6 +27,14 @@ export default defineConfig({
   /* Vercel 은 프로젝트를 도메인 루트에 그대로 배포한다 — base 불필요, 문서의
      `/part-1/...` 절대 링크가 손 안 대고 그대로 산다. 커스텀 도메인을 붙이면
      여기 site 를 그 도메인으로 채울 것(사이트맵·canonical URL 용). */
+  /* GFM 의 취소선은 기본으로 홑물결(~)도 구분자로 먹는다 — "D4~7", "8~10h" 같은
+     범위 표기가 문단 안에서 짝 지어져 그 사이 전체가 취소선으로 렌더된다.
+     내장 gfm 을 끄고 remark-gfm 을 singleTilde:false 로 직접 넣어 겹물결(~~)만
+     취소선으로 남긴다 — 나머지 GFM 기능(표·작업 목록 등)은 그대로다. */
+  markdown: {
+    gfm: false,
+    remarkPlugins: [[remarkGfm, { singleTilde: false }]],
+  },
   integrations: [
     mermaid(),
     mermaidFullscreen,

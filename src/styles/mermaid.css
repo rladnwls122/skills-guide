@@ -40,14 +40,26 @@
 	border: 1px solid var(--sl-color-hairline, var(--sl-color-gray-5));
 	border-radius: 9999px;
 	cursor: pointer;
-	opacity: 0.75;
 	transition: opacity 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .mfs-open-btn:is(:hover, :focus-visible) {
-	opacity: 1;
 	color: var(--sl-color-white);
 	border-color: var(--sl-color-accent);
+}
+
+/* 포인터가 있는 환경에서만 숨긴다 — 터치 기기는 hover 가 없어 영영 못 누른다.
+   opacity 만 0 으로 두므로 탭 이동·포커스는 그대로 살아 있다(visibility 는 금물). */
+@media (hover: hover) {
+	.mfs-open-btn {
+		opacity: 0;
+	}
+
+	.mfs-frame:hover .mfs-open-btn,
+	.mfs-frame:focus-within .mfs-open-btn,
+	.mfs-open-btn:focus-visible {
+		opacity: 1;
+	}
 }
 
 /* ── 오버레이 ───────────────────────────────────────────── */

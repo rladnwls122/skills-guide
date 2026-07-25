@@ -37,7 +37,13 @@ export default defineConfig({
     gfm: false,
     remarkPlugins: [[remarkGfm, { singleTilde: false }]],
   },
-  integrations: [mermaid(), mermaidFullscreen, starlight({
+  integrations: [mermaid({
+    mermaidConfig: {
+      themeVariables: {
+        fontSize: '18px',
+      },
+    },
+  }), mermaidFullscreen, starlight({
     title: 'skills-guide',
     description: '전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드',
     defaultLocale: 'root',

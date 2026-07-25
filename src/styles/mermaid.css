@@ -10,30 +10,36 @@
 	overflow: hidden;
 }
 
-/* 본문 폭보다 넓은 도식은 프레임 안에서 가로 스크롤 — 페이지 자체가 밀리면 안 된다. */
-.mfs-frame > pre.mermaid {
+/* 본문 내 기본 렌더링: 컨테이너 100% 폭에 맞춤 */
+.mfs-frame > pre.mermaid svg,
+.mermaid svg {
+	display: block;
+	width: 100% !important;
+	height: auto !important;
 	margin: 0;
-	padding: 1rem;
+	padding: 0;
+}
+
+/* 호버 시: 원본 크기로 펼쳐지고 가로 스크롤 가능 */
+:is(div, figure, .mfs-frame):has(> .mermaid):hover {
+	width: auto !important;
+}
+
+.mfs-frame > pre.mermaid:hover,
+.mermaid:hover {
 	overflow-x: auto;
-	background: none;
-	border: 0;
+	padding: 1rem;
+	margin: 0;
+	text-align: left;
 }
 
-.mfs-frame > pre.mermaid svg {
-	/* 도식이 본문보다 클 때 억지로 축소되어 글자가 안 보이는 현상 방지.
-	   원래 크기를 유지하고 부모(pre.mermaid)의 overflow-x: auto 로 스크롤하게 한다. */
+.mfs-frame > pre.mermaid:hover svg,
+.mermaid:hover svg {
+	display: block;
+	width: auto !important;
 	max-width: none !important;
-	/* 도식이 너무 작게 렌더링되는 경우를 대비한 최소 폭 대폭 상향 */
-	min-width: 800px;
-	height: auto;
-	/* Mermaid가 텍스트 크기를 계산할 때 더 큰 폰트를 기준으로 하도록 강제 */
-	font-size: 16px !important;
-}
-
-/* 다이어그램 내부의 텍스트가 너무 작게 렌더링되는 문제 강제 보정 */
-.mfs-frame > pre.mermaid svg text,
-.mfs-frame > pre.mermaid svg .nodeLabel {
-	font-size: 16px !important;
+	margin: 0;
+	padding: 0;
 }
 
 .mfs-open-btn {

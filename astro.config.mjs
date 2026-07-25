@@ -23,10 +23,12 @@ const mermaidFullscreen = {
 };
 
 export default defineConfig({
-  /* GitHub Pages 사용자 사이트(리포 이름 = rladnwls122.github.io)라 루트에 붙는다.
-     base 는 '/' 기본값 그대로 — 문서의 `/part-1/...` 절대 링크가 손 안 대고 그대로 산다.
-     프로젝트 리포로 되돌리면 base 가 생기고 그 링크들이 전부 깨진다. */
+  /* GitHub Pages 프로젝트 사이트 — 리포 이름이 URL 경로로 붙는다
+     (https://rladnwls122.github.io/skills-2026-learn_module/). 문서 안의 루트 절대
+     링크(`/part-1/...` 등 163곳)는 이 접두를 붙여 src/content/docs 에 직접 반영해
+     뒀다 — base 를 바꾸면 그 링크들도 같이 고쳐야 한다. */
   site: 'https://rladnwls122.github.io',
+  base: '/skills-2026-learn_module',
   integrations: [
     mermaid(),
     mermaidFullscreen,

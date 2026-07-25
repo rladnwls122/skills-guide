@@ -2,7 +2,7 @@
 
 전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드 — Astro Starlight 문서 사이트.
 
-**사이트: https://rladnwls122.github.io**
+**사이트: https://rladnwls122.github.io/skills-2026-learn_module/**
 
 - 콘텐츠: `src/content/docs/` (시작 / part-1~6 / reference)
 - 디자인: [starlight-theme-exquisitus](https://github.com/anaxite/starlight-theme-exquisitus) — 팔레트·서체는 테마가 전담
@@ -43,6 +43,8 @@ ChosunSm·Elice 원본은 `~/Downloads/` 아래를 본다(`scripts/subset-font.p
 
 GitHub Pages — `main` 에 push 하면 `.github/workflows/deploy.yml` 이 빌드·배포한다.
 
-리포 이름이 `rladnwls122.github.io` 라서 사이트가 도메인 루트에 붙고, Astro `base` 가
-`/` 로 남는다. 프로젝트 리포로 옮기면 `base` 가 생겨 문서의 `/part-1/...` 절대 링크
-100여 곳이 전부 깨진다 — 옮길 거면 링크 일괄 수정이 같이 가야 한다.
+프로젝트 사이트(`rladnwls122.github.io/skills-2026-learn_module/`)라 URL 에 리포 이름이
+붙는다. Astro `base` 를 `/skills-2026-learn_module` 로 두고, 문서 안의 루트 절대
+링크(`/part-1/...` 등)에도 이 접두를 직접 붙여 뒀다 — 리포를 옮기거나 이름을 바꾸면
+`astro.config.mjs` 의 `base`·`site` 와 `src/content/docs/**` 의 링크 접두를 같이 고쳐야
+한다.

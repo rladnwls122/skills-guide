@@ -27,7 +27,7 @@ AI(챗봇·코드 어시스턴트 일체)·검색엔진.
 
 ## 진행 절차
 
-착수 순서는 [소요 시간표](/reference/timings/) — 긴 것 먼저.
+착수 순서는 [소요 시간표](/skills-2026-learn_module/reference/timings/) — 긴 것 먼저.
 
 - [ ] **T+0:00** 타이머 시작. mark 항목 표 훑기(5분) — 무엇이 채점되는지부터
 - [ ] **T+1:00** 변형 카드 3장 개봉 — 각 15분 상한, 콘솔 우선으로 해결 후 본 파이프라인 복귀
@@ -37,7 +37,7 @@ AI(챗봇·코드 어시스턴트 일체)·검색엔진.
 - [ ] 클러스터 완료 → kubeconfig → helm/k8s apply (번호 prefix 순서)
 - [ ] ingress로 ALB 확보 → **2차 apply** (`-var enable_cdn=true`) → `aws cloudfront wait distribution-deployed`
 - [ ] 전파 대기 중 검증 시드 준비 (POST 데이터·트래픽·Grafana 패널)
-- [ ] **T+3:20 목표** 구현 완료. [mark 스크립트 가이드](/reference/mark-script-guide/)의 **채점 직전 리셋 체크리스트** 수행
+- [ ] **T+3:20 목표** 구현 완료. [mark 스크립트 가이드](/skills-2026-learn_module/reference/mark-script-guide/)의 **채점 직전 리셋 체크리스트** 수행
 - [ ] mark.sh 실행 (지정 환경에서 — `rm -rf ~/.aws`류 있으면 반드시 CloudShell) → 항목별 O/X 기록
 - [ ] **T+4:00** 하드 스톱. 미완이어도 채점
 
@@ -61,7 +61,7 @@ AI(챗봇·코드 어시스턴트 일체)·검색엔진.
 ```
 
 - 런북 밖에서 10분+ 소모한 항목, 변형 카드 실패 항목도 한 행으로 기록.
-- 작성 후 실패 항목을 [트러블슈팅](/reference/troubleshooting/)에 자기 언어로 추가.
+- 작성 후 실패 항목을 [트러블슈팅](/skills-2026-learn_module/reference/troubleshooting/)에 자기 언어로 추가.
 
 ## 종료 후 (남는 시간)
 

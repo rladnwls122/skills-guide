@@ -4,6 +4,7 @@ description: 이미지·컨테이너·레지스트리 관계와 build→tag→pu
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Steps, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
@@ -25,7 +26,7 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 Dockerfile 핵심 명령:
 
-```dockerfile
+```dockerfile title="Dockerfile"
 FROM python:3.12-slim        # 베이스 이미지 — 무엇 위에 쌓을지
 COPY app.py /app/app.py     # 로컬 파일을 이미지 안으로
 RUN pip install flask        # 빌드 시점에 실행 (레이어 생성)
@@ -49,41 +50,51 @@ push 3단계 암기: **build → tag(레지스트리 주소 포함) → push**. 
 ## ③ 대회에서 어떻게 쓰이나
 
 - 대회는 로컬이 아니라 **CloudShell에서 빌드**한다. CloudShell은 디스크가 작고 세션이 초기화되므로 빌드가 빠르고 이미지가 작아야 한다.
-- **베이스 이미지 선택이 채점을 좌우한다**: 과제가 지정한 베이스(예: 특정 태그)를 안 쓰면 감점, 큰 이미지는 pull 지연으로 헬스체크 채점에 늦는다.
+:::danger[베이스 이미지 선택이 채점을 좌우한다]
+과제가 지정한 베이스(예: 특정 태그)를 안 쓰면 감점, 큰 이미지는 pull 지연으로 헬스체크 채점에 늦는다.
+:::
+
 - 이 내용은 **PART-1 모듈 03(컨테이너 빌드·ECR)** 의 기반이다.
 
 ## ④ 미니 실습 (30분)
 
-> ⚠️ ECR은 저장 용량 과금(소액). 실습 끝나면 레포까지 삭제한다. Docker Desktop(또는 CloudShell) 필요.
+:::caution[과금 주의]
+ECR은 저장 용량 과금(소액). 실습 끝나면 레포까지 삭제한다. Docker Desktop(또는 CloudShell) 필요.
+:::
 
-1. hello 이미지 만들기:
+<Steps>
 
-```bash
-mkdir hello && cd hello
-cat > Dockerfile <<'EOF'
-FROM alpine:3.20
-ENTRYPOINT ["echo", "hello skills"]
-EOF
-docker build -t hello:v1 .
-docker run --rm hello:v1     # "hello skills" 출력 확인
-```
+1. **hello 이미지 만들기**
 
-2. ECR push (리전 `ap-northeast-2`, `<ACCOUNT_ID>`는 본인 계정):
+   ```bash
+   mkdir hello && cd hello
+   cat > Dockerfile <<'EOF'
+   FROM alpine:3.20
+   ENTRYPOINT ["echo", "hello skills"]
+   EOF
+   docker build -t hello:v1 .
+   docker run --rm hello:v1     # "hello skills" 출력 확인
+   ```
 
-```bash
-aws ecr create-repository --repository-name hello
-aws ecr get-login-password | docker login --username AWS \
-  --password-stdin <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com
-docker tag hello:v1 <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/hello:v1
-docker push <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/hello:v1
-```
+2. **ECR push** (리전 `ap-northeast-2`, `<ACCOUNT_ID>`는 본인 계정)
 
-3. 콘솔에서 ECR 레포에 이미지가 보이는지 확인.
-4. **즉시 삭제**:
+   ```bash
+   aws ecr create-repository --repository-name hello
+   aws ecr get-login-password | docker login --username AWS \
+     --password-stdin <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com
+   docker tag hello:v1 <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/hello:v1
+   docker push <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/hello:v1
+   ```
 
-```bash
-aws ecr delete-repository --repository-name hello --force
-```
+3. **콘솔에서 ECR 레포에 이미지가 보이는지 확인**
+
+4. **즉시 삭제**
+
+   ```bash
+   aws ecr delete-repository --repository-name hello --force
+   ```
+
+</Steps>
 
 ## ⑤ 자기 점검 퀴즈
 
@@ -130,8 +141,10 @@ aws ecr delete-repository --repository-name hello --force
 
 ## ⑥ 다음 단계
 
-- [PART 1 — Foundation·IaC](/part-1/01-terraform-vpc/) — 모듈 03 컨테이너 빌드·ECR
-- 다음 선수 학습: [셸 기초](/start/shell-basics/)
+모듈 03(컨테이너 빌드·ECR)에서 이 흐름을 대회 스택에 맞춰 실습한다.
+
+<LinkButton href="/start/shell-basics/" icon="right-arrow">다음 선수 학습 — 셸 기초</LinkButton>
+<LinkButton href="/part-1/01-terraform-vpc/" variant="minimal">PART 1 — Foundation·IaC</LinkButton>
 
 ## 공식 문서
 

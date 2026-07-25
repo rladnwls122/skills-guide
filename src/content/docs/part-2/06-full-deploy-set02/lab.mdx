@@ -56,6 +56,10 @@ aws ecr describe-image-scan-findings --repository-name wskorea26-book-repo --ima
 
 **검증**: 출력에 `CRITICAL`/`HIGH` 키가 **없어야** 함. High가 나오면 Dockerfile에 `RUN apk upgrade --no-cache` 추가 후 재빌드/재푸시.
 
+:::danger[빌드 위치]
+VPC CloudShell은 인터넷이 없어 alpine을 pull하지 못한다. 이미지 빌드는 반드시 **기본 CloudShell**에서.
+:::
+
 ## ③ eksctl 클러스터 (~20분, ②와 병행 가능)
 
 04 lab의 렌더 절차 그대로: `${VAR}` 9종 `.Replace()` 치환 → **`Select-String '\$\{'` 누락 검사** → `eksctl create cluster -f cluster.rendered.yaml` → `aws eks update-kubeconfig --region ap-northeast-2 --name wskorea26-cluster`.
@@ -83,6 +87,10 @@ aws elbv2 wait target-in-service --target-group-arn "$env:APP_TG"
 **검증**: wait가 통과하면 타깃 healthy.
 
 ## ⑥ 모니터링 (kube-prometheus-stack + Grafana)
+
+:::danger[따옴표 함정]
+Grafana 비번 `$korea26!!` 는 PowerShell **작은따옴표**로만 쓴다. 큰따옴표면 `$korea26` 이 빈 변수로 확장돼 비번이 틀리고 mark 10 이 전멸한다.
+:::
 
 ```powershell
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts; helm repo update
@@ -136,7 +144,9 @@ curl.exe -s "https://$env:CF/book?concert_name=SEED_CON"                 # 최�
 curl.exe -o NUL -s -w "%{http_code}`n" "https://$env:CF/book"            # 400
 ```
 
-주석의 기대값과 하나라도 다르면 여기서 멈추고 원인 추적 (아래 함정 표).
+:::caution
+주석의 기대값과 하나라도 다르면 여기서 멈추고 원인 추적 (아래 함정 표). 다음 단계로 넘어가지 않는다.
+:::
 
 ## ⑨ 채점 — CloudShell VPC Environment
 
@@ -153,6 +163,10 @@ chmod +x ~/mark.sh && ~/mark.sh
 **통과 기준: 자동 채점 80% 이상** (30점 만점 기준 24점+; 10번 Monitoring 3.5점은 수동 — Grafana 접속·패널로 셀프 확인).
 
 ## ⑩ 정리 (순서 엄수)
+
+:::danger[순서 엄수]
+helm → eksctl → DynamoDB 삭제방지 해제 → `terraform destroy`. 순서를 바꾸면 destroy 가 중간에 막힌다.
+:::
 
 ```powershell
 helm -n monitoring uninstall wskorea26-monitoring

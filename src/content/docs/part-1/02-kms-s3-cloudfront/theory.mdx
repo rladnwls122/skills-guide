@@ -150,7 +150,9 @@ flowchart TD
     D -- "예" --> F["통과: 배포자 admin + 사용자별 use statement"]
 ```
 
-**치명 함정**: 배포자 신원이 admin 이므로, **root(또는 다른 신원)로 apply 하면 이후 그 키에 대한 모든 작업이 거부**된다. eksctl·docker push·kubectl 도 terraform 과 **같은 자격증명**으로 실행해야 한다. 또 root 위임이 없으니 키 소비자(EKS Pod 역할, Lambda 실행 역할, 서비스 principal)를 키 정책에 **직접** 나열해야 한다 — set-03 은 db 키에 `book_pod`/`book_function` 역할, function 키에 lambda 서비스 principal(EncryptionContext 조건)까지 명시한다.
+:::danger[치명 함정]
+배포자 신원이 admin 이므로, **root(또는 다른 신원)로 apply 하면 이후 그 키에 대한 모든 작업이 거부**된다. eksctl·docker push·kubectl 도 terraform 과 **같은 자격증명**으로 실행해야 한다. 또 root 위임이 없으니 키 소비자(EKS Pod 역할, Lambda 실행 역할, 서비스 principal)를 키 정책에 **직접** 나열해야 한다 — set-03 은 db 키에 `book_pod`/`book_function` 역할, function 키에 lambda 서비스 principal(EncryptionContext 조건)까지 명시한다.
+:::
 
 **④ 세트별 차이** — root-less 는 set-03 유형의 유의사항이 있을 때만. 평상시(set-02)는 root 위임이 단순하고 안전하다. 과제지 유의사항을 먼저 읽고 결정한다.
 
@@ -171,8 +173,8 @@ flowchart TD
 | EKS secrets | CMK `wskorea26-eks-key` | 과제지에 이름 명시 |
 | ECR | **관리형 `aws/ecr`** | 이름 없음 + mark 는 encryptionType 만 검사 |
 
-```hcl
-# ecr.tf — encryption_type 만 KMS, kms_key 미지정 = aws/ecr 관리형
+```hcl title="ecr.tf"
+# encryption_type 만 KMS, kms_key 미지정 = aws/ecr 관리형
 encryption_configuration {
   encryption_type = "KMS"
 }
@@ -226,7 +228,9 @@ resource "aws_s3_object" "static" {
 }
 ```
 
+:::caution
 `content_type` 을 안 주면 브라우저가 html 을 다운로드해 버린다.
+:::
 
 **④ 세트별 차이** — 객체 경로(prefix)·파일 목록·버킷 이름 규칙이 바뀐다. 전부 변수/locals 로 처리.
 
@@ -287,7 +291,9 @@ graph LR
     B --> K
 ```
 
+:::danger[순환 참조]
 `key → distribution → bucket → key` 순환으로 plan 이 실패한다. **우회: 키 정책은 배포 ARN 대신 `aws:SourceAccount = 계정ID` 조건**을 쓴다 (버킷 정책은 bucket→distribution 단방향이라 ARN 직접 참조 가능).
+:::
 
 OAC 리소스와 오리진 연결 (set-02 실측):
 

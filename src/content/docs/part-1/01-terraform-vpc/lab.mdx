@@ -3,6 +3,8 @@ title: 01. Terraform 문법 + VPC — 실습
 description: "정답지를 보지 않고 백지에서 VPC tf 코드를 작성해 apply·검증한 뒤 정답과 diff 하는 실습."
 ---
 
+import { Steps } from '@astrojs/starlight/components';
+
 > 문서 유형: tutorial
 
 **방식**: 정답지를 보지 않고 백지에서 tf 코드를 쓴다 → apply·검증 → 마지막에 `skills-2026` 정답과 diff 해서 설계 차이를 복기한다.
@@ -25,89 +27,96 @@ mkdir my-vpc-lab; cd my-vpc-lab
 
 ## 단계별 절차
 
-### 1) 스펙만 보고 직접 작성 (정답지 금지)
+<Steps>
 
-작성할 파일: `versions.tf`, `variables.tf`, `terraform.tfvars`, `data.tf`, `vpc.tf`, `outputs.tf`
+1. **스펙만 보고 직접 작성 (정답지 금지)**
 
-구현 스펙 (set-02 Reference01 실측):
+   작성할 파일: `versions.tf`, `variables.tf`, `terraform.tfvars`, `data.tf`, `vpc.tf`, `outputs.tf`
 
-| 항목 | 값 |
-|---|---|
-| VPC | `wskorea26-vpc`, `172.16.0.0/16`, DNS support/hostnames 활성 |
-| 서브넷 | `wskorea26-pub-subnet-c` 172.16.1.0/24 (2c), `wskorea26-pub-subnet-d` 172.16.2.0/24 (2d), `wskorea26-priv-subnet-c` 172.16.201.0/24 (2c), `wskorea26-priv-subnet-d` 172.16.202.0/24 (2d) |
-| IGW | `book-igw` |
-| NAT | `book-ngw-c`(pub-subnet-c 안), `book-ngw-d`(pub-subnet-d 안) + EIP 각 1 |
-| RTB | `wskorea26-public-rtb`(0.0.0.0/0→IGW, pub 2개 연결), `wskorea26-private-rtb-c`(→ngw-c, priv-c 연결), `wskorea26-private-rtb-d`(→ngw-d, priv-d 연결) |
+   구현 스펙 (set-02 Reference01 실측):
 
-필수 제약:
-- 서브넷은 `map(object({cidr, az, tier}))` 변수 + `for_each` 로 생성 (복붙 4개 금지)
-- public 서브넷만 `map_public_ip_on_launch = true`
-- `player_number`, `region`, `vpc_cidr` 는 변수 + tfvars 주입
-- output: `vpc_id`, `public_subnet_ids`(map), `private_subnet_ids`(map), `account_id`
+   | 항목 | 값 |
+   |---|---|
+   | VPC | `wskorea26-vpc`, `172.16.0.0/16`, DNS support/hostnames 활성 |
+   | 서브넷 | `wskorea26-pub-subnet-c` 172.16.1.0/24 (2c), `wskorea26-pub-subnet-d` 172.16.2.0/24 (2d), `wskorea26-priv-subnet-c` 172.16.201.0/24 (2c), `wskorea26-priv-subnet-d` 172.16.202.0/24 (2d) |
+   | IGW | `book-igw` |
+   | NAT | `book-ngw-c`(pub-subnet-c 안), `book-ngw-d`(pub-subnet-d 안) + EIP 각 1 |
+   | RTB | `wskorea26-public-rtb`(0.0.0.0/0→IGW, pub 2개 연결), `wskorea26-private-rtb-c`(→ngw-c, priv-c 연결), `wskorea26-private-rtb-d`(→ngw-d, priv-d 연결) |
 
-### 2) 문법 검증 → apply
+   필수 제약:
 
-```powershell
-terraform init
-terraform fmt -check -diff
-terraform validate
-terraform plan     # 리소스 수 확인: VPC1+IGW1+서브넷4+EIP2+NAT2+RTB3+route3+assoc4 = 20개
-terraform apply
-```
+   - 서브넷은 `map(object({cidr, az, tier}))` 변수 + `for_each` 로 생성 (복붙 4개 금지)
+   - public 서브넷만 `map_public_ip_on_launch = true`
+   - `player_number`, `region`, `vpc_cidr` 는 변수 + tfvars 주입
+   - output: `vpc_id`, `public_subnet_ids`(map), `private_subnet_ids`(map), `account_id`
 
-기대: `Apply complete! Resources: 20 added` (NAT 생성으로 2~3분 소요).
+2. **문법 검증 → apply**
 
-### 3) 검증 — mark.sh가 보는 방식으로
+   ```powershell
+   terraform init
+   terraform fmt -check -diff
+   terraform validate
+   terraform plan     # 리소스 수 확인: VPC1+IGW1+서브넷4+EIP2+NAT2+RTB3+route3+assoc4 = 20개
+   terraform apply
+   ```
 
-```powershell
-$env:VPC_ID = terraform output -raw vpc_id
+   기대: `Apply complete! Resources: 20 added` (NAT 생성으로 2~3분 소요).
 
-# (1) CIDR — mark 1-1 상당
-aws ec2 describe-vpcs --vpc-ids $env:VPC_ID --query 'Vpcs[0].CidrBlock'
-# 기대: "172.16.0.0/16"
+3. **검증 — mark.sh가 보는 방식으로**
 
-# (2) RTB↔서브넷 매핑 — mark 1-2 상당
-aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$env:VPC_ID" `
-  --query 'RouteTables[].{Name:Tags[?Key==`Name`]|[0].Value, Subnets:Associations[].SubnetId, Routes:Routes[?DestinationCidrBlock==`0.0.0.0/0`].[GatewayId,NatGatewayId]}' `
-  --output json
-```
+   ```powershell
+   $env:VPC_ID = terraform output -raw vpc_id
 
-기대 출력 (요지):
-- `wskorea26-public-rtb`: Subnets 2개, 기본 라우트 `GatewayId = igw-...`
-- `wskorea26-private-rtb-c`: Subnets 1개(priv-c), 기본 라우트 `NatGatewayId = nat-...`
-- `wskorea26-private-rtb-d`: Subnets 1개(priv-d), 기본 라우트 `NatGatewayId = nat-...`
-- Name 없는 기본 RTB 하나가 더 보이는 것은 정상 (VPC 기본 RTB, 연결 없음)
+   # (1) CIDR — mark 1-1 상당
+   aws ec2 describe-vpcs --vpc-ids $env:VPC_ID --query 'Vpcs[0].CidrBlock'
+   # 기대: "172.16.0.0/16"
 
-```powershell
-# (3) NAT 가 "public" 서브넷에 있는지
-aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$env:VPC_ID" `
-  --query 'NatGateways[].{Name:Tags[?Key==`Name`]|[0].Value, Subnet:SubnetId}'
-# 기대: book-ngw-c → pub-subnet-c 의 ID, book-ngw-d → pub-subnet-d 의 ID
-```
+   # (2) RTB↔서브넷 매핑 — mark 1-2 상당
+   aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$env:VPC_ID" `
+     --query 'RouteTables[].{Name:Tags[?Key==`Name`]|[0].Value, Subnets:Associations[].SubnetId, Routes:Routes[?DestinationCidrBlock==`0.0.0.0/0`].[GatewayId,NatGatewayId]}' `
+     --output json
+   ```
 
-### 4) output 영속화
+   기대 출력 (요지):
 
-```powershell
-terraform output -json | Set-Content ..\outputs.json
-@"
-`$env:VPC_ID = "$(terraform output -raw vpc_id)"
-`$env:PRIV_SUBNET_C = "$((terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-c')"
-"@ | Set-Content ..\.env.ps1
-. ..\.env.ps1   # 새 터미널에서도 이 한 줄로 복원
-```
+   - `wskorea26-public-rtb`: Subnets 2개, 기본 라우트 `GatewayId = igw-...`
+   - `wskorea26-private-rtb-c`: Subnets 1개(priv-c), 기본 라우트 `NatGatewayId = nat-...`
+   - `wskorea26-private-rtb-d`: Subnets 1개(priv-d), 기본 라우트 `NatGatewayId = nat-...`
+   - Name 없는 기본 RTB 하나가 더 보이는 것은 정상 (VPC 기본 RTB, 연결 없음)
 
-### 5) 정답과 diff
+   ```powershell
+   # (3) NAT 가 "public" 서브넷에 있는지
+   aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$env:VPC_ID" `
+     --query 'NatGateways[].{Name:Tags[?Key==`Name`]|[0].Value, Subnet:SubnetId}'
+   # 기대: book-ngw-c → pub-subnet-c 의 ID, book-ngw-d → pub-subnet-d 의 ID
+   ```
 
-```powershell
-git diff --no-index .\vpc.tf C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\vpc.tf
-git diff --no-index .\variables.tf C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\variables.tf
-```
+4. **output 영속화**
 
-diff 에서 확인할 관점 (기능이 같아도 설계 차이를 본다):
-- 서브넷 이름을 map **key** 로 썼는가 (정답 방식) vs 별도 name 필드
-- NAT 배치를 `public_by_az` locals 매핑으로 풀었는가 vs 하드코딩 인덱스
-- `aws_route` 를 별도 리소스로 뺐는가 vs 인라인 route 블록
-- 이름이 `기본값 + tfvars` 구조인가 vs 리소스에 직접 리터럴
+   ```powershell
+   terraform output -json | Set-Content ..\outputs.json
+   @"
+   `$env:VPC_ID = "$(terraform output -raw vpc_id)"
+   `$env:PRIV_SUBNET_C = "$((terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-c')"
+   "@ | Set-Content ..\.env.ps1
+   . ..\.env.ps1   # 새 터미널에서도 이 한 줄로 복원
+   ```
+
+5. **정답과 diff**
+
+   ```powershell
+   git diff --no-index .\vpc.tf C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\vpc.tf
+   git diff --no-index .\variables.tf C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\variables.tf
+   ```
+
+   diff 에서 확인할 관점 (기능이 같아도 설계 차이를 본다):
+
+   - 서브넷 이름을 map **key** 로 썼는가 (정답 방식) vs 별도 name 필드
+   - NAT 배치를 `public_by_az` locals 매핑으로 풀었는가 vs 하드코딩 인덱스
+   - `aws_route` 를 별도 리소스로 뺐는가 vs 인라인 route 블록
+   - 이름이 `기본값 + tfvars` 구조인가 vs 리소스에 직접 리터럴
+
+</Steps>
 
 ## :badge[함정]{variant=danger} 목록
 
@@ -138,4 +147,8 @@ aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$env:VPC_ID" `
 aws ec2 describe-addresses --query 'Addresses[].PublicIp'   # 남은 EIP 없어야 함 (있으면 시간당 과금)
 ```
 
-VPC 모듈은 의존 리소스가 없으므로 destroy 순서 고민 없이 한 번에 끝난다. EIP 가 남았는지 마지막으로 꼭 확인한다.
+VPC 모듈은 의존 리소스가 없으므로 destroy 순서 고민 없이 한 번에 끝난다.
+
+:::caution[과금 주의]
+EIP 가 남았는지 마지막으로 꼭 확인한다 — 남아 있으면 시간당 과금이다.
+:::

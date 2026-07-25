@@ -3,6 +3,8 @@ title: 00 — 사전 준비 (Day 0, 반나절)
 description: 학습용 AWS 계정·도구·비용 알람을 준비하고 선수 지식을 자가진단하는 Day 0 체크리스트.
 ---
 
+import { Steps, Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
+
 > 문서 유형: 개요
 
 ## 목표
@@ -34,18 +36,30 @@ PowerShell 함정 미리 각인: `curl`은 Invoke-WebRequest 별칭 → 항상 `
 
 ## 3. 비용 가드레일
 
-- AWS Budgets 월 $50 알람 생성 (콘솔 5분, 또는 아래 CLI 한 방):
+:::caution[시간당 과금 목록 암기]
+**NAT GW, EKS 클러스터($0.1/h), MSK, ALB, EC2** — 켜 둔 시간이 그대로 청구된다.
+:::
 
-  ```bash
-  ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-  aws budgets create-budget --account-id "$ACCOUNT_ID" \
-    --budget '{"BudgetName":"skills-guide-budget","BudgetLimit":{"Amount":"50","Unit":"USD"},"TimeUnit":"MONTHLY","BudgetType":"COST"}' \
-    --notifications-with-subscribers '[{"Notification":{"NotificationType":"ACTUAL","ComparisonOperator":"GREATER_THAN","Threshold":80,"ThresholdType":"PERCENTAGE"},"Subscribers":[{"SubscriptionType":"EMAIL","Address":"본인이메일@example.com"}]}]'
-  ```
-- 시간당 과금 목록 암기: **NAT GW, EKS 클러스터($0.1/h), MSK, ALB, EC2**.
-- 원칙: 모듈 종료 = destroy. 예외는 모듈 README에 명시된 날만 (D4→D5 클러스터 유지).
-- destroy 후 잔존 리소스 일괄 점검: [잔존 리소스 점검](/reference/cleanup-check/)
-  블록을 매일 학습 종료 시 실행 — 빈 출력이어야 그날이 끝난 것.
+<Steps>
+
+1. **AWS Budgets 월 $50 알람 생성** (콘솔 5분, 또는 아래 CLI 한 방)
+
+   ```bash
+   ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+   aws budgets create-budget --account-id "$ACCOUNT_ID" \
+     --budget '{"BudgetName":"skills-guide-budget","BudgetLimit":{"Amount":"50","Unit":"USD"},"TimeUnit":"MONTHLY","BudgetType":"COST"}' \
+     --notifications-with-subscribers '[{"Notification":{"NotificationType":"ACTUAL","ComparisonOperator":"GREATER_THAN","Threshold":80,"ThresholdType":"PERCENTAGE"},"Subscribers":[{"SubscriptionType":"EMAIL","Address":"본인이메일@example.com"}]}]'
+   ```
+
+2. **모듈 종료 = destroy**
+
+   예외는 모듈 README에 명시된 날만 (D4→D5 클러스터 유지).
+
+3. **매일 학습 종료 시 잔존 리소스 일괄 점검**
+
+   [잔존 리소스 점검](/reference/cleanup-check/) 블록을 실행 — 빈 출력이어야 그날이 끝난 것.
+
+</Steps>
 
 ## 4. 저장소 클론
 
@@ -83,11 +97,32 @@ Kubernetes·Terraform·eksctl은 선수 지식 아님 — PART 1~2에서 배운�
 
 각 모듈 README 상단의 "선행 지식" 블록이 그 모듈에 필요한 항목만 3~5줄로 추려 여기로 링크한다 — 학습 중에는 모듈에서 시작하고, 막히는 줄이 있을 때만 아래 원문을 연다.
 
-| 가이드 | 자가진단 항목 | 대회 연결 |
-|---|---|---|
-| [VPC 기초](/start/vpc-basics/) | 1 | RTB↔서브넷 매핑 채점, PART-1 모듈 01 |
-| [IAM 기초](/start/iam-basics/) | 2, 3 | root-less KMS·채점 신원, PART-3 모듈 08 |
-| [Docker 기초](/start/docker-basics/) | 4 | CloudShell 빌드·ECR, PART-1 모듈 03 |
-| [셸 기초](/start/shell-basics/) | 5 | 30% 변동 드릴, PART-5 모듈 11 |
-| [AWS CLI 기초](/start/awscli-basics/) | 3 | mark.sh 채점 역추적 |
-| [Kubernetes 기초](/start/k8s-basics/) | 7 (권장) | PART-2 모듈 05 k8s 워크로드 |
+<CardGrid>
+  <Card title="VPC 기초" icon="bars">
+    자가진단 1 — RTB↔서브넷 매핑 채점, PART-1 모듈 01
+    [읽기](/start/vpc-basics/)
+  </Card>
+  <Card title="IAM 기초" icon="approve-check">
+    자가진단 2, 3 — root-less KMS·채점 신원, PART-3 모듈 08
+    [읽기](/start/iam-basics/)
+  </Card>
+  <Card title="Docker 기초" icon="rocket">
+    자가진단 4 — CloudShell 빌드·ECR, PART-1 모듈 03
+    [읽기](/start/docker-basics/)
+  </Card>
+  <Card title="셸 기초" icon="setting">
+    자가진단 5 — 30% 변동 드릴, PART-5 모듈 11
+    [읽기](/start/shell-basics/)
+  </Card>
+  <Card title="AWS CLI 기초" icon="magnifier">
+    자가진단 3 — mark.sh 채점 역추적
+    [읽기](/start/awscli-basics/)
+  </Card>
+  <Card title="Kubernetes 기초" icon="puzzle">
+    자가진단 7 (권장) — PART-2 모듈 05 k8s 워크로드
+    [읽기](/start/k8s-basics/)
+  </Card>
+</CardGrid>
+
+<LinkButton href="/part-1/01-terraform-vpc/" icon="right-arrow">PART 1 시작</LinkButton>
+<LinkButton href="/start/vpc-basics/" variant="minimal">먼저 VPC 기초 보충</LinkButton>

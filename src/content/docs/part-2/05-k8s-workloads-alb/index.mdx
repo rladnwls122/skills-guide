@@ -3,6 +3,8 @@ title: 05. k8s 워크로드 + ALB 연동 — Deployment / Helm / TargetGroupBind
 description: "프로덕션급 Deployment·LBC 설치·Terraform ALB + TargetGroupBinding 패턴의 학습 목표와 선행 지식."
 ---
 
+import { LinkButton } from '@astrojs/starlight/components';
+
 > 문서 유형: 개요
 
 ## 학습 목표
@@ -26,8 +28,10 @@ description: "프로덕션급 Deployment·LBC 설치·Terraform ALB + TargetGrou
 | ALB x 2 (book/grafana) | 약 $0.0225/h + LCU | PART-1 terraform이 생성 |
 | NAT x 2 | 약 $0.236/h | |
 
-> 04에서 유지한 클러스터를 그대로 쓴다. **05 종료 시**: 06을 다음날 이어가면 유지,
-> 아니면 `eksctl delete cluster` + `terraform destroy` (DynamoDB 삭제방지 해제 선행 — 06 참고).
+:::caution[과금 주의]
+04에서 유지한 클러스터를 그대로 쓴다. **05 종료 시**: 06을 다음날 이어가면 유지,
+아니면 `eksctl delete cluster` + `terraform destroy` (DynamoDB 삭제방지 해제 선행 — 06 참고).
+:::
 
 ## 선행 지식
 
@@ -57,3 +61,8 @@ description: "프로덕션급 Deployment·LBC 설치·Terraform ALB + TargetGrou
 - [TargetGroupBinding (AWS Load Balancer Controller)](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/targetgroupbinding/targetgroupbinding/) — spec 필드·targetType
 - [ALB 리스너 규칙](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/listener-update-rules.html) — 조건·우선순위·기본 액션
 - [Helm 문서](https://helm.sh/docs/) — repo/chart/release/values
+
+## 다음 단계
+
+<LinkButton href="/part-2/05-k8s-workloads-alb/theory/" icon="right-arrow">이론 읽기</LinkButton>
+<LinkButton href="/part-2/05-k8s-workloads-alb/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

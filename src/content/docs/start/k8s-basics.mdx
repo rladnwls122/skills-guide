@@ -4,6 +4,7 @@ description: Pod·Deployment·Service·ConfigMap·ServiceAccount 등 대회에 �
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Steps, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
@@ -157,8 +158,12 @@ flowchart TB
 - **ConfigMap**으로 앱 설정(DB 호스트 등)을 주입하고, **Secret**은 KMS envelope 암호화(모듈 08)의 대상이 된다.
 - **ServiceAccount**는 IRSA/Pod Identity로 AWS IAM 권한과 연결된다 — "Pod이 S3에 접근하는 방법". 개념만 잡고 PART-2 모듈 04에서 심화.
 - **Helm**은 AWS Load Balancer Controller, kube-prometheus-stack 설치에 쓴다. **차트 버전 고정**이 원칙(버전 미고정 = 대회 당일 다른 버전이 설치되는 사고).
-- **Namespace**: 채점 스크립트(mark.sh)는 "특정 ns에 Pod이 있는가"를 검사한다. ns를 틀리면 리소스가 멀쩡해도 0점.
-- **kubectl 필수 명령** (손에 익혀야 하는 것):
+
+:::danger[Namespace를 틀리면 0점]
+채점 스크립트(mark.sh)는 "특정 ns에 Pod이 있는가"를 검사한다. 리소스가 멀쩡해도 ns가 틀리면 점수가 0이다.
+:::
+
+**kubectl 필수 명령** (손에 익혀야 하는 것):
 
 ```bash
 kubectl apply -f k8s/           # 파일명 번호 prefix(00-, 10-...) 순서로 적용
@@ -190,21 +195,45 @@ skills-2026 저장소의 `set-02/task-1/k8s/app/deployment.yaml`을 열고 각 �
 
 kind(Docker 필요)로 1노드 클러스터를 띄워 명령을 손에 익힌다:
 
-```bash
-# 설치 (Windows / winget)
-winget install Kubernetes.kind
-kind create cluster
+<Steps>
 
-kubectl create namespace demo
-kubectl create deployment web --image=nginx --replicas=2 -n demo
-kubectl expose deployment web --port=80 -n demo          # ClusterIP Service
-kubectl get pod,svc -n demo -o wide
-kubectl describe pod -n demo -l app=web                  # Events 읽기
-kubectl delete pod -n demo -l app=web                    # 지워도 ReplicaSet이 되살림 확인
-kubectl get pod -n demo                                  # 새 Pod 확인
+1. **kind 설치 · 클러스터 생성**
 
-kind delete cluster    # 정리
-```
+   ```bash
+   # 설치 (Windows / winget)
+   winget install Kubernetes.kind
+   kind create cluster
+   ```
+
+2. **Deployment와 Service 만들기**
+
+   ```bash
+   kubectl create namespace demo
+   kubectl create deployment web --image=nginx --replicas=2 -n demo
+   kubectl expose deployment web --port=80 -n demo          # ClusterIP Service
+   ```
+
+3. **상태 확인과 Events 읽기**
+
+   ```bash
+   kubectl get pod,svc -n demo -o wide
+   kubectl describe pod -n demo -l app=web                  # Events 읽기
+   ```
+
+4. **자가 복구 확인**
+
+   ```bash
+   kubectl delete pod -n demo -l app=web                    # 지워도 ReplicaSet이 되살림 확인
+   kubectl get pod -n demo                                  # 새 Pod 확인
+   ```
+
+5. **정리**
+
+   ```bash
+   kind delete cluster
+   ```
+
+</Steps>
 
 로컬이 부담스러우면 생략 가능 — **PART-2 모듈 04~05에서 EKS로 동일 내용을 실습**한다.
 
@@ -274,8 +303,10 @@ base64는 누구나 되돌릴 수 있는 **인코딩**이지 암호화가 아니
 
 ## ⑦ 다음 단계
 
-- [PART 2 — EKS Core](/part-2/04-eksctl-cluster/) — 모듈 04(EKS·IRSA), 모듈 05(k8s 워크로드 심화)에서 이 내용을 EKS 위에서 실전 수준으로 확장
-- 다음 선수 학습: [AWS CLI 기초](/start/awscli-basics/)
+모듈 04(EKS·IRSA)와 모듈 05(k8s 워크로드 심화)에서 이 내용을 EKS 위에서 실전 수준으로 확장한다.
+
+<LinkButton href="/start/awscli-basics/" icon="right-arrow">다음 선수 학습 — AWS CLI 기초</LinkButton>
+<LinkButton href="/part-2/04-eksctl-cluster/" variant="minimal">PART 2 — EKS Core</LinkButton>
 
 ## 공식 문서
 

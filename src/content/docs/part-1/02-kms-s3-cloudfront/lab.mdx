@@ -3,6 +3,8 @@ title: 02. KMS + S3 + CloudFront — 실습
 description: "CMK 2개와 OAC 버킷·CloudFront 배포를 직접 작성하고 순환 참조를 재현·우회하는 실습."
 ---
 
+import { Steps } from '@astrojs/starlight/components';
+
 > 문서 유형: tutorial
 
 **방식**: 스펙만 보고 tf 코드를 직접 쓴다 → apply·검증 → `skills-2026` 정답과 diff. Day 1 실습 디렉토리와 별개의 새 디렉토리에서 진행 (VPC 불필요 — 이 3개 서비스는 VPC 밖 리소스).
@@ -27,100 +29,104 @@ mkdir provided
 
 ## 단계별 절차
 
-### 1) 스펙만 보고 직접 작성 (정답지 금지)
+<Steps>
 
-작성 파일: `versions.tf`, `variables.tf`(player_number 포함), `data.tf`, `kms.tf`, `s3.tf`, `cloudfront.tf`, `outputs.tf`
+1. **스펙만 보고 직접 작성 (정답지 금지)**
 
-| 항목 | 스펙 (set-02 실측) |
-|---|---|
-| CMK | `wskorea26-s3-key`, `wskorea26-dynamodb-key` — rotation 활성, 삭제 대기 7일, alias `alias/<이름>` |
-| s3 키 정책 | root 전체 위임 + CloudFront 서비스 principal 에 Decrypt/GenerateDataKey (`aws:SourceAccount` 조건) |
-| dynamodb 키 정책 | root 전체 위임만 |
-| 버킷 | `wskorea26-concert-bucket-<비번호>`, 퍼블릭 차단 4종, SSE-KMS(s3키)+BucketKey |
-| 객체 | `web/main/index.html`(`text/html`), `web/main/main.jpeg`(`image/jpeg`) — for_each |
-| OAC | `wskorea26-s3-oac`, s3 타입, always/sigv4 |
-| CloudFront | comment `wskorea26-concert-cf`, S3 오리진(OAC, origin_path `/web/main`), default behavior GET/HEAD + redirect-to-https + Managed-CachingOptimized, default_root_object `index.html`, 기본 인증서 |
-| 버킷 정책 | cloudfront.amazonaws.com + `AWS:SourceArn` = 배포 ARN, `s3:GetObject` |
-| output | `s3_bucket_name`, `cloudfront_domain` |
+   작성 파일: `versions.tf`, `variables.tf`(player_number 포함), `data.tf`, `kms.tf`, `s3.tf`, `cloudfront.tf`, `outputs.tf`
 
-관리형 캐시 정책은 data source 로 조회한다: `data "aws_cloudfront_cache_policy" "caching_optimized" { name = "Managed-CachingOptimized" }`.
+   | 항목 | 스펙 (set-02 실측) |
+   |---|---|
+   | CMK | `wskorea26-s3-key`, `wskorea26-dynamodb-key` — rotation 활성, 삭제 대기 7일, alias `alias/<이름>` |
+   | s3 키 정책 | root 전체 위임 + CloudFront 서비스 principal 에 Decrypt/GenerateDataKey (`aws:SourceAccount` 조건) |
+   | dynamodb 키 정책 | root 전체 위임만 |
+   | 버킷 | `wskorea26-concert-bucket-<비번호>`, 퍼블릭 차단 4종, SSE-KMS(s3키)+BucketKey |
+   | 객체 | `web/main/index.html`(`text/html`), `web/main/main.jpeg`(`image/jpeg`) — for_each |
+   | OAC | `wskorea26-s3-oac`, s3 타입, always/sigv4 |
+   | CloudFront | comment `wskorea26-concert-cf`, S3 오리진(OAC, origin_path `/web/main`), default behavior GET/HEAD + redirect-to-https + Managed-CachingOptimized, default_root_object `index.html`, 기본 인증서 |
+   | 버킷 정책 | cloudfront.amazonaws.com + `AWS:SourceArn` = 배포 ARN, `s3:GetObject` |
+   | output | `s3_bucket_name`, `cloudfront_domain` |
 
-### 2) 순환 참조를 일부러 체험 (5분)
+   관리형 캐시 정책은 data source 로 조회한다: `data "aws_cloudfront_cache_policy" "caching_optimized" { name = "Managed-CachingOptimized" }`.
 
-s3 키 정책의 CloudFront statement 에 SourceAccount 대신 아래를 넣고 plan:
+2. **순환 참조를 일부러 체험 (5분)**
 
-```hcl
-condition {
-  test     = "StringEquals"
-  variable = "aws:SourceArn"
-  values   = [aws_cloudfront_distribution.cdn.arn]   # 순환!
-}
-```
+   s3 키 정책의 CloudFront statement 에 SourceAccount 대신 아래를 넣고 plan:
 
-기대: `Error: Cycle: aws_kms_key.s3, aws_cloudfront_distribution.cdn, aws_s3_bucket..., ...` — key→distribution→bucket→key 순환을 확인 후 `aws:SourceAccount = local.account_id` 로 되돌린다.
+   ```hcl title="kms.tf (일부러 깨뜨리는 버전)"
+   condition {
+     test     = "StringEquals"
+     variable = "aws:SourceArn"
+     values   = [aws_cloudfront_distribution.cdn.arn]   # 순환!
+   }
+   ```
 
-### 3) apply & 검증
+   기대: `Error: Cycle: aws_kms_key.s3, aws_cloudfront_distribution.cdn, aws_s3_bucket..., ...` — key→distribution→bucket→key 순환을 확인 후 `aws:SourceAccount = local.account_id` 로 되돌린다.
 
-```powershell
-terraform init && terraform fmt && terraform validate && terraform apply
-# CloudFront 배포 완료까지 수 분 소요
+3. **apply & 검증**
 
-$BUCKET = terraform output -raw s3_bucket_name
-$CF     = terraform output -raw cloudfront_domain
+   ```powershell
+   terraform init && terraform fmt && terraform validate && terraform apply
+   # CloudFront 배포 완료까지 수 분 소요
 
-# (1) alias 역조회 — mark 방식
-aws kms describe-key --key-id alias/wskorea26-s3-key --query 'KeyMetadata.[KeyState,KeyManager]'
-# 기대: ["Enabled", "CUSTOMER"]
+   $BUCKET = terraform output -raw s3_bucket_name
+   $CF     = terraform output -raw cloudfront_domain
 
-# (2) 퍼블릭 차단 4종 — mark 2-2
-aws s3api get-public-access-block --bucket $BUCKET
-# 기대: 4개 필드 모두 true
-aws s3api get-bucket-policy-status --bucket $BUCKET --query 'PolicyStatus.IsPublic'
-# 기대: false  (버킷 정책이 없으면 이 호출 자체가 에러 — OAC 정책이 있어야 함)
+   # (1) alias 역조회 — mark 방식
+   aws kms describe-key --key-id alias/wskorea26-s3-key --query 'KeyMetadata.[KeyState,KeyManager]'
+   # 기대: ["Enabled", "CUSTOMER"]
 
-# (3) 암호화 — SSE-KMS + BucketKey
-aws s3api get-bucket-encryption --bucket $BUCKET `
-  --query 'ServerSideEncryptionConfiguration.Rules[0]'
-# 기대: SSEAlgorithm aws:kms + KMSMasterKeyID(s3키 ARN) + BucketKeyEnabled true
+   # (2) 퍼블릭 차단 4종 — mark 2-2
+   aws s3api get-public-access-block --bucket $BUCKET
+   # 기대: 4개 필드 모두 true
+   aws s3api get-bucket-policy-status --bucket $BUCKET --query 'PolicyStatus.IsPublic'
+   # 기대: false  (버킷 정책이 없으면 이 호출 자체가 에러 — OAC 정책이 있어야 함)
 
-# (4) 객체 키 — mark 2-1
-aws s3api list-objects-v2 --bucket $BUCKET --query 'Contents[].Key'
-# 기대: ["web/main/index.html", "web/main/main.jpeg"]
+   # (3) 암호화 — SSE-KMS + BucketKey
+   aws s3api get-bucket-encryption --bucket $BUCKET `
+     --query 'ServerSideEncryptionConfiguration.Rules[0]'
+   # 기대: SSEAlgorithm aws:kms + KMSMasterKeyID(s3키 ARN) + BucketKeyEnabled true
 
-# (5) 접근 경로: CloudFront 만 허용
-curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/"          # 기대: 200
-curl.exe -s -o NUL -w "%{http_code}`n" "https://$BUCKET.s3.ap-northeast-2.amazonaws.com/web/main/index.html"  # 기대: 403
-curl.exe -s -o NUL -w "%{http_code}`n" "http://$CF/" -L        # http → 301 후 200 (redirect-to-https)
-```
+   # (4) 객체 키 — mark 2-1
+   aws s3api list-objects-v2 --bucket $BUCKET --query 'Contents[].Key'
+   # 기대: ["web/main/index.html", "web/main/main.jpeg"]
 
-배포 완료 대기가 필요하면: `aws cloudfront wait distribution-deployed --id <배포ID>`.
+   # (5) 접근 경로: CloudFront 만 허용
+   curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/"          # 기대: 200
+   curl.exe -s -o NUL -w "%{http_code}`n" "https://$BUCKET.s3.ap-northeast-2.amazonaws.com/web/main/index.html"  # 기대: 403
+   curl.exe -s -o NUL -w "%{http_code}`n" "http://$CF/" -L        # http → 301 후 200 (redirect-to-https)
+   ```
 
-### 4) (심화) root-less 키 정책으로 재작성
+   배포 완료 대기가 필요하면: `aws cloudfront wait distribution-deployed --id <배포ID>`.
 
-set-03 유의사항을 가정하고 s3 키 정책에서 root statement 를 제거:
+4. **(심화) root-less 키 정책으로 재작성**
 
-1. `data "aws_iam_session_context"` + `aws_caller_identity` 로 배포자 ARN 조회
-2. `kms:*` 없이 admin 액션을 개별 나열한 `kms_admin` 문서 작성 (`kms:Create*`, `kms:Put*` 포함 필수)
-3. apply 후 정책 텍스트 자가 grep:
+   set-03 유의사항을 가정하고 s3 키 정책에서 root statement 를 제거:
 
-```powershell
-aws kms get-key-policy --key-id alias/wskorea26-s3-key --policy-name default --output text | Select-String -Pattern ':root|kms:\*'
-# 기대: 출력 없음 (있으면 set-03 mark 실격)
-```
+   - `data "aws_iam_session_context"` + `aws_caller_identity` 로 배포자 ARN 조회
+   - `kms:*` 없이 admin 액션을 개별 나열한 `kms_admin` 문서 작성 (`kms:Create*`, `kms:Put*` 포함 필수)
+   - apply 후 정책 텍스트 자가 grep:
 
-`kms:Put*` 를 빼고 apply 해 보면 `MalformedPolicyDocumentException: ... will prevent you from managing the key`(lockout safety check) 를 볼 수 있다.
+   ```powershell
+   aws kms get-key-policy --key-id alias/wskorea26-s3-key --policy-name default --output text | Select-String -Pattern ':root|kms:\*'
+   # 기대: 출력 없음 (있으면 set-03 mark 실격)
+   ```
 
-### 5) 정답과 diff
+   `kms:Put*` 를 빼고 apply 해 보면 `MalformedPolicyDocumentException: ... will prevent you from managing the key`(lockout safety check) 를 볼 수 있다.
 
-```powershell
-git diff --no-index .\kms.tf C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\kms.tf
-git diff --no-index .\s3.tf  C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\s3.tf
-git diff --no-index .\cloudfront.tf C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\cloudfront.tf
-# 심화 diff
-git diff --no-index .\kms.tf C:\Users\kryuk\practice\skills-2026\set-03\task-1\terraform\kms.tf
-```
+5. **정답과 diff**
 
-확인 관점: `source_policy_documents` 합성 여부, `bucket_key_enabled`, `content_type` 처리, comment 로 배포 식별, 버킷 정책 SourceArn vs 키 정책 SourceAccount 구분.
+   ```powershell
+   git diff --no-index .\kms.tf C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\kms.tf
+   git diff --no-index .\s3.tf  C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\s3.tf
+   git diff --no-index .\cloudfront.tf C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\cloudfront.tf
+   # 심화 diff
+   git diff --no-index .\kms.tf C:\Users\kryuk\practice\skills-2026\set-03\task-1\terraform\kms.tf
+   ```
+
+   확인 관점: `source_policy_documents` 합성 여부, `bucket_key_enabled`, `content_type` 처리, comment 로 배포 식별, 버킷 정책 SourceArn vs 키 정책 SourceAccount 구분.
+
+</Steps>
 
 ## :badge[함정]{variant=danger} 목록
 
@@ -158,4 +164,6 @@ aws s3api head-bucket --bucket $BUCKET 2>&1            # 404 여야 함
 aws kms describe-key --key-id alias/wskorea26-s3-key 2>&1   # NotFoundException (alias 삭제됨)
 ```
 
+:::note[실측]
 KMS 키는 즉시 삭제되지 않고 **PendingDeletion(7일)** 상태로 남는다 — 정상이며 대기 중 과금 없음. 같은 이름 키를 바로 다시 만들어도 alias 는 재사용 가능(이전 alias 는 destroy 로 삭제됨).
+:::

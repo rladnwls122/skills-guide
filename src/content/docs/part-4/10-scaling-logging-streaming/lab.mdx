@@ -3,6 +3,8 @@ title: Lab 10 — 오토스케일링 + 로깅 (유형 5 스트리밍은 실습 �
 description: 유형 3 SQS→KEDA→Karpenter와 유형 4 OTel→Loki→Grafana를 순서·검증·함정 중심으로 배포하고, 유형 5는 암기 체크로 대체한다.
 ---
 
+import { Steps } from '@astrojs/starlight/components';
+
 > 문서 유형: tutorial
 
 정답지: `skills-2026/set-07/task-2/`. terraform은 본 PC(PowerShell), 클러스터/헬름/이미지 빌드는 CloudShell(Docker 내장)에서 한다 — 채점과 같은 셸이라 클러스터 생성자 신원 = 채점 신원이 자동 일치한다. 상세 명령 전문은 각 모듈 README 런북에 있다. 이 랩은 순서·검증·함정에 집중한다.
@@ -20,12 +22,16 @@ description: 유형 3 SQS→KEDA→Karpenter와 유형 4 OTel→Loki→Grafana�
 
 ### A-1. 절차 (순서 요약)
 
+<Steps>
+
 1. **본 PC**: `module-3-eks-scaling/terraform` apply → `outputs.json` → eksctl/k8s/mark/provided+outputs.json을 zip으로 CloudShell 반입.
 2. **CloudShell**: eksctl·helm 설치 → `~/.skm-env` 환경변수 영구화 → `eksctl create cluster`(~20분, **탭 닫지 말 것**).
 3. 앱 이미지 빌드/푸시 (제공 Dockerfile 그대로).
 4. **KEDA 2.20.1** 설치 — `serviceAccount.operator.create=false`(IRSA용 keda-operator 재사용) + addon taint `tolerations` 지정.
 5. **Karpenter 1.14.0** 설치(kube-system) — `controller.resources.requests.cpu=0.5, memory=512Mi`로 낮춤(addon 노드 용량).
 6. k8s 번호 순서 apply: namespace → **NodePool 먼저** → deployment(`<ECR_IMAGE>`/`<SQS_URL>` sed 치환) → ScaledObject.
+
+</Steps>
 
 ### A-2. 검증 + 기대 출력
 
@@ -69,6 +75,8 @@ kubectl get nodes -l karpenter.sh/nodepool=skm-app-nodepool   # 1대로 수렴
 
 ### B-1. 절차 (순서 요약 — 순서 의존이 많다)
 
+<Steps>
+
 1. **본 PC**: `module-4-container-logging/terraform` apply (VPC + **이름 고정 ALB/TG** + ECR + LBC IAM) → zip 반입.
 2. **CloudShell**: `~/.o11y-env` → `eksctl create cluster`(~20분) → 노드 2대가 AZ a/c로 분산됐는지 확인.
 3. 이미지 빌드: **제공 app.py + 자체 app/Dockerfile** (제공 Dockerfile은 flask 미설치 → CrashLoop).
@@ -77,6 +85,8 @@ kubectl get nodes -l karpenter.sh/nodepool=skm-app-nodepool   # 1대로 수렴
 6. **Loki 18.5.1** (`grafana-community` 저장소 — `grafana/loki`는 GEL 전용) → svc `o11y-loki` 3100 확인.
 7. **OTel DaemonSet apply는 Loki 이후** (otlphttp 전송 대상 먼저).
 8. **Grafana 10.5.15** + 대시보드 ConfigMap + Grafana TGB.
+
+</Steps>
 
 ### B-2. 검증 + 기대 출력
 
@@ -146,5 +156,8 @@ cd skills-2026\set-07\task-2\module-3-eks-scaling\terraform ; terraform destroy 
 cd ..\..\module-4-container-logging\terraform ; terraform destroy -auto-approve
 ```
 
-- Karpenter 노드가 남은 채 클러스터를 지우면 고아 EC2가 남을 수 있다 — NodePool 삭제 후 노드 반환을 확인하고 클러스터 삭제.
 - destroy 후 EC2/ALB/NAT가 콘솔에 안 남았는지 눈으로 확인한다.
+
+:::caution[삭제 순서]
+Karpenter 노드가 남은 채 클러스터를 지우면 **고아 EC2가 남는다** — NodePool 삭제 후 노드 반환을 확인하고 클러스터를 삭제한다.
+:::

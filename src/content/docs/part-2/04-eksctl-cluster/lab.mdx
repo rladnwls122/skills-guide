@@ -36,7 +36,10 @@ $c | Set-Content cluster.rendered.yaml
 Select-String '\$\{' cluster.rendered.yaml
 ```
 
+:::caution[생략 금지]
 기대 출력: **아무것도 없음**. 한 줄이라도 나오면 해당 변수가 env에 없는 것 — `.env.ps1` 재확인.
+치환이 남은 채로 생성에 들어가면 20분을 버린다.
+:::
 
 ## 2. 클러스터 생성 (~20분)
 
@@ -96,7 +99,9 @@ wskorea26-app-ng        t3.medium       wskorea26-app-node
 kubectl get pod -n kube-system -o wide
 ```
 
+:::danger[mark 5-4]
 기대: coredns 2개가 addon 노드 위. `eks-pod-identity-agent`, `metrics-server`가 **보이면 안 된다**.
+:::
 
 ## 4. :badge[함정]{variant=danger} 정리
 
@@ -128,7 +133,9 @@ eksctl create addon -f cluster.rendered.yaml                                    
 
 ## 6. 정리
 
-> **05로 바로 이어가면 클러스터 유지 (README destroy 방침 예외).**
+:::caution[과금 주의]
+**05로 바로 이어가면 클러스터 유지 (README destroy 방침 예외).** 이어가지 않으면 아래로 삭제한다.
+:::
 
 당일 종료 시:
 

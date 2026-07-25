@@ -3,6 +3,8 @@ title: 08. Fully-Private EKS + IAM 심화
 description: "fully-private EKS 운용, 머신 3분할, audit role 이중 평가 등 하드모드 학습 목표."
 ---
 
+import { FileTree, LinkButton } from '@astrojs/starlight/components';
+
 > 문서 유형: 개요
 
 ## 학습 목표
@@ -29,7 +31,9 @@ description: "fully-private EKS 운용, 머신 3분할, audit role 이중 평가
 | EKS + 노드 (실습 B) | 약 $0.31/h | PART-2 클러스터 재사용, 실습 후 destroy |
 | VPC Interface Endpoint | 개당 약 $0.013/h + AZ당 | 실습 B에서 만들면 반드시 삭제 |
 
-> 실습 A(IAM audit role)는 클러스터 없이 즉시 가능하고 무료 — 먼저 한다.
+:::tip
+실습 A(IAM audit role)는 클러스터 없이 즉시 가능하고 무료 — 먼저 한다.
+:::
 
 ## 선행 지식
 
@@ -49,12 +53,25 @@ description: "fully-private EKS 운용, 머신 3분할, audit role 이중 평가
 
 ## 참고 경로
 
-- `C:\Users\kryuk\practice\skills-2026\set-03\task-1\eksctl\cluster.yaml` (privateCluster + overrideBootstrapCommand)
-- `C:\Users\kryuk\practice\skills-2026\set-03\task-1\terraform\endpoints.tf` (eks/eks-auth Endpoint 함정 주석)
-- `C:\Users\kryuk\practice\skills-2026\set-03\task-1\terraform\kms.tf` (root-less 키 정책)
-- `C:\Users\kryuk\practice\skills-2026\set-07\task-1\terraform\iam.tf` (audit role 완본)
-- `C:\Users\kryuk\practice\skills-2026\set-07\task-1\README.md` (머신 3분할·bastion 런북)
-- `C:\Users\kryuk\practice\skills-2026\docs\src\content\docs\setlist\set-03\task-1\notes.md` (실측 함정 기록)
+전부 `C:\Users\kryuk\practice\` 아래.
+
+<FileTree>
+
+- skills-2026
+  - set-03/task-1
+    - eksctl
+      - **cluster.yaml** privateCluster + overrideBootstrapCommand
+    - terraform
+      - **endpoints.tf** eks/eks-auth Endpoint 함정 주석
+      - **kms.tf** root-less 키 정책
+  - set-07/task-1
+    - terraform
+      - **iam.tf** audit role 완본
+    - **README.md** 머신 3분할·bastion 런북
+  - docs/src/content/docs/setlist/set-03/task-1
+    - **notes.md** 실측 함정 기록
+
+</FileTree>
 
 ## 공식 문서
 
@@ -64,3 +81,8 @@ description: "fully-private EKS 운용, 머신 3분할, audit role 이중 평가
 - [`sts:ExternalId`](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html) — audit role 실습 원문
 - [클러스터 DNS 커스터마이즈](https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/) — CoreDNS Corefile 수정
 - [CloudFront 개발자 안내서](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/) — VPC origins·prefix list 절 참조
+
+## 다음 단계
+
+<LinkButton href="/part-3/08-private-eks-iam/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-3/08-private-eks-iam/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

@@ -52,7 +52,11 @@ graph TD
 
 **① 한 줄 정의** — Origin 2개(ALB 커스텀/S3 OAC)를 가진 배포에서, viewer-request CloudFront Function이 POST /book만 /v1/book으로 재작성한다.
 
-**② 왜 (채점 관점)** — 제공 book 바이너리는 **`POST /v1/book`과 `GET /health`만 서빙하며 수정 금지**다. 그런데 채점은 `https://<CF>/book`으로 POST(9-1)·GET(9-2)·에러(9-3)를 시험한다. **ALB는 경로 재작성이 불가능**하므로 CloudFront Function이 유일한 해법이고, GET은 애초에 앱이 아닌 Lambda가 처리한다.
+**② 왜 (채점 관점)**
+
+:::danger[제공 자료 수정 금지]
+제공 book 바이너리는 **`POST /v1/book`과 `GET /health`만 서빙하며 수정 금지**다. 그런데 채점은 `https://<CF>/book`으로 POST(9-1)·GET(9-2)·에러(9-3)를 시험한다. **ALB는 경로 재작성이 불가능**하므로 CloudFront Function이 유일한 해법이고, GET은 애초에 앱이 아닌 Lambda가 처리한다.
+:::
 
 **③ 원리**
 
@@ -74,9 +78,9 @@ sequenceDiagram
     A->>A: 규칙 p20 (헤더만) → lambda-tg
 ```
 
-실측 함수 전문 (`book-rewrite.js` — 이 이상 절대 복잡하게 만들지 말 것):
+실측 함수 전문 (이 이상 절대 복잡하게 만들지 말 것):
 
-```javascript
+```javascript title="terraform/cloudfront/book-rewrite.js"
 function handler(event) {
     var request = event.request;
     if (request.method === 'POST' && request.uri === '/book') {

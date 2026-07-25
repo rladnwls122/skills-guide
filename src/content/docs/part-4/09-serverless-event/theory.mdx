@@ -41,13 +41,20 @@ flowchart LR
 
 1. **S3 트리거 suffix `.csv`** — 처리 Lambda가 `error/`에 `.json`을 쓰는데, suffix 필터가 없으면 그 쓰기가 다시 트리거를 발화해 **재귀 무한루프**가 된다. suffix `.csv` 하나로 차단(출력이 `.json`이라 매치 안 됨).
 2. **ASL에서 S3 이동은 Copy+Delete 2상태** — S3에 "move" API는 없다. `MoveToProcessed`(CopyObject) → `DeleteInputProcessed`(DeleteObject)로 상태를 2개로 분리한다. 채점은 상태 이름이 아니라 State Machine [name,type]과 S3/DDB 최종 상태만 본다.
-3. **Decimal 나눗셈** — `Decimal("483")/Decimal("5")` = 정확히 `96.6`. float로 하면 `96.60000000000001`이 되고, 애초에 boto3는 DynamoDB에 float 저장 자체를 거부한다(TypeError). 평균 계산은 반드시 `decimal.Decimal`.
+
+:::note[실측 — Decimal 나눗셈]
+`Decimal("483")/Decimal("5")` = 정확히 `96.6`. float로 하면 `96.60000000000001`이 되고, 애초에 boto3는 DynamoDB에 float 저장 자체를 거부한다(TypeError). 평균 계산은 반드시 `decimal.Decimal`.
+:::
+
 4. **처리 Lambda를 State Machine에서 ARN 직접 호출** — 출력이 `$.result`에 그대로 실려 `.Payload` 언랩이 필요 없다.
 5. **IAM 역할 2개** — Lambda 공용 `wsc2026-lambda-student-role` + Step Functions용 `wsc2026-stepfunction-student-role` (과제가 Lambda 역할을 하나만 명명하므로 두 Lambda가 공용).
 
 ### ④ 채점이 보는 상태
 
-- **처리 Lambda 이름 `wsc2026-student-score-function`은 task.md에 없고 mark에만 있다** — mark.md/mark 스크립트를 반드시 읽고 이름을 그대로 쓴다. 임의 변경 금지.
+:::danger[함정 — 이름이 mark에만 있다]
+**처리 Lambda 이름 `wsc2026-student-score-function`은 task.md에 없고 mark에만 있다.** mark.md/mark 스크립트를 반드시 읽고 이름을 그대로 쓴다. 임의 변경 금지.
+:::
+
 - **S3 폴더 마커는 `input/` 하나만 생성.** `processed/`·`error/`는 실행 후 실제 객체가 생겨 PRE가 뜬다. 마커(0바이트 객체)를 만들어두면 채점의 `aws s3 ls` 목록에 잉여 라인이 출력돼 오답.
 - **채점 직전 리셋 절차 (순서 엄수)**: ① `processed/`·`error/` 비우기 → ② DynamoDB 전 항목 삭제 → ③ `test.csv`를 `input/`에 **정확히 1회** 업로드. 2회 업로드하면 timestamp가 다른 error JSON이 8개가 되어 오답(기대는 4개).
 - 기대 결과: `STU1020 96.6 A` (get-item), `processed/`에 test.csv만, `error/`에 error_*_STU2001/STU2002/STU2004/unknown.json **정확히 4개**.
@@ -169,7 +176,10 @@ flowchart TB
 - **Config 스코프는 EC2 Instance·SecurityGroup만 기록.** 스코프를 넓히면 태그 없는 관리형 리소스(자동 생성 SG, ENI 등)가 required-tags에서 NON_COMPLIANT로 잡혀 "NON_COMPLIANT 0건(None)" 채점이 깨진다.
 - **CloudTrail·Config 첫 평가는 5~10분** — apply 직후 바로 채점하지 말 것. 급하면 `aws configservice start-config-rules-evaluation`으로 강제 트리거.
 - 기대 출력: stop+SSH 인바운드 추가 후 sleep 90 → `EC2 State: running`, `SG Inbound Count: 0`, required-tags NON_COMPLIANT 조회 결과 `None`.
-- **과제지 오타는 그대로 유지** — 예: set-02의 `wsc2026-alaytics-ec2-role`(alaytics). 이름 정확 일치 채점이므로 "고쳐주면" 오답.
+
+:::caution[과제지 오타는 그대로 유지]
+예: set-02의 `wsc2026-alaytics-ec2-role`(alaytics). 이름 정확 일치 채점이므로 "고쳐주면" 오답.
+:::
 
 ### ⑤ 퀴즈
 

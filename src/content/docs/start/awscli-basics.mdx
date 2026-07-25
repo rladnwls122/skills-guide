@@ -4,6 +4,7 @@ description: 프로파일·리전·조회 명령 패턴과 --query·jq 값 추�
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
@@ -48,7 +49,11 @@ flowchart LR
 ## ③ 대회에서 어떻게 쓰이나
 
 - **mark.sh가 전부 aws cli + jq다.** `aws eks describe-cluster ... | jq -r '...'` 같은 줄을 읽을 줄 알면 "채점이 정확히 어떤 필드를 보는지" 역추적할 수 있다 — 대회 전 최대 무기.
-- 대회 작업 환경 자체가 CloudShell인 유형이 많다. 프로파일/리전이 잘못돼 있으면 모든 명령이 엉뚱한 곳을 보게 된다 — 시작 시 `sts get-caller-identity`와 리전 확인이 루틴.
+- 대회 작업 환경 자체가 CloudShell인 유형이 많다.
+
+:::caution[프로파일·리전 확인이 시작 루틴]
+프로파일/리전이 잘못돼 있으면 모든 명령이 조용히 엉뚱한 곳을 본다. 셸을 열자마자 `sts get-caller-identity` 와 리전 확인.
+:::
 
 ## ④ 미니 실습 (15분, 조회만 — 과금 없음)
 
@@ -57,17 +62,28 @@ flowchart LR
 ```bash
 aws sts get-caller-identity            # 신원 확인 루틴
 aws ec2 describe-vpcs --output table   # 전체를 표로 훑기
-
-# 방법 1: --query (JMESPath)
-aws ec2 describe-vpcs --query 'Vpcs[0].VpcId' --output text
-
-# 방법 2: jq
-aws ec2 describe-vpcs | jq -r '.Vpcs[0].VpcId'
-
-# 응용: 전체 VPC의 ID+CIDR 쌍
-aws ec2 describe-vpcs --query 'Vpcs[].[VpcId,CidrBlock]' --output text
-aws ec2 describe-vpcs | jq -r '.Vpcs[] | "\(.VpcId) \(.CidrBlock)"'
 ```
+
+같은 값을 두 방식으로 뽑아 본다:
+
+<Tabs syncKey="tool">
+  <TabItem label="--query (JMESPath)">
+  ```bash
+  aws ec2 describe-vpcs --query 'Vpcs[0].VpcId' --output text
+
+  # 응용: 전체 VPC의 ID+CIDR 쌍
+  aws ec2 describe-vpcs --query 'Vpcs[].[VpcId,CidrBlock]' --output text
+  ```
+  </TabItem>
+  <TabItem label="jq">
+  ```bash
+  aws ec2 describe-vpcs | jq -r '.Vpcs[0].VpcId'
+
+  # 응용: 전체 VPC의 ID+CIDR 쌍
+  aws ec2 describe-vpcs | jq -r '.Vpcs[] | "\(.VpcId) \(.CidrBlock)"'
+  ```
+  </TabItem>
+</Tabs>
 
 두 방식의 출력이 같은지 확인. 콘솔에서 CloudShell도 한 번 열어 같은 명령을 실행해 본다 (자격증명 설정 없이 되는 것 확인).
 
@@ -116,8 +132,10 @@ aws ec2 describe-vpcs | jq -r '.Vpcs[] | "\(.VpcId) \(.CidrBlock)"'
 
 ## ⑥ 다음 단계
 
-- 선수 학습 완료 → [선수 지식 개요](/start/)의 완료 체크 후 [PART 1 — Foundation·IaC](/part-1/01-terraform-vpc/) 시작
-- 채점 역추적 훈련: [PART 5 — Battle Drills](/part-5/11-mutation-drill/)
+선수 학습 완료 — [선수 지식 개요](/start/)의 완료 체크를 마친 뒤 PART 1로 넘어간다. 채점 역추적 훈련은 [PART 5 — Battle Drills](/part-5/11-mutation-drill/)에서 이어진다.
+
+<LinkButton href="/part-1/01-terraform-vpc/" icon="right-arrow">PART 1 시작</LinkButton>
+<LinkButton href="/start/" variant="minimal">완료 체크로 돌아가기</LinkButton>
 
 ## 공식 문서
 

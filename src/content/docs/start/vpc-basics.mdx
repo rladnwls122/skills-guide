@@ -4,6 +4,7 @@ description: VPC·서브넷·IGW·NAT GW·라우팅 테이블의 역할과 퍼�
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Steps, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
@@ -54,23 +55,41 @@ flowchart LR
 
 ## ③ 대회에서 어떻게 쓰이나
 
-- **RTB ↔ 서브넷 매핑이 채점 대상이다.** 서브넷을 만들고 RTB 연결을 빠뜨리면 "이름은 private인데 실제로는 메인 RTB를 타는" 서브넷이 되고, 채점 스크립트(mark.sh)는 라우팅 실체를 본다.
+:::danger[채점 함정 — RTB ↔ 서브넷 매핑]
+서브넷을 만들고 RTB 연결(association)을 빠뜨리면 "이름은 private인데 실제로는 메인 RTB를 타는" 서브넷이 된다. 채점 스크립트(mark.sh)는 이름이 아니라 **라우팅 실체**를 본다.
+:::
+
 - EKS 노드는 프라이빗 서브넷에 배치되므로 NAT 경로가 없으면 이미지 pull부터 실패한다.
 - 이 내용은 **PART-1 모듈 01(Terraform VPC)** 의 직접적인 기반 — 여기서 콘솔로 손에 익힌 구조를 모듈 01에서 코드로 다시 만든다.
 
 ## ④ 미니 실습 (콘솔, 30분)
 
-> ⚠️ NAT GW는 **시간당 + 데이터 과금**. 실습 끝나면 즉시 삭제한다.
+:::caution[과금 주의]
+NAT GW는 **시간당 + 데이터 과금**. 실습 끝나면 즉시 삭제한다.
+:::
 
-1. VPC 생성: `10.0.0.0/16` (VPC만 생성, "VPC 등" 마법사 말고 수동으로)
-2. 서브넷 2개: `10.0.1.0/24` (public 용), `10.0.2.0/24` (private 용) — 같은 AZ
-3. IGW 생성 → VPC에 연결(Attach)
-4. NAT GW 생성 → **퍼블릭 서브넷**에, 탄력적 IP 새로 할당
-5. RTB 2개 생성:
+<Steps>
+
+1. **VPC 생성**: `10.0.0.0/16` (VPC만 생성, "VPC 등" 마법사 말고 수동으로)
+
+2. **서브넷 2개**: `10.0.1.0/24` (public 용), `10.0.2.0/24` (private 용) — 같은 AZ
+
+3. **IGW 생성** → VPC에 연결(Attach)
+
+4. **NAT GW 생성** → **퍼블릭 서브넷**에, 탄력적 IP 새로 할당
+
+5. **RTB 2개 생성**
+
    - public-rtb: `0.0.0.0/0 → IGW`, 서브넷 `10.0.1.0/24` 연결
    - private-rtb: `0.0.0.0/0 → NAT GW`, 서브넷 `10.0.2.0/24` 연결
-6. 각 서브넷 상세에서 "라우팅 테이블" 탭을 열어 매핑을 눈으로 확인
-7. **즉시 삭제 (순서 중요)**: NAT GW 삭제 → 탄력적 IP 릴리스 → IGW 분리·삭제 → 서브넷 → RTB → VPC
+
+6. **매핑 확인**: 각 서브넷 상세에서 "라우팅 테이블" 탭을 열어 눈으로 확인
+
+7. **즉시 삭제 (순서 중요)**
+
+   NAT GW 삭제 → 탄력적 IP 릴리스 → IGW 분리·삭제 → 서브넷 → RTB → VPC
+
+</Steps>
 
 ## ⑤ 자기 점검 퀴즈
 
@@ -117,8 +136,10 @@ SG = **스테이트풀**(나간 트래픽의 응답은 자동 허용), NACL = **
 
 ## ⑥ 다음 단계
 
-- [PART 1 — Foundation·IaC](/part-1/01-terraform-vpc/) — 모듈 01에서 이 구조를 Terraform으로 재현
-- 다음 선수 학습: [IAM 기초](/start/iam-basics/)
+모듈 01에서 이 구조를 Terraform으로 재현한다.
+
+<LinkButton href="/start/iam-basics/" icon="right-arrow">다음 선수 학습 — IAM 기초</LinkButton>
+<LinkButton href="/part-1/01-terraform-vpc/" variant="minimal">PART 1 — Foundation·IaC</LinkButton>
 
 ## 공식 문서
 

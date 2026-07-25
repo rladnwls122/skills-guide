@@ -3,6 +3,8 @@ title: 01. Terraform 문법 + VPC (Day 1)
 description: "Day 1 모듈 개요 — HCL 문법과 set-02 VPC(서브넷 4·NAT 2·RTB 3) 학습 목표, 소요 시간, NAT 과금 방침, 선행 지식."
 ---
 
+import { FileTree, LinkButton } from '@astrojs/starlight/components';
+
 > 문서 유형: 개요
 
 ## 학습 목표
@@ -26,7 +28,9 @@ description: "Day 1 모듈 개요 — HCL 문법과 set-02 VPC(서브넷 4·NAT 
 | EIP ×2 | NAT 에 붙어있는 동안 무료, destroy 시 함께 해제 | destroy 로 자동 정리 |
 | VPC/서브넷/IGW/RTB | 무료 | destroy 로 함께 정리 |
 
+:::caution[과금 주의]
 **절대 NAT 를 밤새 켜두지 않는다.** 실습을 이어서 하려면 다음 날 다시 apply 한다 (state 가 로컬이므로 apply 만 다시 하면 됨).
+:::
 
 ## 선행 지식
 
@@ -43,13 +47,19 @@ description: "Day 1 모듈 개요 — HCL 문법과 set-02 VPC(서브넷 4·NAT 
 
 ## 참고 경로 (정답지)
 
-- `skills-2026/set-02/task-1/terraform/vpc.tf` — VPC/서브넷/NAT/RTB 정답
-- `skills-2026/set-02/task-1/terraform/variables.tf` — 변수 설계 정답
-- `skills-2026/set-02/task-1/terraform/data.tf` — locals·caller_identity 패턴
-- `skills-2026/set-02/task-1/terraform/versions.tf` — provider 고정 패턴
-- `skills-2026/set-02/task-1/terraform/terraform.tfvars` — 세트 고유값 주입 패턴
-- `skills-2026/set-02/task-1/terraform/outputs.tf` — output 설계 정답
-- `skills-2026/set-02/task-1/README.md` §"작업 변수 영구화" — output → .env 영속화 실측 절차
+<FileTree>
+
+- skills-2026/set-02/task-1
+  - terraform
+    - vpc.tf VPC/서브넷/NAT/RTB 정답
+    - variables.tf 변수 설계 정답
+    - data.tf locals·caller_identity 패턴
+    - versions.tf provider 고정 패턴
+    - terraform.tfvars 세트 고유값 주입 패턴
+    - outputs.tf output 설계 정답
+  - README.md §"작업 변수 영구화" — output → .env 영속화 실측 절차
+
+</FileTree>
 
 ## 공식 문서
 
@@ -58,3 +68,8 @@ description: "Day 1 모듈 개요 — HCL 문법과 set-02 VPC(서브넷 4·NAT 
 - [AWS provider 리소스 색인](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) — `aws_vpc`·`aws_subnet`·`aws_route_table` 인자와 반환 속성(Attribute Reference)
 - [Terraform CLI 명령](https://developer.hashicorp.com/terraform/cli/commands) — `plan`/`apply`/`output`/`-target` 옵션
 - [Amazon VPC 사용 설명서](https://docs.aws.amazon.com/vpc/latest/userguide/) — 라우팅·NAT·엔드포인트 개념 원문
+
+## 다음 단계
+
+<LinkButton href="/part-1/01-terraform-vpc/theory/" icon="right-arrow">이론 읽기</LinkButton>
+<LinkButton href="/part-1/01-terraform-vpc/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

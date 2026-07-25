@@ -3,6 +3,8 @@ title: 03. 컨테이너(ECR) + Lambda + DynamoDB (Day 3)
 description: "Day 3 모듈 개요 — Dockerfile 베이스 선택, ECR 스캔, DynamoDB 설계, ALB 통합 Lambda 학습 목표."
 ---
 
+import { FileTree, LinkButton } from '@astrojs/starlight/components';
+
 > 문서 유형: 개요
 
 ## 학습 목표
@@ -27,7 +29,9 @@ description: "Day 3 모듈 개요 — Dockerfile 베이스 선택, ECR 스캔, D
 | KMS CMK 1개 | 월 $1 일할 | destroy → 7일 대기 |
 | CloudWatch Logs | 저장 소액 | destroy 로 함께 삭제 |
 
+:::caution[destroy 순서 주의]
 시간당 폭탄 리소스는 없지만, **DynamoDB 는 `deletion_protection_enabled = true` 상태에서 destroy 가 실패한다** — 정리 절차(lab.md §정리)를 반드시 따른다.
+:::
 
 ## 선행 지식
 
@@ -44,13 +48,20 @@ description: "Day 3 모듈 개요 — Dockerfile 베이스 선택, ECR 스캔, D
 
 ## 참고 경로 (정답지)
 
-- `skills-2026/set-02/task-1/app/Dockerfile` — alpine 고정 + tzdata + 비루트 유저
-- `skills-2026/set-02/task-1/terraform/ecr.tf` — scanOnPush + KMS(관리형 aws/ecr)
-- `skills-2026/set-02/task-1/terraform/dynamodb.tf` — PK/GSI/PITR/삭제방지
-- `skills-2026/set-02/task-1/terraform/lambda.tf` — 최소권한 실행역할 + 환경변수 주입
-- `skills-2026/set-02/task-1/terraform/lambda/index.py` — ALB 통합 핸들러 정답
-- `skills-2026/set-02/task-1/README.md` §2 — CloudShell 빌드/push/스캔 확인 실측 명령
-- `skills-2026/set-02/task-2/module-1-workflow/terraform/lambda/index.py` — Decimal 평균 계산 실측
+<FileTree>
+
+- skills-2026/set-02
+  - task-1
+    - app/Dockerfile alpine 고정 + tzdata + 비루트 유저
+    - terraform
+      - ecr.tf scanOnPush + KMS(관리형 aws/ecr)
+      - dynamodb.tf PK/GSI/PITR/삭제방지
+      - lambda.tf 최소권한 실행역할 + 환경변수 주입
+      - lambda/index.py ALB 통합 핸들러 정답
+    - README.md §2 — CloudShell 빌드/push/스캔 확인 실측 명령
+  - task-2/module-1-workflow/terraform/lambda/index.py Decimal 평균 계산 실측
+
+</FileTree>
 
 ## 공식 문서
 
@@ -59,3 +70,8 @@ description: "Day 3 모듈 개요 — Dockerfile 베이스 선택, ECR 스캔, D
 - [DynamoDB 개발자 안내서](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/) — PK/GSI 설계, PITR
 - [ALB의 Lambda 대상](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html) — 502를 만드는 응답 포맷 요구사항
 - [boto3 DynamoDB 레퍼런스](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html) — `Query` 인자와 Decimal 타입
+
+## 다음 단계
+
+<LinkButton href="/part-1/03-container-lambda-dynamodb/theory/" icon="right-arrow">이론 읽기</LinkButton>
+<LinkButton href="/part-1/03-container-lambda-dynamodb/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

@@ -4,6 +4,7 @@ description: 사용자·역할·정책 JSON과 AssumeRole 흐름, 대회에서 r
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Steps, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
@@ -60,22 +61,35 @@ sequenceDiagram
 
 ## ③ 대회에서 어떻게 쓰이나
 
-- **root 금지 이유**: 대회 유형의 KMS 키 정책은 **root-less** — root를 Principal에서 뺀다. root로 리소스를 만들면 이후 KMS 사용이 전부 거부되어 복구 불가에 가깝다.
+:::danger[root 상시 사용 금지]
+대회 유형의 KMS 키 정책은 **root-less** — root를 Principal에서 뺀다. root로 리소스를 만들면 이후 KMS 사용이 전부 거부되어 복구 불가에 가깝다.
+:::
+
 - **생성자 = 채점자 신원**: EKS 클러스터를 만든 IAM 신원만 기본 kubectl 접근을 가진다. 채점 스크립트(mark.sh)가 도는 신원과 생성 신원이 다르면 채점 자체가 실패한다. 처음부터 IAM 사용자 하나로 통일하는 습관이 곧 점수다.
 - 이 내용은 **PART-3 모듈 08(IAM 심화)** — IRSA, aws-auth, KMS 키 정책 — 의 기반이다.
 
 ## ④ 미니 실습 (15분, 과금 없음)
 
-1. 콘솔(root 또는 기존 관리자)에서 IAM 사용자 생성: 이름 `skills-admin`, 정책 `AdministratorAccess` 직접 연결, 액세스 키 발급 (CLI 용도)
-2. 로컬에서 자격증명 등록 후 신원 확인:
+<Steps>
 
-```bash
-aws configure   # 액세스 키, 시크릿, 리전 ap-northeast-2, 출력 json
-aws sts get-caller-identity
-```
+1. **IAM 사용자 생성**
 
-3. 출력의 `Arn`이 `arn:aws:iam::<계정ID>:user/skills-admin`인지 확인 — `root`가 보이면 잘못 설정된 것.
-4. 이 사용자를 **앞으로 모든 학습의 단일 신원**으로 사용한다. (삭제하지 않고 유지)
+   콘솔(root 또는 기존 관리자)에서 이름 `skills-admin`, 정책 `AdministratorAccess` 직접 연결, 액세스 키 발급 (CLI 용도).
+
+2. **로컬에서 자격증명 등록 후 신원 확인**
+
+   ```bash
+   aws configure   # 액세스 키, 시크릿, 리전 ap-northeast-2, 출력 json
+   aws sts get-caller-identity
+   ```
+
+3. **`Arn` 확인**
+
+   `arn:aws:iam::<계정ID>:user/skills-admin` 인지 확인 — `root`가 보이면 잘못 설정된 것.
+
+4. **이 사용자를 앞으로 모든 학습의 단일 신원으로 사용한다** (삭제하지 않고 유지)
+
+</Steps>
 
 ## ⑤ 자기 점검 퀴즈
 
@@ -117,8 +131,10 @@ EKS 클러스터를 root 사용자로 생성하면 대회에서 어떤 문제가
 
 ## ⑥ 다음 단계
 
-- [PART 3 — 관측성·Hard Mode](/part-3/07-observability/) — 모듈 08 IAM 심화 (IRSA, KMS 키 정책)
-- 다음 선수 학습: [Docker 기초](/start/docker-basics/)
+모듈 08에서 IRSA·aws-auth·KMS 키 정책으로 심화한다.
+
+<LinkButton href="/start/docker-basics/" icon="right-arrow">다음 선수 학습 — Docker 기초</LinkButton>
+<LinkButton href="/part-3/07-observability/" variant="minimal">PART 3 — 관측성·Hard Mode</LinkButton>
 
 ## 공식 문서
 

@@ -113,9 +113,13 @@ flowchart LR
     P -->|PodMonitor port metrics /metrics 15s| PR[Prometheus]
 ```
 
-- 실제 노출되는 이름에는 **`log_metric_counter_` / `log_metric_histogram_` 접두어가 자동으로 붙는다**:
-  `log_metric_counter_wsc2026_requests_total`, `log_metric_histogram_wsc2026_request_duration_seconds_{bucket,sum,count}`.
-- **배포 후 반드시 `:2021/metrics`를 curl 해서 실제 메트릭명을 확인**하고 prometheus-rules.yaml / dashboard.json의 이름과 대조한다. 접두어 규칙이 버전에 따라 다를 수 있어 실측이 원칙.
+:::note[실측 — 메트릭명 접두어]
+실제 노출되는 이름에는 **`log_metric_counter_` / `log_metric_histogram_` 접두어가 자동으로 붙는다**:
+`log_metric_counter_wsc2026_requests_total`, `log_metric_histogram_wsc2026_request_duration_seconds_{bucket,sum,count}`.
+
+**배포 후 반드시 `:2021/metrics`를 curl 해서 실제 메트릭명을 확인**하고 prometheus-rules.yaml / dashboard.json의 이름과 대조한다. 접두어 규칙이 버전에 따라 다를 수 있어 실측이 원칙.
+:::
+
 - PodMonitor가 붙으려면 kps values에 `podMonitorSelectorNilUsesHelmValues: false`가 있어야 release 라벨 없이도 선택된다.
 - **함정**: `aws-for-fluent-bit` 이미지에 log_to_metrics가 빠진 빌드가 있다. 필터가 안 먹으면 upstream `fluent/fluent-bit` 최신 안정 태그로 이미지만 교체(설정 호환).
 
@@ -152,7 +156,10 @@ flowchart TD
 - 대시보드 import는 **configmap 생성 → `grafana_dashboard=1` 라벨** 두 단계. 라벨을 빼먹으면 sidecar가 무시한다.
 - cloudwatch datasource는 `authType: default` — Grafana SA에 Pod Identity(grafana-role)를 연결해 인증한다.
 - 알람 6종(set-03 Reference02): PodHighCPU(80%/3m), PodHighMemory(90%/3m), PodNotReady, HighErrorRate(5%/1m), HighLatency(평균 3s/1m), PodCrashLooping(재시작>3).
-- **발화 불가 항목은 사양대로 구현만 한다**: set-03 실측 — 제공 바이너리에 `/delay` 엔드포인트가 없어(404, µs 응답) HighLatency는 채점 latency-gen으로 발화시킬 수 없다. 나머지 5종은 채점 부하 파드로 발화된다. 룰을 임의로 낮춰 억지로 발화시키면 사양 불일치 감점.
+
+:::danger[함정 — 발화 불가 항목은 사양대로 구현만]
+set-03 실측: 제공 바이너리에 `/delay` 엔드포인트가 없어(404, µs 응답) HighLatency는 채점 latency-gen으로 발화시킬 수 없다. 나머지 5종은 채점 부하 파드로 발화된다. **룰을 임의로 낮춰 억지로 발화시키면 사양 불일치 감점.**
+:::
 
 ### ④ 세트별 차이
 

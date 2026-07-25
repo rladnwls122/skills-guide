@@ -18,8 +18,10 @@ description: destroy 후에도 남아 과금되는 리소스를 매일 학습 �
 | CloudWatch 로그 그룹 | Fluent Bit·Lambda가 만든 그룹은 IaC 밖 — 비용은 미미하나 **다음날 재생성 시 이름 충돌** | `aws logs delete-log-group` |
 | ECR 이미지 | 리포는 destroy돼도 `--force` 없으면 이미지 있는 리포는 삭제 실패 | `aws ecr delete-repository --force` |
 
-> 순서 원칙: **k8s ingress/svc 삭제 → 클러스터 삭제 → terraform destroy**.
-> 역순으로 하면 LBC 고아 ALB·SG 때문에 VPC destroy가 `DependencyViolation`으로 막힌다.
+:::caution[순서 원칙]
+**k8s ingress/svc 삭제 → 클러스터 삭제 → terraform destroy**.
+역순으로 하면 LBC 고아 ALB·SG 때문에 VPC destroy가 `DependencyViolation`으로 막힌다.
+:::
 
 ## 일괄 점검 블록 (CloudShell/Git Bash에 통째 붙여넣기)
 
@@ -39,8 +41,10 @@ echo "=== MSK ===" && aws kafka list-clusters-v2 \
   --query 'ClusterInfoList[].[ClusterName,State]' --output text
 ```
 
+:::tip[판정 기준]
 전부 빈 출력(또는 의도적으로 유지 중인 것만)이면 통과. D4→D5처럼 README에 명시된
 유지 예외만 남긴다.
+:::
 
 ## 비용 실측 (다음날 아침 확인)
 

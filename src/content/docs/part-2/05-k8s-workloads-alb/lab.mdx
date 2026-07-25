@@ -51,7 +51,9 @@ kubectl apply -f app/service.yaml -f app/pdb.yaml
 (Get-Content app/targetgroupbinding.yaml -Raw).Replace('<APP_TARGET_GROUP_ARN>', $env:APP_TG) | kubectl apply -f -
 ```
 
-순서 이유: ns가 먼저(리소스의 소속), configmap이 deployment보다 먼저(envFrom 참조), TGB는 service 이후(serviceRef).
+:::caution[순서 이유]
+ns가 먼저(리소스의 소속), configmap이 deployment보다 먼저(envFrom 참조), TGB는 service 이후(serviceRef).
+:::
 
 **검증:**
 
@@ -126,7 +128,9 @@ kubectl -n wskorea26 get pod -w      # Ctrl+C로 중단
 
 ## 7. 정리
 
-06으로 이어가면 **전부 유지**. 여기서 끝내면:
+:::caution[과금 주의]
+06으로 이어가면 **전부 유지**. 여기서 끝내면 아래 순서대로 — DynamoDB 삭제방지를 먼저 해제해야 `terraform destroy` 가 막히지 않는다.
+:::
 
 ```powershell
 helm -n kube-system uninstall aws-load-balancer-controller

@@ -3,14 +3,20 @@ title: 3과제 부하 운영 실습 — 배포 · 부하 · 조정 드릴
 description: T+50분 배포 타임라인, 사전 워밍, k6 3단 프로파일, 감시 루프, 튜닝 노브 표와 부하 중 장애 10종 드릴.
 ---
 
+import { Steps } from '@astrojs/starlight/components';
+
 > 문서 유형: how-to
 
 ## 규칙
 
 - 정답지(`skills-2026/task-3`)의 `README.md`를 런북으로 쓰되, **타이머를 켜고** 실행한다. 목표는 T+50분 배포 완료다.
-- 부하는 자기 CloudFront 도메인에만 주입한다. 드릴이 끝나면 부하부터 멈춘다.
 - 조정은 반드시 **관측 → 노브 1개 변경 → 재측정** 순서로 한다. 부하 중에 두 개를 동시에 바꾸면 어느 쪽이 들었는지 알 수 없다.
-- 드릴 1회는 3시간 안에 끝내고 destroy한다 ([모듈 개요](/part-6/14-task3-load-ops/)의 과금 절차).
+
+:::caution[부하 주입 대상과 정리]
+부하는 자기 CloudFront 도메인에만 주입한다. 드릴이 끝나면 부하부터 멈춘다.
+
+드릴 1회는 3시간 안에 끝내고 destroy한다 ([모듈 개요](/part-6/14-task3-load-ops/)의 과금 절차).
+:::
 
 ## 준비
 
@@ -104,19 +110,34 @@ kubectl delete -f warm.yaml   # 자리를 실제 파드에 넘긴다
 
 정답지의 `script/load.js`를 그대로 쓴다. 임계값이 채점표와 같아 빨간불이 곧 감점이다.
 
-```powershell
-# ── Windows PowerShell ──
-$env:BASE_URL = $CF
+<Steps>
 
-# ① Ramp — 정상 부하에서 SLO를 지키는지
-$env:VUS='20'; $env:DURATION='2m'; k6 run script/load.js
+1. **BASE_URL 지정**
 
-# ② Spike — 스텝 증가에 스케일이 따라붙는지
-$env:VUS='80'; $env:DURATION='1m'; k6 run script/load.js
+   ```powershell
+   # ── Windows PowerShell ──
+   $env:BASE_URL = $CF
+   ```
 
-# ③ Soak — 지속 부하에서 DB·커넥션·크레딧이 버티는지
-$env:VUS='40'; $env:DURATION='10m'; k6 run script/load.js
-```
+2. **① Ramp** — 정상 부하에서 SLO를 지키는지
+
+   ```powershell
+   $env:VUS='20'; $env:DURATION='2m'; k6 run script/load.js
+   ```
+
+3. **② Spike** — 스텝 증가에 스케일이 따라붙는지
+
+   ```powershell
+   $env:VUS='80'; $env:DURATION='1m'; k6 run script/load.js
+   ```
+
+4. **③ Soak** — 지속 부하에서 DB·커넥션·크레딧이 버티는지
+
+   ```powershell
+   $env:VUS='40'; $env:DURATION='10m'; k6 run script/load.js
+   ```
+
+</Steps>
 
 각 회차마다 기록한다: `http_req_duration{app:*}`의 p(90), `http_req_failed` 비율, 최대 노드 수, 최대 파드 수.
 

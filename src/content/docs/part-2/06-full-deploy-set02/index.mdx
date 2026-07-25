@@ -3,6 +3,8 @@ title: 06. set-02 1과제 완주 — 배포 10단계 런북 훈련
 description: "set-02 1과제 배포 10단계 런북과 백지 도식·mark.sh 득점 목표."
 ---
 
+import { LinkButton } from '@astrojs/starlight/components';
+
 > 문서 유형: 개요
 
 ## 학습 목표
@@ -26,8 +28,10 @@ description: "set-02 1과제 배포 10단계 런북과 백지 도식·mark.sh �
 | NAT x 2, ALB x 2 | ~$0.28/h |
 | CloudFront / Lambda / DynamoDB / S3 | 사용량 기반 (실습 수준 ~무료) |
 
-> **Day 6 → Day 7은 전체 유지** (완주 흐름 유지가 목적).
-> **Day 7 종료 시 반드시 10단계 정리 절차로 전부 삭제** — helm → eksctl → DynamoDB 삭제방지 해제 → terraform destroy 순서를 지켜야 destroy가 안 막힌다.
+:::danger[정리 순서 엄수]
+**Day 6 → Day 7은 전체 유지** (완주 흐름 유지가 목적).
+**Day 7 종료 시 반드시 10단계 정리 절차로 전부 삭제** — helm → eksctl → DynamoDB 삭제방지 해제 → terraform destroy 순서를 지켜야 destroy가 안 막힌다.
+:::
 
 ## 선행 지식
 
@@ -54,3 +58,8 @@ description: "set-02 1과제 배포 10단계 런북과 백지 도식·mark.sh �
 - [CloudFront Functions](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-functions.html) — 뷰어 요청 경로 재작성 문법·제약
 - [kubectl 퀵 레퍼런스](https://kubernetes.io/docs/reference/kubectl/quick-reference/) — 검증 단계에서 가장 많이 여는 페이지
 - [AWS CloudShell 사용 설명서](https://docs.aws.amazon.com/cloudshell/latest/userguide/) — VPC 환경·세션 수명·파일 전송 제약
+
+## 다음 단계
+
+<LinkButton href="/part-2/06-full-deploy-set02/theory/" icon="right-arrow">이론 읽기</LinkButton>
+<LinkButton href="/part-2/06-full-deploy-set02/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

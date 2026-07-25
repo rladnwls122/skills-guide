@@ -3,6 +3,8 @@ title: mark.sh 읽는 법 — 채점 스크립트 리버스 엔지니어링 가�
 description: 구현 전에 mark 스크립트를 읽어 채점 기준을 역추적하는 판단 원칙과 절차.
 ---
 
+import { Steps } from '@astrojs/starlight/components';
+
 > 문서 유형: reference
 
 수상의 실제 비결. **구현 전에 mark 스크립트부터 읽는다.**
@@ -19,17 +21,30 @@ description: 구현 전에 mark 스크립트를 읽어 채점 기준을 역추�
 
 ## 읽기 절차
 
+<Steps>
+
 1. 스크립트를 항목(N-N) 단위로 자른다.
+
 2. 각 항목을 표로 정리: **어떤 명령으로 → 무엇을 grep/비교 → 기대값**.
+
    ```
    | 항목 | 검사 명령 | 기대값 |
    | 7-2 | aws elbv2 describe-rules ... jq HttpHeaderConfig.Values[] | wskorea26-cf 2줄 |
    ```
+
 3. 기대값에 등장하는 **모든 리터럴**(이름/태그/키/문자열)을 구현 체크리스트로 옮긴다.
+
 4. `sleep`/재시도 로직 → 시간 의존 항목 표시 (예: 로그 30초, rate-limit 60+30초 대기).
+
 5. 스크립트 첫머리의 환경 준비(예: `rm -rf ~/.aws`, `export number=`) → **어디서 실행해야 하는지** 결정.
-   - `rm -rf ~/.aws` 있으면 반드시 CloudShell에서 (본 PC 자격증명 날아감).
-   - `export number=<등번호>`는 apply 시 `player_number`와 정확 일치 필요 (set-07 9-1/9-2 실측).
+
+   :::danger[본 PC 자격증명]
+   `rm -rf ~/.aws` 있으면 반드시 CloudShell에서 (본 PC 자격증명 날아감).
+   :::
+
+   `export number=<등번호>`는 apply 시 `player_number`와 정확 일치 필요 (set-07 9-1/9-2 실측).
+
+</Steps>
 
 ## 채점 직전 리셋 체크리스트
 

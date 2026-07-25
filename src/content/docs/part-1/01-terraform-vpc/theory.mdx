@@ -4,6 +4,7 @@ description: "채점 스크립트가 무엇을 보는가 관점으로 정리한 
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
@@ -65,11 +66,17 @@ resource "aws_subnet" "a" {
 
 위 예에서 서브넷이 `aws_vpc.this.id` 를 참조하므로 Terraform 은 **VPC → 서브넷** 순서를 스스로 세운다. 순서를 내가 쓰는 게 아니라, 참조 관계로 의존성 그래프가 만들어지고 서로 무관한 리소스는 병렬로 생성된다. 참조가 없는데도 순서를 강제해야 할 때만 `depends_on` 을 쓴다 — 남발하면 병렬성이 죽어 배포가 느려진다.
 
-여기서 대회용 함정 하나가 나온다: **A 가 B 를 참조하고 B 가 다시 A 를 참조하면 그래프가 고리가 되어 apply 자체가 거부된다**(순환 참조). 모듈 02 의 KMS·CloudFront·버킷 정책이 정확히 이 함정이다.
+:::danger[함정]
+**A 가 B 를 참조하고 B 가 다시 A 를 참조하면 그래프가 고리가 되어 apply 자체가 거부된다**(순환 참조). 모듈 02 의 KMS·CloudFront·버킷 정책이 정확히 이 함정이다.
+:::
 
 ### 0-6. plan 은 세 가지를 비교한다
 
-`terraform plan` = **코드**(`*.tf`) ↔ **상태 파일**(`terraform.tfstate`, 내가 지난번에 만든 것의 기록) ↔ **실제 AWS**. 셋 중 하나만 어긋나도 diff 가 뜬다. 그래서 콘솔에서 손으로 고친 리소스는 다음 plan 에서 "되돌리겠다"고 나온다 — 대회에서 콘솔 수정과 코드 수정을 섞을 때 반드시 기억할 것. tfstate 는 로컬에 두고 커밋하지 않는다(계정 정보·시크릿 포함).
+`terraform plan` = **코드**(`*.tf`) ↔ **상태 파일**(`terraform.tfstate`, 내가 지난번에 만든 것의 기록) ↔ **실제 AWS**. 셋 중 하나만 어긋나도 diff 가 뜬다.
+
+:::caution[콘솔 수정과 섞을 때]
+콘솔에서 손으로 고친 리소스는 다음 plan 에서 "되돌리겠다"고 나온다 — 대회에서 콘솔 수정과 코드 수정을 섞을 때 반드시 기억할 것. tfstate 는 로컬에 두고 커밋하지 않는다(계정 정보·시크릿 포함).
+:::
 
 ---
 
@@ -112,8 +119,8 @@ provider "aws" {
 
 **③ 핵심 원리** — set-02 실측 패턴:
 
-```hcl
-# variables.tf — 기본값 정의
+```hcl title="variables.tf"
+# 기본값 정의
 variable "player_number" {
   description = "비번호. S3 버킷 접미사(wskorea26-concert-bucket-<비번호>)에 사용"
   type        = string
@@ -135,15 +142,15 @@ variable "subnets" {
 }
 ```
 
-```hcl
-# terraform.tfvars — 대회 당일 바뀌는 값만 명시 주입
+```hcl title="terraform.tfvars"
+# 대회 당일 바뀌는 값만 명시 주입
 player_number = "103"
 region        = "ap-northeast-2"
 vpc_cidr      = "172.16.0.0/16"
 ```
 
-```hcl
-# data.tf — locals 로 파생값 계산
+```hcl title="data.tf"
+# locals 로 파생값 계산
 locals {
   bucket_name         = "${var.bucket_name_prefix}-${var.player_number}"
   public_subnet_keys  = [for k, v in var.subnets : k if v.tier == "public"]
@@ -294,24 +301,27 @@ resource "aws_nat_gateway" "this" {
 
 **② 왜 필요한가 (채점 관점)** — 대회 환경은 재시동 시 파일이 초기화되고 CloudShell 세션이 끊긴다. eksctl YAML 렌더링·kubectl 치환·채점 확인 명령이 전부 output 값을 쓰므로, 매번 콘솔에서 복사하면 시간이 녹는다. bastion 에는 Terraform 을 안 올리고 `outputs.json` 만 올려 jq 로 읽는 것이 저장소 규칙이다.
 
-**③ 핵심 원리** — set-02 README 실측(PowerShell):
+**③ 핵심 원리** — set-02 README 실측:
 
-```powershell
-terraform output -json | Set-Content ..\outputs.json
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  terraform output -json | Set-Content ..\outputs.json
 
-$env:ACCOUNT_ID    = terraform output -raw account_id
-$env:VPC_ID        = terraform output -raw vpc_id
-$env:PRIV_SUBNET_C = (terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-c'
-# ... 을 .env.ps1 로 저장 → 새 터미널에서 `. .\.env.ps1` 만 재실행
-```
-
-Linux/CloudShell 이면 jq:
-
-```bash
-terraform output -json > outputs.json
-export VPC_ID=$(jq -r '.vpc_id.value' outputs.json)
-export PRIV_SUBNET_C=$(jq -r '.private_subnet_ids.value["wskorea26-priv-subnet-c"]' outputs.json)
-```
+  $env:ACCOUNT_ID    = terraform output -raw account_id
+  $env:VPC_ID        = terraform output -raw vpc_id
+  $env:PRIV_SUBNET_C = (terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-c'
+  # ... 을 .env.ps1 로 저장 → 새 터미널에서 `. .\.env.ps1` 만 재실행
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform output -json > outputs.json
+  export VPC_ID=$(jq -r '.vpc_id.value' outputs.json)
+  export PRIV_SUBNET_C=$(jq -r '.private_subnet_ids.value["wskorea26-priv-subnet-c"]' outputs.json)
+  ```
+  </TabItem>
+</Tabs>
 
 map output 은 `-json` + jq/ConvertFrom-Json, 단일 문자열은 `-raw` 를 쓴다.
 

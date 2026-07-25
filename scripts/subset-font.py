@@ -13,7 +13,6 @@
 """
 
 import sys
-import urllib.request
 from pathlib import Path
 
 from fontTools.subset import Options, Subsetter
@@ -21,29 +20,22 @@ from fontTools.ttLib import TTFont
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "src" / "fonts"
-CACHE = Path(__file__).resolve().parent / ".font-cache"
 
-# 역할 → 원본. url 이 있으면 없을 때 내려받는다.
+# 역할 → 원본 서체
 FONTS = [
     {
-        # 제목·register — 조선일보명조. 단일 굵기라 CSS 에서 400 만 선언하고
-        # 700 은 브라우저 합성에 맡긴다(heading-font.css 주석 참고).
+        # 제목·본문(reading column) — 조선일보명조. 단일 굵기라 CSS 에서 400 만
+        # 선언하고 700 은 브라우저 합성에 맡긴다(korean-fonts.css 주석 참고).
         "name": "chosun-sm",
         "src": Path.home() / "Downloads" / "ChosunSm.TTF",
-        "url": None,
-    },
-    {
-        # 본문 reading column — Literata(세리프)의 한글 짝. 가변 굵기.
-        "name": "noto-serif-kr",
-        "src": CACHE / "NotoSerifKR.ttf",
-        "url": "https://github.com/google/fonts/raw/main/ofl/notoserifkr/NotoSerifKR%5Bwght%5D.ttf",
+        "hint": "ChosunSm.TTF 를 Downloads 에 두거나 이 경로를 고칠 것",
     },
     {
         # UI 크롬 — Alegreya Sans(산세리프)의 한글 짝. 가변 굵기.
         "name": "pretendard",
         "src": ROOT
         / "node_modules/pretendard/dist/public/variable/PretendardVariable.ttf",
-        "url": None,
+        "hint": "`npm install` 로 받아진다",
     },
 ]
 
@@ -65,16 +57,8 @@ def used_chars() -> set[str]:
 
 def ensure_src(font: dict) -> Path:
     src: Path = font["src"]
-    if src.exists():
-        return src
-    if not font["url"]:
-        sys.exit(
-            f"원본 서체가 없다: {src}\n"
-            f"  (pretendard 는 `npm install` 로 받아진다)"
-        )
-    src.parent.mkdir(parents=True, exist_ok=True)
-    print(f"내려받는 중: {font['name']} …")
-    urllib.request.urlretrieve(font["url"], src)
+    if not src.exists():
+        sys.exit(f"원본 서체가 없다: {src}\n  ({font['hint']})")
     return src
 
 

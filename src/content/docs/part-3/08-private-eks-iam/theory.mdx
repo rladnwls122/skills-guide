@@ -56,7 +56,10 @@ flowchart LR
 
   - 경로 A(NAT): 세트에 프라이빗 통신 요구가 없으면 이걸로 충분(비용·생성 시간 절감). S3 Gateway Endpoint만 두어 이미지 레이어 pull을 안정화하는 절충이 set-03.
   - 경로 B(Endpoint): "인터넷 미경유" 요구 시 s3/ecr.api/ecr.dkr 필수 (set-07은 ECR·CloudWatch를 Endpoint로).
-- **함정 (set-03 실측, endpoints.tf 주석)**: `eks` / `eks-auth` Interface Endpoint를 `private_dns_enabled`로 만들면 PHZ가 OIDC/eks-auth 도메인 해석을 가로채 **Pod Identity/IRSA가 깨진다**. fully private여도 NAT 경유 호출로 충분하므로 이 둘은 만들지 않는다.
+
+:::danger[함정 — eks / eks-auth Endpoint]
+set-03 실측(endpoints.tf 주석): `eks` / `eks-auth` Interface Endpoint를 `private_dns_enabled`로 만들면 PHZ가 OIDC/eks-auth 도메인 해석을 가로채 **Pod Identity/IRSA가 깨진다**. fully private여도 NAT 경유 호출로 충분하므로 이 둘은 만들지 않는다.
+:::
 
 ### ④ 세트별 차이
 
@@ -123,8 +126,11 @@ flowchart TD
 ```
 
 - kubelet 쪽: AL2023 MNG는 `overrideBootstrapCommand`에 nodeadm NodeConfig를 넣으면 기본 NodeConfig와 필드 단위 merge된다 — 노드그룹 **모두**에 넣는다.
-- **coredns addon을 업데이트하면 Corefile이 초기화**될 수 있다 → 업데이트 금지, 했다면 패치 재적용 후 grep 재확인.
 - kps의 Alertmanager도 `clusterDomain` 설정이 있어 함께 맞춘다(모듈 07 연계).
+
+:::caution[coredns addon 업데이트 금지]
+addon을 업데이트하면 **Corefile이 초기화**될 수 있다. 이미 했다면 패치를 재적용하고 grep으로 재확인한다.
+:::
 
 ### ④ 세트별 차이
 
@@ -140,8 +146,12 @@ flowchart TD
 
 ### ② 왜 (채점 관점)
 
-- mark 9-1: `get-role`로 MaxSessionDuration=3600, Principal=`:root`, ExternalId 문자열을 **정확 일치**로 본다. ExternalId는 `unicorn-audit-2026<선수등번호>` — **apply 시 넣은 player_number와 채점 셸이 export한 number가 정확히 일치**해야 한다.
+- mark 9-1: `get-role`로 MaxSessionDuration=3600, Principal=`:root`, ExternalId 문자열을 **정확 일치**로 본다.
 - mark 9-2: ExternalId 없이 assume → `AccessDenied` 기대, ExternalId 붙여 assume → 성공 후 허용 액션(describe-vpcs)은 되고 미허용 액션(describe-instances)은 `AccessDenied/UnauthorizedOperation`이어야 한다. 즉 **성공과 실패 양쪽이 모두 채점 대상**이다.
+
+:::danger[ExternalId 정확 일치]
+ExternalId는 `unicorn-audit-2026<선수등번호>` — **apply 시 넣은 player_number와 채점 셸이 export한 number가 정확히 일치**해야 한다.
+:::
 
 ### ③ 원리 — AssumeRole 이중 평가
 

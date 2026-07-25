@@ -38,7 +38,11 @@ flowchart LR
 
 1. **queueLength 5 → 메시지 100건이면 목표 Pod 20이지만 max 5로 캡** — 그래서 채점 기대가 "Pod ≥ 5".
 2. **Pod requests 500m × 5 = 2.5 vCPU > t3.medium allocatable ~1.9 vCPU** → 한 대에 다 못 들어가 Pending 발생 → Karpenter가 2대째를 띄운다. 채점 기대 "Node ≥ 2"는 이 계산에서 나온다. requests를 줄이면 노드가 안 늘어나 오답.
-3. **스케일인 시간 예산 2.5분**: ScaledObject `pollingInterval: 10`(빠른 감지) + HPA behavior `scaleDown.stabilizationWindowSeconds: 30`(기본 300 → 30) + NodePool `consolidateAfter: 60s`가 한 쌍. 기본값 300이면 Pod 축소만 5분이라 채점 시간 내 1/1 수렴 실패. **어느 값도 늘리지 않는다.**
+
+:::danger[스케일인 시간 예산 2.5분 — 어느 값도 늘리지 않는다]
+ScaledObject `pollingInterval: 10`(빠른 감지) + HPA behavior `scaleDown.stabilizationWindowSeconds: 30`(기본 300 → 30) + NodePool `consolidateAfter: 60s`가 한 쌍. 기본값 300이면 Pod 축소만 5분이라 채점 시간 내 1/1 수렴에 실패한다.
+:::
+
 4. **`identityOwner: operator`** — SQS 조회 자격증명을 keda-operator SA의 IRSA에서 가져온다. 앱 Pod의 권한과 무관.
 5. **Karpenter 디스커버리 태그**: 서브넷은 `karpenter.sh/discovery: skm-eks-cluster` 태그(terraform이 부착), SG는 `aws:eks:cluster-name` 태그로 찾는다. 태그가 없으면 NodeClass가 서브넷/SG를 못 찾아 노드가 안 뜬다.
 6. **NodePool taint `dedicated=app:NoSchedule`** + Deployment toleration + nodeSelector — 앱만 Karpenter 노드에, addon(KEDA·Karpenter 자신·coredns)은 addon 노드그룹에 격리.
@@ -158,7 +162,12 @@ flowchart LR
 
 - 리소스 조회: `log-generator` 2 replica(o11y), ds `o11y-otel`, svc `o11y-loki` ClusterIP 3100, deploy `o11y-grafana` — 이름·네임스페이스 정확 일치.
 - LogQL 채점: `{k8s_namespace_name="o11y"} | json | level="ERROR"`가 결과를 반환해야 함.
-- **Grafana는 웹 수동 채점 항목 존재** — 로그인/Datasource/Log Overview 3패널. **No Data 패널이 하나라도 있으면 오답** → 채점 전 `/log?level=info`, `/log?level=warn`, `/log?level=error`를 각각 호출해 3레벨 데이터를 미리 만든다.
+- **Grafana는 웹 수동 채점 항목 존재** — 로그인/Datasource/Log Overview 3패널.
+
+:::caution[No Data 패널이 하나라도 있으면 오답]
+채점 전 `/log?level=info`, `/log?level=warn`, `/log?level=error`를 각각 호출해 3레벨 데이터를 미리 만든다.
+:::
+
 - 범례가 `{level="ERROR"}` 형태면 오답 — legendFormat `{{level}}` 유지.
 - ALB 타깃 healthy까지 1~2분 — 채점 직전 `curl /healthz`로 확인.
 
@@ -278,7 +287,10 @@ flowchart LR
 
 ### ④ 채점이 보는 상태
 
-- Flink: `wsc2026-analytics-flink`가 **READY** / `ZEPPELIN-FLINK-3_0` — 시연(Run→RUNNING) 후 **반드시 Stop**해 READY로 복귀. RUNNING이면 오답. DDL은 Glue DB에 저장돼 Stop해도 유지.
+:::caution[채점 직전 Flink 상태는 READY]
+`wsc2026-analytics-flink`가 **READY** / `ZEPPELIN-FLINK-3_0`이어야 한다 — 시연(Run→RUNNING) 후 **반드시 Stop**해 READY로 복귀. RUNNING이면 오답. DDL은 Glue DB에 저장돼 Stop해도 유지된다.
+:::
+
 - task.md가 "Flink 1.19"라 해도 mark가 `ZEPPELIN-FLINK-3_0`을 채점하면 **mark 우선**.
 - MSK: ACTIVE / 3.6.0 / kafka.t3.small / Sasl.Iam.Enabled True, ESM 2개 Enabled, DynamoDB 항목이 `.S`로 조회, alert 경로는 S3 `alert/`에 객체.
 - 이름 오타도 원문 유지: `wsc2026-alaytics-ec2-role`(과제지 오타) — 고치면 오답.

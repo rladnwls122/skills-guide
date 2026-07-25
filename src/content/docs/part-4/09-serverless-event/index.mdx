@@ -3,6 +3,8 @@ title: 09. 서버리스 워크플로 + 이벤트 자동복구 (Day 10)
 description: 2과제 단골 유형인 서버리스 워크플로(S3→Lambda→Step Functions→DynamoDB)와 이벤트 자동복구를 하루에 잡는 Day 10 모듈 개요.
 ---
 
+import { FileTree, LinkButton } from '@astrojs/starlight/components';
+
 > 문서 유형: 개요
 
 2과제 단골 유형 두 개를 하루에 잡는다: **유형 1 — 서버리스 워크플로**(S3 → Lambda → Step Functions → DynamoDB, set-02 task-2 module-1)와 **유형 2 — 이벤트 자동복구**(EventBridge/CloudTrail/Config → Lambda 복구, set-02 task-2 module-3).
@@ -34,7 +36,10 @@ description: 2과제 단골 유형인 서버리스 워크플로(S3→Lambda→St
 | EC2 t3.micro ×1 (유형 2) | 시간당 과금 (소액) | 실습 종료 즉시 destroy |
 | NAT 없음 | — | 이 모듈들은 NAT를 만들지 않는다 |
 
+:::caution[과금 주의]
 당일 실습 종료 시 두 모듈 모두 `terraform destroy`. state가 로컬이므로 다음 날 apply만 다시 하면 된다.
+특히 **AWS Config 레코더**는 켜져 있는 동안 기록 항목당 과금이라 실습 종료 즉시 destroy.
+:::
 
 ## 선행 지식
 
@@ -51,16 +56,25 @@ description: 2과제 단골 유형인 서버리스 워크플로(S3→Lambda→St
 
 ## 참고 경로 (정답지)
 
-- `skills-2026/set-02/task-2/module-1-workflow/` — 유형 1 정답 (terraform + ASL + Lambda 코드)
-  - `terraform/statemachine/workflow.asl.json` — 상태 머신 정의
-  - `terraform/lambda/index.py` — Decimal 평균·오류행 분기 정답
-  - `README.md` — "최종 실행 절차(채점 직전, 순서 엄수)" 실측 런북
-- `skills-2026/set-02/task-2/module-3-event/` — 유형 2 정답
-  - `terraform/eventbridge.tf` — 룰 6개 (네이티브 + CloudTrail 패턴)
-  - `terraform/lambda/<function>/index.py` — 복구 함수 6개
-  - `terraform/config.tf` — Config 레코더 + 스코프 제한
-  - `README.md` §"설계 근거 · 함정" — 레이스 컨디션·무한루프 실측 기록
-- `skills-2026/set-02/task-2/README.md` — 모듈별 리전·공통 워크플로
+<FileTree>
+
+- skills-2026/set-02/task-2
+  - module-1-workflow 유형 1 정답 (terraform + ASL + Lambda 코드)
+    - terraform/statemachine
+      - **workflow.asl.json** 상태 머신 정의
+    - terraform/lambda
+      - **index.py** Decimal 평균·오류행 분기 정답
+    - **README.md** "최종 실행 절차(채점 직전, 순서 엄수)" 실측 런북
+  - module-3-event 유형 2 정답
+    - terraform
+      - **eventbridge.tf** 룰 6개 (네이티브 + CloudTrail 패턴)
+      - **config.tf** Config 레코더 + 스코프 제한
+      - lambda/`<function>`
+        - **index.py** 복구 함수 6개
+    - **README.md** §"설계 근거 · 함정" — 레이스 컨디션·무한루프 실측 기록
+  - **README.md** 모듈별 리전·공통 워크플로
+
+</FileTree>
 
 ## 공식 문서
 
@@ -69,3 +83,8 @@ description: 2과제 단골 유형인 서버리스 워크플로(S3→Lambda→St
 - [AWS Config 개발자 안내서](https://docs.aws.amazon.com/config/latest/developerguide/) — 레코더 스코프·규칙 평가 시점
 - [S3 이벤트 알림](https://docs.aws.amazon.com/AmazonS3/latest/userguide/NotificationHowTo.html) — suffix 필터로 재귀 차단
 - [Lambda Python 런타임](https://docs.aws.amazon.com/lambda/latest/dg/lambda-python.html) — 핸들러 서명·환경변수
+
+## 다음 단계
+
+<LinkButton href="/part-4/09-serverless-event/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-4/09-serverless-event/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

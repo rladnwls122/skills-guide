@@ -3,6 +3,8 @@ title: 11. 변동 드릴 — 30% 변동 대응 (Day 12)
 description: 대회 당일 30% 수정되는 과제지를 받고 30분 안에 코드베이스 전체에 반영하는 근육을 만드는 Day 12 모듈 개요.
 ---
 
+import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
+
 > 문서 유형: 개요
 
 대회 당일 공개 과제의 약 30%가 수정된다(이름·스펙·개수). 이 모듈은 "바뀐 과제지를 받고 30분 안에 코드베이스 전체에 반영"하는 근육을 만든다.
@@ -21,8 +23,11 @@ description: 대회 당일 30% 수정되는 과제지를 받고 30분 안에 코
 
 ## 과금 / destroy
 
-- 훈련 ①·②의 편집 자체는 무과금(로컬 편집). mark 재통과까지 확인하려면 set-02 스택 apply 필요 — NAT GW·EKS·ALB 시간당 과금 시작.
-- 검증 후 즉시 `terraform destroy` + `eksctl delete cluster`. CloudFront는 disable→삭제 전파 대기.
+:::caution[시간당 과금]
+훈련 ①·②의 편집 자체는 무과금(로컬 편집). mark 재통과까지 확인하려면 set-02 스택 apply 필요 — NAT GW·EKS·ALB 시간당 과금 시작.
+
+검증 후 즉시 `terraform destroy` + `eksctl delete cluster`. CloudFront는 disable→삭제 전파 대기.
+:::
 
 ## 선행 지식
 
@@ -39,8 +44,20 @@ description: 대회 당일 30% 수정되는 과제지를 받고 30분 안에 코
 
 ## 파일
 
-- [theory](/part-5/11-mutation-drill/theory/) — 판단 원칙과 변동 대응 방법론 + 퀴즈
-- [lab](/part-5/11-mutation-drill/lab/) — 훈련 ①②③ 절차·판정 기준·회고 양식
+<CardGrid>
+  <Card title="theory" icon="open-book">
+    판단 원칙과 변동 대응 방법론 + 퀴즈.
+
+    [읽기](/part-5/11-mutation-drill/theory/)
+  </Card>
+  <Card title="lab" icon="rocket">
+    훈련 ①②③ 절차·판정 기준·회고 양식.
+
+    [실습하기](/part-5/11-mutation-drill/lab/)
+  </Card>
+</CardGrid>
+
+<LinkButton href="/part-5/11-mutation-drill/theory/" icon="right-arrow">이론부터 시작</LinkButton>
 
 ## 공식 문서
 

@@ -33,7 +33,7 @@ flowchart TD
 
 set-02 실측 Dockerfile 전문:
 
-```dockerfile
+```dockerfile title="Dockerfile"
 # syntax=docker/dockerfile:1
 FROM alpine:3.24.1
 
@@ -56,7 +56,9 @@ ENTRYPOINT ["/book"]
 
 **스캔에서 High 가 나오면**: `RUN apk upgrade --no-cache` 한 줄을 추가해 재빌드/재푸시한다 (set-02 README 실측 대응).
 
-**빌드 환경**: 대회 PC(Windows, Docker/WSL 불가)에서는 빌드 불가 → **기본 CloudShell** 에서 빌드한다. CloudShell 은 amd64 네이티브라 단일 아키텍처 이미지가 되고 스캔과 호환된다. (VPC CloudShell 은 인터넷이 없어 alpine 을 못 받는다 — 기본 CloudShell 사용.)
+:::caution[빌드 환경]
+대회 PC(Windows, Docker/WSL 불가)에서는 빌드 불가 → **기본 CloudShell** 에서 빌드한다. CloudShell 은 amd64 네이티브라 단일 아키텍처 이미지가 되고 스캔과 호환된다. (VPC CloudShell 은 인터넷이 없어 alpine 을 못 받는다 — 기본 CloudShell 사용.)
+:::
 
 **④ 세트별 차이** — 앱 언어/포트/태그가 바뀌지만 "고정 버전 alpine + tzdata/TZ + 비루트 + CloudShell(amd64) 빌드" 골격은 공통.
 
@@ -70,7 +72,7 @@ ENTRYPOINT ["/book"]
 
 **③ 핵심 원리** — set-02 실측:
 
-```hcl
+```hcl title="ecr.tf"
 resource "aws_ecr_repository" "book" {
   name         = "wskorea26-book-repo"
   force_delete = true                      # destroy 시 이미지째 삭제
@@ -127,7 +129,7 @@ graph LR
 
 set-02 실측:
 
-```hcl
+```hcl title="dynamodb.tf"
 resource "aws_dynamodb_table" "data" {
   name                        = "wskorea26-data-table"
   billing_mode                = "PAY_PER_REQUEST"
@@ -174,7 +176,11 @@ resource "aws_dynamodb_table" "data" {
 - `attribute` 는 **키로 쓰는 속성만** 정의한다. 비키 속성을 정의하면 오히려 validate 에러.
 - `deletion_protection_enabled = true` 는 채점 항목이자 destroy 함정 — 삭제 전 false 로 바꿔 apply 해야 한다.
 
-**boto3 Decimal 함정** (set-02 task-2 module-1 실측): DynamoDB 숫자에 Python float 를 넣으면 **boto3 가 저장 자체를 거부**한다. 또 `483/5` 를 float 로 계산하면 `96.60000000000001` 이 되어 채점 기대값 `96.6` 과 불일치. 반드시:
+:::danger[boto3 Decimal 함정 (set-02 task-2 module-1 실측)]
+DynamoDB 숫자에 Python float 를 넣으면 **boto3 가 저장 자체를 거부**한다. 또 `483/5` 를 float 로 계산하면 `96.60000000000001` 이 되어 채점 기대값 `96.6` 과 불일치.
+:::
+
+반드시:
 
 ```python
 from decimal import Decimal
@@ -213,7 +219,7 @@ sequenceDiagram
 
 set-02 실측 핸들러의 채점 포인트별 코드:
 
-```python
+```python title="lambda/index.py"
 import json, os
 from urllib.parse import unquote_plus
 import boto3

@@ -3,10 +3,39 @@ title: 명령 치트시트 — kubectl · eksctl · helm · aws · terraform
 description: 대회장에서 손가락 반사로 치는 kubectl·eksctl·helm·aws·terraform 명령 모음.
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 > 문서 유형: reference
 
 대회장 손가락 반사용. mark.sh가 치는 검증 명령(describe/jq/jsonpath)을 그대로 손에 붙인다.
-PowerShell 함정(`curl.exe`, 작은따옴표)은 [트러블슈팅](/reference/troubleshooting/) 참고.
+아래 명령은 전부 Bash 기준이다 — 본 PC(Windows)에서 칠 때 달라지는 것만 먼저 정리한다.
+
+<Tabs syncKey="shell">
+  <TabItem label="Bash (CloudShell · Git Bash)">
+
+  ```bash
+  curl -s "http://$ALB_DNS/health"
+  export TF_VAR_player_number=07
+  grep -rl "old-name" . | xargs sed -i 's/old-name/new-name/g'
+  aws ecr describe-images --repository-name repo --query 'imageDetails[].imageTags'
+  ```
+
+  </TabItem>
+  <TabItem label="PowerShell 7 (본 PC)">
+
+  ```powershell
+  curl.exe -s "http://$env:ALB_DNS/health"   # curl 은 Invoke-WebRequest 별칭
+  $env:TF_VAR_player_number = '07'           # $ 포함 문자열은 작은따옴표
+  # grep/sed 는 PowerShell 에 없다 — Git Bash 나 CloudShell 에서 친다
+  aws ecr describe-images --repository-name repo --query 'imageDetails[].imageTags'
+  ```
+
+  </TabItem>
+</Tabs>
+
+:::caution[PowerShell 5.1 금지]
+5.1 은 CP949 인코딩이라 jq·terraform 출력이 깨진다. **PowerShell 7** 을 쓴다.
+:::
 
 ## kubectl
 

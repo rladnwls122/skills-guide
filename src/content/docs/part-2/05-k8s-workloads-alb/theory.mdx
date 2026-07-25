@@ -79,8 +79,10 @@ helm -n <ns> list / helm -n <ns> uninstall <release>
 
 **② 왜 (채점 관점 — 수상 과제 공통 패턴)** — 채점은 `wskorea26-book-alb`, `wskorea26-book-tg` 같은 **정확한 이름**을 검사한다(mark 7-1 등). Ingress로 ALB를 만들면 **ALB 이름을 지정할 수 없다**(자동 생성 이름). 그래서:
 
-> **Terraform으로 ALB/TG를 이름 고정 생성 → k8s TGB로 Pod IP만 등록.**
-> 이름 채점이 있는 수상 과제는 전부 이 패턴이다.
+:::tip[수상 과제 공통 패턴]
+**Terraform으로 ALB/TG를 이름 고정 생성 → k8s TGB로 Pod IP만 등록.**
+이름 채점이 있는 수상 과제는 전부 이 패턴이다.
+:::
 
 **③ 원리**
 
@@ -107,7 +109,7 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
 
 TGB manifest (실측):
 
-```yaml
+```yaml title="k8s/app/targetgroupbinding.yaml"
 apiVersion: elbv2.k8s.aws/v1beta1
 kind: TargetGroupBinding
 metadata: { name: wskorea26-book-tgb, namespace: wskorea26 }
@@ -125,7 +127,11 @@ spec:
 
 **① 한 줄 정의** — 리스너(80/HTTP)의 기본 액션은 fixed-response 403, 규칙 2개가 CloudFront 커스텀 헤더를 검증해 POST는 Pod TG로, 그 외는 Lambda TG로 보낸다.
 
-**② 왜 (채점 관점)** — mark 7-2가 `describe-rules`의 `HttpHeaderConfig.Values[]` 출력으로 **`wskorea26-cf` 정확히 2줄** + `curl http://<ALB>/book` = **403**을 검사한다. 규칙을 추가/삭제하면 줄 수가 달라져 즉시 감점 — **규칙 개수는 정확히 2개**.
+**② 왜 (채점 관점)** — mark 7-2가 `describe-rules`의 `HttpHeaderConfig.Values[]` 출력으로 **`wskorea26-cf` 정확히 2줄** + `curl http://<ALB>/book` = **403**을 검사한다.
+
+:::danger[규칙 개수는 정확히 2개]
+규칙을 추가/삭제하면 줄 수가 달라져 즉시 감점이다.
+:::
 
 **③ 원리 (실측 alb.tf)**
 

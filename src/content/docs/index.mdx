@@ -17,7 +17,7 @@ hero:
       variant: minimal
 ---
 
-import { Card } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
 import FeatureGrid from 'starlight-theme-exquisitus/components/FeatureGrid.astro';
 
 <FeatureGrid layout="lead">
@@ -76,10 +76,17 @@ import FeatureGrid from 'starlight-theme-exquisitus/components/FeatureGrid.astro
 
 ## 모듈 사용법 (매 모듈 동일 순서)
 
-1. 모듈 인덱스 — 목표·소요 시간·비용 확인
-2. theory — 개념 + "왜 이 구성인가" (끝의 자기 점검 퀴즈로 확인)
-3. lab — 단계별 실습 + 검증 명령 + 함정 + **정리(destroy)**
-4. 오답 노트 작성: `증상 / 원인 / 다음에 칠 명령` 3열
+<Steps>
+
+1. **모듈 인덱스** — 목표·소요 시간·과금 리소스와 destroy 방침을 먼저 본다.
+
+2. **theory** — 개념 + "왜 이 구성인가". 끝의 자기 점검 퀴즈로 이해를 확인한다.
+
+3. **lab** — 단계별 실습 + 검증 명령 + 함정, 그리고 **정리(destroy)** 까지가 한 세트다.
+
+4. **오답 노트** — `증상 / 원인 / 다음에 칠 명령` 3열로 그날 막힌 것을 남긴다.
+
+</Steps>
 
 ## 대원칙 (수상 과제에서 추출)
 
@@ -94,17 +101,23 @@ import FeatureGrid from 'starlight-theme-exquisitus/components/FeatureGrid.astro
 
 ## 비용 가드레일
 
-- 시간당 과금 리소스(NAT GW, EKS, MSK, ALB)는 **당일 destroy** 필수.
+:::caution[매일 destroy]
+시간당 과금 리소스(NAT GW, EKS, MSK, ALB)는 **당일 destroy** 가 원칙이다.
+EKS 를 이어서 쓰는 날(D4→D5)만 예외이고, 그것도 모듈 인덱스에 명시된 날만이다.
+:::
+
 - AWS Budgets 알람 $50 설정(00 모듈에서 수행). 2주 총 예산 목표 < $100.
-- EKS 유지가 필요한 날(D4→D5)만 예외 — 모듈 인덱스에 명시된 날만.
+- 종료 루틴은 [잔존 리소스 점검](/reference/cleanup-check/) — 빈 출력이어야 그날이 끝난 것.
 
 ## Reference
 
-- [AI 학습 활용 가이드](/reference/ai-study-guide/) — 질문 공식·패턴 5종·의존 방지
-- [명령 치트시트](/reference/cheatsheet/) — kubectl·eksctl·helm·aws·terraform
-- [잔존 리소스 점검](/reference/cleanup-check/) — destroy 후 매일 종료 루틴
-- [트러블슈팅](/reference/troubleshooting/) — 증상→원인→확인 명령 플레이북
-- [mark 스크립트 가이드](/reference/mark-script-guide/) — 채점 스크립트 읽는 법·판단 원칙
-- [소요 시간표](/reference/timings/) — 긴 것부터 던지는 순서
-- [과제 경로 매핑](/reference/links/) — 모듈 ↔ skills-2026 과제 경로
-- [문서 스타일 가이드](/reference/style/) — Diátaxis 유형·문장 규칙·용어 표준화
+<CardGrid>
+  <LinkCard title="AI 학습 활용 가이드" href="/reference/ai-study-guide/" description="질문 공식·패턴 5종·의존 방지. 대회장에선 못 쓰니 학습 중에만." />
+  <LinkCard title="명령 치트시트" href="/reference/cheatsheet/" description="kubectl·eksctl·helm·aws·terraform — 손가락 반사로 치는 명령." />
+  <LinkCard title="트러블슈팅" href="/reference/troubleshooting/" description="증상 → 1순위 확인 명령 → 원인 → 조치 플레이북." />
+  <LinkCard title="mark 스크립트 가이드" href="/reference/mark-script-guide/" description="채점 스크립트 읽는 법과 과제지·채점지 충돌 시 판단 원칙." />
+  <LinkCard title="소요 시간표" href="/reference/timings/" description="리소스별 대기 시간 — 긴 것부터 던지는 순서." />
+  <LinkCard title="잔존 리소스 점검" href="/reference/cleanup-check/" description="destroy 후 매일 돌리는 종료 루틴." />
+  <LinkCard title="과제 경로 매핑" href="/reference/links/" description="모듈 ↔ skills-2026 수상 과제 코드 경로." />
+  <LinkCard title="문서 스타일 가이드" href="/reference/style/" description="Diátaxis 유형·문장 규칙·용어 표준화." />
+</CardGrid>

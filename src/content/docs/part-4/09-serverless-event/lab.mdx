@@ -3,6 +3,8 @@ title: Lab 09 — 서버리스 워크플로 + 이벤트 자동복구
 description: 유형 1 서버리스 워크플로와 유형 2 이벤트 자동복구를 백지에서 배포·검증하고 정답지와 diff하는 실습.
 ---
 
+import { Steps } from '@astrojs/starlight/components';
+
 > 문서 유형: tutorial
 
 두 실습 모두 정답지가 `skills-2026/set-02/task-2/`에 있다. 먼저 백지에서 시도하고, 막히면 정답지와 diff한다.
@@ -19,70 +21,74 @@ description: 유형 1 서버리스 워크플로와 유형 2 이벤트 자동복�
 
 ## Part A — 유형 1 · 서버리스 워크플로 (ap-southeast-1)
 
-### A-1. 배포
+<Steps>
 
-```powershell
-cd skills-2026\set-02\task-2\module-1-workflow\terraform
-terraform init
-terraform apply -var "player_number=$env:NUM"
-terraform output -json > outputs.json
-```
+1. **A-1. 배포**
 
-### A-2. 리소스 검증
+   ```powershell
+   cd skills-2026\set-02\task-2\module-1-workflow\terraform
+   terraform init
+   terraform apply -var "player_number=$env:NUM"
+   terraform output -json > outputs.json
+   ```
 
-```powershell
-$NUM = $env:NUM
-$B = "wsc2026-student-score-bucket-$NUM"
-$env:AWS_DEFAULT_REGION = "ap-southeast-1"
+2. **A-2. 리소스 검증**
 
-aws dynamodb describe-table --table-name wsc2026-student-score --query "Table.[TableName,KeySchema]" --output json
-aws lambda get-function-configuration --function-name wsc2026-student-score-function --query "[FunctionName,Runtime,Environment.Variables]" --output json
-$SM_ARN = aws stepfunctions list-state-machines --query "stateMachines[?name=='wsc2026-student-score-workflow'].stateMachineArn" --output text
-aws stepfunctions describe-state-machine --state-machine-arn $SM_ARN --query "[name,type]" --output text
-```
+   ```powershell
+   $NUM = $env:NUM
+   $B = "wsc2026-student-score-bucket-$NUM"
+   $env:AWS_DEFAULT_REGION = "ap-southeast-1"
 
-기대 출력:
+   aws dynamodb describe-table --table-name wsc2026-student-score --query "Table.[TableName,KeySchema]" --output json
+   aws lambda get-function-configuration --function-name wsc2026-student-score-function --query "[FunctionName,Runtime,Environment.Variables]" --output json
+   $SM_ARN = aws stepfunctions list-state-machines --query "stateMachines[?name=='wsc2026-student-score-workflow'].stateMachineArn" --output text
+   aws stepfunctions describe-state-machine --state-machine-arn $SM_ARN --query "[name,type]" --output text
+   ```
 
-- 테이블: `wsc2026-student-score`, KeySchema `studentId` HASH + `examDate` RANGE
-- Lambda: `wsc2026-student-score-function`, `python3.12`, env에 S3_BUCKET/DDB_TABLE
-- State Machine: `wsc2026-student-score-workflow  STANDARD`
+   기대 출력:
 
-### A-3. 최종 실행 절차 (채점 직전 리셋 — 순서 엄수)
+   - 테이블: `wsc2026-student-score`, KeySchema `studentId` HASH + `examDate` RANGE
+   - Lambda: `wsc2026-student-score-function`, `python3.12`, env에 S3_BUCKET/DDB_TABLE
+   - State Machine: `wsc2026-student-score-workflow  STANDARD`
 
-```powershell
-# 1) 잔여물 제거
-aws s3 rm s3://$B/processed/ --recursive
-aws s3 rm s3://$B/error/ --recursive
+3. **A-3. 최종 실행 절차** (채점 직전 리셋 — 순서 엄수)
 
-# 2) DynamoDB 비우기
-$items = aws dynamodb scan --table-name wsc2026-student-score --query "Items[].{studentId:studentId,examDate:examDate}" --output json | ConvertFrom-Json
-foreach ($i in $items) {
-  $key = ($i | ConvertTo-Json -Compress) -replace '"', '\"'
-  aws dynamodb delete-item --table-name wsc2026-student-score --key $key
-}
+   ```powershell
+   # 1) 잔여물 제거
+   aws s3 rm s3://$B/processed/ --recursive
+   aws s3 rm s3://$B/error/ --recursive
 
-# 3) test.csv 정확 1회 업로드
-aws s3 cp ..\..\provided\module1\test.csv s3://$B/input/test.csv
+   # 2) DynamoDB 비우기
+   $items = aws dynamodb scan --table-name wsc2026-student-score --query "Items[].{studentId:studentId,examDate:examDate}" --output json | ConvertFrom-Json
+   foreach ($i in $items) {
+     $key = ($i | ConvertTo-Json -Compress) -replace '"', '\"'
+     aws dynamodb delete-item --table-name wsc2026-student-score --key $key
+   }
 
-# 4) 실행 확인
-aws stepfunctions list-executions --state-machine-arn $SM_ARN --query "executions[].[status,startDate]" --output text
-```
+   # 3) test.csv 정확 1회 업로드
+   aws s3 cp ..\..\provided\module1\test.csv s3://$B/input/test.csv
 
-### A-4. 결과 검증 + 기대 출력
+   # 4) 실행 확인
+   aws stepfunctions list-executions --state-machine-arn $SM_ARN --query "executions[].[status,startDate]" --output text
+   ```
 
-```powershell
-aws dynamodb get-item --table-name wsc2026-student-score --key '{\"studentId\":{\"S\":\"STU1020\"},\"examDate\":{\"S\":\"2026-05-30\"}}' --query "Item.[studentId.S,average.N,grade.S]" --output text
-# 기대: STU1020    96.6    A   (96.60000000000001 이면 Decimal 미사용)
+4. **A-4. 결과 검증 + 기대 출력**
 
-aws s3 ls s3://$B/
-# 기대: PRE error/  PRE input/  PRE processed/  — 딱 3줄
+   ```powershell
+   aws dynamodb get-item --table-name wsc2026-student-score --key '{\"studentId\":{\"S\":\"STU1020\"},\"examDate\":{\"S\":\"2026-05-30\"}}' --query "Item.[studentId.S,average.N,grade.S]" --output text
+   # 기대: STU1020    96.6    A   (96.60000000000001 이면 Decimal 미사용)
 
-aws s3 ls s3://$B/processed/
-# 기대: test.csv 한 줄만
+   aws s3 ls s3://$B/
+   # 기대: PRE error/  PRE input/  PRE processed/  — 딱 3줄
 
-aws s3 ls s3://$B/error/
-# 기대: error_*_STU2001 / STU2002 / STU2004 / unknown .json — 정확히 4개
-```
+   aws s3 ls s3://$B/processed/
+   # 기대: test.csv 한 줄만
+
+   aws s3 ls s3://$B/error/
+   # 기대: error_*_STU2001 / STU2002 / STU2004 / unknown .json — 정확히 4개
+   ```
+
+</Steps>
 
 ### A-5. :badge[함정]{variant=danger} (여기서 대부분 틀린다)
 
@@ -102,66 +108,70 @@ aws s3 ls s3://$B/error/
 
 ## Part B — 유형 2 · 이벤트 자동복구 (eu-west-1)
 
-### B-1. 배포
+<Steps>
 
-```powershell
-cd skills-2026\set-02\task-2\module-3-event\terraform
-terraform init
-terraform apply -var "player_number=$env:NUM"
-```
+1. **B-1. 배포**
 
-**apply 후 5~10분 대기** — CloudTrail 이벤트 전달 활성화 + Config 첫 평가. 급하면:
+   ```powershell
+   cd skills-2026\set-02\task-2\module-3-event\terraform
+   terraform init
+   terraform apply -var "player_number=$env:NUM"
+   ```
 
-```powershell
-$env:AWS_DEFAULT_REGION = "eu-west-1"
-aws configservice start-config-rules-evaluation --config-rule-names wsc2026-required-tags-rule wsc2026-sg-ssh-rule
-```
+   **apply 후 5~10분 대기** — CloudTrail 이벤트 전달 활성화 + Config 첫 평가. 급하면:
 
-### B-2. 리소스 검증
+   ```powershell
+   $env:AWS_DEFAULT_REGION = "eu-west-1"
+   aws configservice start-config-rules-evaluation --config-rule-names wsc2026-required-tags-rule wsc2026-sg-ssh-rule
+   ```
 
-```powershell
-$env:AWS_DEFAULT_REGION = "eu-west-1"
-$ACCOUNT_ID = aws sts get-caller-identity --query Account --output text
-$INSTANCE_ID = aws ec2 describe-instances --filters "Name=tag:Name,Values=wsc2026-event-ec2" "Name=instance-state-name,Values=running,stopped" --query "Reservations[0].Instances[0].InstanceId" --output text
-$SG_ID = aws ec2 describe-security-groups --filters "Name=group-name,Values=wsc2026-event-sg" --query "SecurityGroups[0].GroupId" --output text
+2. **B-2. 리소스 검증**
 
-# Lambda 4개 (mark) + 2개 (task 전용) — 전부 python3.12
-foreach ($fn in "wsc2026-ec2-stop-remediation","wsc2026-ec2-terminate-alert","wsc2026-sg-remediation","wsc2026-tag-alert","wsc2026-role-remediation","wsc2026-ec2-type-remediation") { aws lambda get-function --function-name $fn --query "Configuration.[FunctionName,Runtime]" --output text }
-# EventBridge 타깃
-foreach ($rule in "wsc2026-ec2-stop-rule","wsc2026-ec2-terminate-rule") { "$rule -> $(aws events list-targets-by-rule --rule $rule --query 'Targets[0].Arn' --output text)" }
-# Config 룰 ACTIVE
-aws configservice describe-config-rules --config-rule-names wsc2026-sg-ssh-rule wsc2026-required-tags-rule --query "ConfigRules[*].[ConfigRuleName,ConfigRuleState]" --output text
-```
+   ```powershell
+   $env:AWS_DEFAULT_REGION = "eu-west-1"
+   $ACCOUNT_ID = aws sts get-caller-identity --query Account --output text
+   $INSTANCE_ID = aws ec2 describe-instances --filters "Name=tag:Name,Values=wsc2026-event-ec2" "Name=instance-state-name,Values=running,stopped" --query "Reservations[0].Instances[0].InstanceId" --output text
+   $SG_ID = aws ec2 describe-security-groups --filters "Name=group-name,Values=wsc2026-event-sg" --query "SecurityGroups[0].GroupId" --output text
 
-### B-3. 복구 시연 + 기대 출력
+   # Lambda 4개 (mark) + 2개 (task 전용) — 전부 python3.12
+   foreach ($fn in "wsc2026-ec2-stop-remediation","wsc2026-ec2-terminate-alert","wsc2026-sg-remediation","wsc2026-tag-alert","wsc2026-role-remediation","wsc2026-ec2-type-remediation") { aws lambda get-function --function-name $fn --query "Configuration.[FunctionName,Runtime]" --output text }
+   # EventBridge 타깃
+   foreach ($rule in "wsc2026-ec2-stop-rule","wsc2026-ec2-terminate-rule") { "$rule -> $(aws events list-targets-by-rule --rule $rule --query 'Targets[0].Arn' --output text)" }
+   # Config 룰 ACTIVE
+   aws configservice describe-config-rules --config-rule-names wsc2026-sg-ssh-rule wsc2026-required-tags-rule --query "ConfigRules[*].[ConfigRuleName,ConfigRuleState]" --output text
+   ```
 
-```powershell
-# 위반 주입: 중지 + SSH 인바운드 추가
-aws ec2 stop-instances --instance-ids $INSTANCE_ID | Out-Null
-aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 | Out-Null
-Start-Sleep 90
+3. **B-3. 복구 시연 + 기대 출력**
 
-"EC2 State: $(aws ec2 describe-instances --instance-ids $INSTANCE_ID --query 'Reservations[0].Instances[0].State.Name' --output text)"
-# 기대: running
-"SG Inbound Count: $(aws ec2 describe-security-groups --group-ids $SG_ID --query 'SecurityGroups[0].IpPermissions | length(@)' --output text)"
-# 기대: 0
-aws configservice get-compliance-details-by-config-rule --config-rule-name wsc2026-required-tags-rule --compliance-types NON_COMPLIANT --query "EvaluationResults[0].EvaluationResultIdentifier.EvaluationResultQualifier.ResourceId" --output text
-# 기대: None
-```
+   ```powershell
+   # 위반 주입: 중지 + SSH 인바운드 추가
+   aws ec2 stop-instances --instance-ids $INSTANCE_ID | Out-Null
+   aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 | Out-Null
+   Start-Sleep 90
 
-### B-4. 타입 원복 시연 (task 전용, 수동 채점 대비)
+   "EC2 State: $(aws ec2 describe-instances --instance-ids $INSTANCE_ID --query 'Reservations[0].Instances[0].State.Name' --output text)"
+   # 기대: running
+   "SG Inbound Count: $(aws ec2 describe-security-groups --group-ids $SG_ID --query 'SecurityGroups[0].IpPermissions | length(@)' --output text)"
+   # 기대: 0
+   aws configservice get-compliance-details-by-config-rule --config-rule-name wsc2026-required-tags-rule --compliance-types NON_COMPLIANT --query "EvaluationResults[0].EvaluationResultIdentifier.EvaluationResultQualifier.ResourceId" --output text
+   # 기대: None
+   ```
 
-```powershell
-aws events disable-rule --name wsc2026-ec2-stop-rule          # 필수! 레이스 방지
-aws ec2 stop-instances --instance-ids $INSTANCE_ID
-aws ec2 wait instance-stopped --instance-ids $INSTANCE_ID
-aws ec2 modify-instance-attribute --instance-id $INSTANCE_ID --instance-type t3.small
-aws ec2 start-instances --instance-ids $INSTANCE_ID
-Start-Sleep 180
-aws ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].[InstanceType,State.Name]" --output text
-# 기대: t3.micro    running   (자동 원복)
-aws events enable-rule --name wsc2026-ec2-stop-rule
-```
+4. **B-4. 타입 원복 시연** (task 전용, 수동 채점 대비)
+
+   ```powershell
+   aws events disable-rule --name wsc2026-ec2-stop-rule          # 필수! 레이스 방지
+   aws ec2 stop-instances --instance-ids $INSTANCE_ID
+   aws ec2 wait instance-stopped --instance-ids $INSTANCE_ID
+   aws ec2 modify-instance-attribute --instance-id $INSTANCE_ID --instance-type t3.small
+   aws ec2 start-instances --instance-ids $INSTANCE_ID
+   Start-Sleep 180
+   aws ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].[InstanceType,State.Name]" --output text
+   # 기대: t3.micro    running   (자동 원복)
+   aws events enable-rule --name wsc2026-ec2-stop-rule
+   ```
+
+</Steps>
 
 ### B-5. :badge[함정]{variant=danger}
 
@@ -189,4 +199,7 @@ cd ..\..\module-3-event\terraform ; terraform destroy -var "player_number=$env:N
 ```
 
 - 유형 1: destroy 전 버킷이 비어 있어야 한다(`aws s3 rm s3://$B --recursive` 후 destroy가 안전).
-- 유형 2: **Config 레코더가 과금 주범** — 당일 destroy 필수.
+
+:::caution[과금 주의]
+유형 2는 **Config 레코더가 과금 주범** — 당일 destroy 필수.
+:::

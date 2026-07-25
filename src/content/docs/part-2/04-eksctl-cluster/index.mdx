@@ -3,6 +3,8 @@ title: 04. eksctl 클러스터 — ClusterConfig 완전 정복
 description: "eksctl ClusterConfig 5대 블록과 IRSA·노드그룹 2분할·치환 파이프라인 학습 목표."
 ---
 
+import { LinkButton } from '@astrojs/starlight/components';
+
 > 문서 유형: 개요
 
 ## 학습 목표
@@ -26,10 +28,12 @@ description: "eksctl ClusterConfig 5대 블록과 IRSA·노드그룹 2분할·�
 | t3.medium x 4 (노드) | 약 $0.21/h | addon 2 + app 2 |
 | NAT Gateway x 2 | 약 $0.118/h (개당) | PART-1 VPC에서 이미 생성 |
 
-> **예외: 04 → 05는 클러스터를 삭제하지 않고 유지한다.**
-> 05(워크로드/ALB)는 이 클러스터 위에서 실습하므로 이틀 연속 학습 시 유지가 더 싸고 빠르다.
-> 하루 이상 쉬면 `eksctl delete cluster -f cluster.rendered.yaml` 후 다음날 재생성(20분)한다.
-> 클러스터 하루 방치 비용 ≈ $0.10×24 + $0.21×24 ≈ **$7.4/일** — 잊지 말 것.
+:::caution[과금 주의 — destroy 방침 예외]
+**04 → 05는 클러스터를 삭제하지 않고 유지한다.**
+05(워크로드/ALB)는 이 클러스터 위에서 실습하므로 이틀 연속 학습 시 유지가 더 싸고 빠르다.
+하루 이상 쉬면 `eksctl delete cluster -f cluster.rendered.yaml` 후 다음날 재생성(20분)한다.
+클러스터 하루 방치 비용 ≈ $0.10×24 + $0.21×24 ≈ **$7.4/일** — 잊지 말 것.
+:::
 
 ## 선행 지식
 
@@ -58,3 +62,8 @@ description: "eksctl ClusterConfig 5대 블록과 IRSA·노드그룹 2분할·�
 - [IRSA(서비스 계정용 IAM 역할)](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) — OIDC trust 조건 문법
 - [EKS Pod Identity](https://docs.aws.amazon.com/eks/latest/userguide/pod-identity.html) — IRSA와의 차이·에이전트 요구사항
 - [클러스터 액세스 항목(Access entries)](https://docs.aws.amazon.com/eks/latest/userguide/access-entries.html) — 생성자 외 신원에 kubectl 권한 부여
+
+## 다음 단계
+
+<LinkButton href="/part-2/04-eksctl-cluster/theory/" icon="right-arrow">이론 읽기</LinkButton>
+<LinkButton href="/part-2/04-eksctl-cluster/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

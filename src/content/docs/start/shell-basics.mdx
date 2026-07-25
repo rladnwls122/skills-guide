@@ -4,6 +4,7 @@ description: grep·sed·jq·heredoc 사용법과 PowerShell 환경에서의 차�
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Steps, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
@@ -43,12 +44,12 @@ EOF
 
 `<<'EOF'`(따옴표)면 `$` 그대로, `<<EOF`면 변수 확장 — 헷갈리면 따옴표 붙이는 게 안전.
 
-**PowerShell 차이 (본 PC가 Windows일 때 함정)**:
-
+:::caution[PowerShell 함정 (본 PC가 Windows일 때)]
 - `curl`은 Invoke-WebRequest 별칭 → 진짜 curl은 **`curl.exe`**
 - `$` 포함 문자열(비밀번호 등)은 **작은따옴표** `'pa$$word'`
 - **PowerShell 7 필수** — 5.1은 CP949 인코딩이라 jq/terraform 출력이 깨짐
 - sed/grep은 PowerShell에 없음 → Git Bash 또는 CloudShell에서 실행
+:::
 
 ## ③ 대회에서 어떻게 쓰이나
 
@@ -57,33 +58,37 @@ EOF
 
 ## ④ 미니 실습 (20분, 과금 없음 — 로컬/Git Bash)
 
-1. 샘플 tf 파일 만들고 이름 일괄 치환:
+<Steps>
 
-```bash
-mkdir -p /tmp/drill && cd /tmp/drill
-cat > vpc.tf <<'EOF'
-resource "aws_vpc" "skills_vpc" {
-  cidr_block = "10.0.0.0/16"
-  tags = { Name = "skills-vpc" }
-}
-EOF
-grep -rl "skills" .                 # 어느 파일에 있는지
-sed -i 's/skills/contest/g' vpc.tf  # 일괄 치환
-grep -n "contest" vpc.tf            # 3곳 바뀌었는지 확인
-```
+1. **샘플 tf 파일 만들고 이름 일괄 치환**
 
-2. `terraform output -json`을 가정한 jq 추출:
+   ```bash
+   mkdir -p /tmp/drill && cd /tmp/drill
+   cat > vpc.tf <<'EOF'
+   resource "aws_vpc" "skills_vpc" {
+     cidr_block = "10.0.0.0/16"
+     tags = { Name = "skills-vpc" }
+   }
+   EOF
+   grep -rl "skills" .                 # 어느 파일에 있는지
+   sed -i 's/skills/contest/g' vpc.tf  # 일괄 치환
+   grep -n "contest" vpc.tf            # 3곳 바뀌었는지 확인
+   ```
 
-```bash
-cat > out.json <<'EOF'
-{ "vpc_id": { "value": "vpc-0abc123" }, "subnet_ids": { "value": ["subnet-1", "subnet-2"] } }
-EOF
-jq '.vpc_id.value' out.json          # "vpc-0abc123" (따옴표 있음)
-jq -r '.vpc_id.value' out.json       # vpc-0abc123  (raw)
-jq -r '.subnet_ids.value[0]' out.json  # subnet-1
-```
+2. **`terraform output -json`을 가정한 jq 추출**
 
-3. 정리: `rm -rf /tmp/drill`
+   ```bash
+   cat > out.json <<'EOF'
+   { "vpc_id": { "value": "vpc-0abc123" }, "subnet_ids": { "value": ["subnet-1", "subnet-2"] } }
+   EOF
+   jq '.vpc_id.value' out.json          # "vpc-0abc123" (따옴표 있음)
+   jq -r '.vpc_id.value' out.json       # vpc-0abc123  (raw)
+   jq -r '.subnet_ids.value[0]' out.json  # subnet-1
+   ```
+
+3. **정리**: `rm -rf /tmp/drill`
+
+</Steps>
 
 ## ⑤ 자기 점검 퀴즈
 
@@ -125,8 +130,10 @@ PowerShell은 `curl`·`wget`을 각각 `Invoke-WebRequest`의 별칭으로 잡�
 
 ## ⑥ 다음 단계
 
-- [PART 5 — Battle Drills](/part-5/11-mutation-drill/) — 모듈 11 30% 변동 드릴
-- 다음 선수 학습: [AWS CLI 기초](/start/awscli-basics/)
+모듈 11(30% 변동 드릴)이 이 grep/sed 콤보를 시간 점수로 환산한다.
+
+<LinkButton href="/start/awscli-basics/" icon="right-arrow">다음 선수 학습 — AWS CLI 기초</LinkButton>
+<LinkButton href="/part-5/11-mutation-drill/" variant="minimal">PART 5 — Battle Drills</LinkButton>
 
 ## 공식 문서
 

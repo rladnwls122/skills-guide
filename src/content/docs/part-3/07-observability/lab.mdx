@@ -3,6 +3,8 @@ title: 07. 관측성 실습 — 파이프라인 끝까지 세우고 실측으로
 description: "kube-prometheus-stack·Fluent Bit·PrometheusRule·Grafana 를 세우고 실측으로 검증하는 실습."
 ---
 
+import { Steps } from '@astrojs/starlight/components';
+
 > 문서 유형: tutorial
 
 PART-2 클러스터(앱 배포 완료 상태) 위에서 진행한다. 명령은 클러스터에 kubectl이 되는 셸(대회 기준: VPC CloudShell 또는 bastion) 기준 bash.
@@ -18,43 +20,47 @@ PART-2 클러스터(앱 배포 완료 상태) 위에서 진행한다. 명령은 
 
 ## 단계 절차
 
-### 1) kube-prometheus-stack 설치
+<Steps>
 
-```bash
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts && helm repo update
-# release 이름 monitoring — 채점 파드 이름 카운트와 정합 (set-03 mark 11-1)
-helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
-  --version 87.2.1 -n observability --create-namespace \
-  -f monitoring/kube-prometheus-stack-values.yaml
-kubectl get pods -n observability
-```
+1. **kube-prometheus-stack 설치**
 
-values 필수 확인 포인트: `podMonitorSelectorNilUsesHelmValues: false`, `ruleSelectorNilUsesHelmValues: false`, `additionalDataSources`(prometheus/alertmanager/cloudwatch 이름 정확 일치), Grafana `sidecar.dashboards.label: grafana_dashboard`.
+   ```bash
+   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts && helm repo update
+   # release 이름 monitoring — 채점 파드 이름 카운트와 정합 (set-03 mark 11-1)
+   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+     --version 87.2.1 -n observability --create-namespace \
+     -f monitoring/kube-prometheus-stack-values.yaml
+   kubectl get pods -n observability
+   ```
 
-### 2) Fluent Bit 배포
+   values 필수 확인 포인트: `podMonitorSelectorNilUsesHelmValues: false`, `ruleSelectorNilUsesHelmValues: false`, `additionalDataSources`(prometheus/alertmanager/cloudwatch 이름 정확 일치), Grafana `sidecar.dashboards.label: grafana_dashboard`.
 
-```bash
-kubectl apply -f logging/fluent-bit.yaml
-kubectl get ds -n observability fluent-bit   # DESIRED = 전체 노드 수 (workload 포함)
-```
+2. **Fluent Bit 배포**
 
-### 3) PrometheusRule + 대시보드 provisioning
+   ```bash
+   kubectl apply -f logging/fluent-bit.yaml
+   kubectl get ds -n observability fluent-bit   # DESIRED = 전체 노드 수 (workload 포함)
+   ```
 
-```bash
-kubectl apply -f monitoring/prometheus-rules.yaml
-kubectl create configmap wsc2026-grafana-dashboard -n observability \
-  --from-file=dashboard.json=monitoring/dashboard.json --dry-run=client -o yaml | kubectl apply -f -
-kubectl label configmap wsc2026-grafana-dashboard -n observability grafana_dashboard=1 --overwrite
-```
+3. **PrometheusRule + 대시보드 provisioning**
 
-### 4) 트래픽 시드 (채점 전 필수 — No Data 방지)
+   ```bash
+   kubectl apply -f monitoring/prometheus-rules.yaml
+   kubectl create configmap wsc2026-grafana-dashboard -n observability \
+     --from-file=dashboard.json=monitoring/dashboard.json --dry-run=client -o yaml | kubectl apply -f -
+   kubectl label configmap wsc2026-grafana-dashboard -n observability grafana_dashboard=1 --overwrite
+   ```
 
-```bash
-CF=<cloudfront_또는_alb_도메인>
-curl -s -X POST "https://$CF/booking" -H 'Content-Type: application/json' \
-  -d '{"client_id":"C001","username":"Alice","email":"kim@example.com","concert_name":"Seoul2025"}'
-for i in $(seq 1 30); do curl -s -o /dev/null "https://$CF/"; done
-```
+4. **트래픽 시드** (채점 전 필수 — No Data 방지)
+
+   ```bash
+   CF=<cloudfront_또는_alb_도메인>
+   curl -s -X POST "https://$CF/booking" -H 'Content-Type: application/json' \
+     -d '{"client_id":"C001","username":"Alice","email":"kim@example.com","concert_name":"Seoul2025"}'
+   for i in $(seq 1 30); do curl -s -o /dev/null "https://$CF/"; done
+   ```
+
+</Steps>
 
 ## 검증 + 기대 출력
 

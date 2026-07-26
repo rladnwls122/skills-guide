@@ -46,7 +46,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    subgraph private-subnet["<span class='icon--mdi icon--mdi--lan-connect'></span> 프라이빗 서브넷 노드"]
+    subgraph private-subnet["<span class='icon--aws icon--aws--private-subnet'></span> 프라이빗 서브넷 노드"]
         N[노드/파드]
     end
     NAT@{ icon: "logos:aws-vpc", form: "square", label: "NAT Gateway", pos: "b", h: 46, w: 46 }
@@ -93,9 +93,9 @@ private 클러스터 과제에서 역할별로 실행 위치를 나누는 운영
 flowchart LR
     PC@{ icon: "logos:terraform-icon", form: "square", label: "본 PC<br/>terraform apply<br/>outputs.json 생성", pos: "b", h: 46, w: 46 }
     PC -->|"aws s3 cp _transfer/"| S3[("S3 버킷<br/>_transfer/outputs.json<br/>_transfer/*.tgz")]
-    CS@{ icon: "mdi:console-line", form: "square", label: "VPC CloudShell / bastion<br/>kubectl·helm·채점", pos: "b", h: 46, w: 46 }
+    CS@{ icon: "aws:cloudshell", form: "square", label: "VPC CloudShell / bastion<br/>kubectl·helm·채점", pos: "b", h: 46, w: 46 }
     S3 -->|"aws s3 cp + tar xzf"| CS
-    CS2@{ icon: "mdi:console-line", form: "square", label: "일반 CloudShell<br/>docker build → ECR push", pos: "b", h: 46, w: 46 }
+    CS2@{ icon: "aws:cloudshell", form: "square", label: "일반 CloudShell<br/>docker build → ECR push", pos: "b", h: 46, w: 46 }
     CS2 --> ECR[(ECR)]
     CS -.->|채점 전| DEL["aws s3 rm _transfer/ --recursive<br/>(버킷이 채점 대상)"]
 ```

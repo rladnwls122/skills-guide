@@ -10,9 +10,18 @@ import { MERMAID_ICONS } from '../src/mermaid-icons.mjs';
 
 const CONTENT_DIR = 'src/content/docs';
 
+/* CDN 팩(logos·mdi·simple-icons)에 자체 팩(aws)을 합쳐 하나의 목록으로 본다.
+   자체 팩은 생성물이라 이름 목록을 따로 관리하지 않고 파일에서 바로 읽는다. */
+const awsPack = JSON.parse(await readFile('src/icons/aws.json', 'utf8'));
+const DECLARED = { ...MERMAID_ICONS, aws: Object.keys(awsPack.icons) };
+
+/* 팩 이름에 하이픈이 들어가면(simple-icons) 팩과 아이콘 경계가 모호해진다 —
+   아는 팩 이름만 후보로 두고 가장 긴 것부터 맞춘다. */
+const PACKS = Object.keys(DECLARED).sort((a, b) => b.length - a.length).join('|');
+
 /** 노드 아이콘: icon: "logos:aws-s3" · subgraph 아이콘: icon--logos--aws-s3 */
-const NODE_ICON = /icon:\s*["']([a-z0-9-]+):([a-z0-9-]+)["']/g;
-const SPAN_ICON = /icon--([a-z0-9]+)--([a-z0-9-]+)/g;
+const NODE_ICON = new RegExp(`icon:\\s*["'](${PACKS}):([a-z0-9-]+)["']`, 'g');
+const SPAN_ICON = new RegExp(`icon--(${PACKS})--([a-z0-9-]+)`, 'g');
 
 async function* mdxFiles(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -38,12 +47,12 @@ for await (const file of mdxFiles(CONTENT_DIR)) {
 const missing = [];
 for (const [key, files] of used) {
   const [pack, name] = key.split(':');
-  if (!MERMAID_ICONS[pack]?.includes(name)) {
+  if (!DECLARED[pack]?.includes(name)) {
     missing.push(`  ${key}  ←  ${[...files].join(', ')}`);
   }
 }
 
-const declared = Object.entries(MERMAID_ICONS).flatMap(([p, names]) => names.map((n) => `${p}:${n}`));
+const declared = Object.entries(DECLARED).flatMap(([p, names]) => names.map((n) => `${p}:${n}`));
 const unused = declared.filter((key) => !used.has(key));
 
 if (unused.length) {

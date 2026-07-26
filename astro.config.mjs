@@ -15,6 +15,9 @@ import remarkGfm from 'remark-gfm';
 
 import mdx from '@astrojs/mdx';
 import { iconifyUrl } from './src/mermaid-icons.mjs';
+/* Iconify 에 없는 AWS 서비스·리소스용 자체 팩. scripts/build-aws-icons.mjs 가
+   AWS 공식 아이콘 패키지에서 뽑아 만든다. */
+import awsIcons from './src/icons/aws.json';
 
 /** @type {import('astro').AstroIntegration} */
 const mermaidFullscreen = {
@@ -48,6 +51,7 @@ export default defineConfig({
       { name: 'logos', url: iconifyUrl('logos', 'json') },
       { name: 'mdi', url: iconifyUrl('mdi', 'json') },
       { name: 'simple-icons', url: iconifyUrl('simple-icons', 'json') },
+      { name: 'aws', icons: awsIcons.icons },
     ],
   }), mermaidFullscreen, starlight({
     title: 'skills-guide',
@@ -57,6 +61,7 @@ export default defineConfig({
     customCss: [
       './src/styles/korean-fonts.css',
       './src/styles/mermaid.css',
+      './src/styles/mermaid-aws-icons.css',
       './src/styles/mobile.css',
       './src/styles/sidebar-toggle.css',
     ],

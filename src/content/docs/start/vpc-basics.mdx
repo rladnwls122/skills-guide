@@ -34,16 +34,16 @@ import { Steps, LinkButton } from '@astrojs/starlight/components';
 
 ```mermaid
 flowchart LR
-    subgraph VPC["<span class='icon--logos icon--logos--aws-vpc'></span> VPC 10.0.0.0/16"]
-        subgraph PRIV["<span class='icon--mdi icon--mdi--lan-connect'></span> 프라이빗 서브넷 10.0.2.0/24"]
+    subgraph VPC["<span class='icon--aws icon--aws--vpc'></span> VPC 10.0.0.0/16"]
+        subgraph PRIV["<span class='icon--aws icon--aws--private-subnet'></span> 프라이빗 서브넷 10.0.2.0/24"]
             EC2@{ icon: "logos:aws-ec2", form: "square", label: "EC2 / EKS 노드", pos: "b", h: 46, w: 46 }
         end
-        subgraph PUB["<span class='icon--mdi icon--mdi--lan-connect'></span> 퍼블릭 서브넷 10.0.1.0/24"]
-            NAT@{ icon: "logos:aws-vpc", form: "square", label: "NAT GW", pos: "b", h: 46, w: 46 }
+        subgraph PUB["<span class='icon--aws icon--aws--public-subnet'></span> 퍼블릭 서브넷 10.0.1.0/24"]
+            NAT@{ icon: "aws:nat-gateway", form: "square", label: "NAT GW", pos: "b", h: 46, w: 46 }
         end
         RTBpriv["프라이빗 RTB<br/>0.0.0.0/0 → NAT"]
         RTBpub["퍼블릭 RTB<br/>0.0.0.0/0 → IGW"]
-        IGW@{ icon: "logos:aws-vpc", form: "square", label: "IGW", pos: "b", h: 46, w: 46 }
+        IGW@{ icon: "aws:internet-gateway", form: "square", label: "IGW", pos: "b", h: 46, w: 46 }
     end
     NET(("인터넷"))
 

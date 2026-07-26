@@ -15,13 +15,22 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 ```mermaid
 flowchart LR
-    A[terraform apply<br/>VPC·데이터·ECR] --> B[eksctl create cluster<br/>~20분 던져놓기]
-    B -.대기 중 병렬.-> C[CloudShell<br/>docker build/push<br/>+ ECR 스캔 확인]
-    B --> D[helm / k8s apply]
-    D --> E[ingress → ALB 확보]
-    E --> F[2차 apply<br/>enable_cdn=true]
-    F -.전파 대기 중.-> G[검증 시드 준비<br/>트래픽·데이터]
-    G --> H[리셋 체크리스트<br/>→ mark.sh 셀프 채점]
+    A@{ icon: "logos:terraform-icon", form: "square", label: "terraform apply<br/>VPC·데이터·ECR", pos: "b", h: 46, w: 46 }
+    B@{ icon: "logos:aws-eks", form: "square", label: "eksctl create cluster<br/>~20분 던져놓기", pos: "b", h: 46, w: 46 }
+    C@{ icon: "logos:docker-icon", form: "square", label: "CloudShell<br/>docker build/push<br/>+ ECR 스캔 확인", pos: "b", h: 46, w: 46 }
+    D@{ icon: "logos:helm", form: "square", label: "helm / k8s apply", pos: "b", h: 46, w: 46 }
+    E@{ icon: "logos:aws-elb", form: "square", label: "ingress → ALB 확보", pos: "b", h: 46, w: 46 }
+    F@{ icon: "logos:aws-cloudfront", form: "square", label: "2차 apply<br/>enable_cdn=true", pos: "b", h: 46, w: 46 }
+    G["검증 시드 준비<br/>트래픽·데이터"]
+    H["리셋 체크리스트<br/>→ mark.sh 셀프 채점"]
+
+    A --> B
+    B -.대기 중 병렬.-> C
+    B --> D
+    D --> E
+    E --> F
+    F -.전파 대기 중.-> G
+    G --> H
 ```
 
 eksctl 20분, CloudFront 전파 수 분, ECR 스캔 수 분 — 전부 **던져놓고 다른 일**을 한다.

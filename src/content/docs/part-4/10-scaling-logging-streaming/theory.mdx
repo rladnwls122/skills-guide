@@ -19,12 +19,19 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 ```mermaid
 flowchart LR
-    P[메시지 주입\n채점: 100건] --> SQS["SQS\nskm-order-queue"]
-    SQS -->|"큐 길이 폴링 10s\n(IRSA: keda-operator)"| KEDA["KEDA ScaledObject\norder-scaler\nmin 1 / max 5 / queueLength 5"]
-    KEDA -->|"HPA로 replicas 조정"| DEP["Deployment order-processor\nrequests 500m/512Mi\nnodeSelector: skm-app-nodepool"]
-    DEP -->|"Pending Pod 발생"| KARP["Karpenter (kube-system)\nNodePool skm-app-nodepool\ntaint dedicated=app"]
-    KARP -->|"노드 프로비저닝\nt3.small/t3.medium"| NODE["앱 노드 1~2대+"]
-    NODE -.->|"유휴 60s 후 반환\nWhenEmptyOrUnderutilized"| KARP
+    P["메시지 주입<br/>채점: 100건"]
+    SQS@{ icon: "logos:aws-sqs", form: "square", label: "SQS<br/>skm-order-queue", pos: "b", h: 46, w: 46 }
+    KEDA@{ icon: "logos:kubernetes", form: "square", label: "KEDA ScaledObject<br/>order-scaler<br/>min 1 / max 5 / queueLength 5", pos: "b", h: 46, w: 46 }
+    DEP@{ icon: "logos:kubernetes", form: "square", label: "Deployment order-processor<br/>requests 500m/512Mi<br/>nodeSelector: skm-app-nodepool", pos: "b", h: 46, w: 46 }
+    KARP@{ icon: "logos:kubernetes", form: "square", label: "Karpenter (kube-system)<br/>NodePool skm-app-nodepool<br/>taint dedicated=app", pos: "b", h: 46, w: 46 }
+    NODE@{ icon: "logos:aws-ec2", form: "square", label: "앱 노드 1~2대+", pos: "b", h: 46, w: 46 }
+
+    P --> SQS
+    SQS -->|"큐 길이 폴링 10s<br/>(IRSA: keda-operator)"| KEDA
+    KEDA -->|"HPA로 replicas 조정"| DEP
+    DEP -->|"Pending Pod 발생"| KARP
+    KARP -->|"노드 프로비저닝<br/>t3.small/t3.medium"| NODE
+    NODE -.->|"유휴 60s 후 반환<br/>WhenEmptyOrUnderutilized"| KARP
 ```
 
 2단 스케일링: 큐 길이가 Pod 수를 늘리고(KEDA), Pod가 노드에 안 들어가면 노드가 늘어난다(Karpenter). 축소도 2단: 큐가 비면 Pod 1로, 노드가 비면 1대로.
@@ -133,15 +140,23 @@ Deployment `order-processor`에 configMapRef나 valueFrom으로 env를 하나 �
 
 ```mermaid
 flowchart LR
-    subgraph EKS["EKS o11y-cluster (노드 2대 Multi-AZ)"]
-        APP["log-generator ×2 (ns o11y)\n제공 app.py: /healthz /log\n+ 자체 Dockerfile"]
-        APP -->|"stdout JSON 한 줄\n→ /var/log/pods/*.log"| OTEL["OTel Collector DaemonSet\no11y-otel (ns monitoring)\nfilelog + container 파서"]
-        OTEL -->|"OTLP HTTP\n:3100/otlp"| LOKI["Loki o11y-loki\nSingle Binary + PV"]
-        LOKI --> GRAF["Grafana o11y-grafana\nLog Overview 3패널"]
+    subgraph EKS["<span class='icon--logos icon--logos--aws-eks'></span> EKS o11y-cluster (노드 2대 Multi-AZ)"]
+        APP@{ icon: "logos:kubernetes", form: "square", label: "log-generator ×2 (ns o11y)<br/>제공 app.py: /healthz /log<br/>+ 자체 Dockerfile", pos: "b", h: 46, w: 46 }
+        OTEL@{ icon: "logos:opentelemetry", form: "square", label: "OTel Collector DaemonSet<br/>o11y-otel (ns monitoring)<br/>filelog + container 파서", pos: "b", h: 46, w: 46 }
+        LOKI@{ icon: "logos:grafana", form: "square", label: "Loki o11y-loki<br/>Single Binary + PV", pos: "b", h: 46, w: 46 }
+        GRAF@{ icon: "logos:grafana", form: "square", label: "Grafana o11y-grafana<br/>Log Overview 3패널", pos: "b", h: 46, w: 46 }
+
+        APP -->|"stdout JSON 한 줄<br/>→ /var/log/pods/*.log"| OTEL
+        OTEL -->|"OTLP HTTP<br/>:3100/otlp"| LOKI
+        LOKI --> GRAF
     end
-    ALB1["ALB o11y-app-alb\n(terraform 이름 고정)"] -->|TargetGroupBinding| APP
-    ALB2["ALB o11y-grafana-alb"] -->|TargetGroupBinding| GRAF
-    U[채점자] --> ALB1 & ALB2
+    ALB1@{ icon: "logos:aws-elb", form: "square", label: "ALB o11y-app-alb<br/>(terraform 이름 고정)", pos: "b", h: 46, w: 46 }
+    ALB2@{ icon: "logos:aws-elb", form: "square", label: "ALB o11y-grafana-alb", pos: "b", h: 46, w: 46 }
+    U["채점자"]
+
+    ALB1 -->|TargetGroupBinding| APP
+    ALB2 -->|TargetGroupBinding| GRAF
+    U --> ALB1 & ALB2
 ```
 
 ### ② 언제 이 패턴이 나오나
@@ -250,15 +265,26 @@ Grafana는 웹 수동 채점 항목이 있고, **No Data 패널이 하나라도 
 
 ```mermaid
 flowchart LR
-    subgraph Kinesis+Flink["Kinesis + Flink Studio (set-02 m2)"]
-        EC2A["Flask 앱 (EC2, systemd 'app')\nPOST /order"] --> KIN["Kinesis\nwsc2026-order-stream\nON_DEMAND"]
-        KIN --> FLINK["Managed Flink Studio\nwsc2026-analytics-flink\n(Zeppelin, 채점 시 READY)"]
+    subgraph Kinesis+Flink["<span class='icon--logos icon--logos--aws-kinesis'></span> Kinesis + Flink Studio (set-02 m2)"]
+        EC2A@{ icon: "logos:aws-ec2", form: "square", label: "Flask 앱 (EC2, systemd 'app')<br/>POST /order", pos: "b", h: 46, w: 46 }
+        KIN@{ icon: "logos:aws-kinesis", form: "square", label: "Kinesis<br/>wsc2026-order-stream<br/>ON_DEMAND", pos: "b", h: 46, w: 46 }
+        FLINK@{ icon: "aws:flink", form: "square", label: "Managed Flink Studio<br/>wsc2026-analytics-flink<br/>(Zeppelin, 채점 시 READY)", pos: "b", h: 46, w: 46 }
+
+        EC2A --> KIN
+        KIN --> FLINK
     end
-    subgraph MSK["MSK (set-02 m4)"]
-        PROD["Go producer EC2\n(제공 바이너리, TLS 9094)"] --> MSKC["MSK wsc2026-msk-cluster\nIAM 인증 + 비인증 TLS 병행"]
-        MSKC -->|"ESM (LATEST)"| LC["Lambda consumer ×2\npython3.14"]
-        LC -->|"정상: 전 속성 String"| DDB[("DynamoDB\nwsc2026-sensor-data")]
-        LC -->|"이상치"| SNS2[SNS] & S3A["S3 alert/"]
+    subgraph MSK["<span class='icon--logos icon--logos--aws-msk'></span> MSK (set-02 m4)"]
+        PROD@{ icon: "logos:aws-ec2", form: "square", label: "Go producer EC2<br/>(제공 바이너리, TLS 9094)", pos: "b", h: 46, w: 46 }
+        MSKC@{ icon: "aws:msk", form: "square", label: "MSK wsc2026-msk-cluster<br/>IAM 인증 + 비인증 TLS 병행", pos: "b", h: 46, w: 46 }
+        LC@{ icon: "logos:aws-lambda", form: "square", label: "Lambda consumer ×2<br/>python3.14", pos: "b", h: 46, w: 46 }
+        DDB@{ icon: "logos:aws-dynamodb", form: "square", label: "DynamoDB<br/>wsc2026-sensor-data", pos: "b", h: 46, w: 46 }
+        SNS2@{ icon: "logos:aws-sns", form: "square", label: "SNS", pos: "b", h: 46, w: 46 }
+        S3A@{ icon: "logos:aws-s3", form: "square", label: "S3 alert/", pos: "b", h: 46, w: 46 }
+
+        PROD --> MSKC
+        MSKC -->|"ESM (LATEST)"| LC
+        LC -->|"정상: 전 속성 String"| DDB
+        LC -->|"이상치"| SNS2 & S3A
     end
 ```
 

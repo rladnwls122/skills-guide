@@ -41,7 +41,7 @@ ENTRYPOINT ["python", "/app/app.py"]  # 컨테이너 시작 시 실행할 명령
 flowchart LR
     DF@{ icon: "logos:docker-icon", form: "square", label: "Dockerfile", pos: "b", h: 46, w: 46 }
     IMG@{ icon: "logos:docker-icon", form: "square", label: "로컬 이미지 app:v1", pos: "b", h: 46, w: 46 }
-    ECR@{ icon: "logos:aws", form: "square", label: "ECR 레지스트리", pos: "b", h: 46, w: 46 }
+    ECR@{ icon: "aws:ecr", form: "square", label: "ECR 레지스트리", pos: "b", h: 46, w: 46 }
     EKS@{ icon: "logos:aws-eks", form: "square", label: "EKS 노드가 pull → 컨테이너 실행", pos: "b", h: 46, w: 46 }
     DF -- "docker build -t app:v1 ." --> IMG
     IMG -- "docker tag app:v1 &lt;ECR주소&gt;/app:v1" --> TAG["ECR 태그"]

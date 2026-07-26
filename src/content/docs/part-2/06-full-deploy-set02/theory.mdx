@@ -21,19 +21,26 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 ```mermaid
 graph TD
-    U["User (브라우저/curl)"] -->|"HTTPS (HTTP는 301 리다이렉트)"| CF["CloudFront wskorea26-concert-cf<br/>(+WAF 부착 지점)<br/>CF Function: POST /book → /v1/book 재작성"]
-    CF -->|"기본 동작(정적)<br/>인증: OAC(sigv4) + 헤더 wskorea26-s3-access"| S3["S3 wskorea26-concert-bucket-비번호<br/>origin_path /web/main<br/>SSE-KMS, 퍼블릭 차단"]
-    CF -->|"/book* (무캐싱)<br/>인증: 커스텀 헤더 X-Origin-Verify=wskorea26-cf"| ALB["wskorea26-book-alb :80<br/>기본 403 / 헤더 규칙 2개"]
+    U@{ icon: "mdi:web", form: "square", label: "User (브라우저/curl)", pos: "b", h: 46, w: 46 }
+    CF@{ icon: "logos:aws-cloudfront", form: "square", label: "CloudFront wskorea26-concert-cf<br/>(+WAF 부착 지점)<br/>CF Function: POST /book → /v1/book 재작성", pos: "b", h: 46, w: 46 }
+    U -->|"HTTPS (HTTP는 301 리다이렉트)"| CF
+    S3@{ icon: "logos:aws-s3", form: "square", label: "S3 wskorea26-concert-bucket-비번호<br/>origin_path /web/main<br/>SSE-KMS, 퍼블릭 차단", pos: "b", h: 46, w: 46 }
+    CF -->|"기본 동작(정적)<br/>인증: OAC(sigv4) + 헤더 wskorea26-s3-access"| S3
+    ALB@{ icon: "logos:aws-elb", form: "square", label: "wskorea26-book-alb :80<br/>기본 403 / 헤더 규칙 2개", pos: "b", h: 46, w: 46 }
+    CF -->|"/book* (무캐싱)<br/>인증: 커스텀 헤더 X-Origin-Verify=wskorea26-cf"| ALB
     ALB -->|"POST (규칙 p10)<br/>인증: SG(ALB→노드 8080)"| POD["book Pod x2 (EKS app 노드)<br/>/v1/book, /health:8080"]
-    ALB -->|"그 외 GET 등 (규칙 p20)"| LMB["wskorea26-book-lambda<br/>python3.14, TABLE_NAME"]
-    POD -->|"PutItem — 인증: IRSA(wskorea26-book-sa)"| DDB["DynamoDB wskorea26-data-table<br/>PK client_id, GSI concert_name+created_at<br/>KMS, 삭제방지"]
+    LMB@{ icon: "logos:aws-lambda", form: "square", label: "wskorea26-book-lambda<br/>python3.14, TABLE_NAME", pos: "b", h: 46, w: 46 }
+    ALB -->|"그 외 GET 등 (규칙 p20)"| LMB
+    DDB@{ icon: "logos:aws-dynamodb", form: "square", label: "DynamoDB wskorea26-data-table<br/>PK client_id, GSI concert_name+created_at<br/>KMS, 삭제방지", pos: "b", h: 46, w: 46 }
+    POD -->|"PutItem — 인증: IRSA(wskorea26-book-sa)"| DDB
     LMB -->|"Query — 인증: Lambda 실행 역할(최소권한)"| DDB
-    subgraph EKS["EKS wskorea26-cluster (priv-subnet-c/d)"]
+    subgraph EKS["<span class='icon--logos icon--logos--aws-eks'></span> EKS wskorea26-cluster (priv-subnet-c/d)"]
         POD
-        GRAF["Grafana/Prometheus (addon 노드)"]
-        FB["Fluent Bit DaemonSet(전 노드) → CloudWatch Logs"]
+        GRAF@{ icon: "logos:grafana", form: "square", label: "Grafana/Prometheus (addon 노드)", pos: "b", h: 46, w: 46 }
+        FB@{ icon: "mdi:script-text-outline", form: "square", label: "Fluent Bit DaemonSet(전 노드) → CloudWatch Logs", pos: "b", h: 46, w: 46 }
     end
-    GALB["wskorea26-grafana-alb"] --> GRAF
+    GALB@{ icon: "logos:aws-elb", form: "square", label: "wskorea26-grafana-alb", pos: "b", h: 46, w: 46 }
+    GALB --> GRAF
 ```
 
 암기 포인트(화살표별 인증):
@@ -112,15 +119,24 @@ function handler(event) {
 
 ```mermaid
 graph LR
-    S1["1 terraform apply<br/>.env.ps1 영속화"] --> S2["2 docker build/push<br/>(기본 CloudShell)"]
-    S1 --> S3["3 eksctl create<br/>(VAR 치환, 20분)"]
-    S3 --> S4["4 LBC helm"]
-    S2 --> S5["5 book 앱 k8s"]
+    S1@{ icon: "logos:terraform-icon", form: "square", label: "1 terraform apply<br/>.env.ps1 영속화", pos: "b", h: 46, w: 46 }
+    S2@{ icon: "logos:docker-icon", form: "square", label: "2 docker build/push<br/>(기본 CloudShell)", pos: "b", h: 46, w: 46 }
+    S1 --> S2
+    S3@{ icon: "logos:aws-eks", form: "square", label: "3 eksctl create<br/>(VAR 치환, 20분)", pos: "b", h: 46, w: 46 }
+    S1 --> S3
+    S4@{ icon: "logos:helm", form: "square", label: "4 LBC helm", pos: "b", h: 46, w: 46 }
+    S3 --> S4
+    S5@{ icon: "logos:kubernetes", form: "square", label: "5 book 앱 k8s", pos: "b", h: 46, w: 46 }
+    S2 --> S5
     S4 --> S5
-    S5 --> S6["6 kube-prometheus-stack<br/>+ Grafana TGB"]
-    S6 --> S7["7 Fluent Bit"]
-    S7 --> S8["8 CF Deployed 대기<br/>+ 검증 시드"]
-    S8 --> S9["9 VPC CloudShell<br/>mark.sh"]
+    S6@{ icon: "logos:prometheus", form: "square", label: "6 kube-prometheus-stack<br/>+ Grafana TGB", pos: "b", h: 46, w: 46 }
+    S5 --> S6
+    S7@{ icon: "mdi:script-text-outline", form: "square", label: "7 Fluent Bit", pos: "b", h: 46, w: 46 }
+    S6 --> S7
+    S8@{ icon: "logos:aws-cloudfront", form: "square", label: "8 CF Deployed 대기<br/>+ 검증 시드", pos: "b", h: 46, w: 46 }
+    S7 --> S8
+    S9@{ icon: "mdi:console-line", form: "square", label: "9 VPC CloudShell<br/>mark.sh", pos: "b", h: 46, w: 46 }
+    S8 --> S9
     S9 --> S10["10 정리(역순 destroy)"]
 ```
 

@@ -205,9 +205,60 @@ function decorate(pre) {
 	frame.append(pre, btn);
 }
 
+/*
+ * astro-mermaid 는 렌더 시작 시점에 data-theme 를 한 번만 읽는다. 그 1회를 놓치면
+ * 다크모드인데 라이트 테마로 그려져 글자가 검은색으로 남고, 재렌더는 data-theme 가
+ * '바뀔 때'만 일어나므로 사용자가 테마를 건드리기 전까지 복구되지 않는다.
+ *
+ * 렌더 결과의 실제 테마를 svg 루트 fill 밝기로 읽어(다크 테마는 밝은 글자색) 문서
+ * 테마와 어긋날 때만 data-theme 를 동기적으로 뒤집었다 되돌린다. 두 번의 변경이
+ * 한 번의 MutationObserver 콜백으로 합쳐져 최종값으로 재렌더된다.
+ *
+ * 무조건 재렌더시키지 않는 이유: 정상인 페이지에서도 mermaid 작업이 2배가 된다.
+ */
+let themeRepairDone = false;
+
+function isLightFill(color) {
+	const [r, g, b] = (color.match(/\d+/g) || []).map(Number);
+	if (r === undefined) return null;
+	return 0.299 * r + 0.587 * g + 0.114 * b > 128;
+}
+
+function syncTheme() {
+	// 페이지당 한 번만 시도한다. 재렌더된 svg 에는 표시가 없어 다시 검사 대상이 되므로,
+	// 판별이 틀리면(또는 mermaid 가 예상과 다른 색을 쓰면) 재렌더가 무한히 반복된다.
+	if (themeRepairDone) return;
+
+	const html = document.documentElement;
+	if (!html.dataset.theme) return;
+	const wantDark = html.dataset.theme === "dark";
+
+	const rendered = document.querySelectorAll("pre.mermaid[data-processed]");
+	if (!rendered.length) return;
+
+	// data-diagram 이 없는 도식이 하나라도 있으면 손대지 않는다 — 재렌더가 걸리면
+	// astro-mermaid 가 렌더된 SVG 를 소스로 덮어써 그 도식이 영구히 깨진다.
+	for (const pre of rendered) {
+		if (!pre.getAttribute("data-diagram")) return;
+	}
+
+	const svg = rendered[0].querySelector("svg");
+	if (!svg) return;
+
+	const light = isLightFill(getComputedStyle(svg).fill);
+	if (light === null) return;
+	themeRepairDone = true;
+	if (light !== wantDark) return; // 밝은 글자 = 다크 테마. 일치하면 할 일 없음
+
+	const current = html.dataset.theme;
+	html.dataset.theme = current === "dark" ? "light" : "dark";
+	html.dataset.theme = current;
+}
+
 function scan() {
 	document.querySelectorAll("pre.mermaid").forEach(decorate);
 	document.querySelectorAll("pre.mermaid svg").forEach(sizeSvg);
+	syncTheme();
 }
 
 function init() {
@@ -223,4 +274,7 @@ if (document.readyState === "loading") {
 	init();
 }
 // Starlight 의 뷰 트랜지션으로 페이지가 갈릴 때도 다시 건다.
-document.addEventListener("astro:page-load", scan);
+document.addEventListener("astro:page-load", () => {
+	themeRepairDone = false;
+	scan();
+});

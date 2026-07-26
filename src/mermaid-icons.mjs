@@ -27,6 +27,8 @@ export const MERMAID_ICONS = {
     'lan-connect', 'layers-outline', 'script-text-outline', 'console-line',
     'server-network', 'web', 'routes', 'card-text-outline',
   ],
+  // logos 팩에 없는 브랜드 로고. 단색이라 mdi처럼 색을 박아야 한다.
+  'simple-icons': ['fluentbit'],
 };
 
 /** Iconify 서브셋 엔드포인트 URL. 아이콘 개수와 무관하게 팩당 요청 1건. */

@@ -37,7 +37,7 @@ graph TD
     subgraph EKS["<span class='icon--logos icon--logos--aws-eks'></span> EKS wskorea26-cluster (priv-subnet-c/d)"]
         POD
         GRAF@{ icon: "logos:grafana", form: "square", label: "Grafana/Prometheus (addon 노드)", pos: "b", h: 46, w: 46 }
-        FB@{ icon: "mdi:script-text-outline", form: "square", label: "Fluent Bit DaemonSet(전 노드) → CloudWatch Logs", pos: "b", h: 46, w: 46 }
+        FB@{ icon: "simple-icons:fluentbit", form: "square", label: "Fluent Bit DaemonSet(전 노드) → CloudWatch Logs", pos: "b", h: 46, w: 46 }
     end
     GALB@{ icon: "logos:aws-elb", form: "square", label: "wskorea26-grafana-alb", pos: "b", h: 46, w: 46 }
     GALB --> GRAF
@@ -131,7 +131,7 @@ graph LR
     S4 --> S5
     S6@{ icon: "logos:prometheus", form: "square", label: "6 kube-prometheus-stack<br/>+ Grafana TGB", pos: "b", h: 46, w: 46 }
     S5 --> S6
-    S7@{ icon: "mdi:script-text-outline", form: "square", label: "7 Fluent Bit", pos: "b", h: 46, w: 46 }
+    S7@{ icon: "simple-icons:fluentbit", form: "square", label: "7 Fluent Bit", pos: "b", h: 46, w: 46 }
     S6 --> S7
     S8@{ icon: "logos:aws-cloudfront", form: "square", label: "8 CF Deployed 대기<br/>+ 검증 시드", pos: "b", h: 46, w: 46 }
     S7 --> S8

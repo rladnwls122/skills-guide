@@ -104,10 +104,10 @@ flowchart TB
         subgraph NGADDON["<span class='icon--logos icon--logos--aws-ec2'></span> addon 노드그룹 (taint/label: node-type=addon)"]
             LBC@{ icon: "logos:helm", form: "square", label: "Helm 릴리스: LBC<br/>(AWS Load Balancer Controller)", pos: "b", h: 46, w: 46 }
             KPS@{ icon: "logos:prometheus", form: "square", label: "Helm 릴리스:<br/>kube-prometheus-stack", pos: "b", h: 46, w: 46 }
-            FB1@{ icon: "mdi:script-text-outline", form: "square", label: "DaemonSet: Fluent Bit", pos: "b", h: 46, w: 46 }
+            FB1@{ icon: "simple-icons:fluentbit", form: "square", label: "DaemonSet: Fluent Bit", pos: "b", h: 46, w: 46 }
         end
         subgraph NGAPP["<span class='icon--logos icon--logos--aws-ec2'></span> app 노드그룹 (label: node-type=app)"]
-            FB2@{ icon: "mdi:script-text-outline", form: "square", label: "DaemonSet: Fluent Bit", pos: "b", h: 46, w: 46 }
+            FB2@{ icon: "simple-icons:fluentbit", form: "square", label: "DaemonSet: Fluent Bit", pos: "b", h: 46, w: 46 }
             subgraph NSAPP["<span class='icon--logos icon--logos--kubernetes'></span> Namespace: app (채점이 ns 검사)"]
                 DEP["Deployment<br/>replicas 2 · probe 3종<br/>topologySpread(AZ)"]
                 POD1["Pod"]

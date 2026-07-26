@@ -47,6 +47,7 @@ export default defineConfig({
     iconPacks: [
       { name: 'logos', url: iconifyUrl('logos', 'json') },
       { name: 'mdi', url: iconifyUrl('mdi', 'json') },
+      { name: 'simple-icons', url: iconifyUrl('simple-icons', 'json') },
     ],
   }), mermaidFullscreen, starlight({
     title: 'skills-guide',

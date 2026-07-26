@@ -154,53 +154,7 @@ aws kms get-key-policy --key-id alias/wskorea26-s3-key --policy-name default --o
 
 ---
 
-## ⑤ 자기 점검 퀴즈
-
-<Quiz title="봉투 암호화 키 역할 구분">
-봉투 암호화(Envelope Encryption) 흐름에서 실제 고속 데이터 암호화/복호화에 직접 사용되며, 사용 직후 메모리에서 파기되어야 하는 1회성 대칭 키의 명칭은 무엇인가?
-
-- [ ] CMK (Customer Master Key)
-  > CMK는 KMS HSM 내부에 보관되는 마스터 키다. 실제 데이터가 아니라 DEK를 암·복호화하는 용도로만 쓴다.
-- [x] DEK (Data Encryption Key)
-- [ ] OAC (Origin Access Control)
-  > OAC는 CloudFront가 S3 원본에 접근할 때 요청에 서명하는 구성 요소다. 암호화 키가 아니다.
-- [ ] IAM Role Policy
-  > IAM 정책은 자격 증명에 매핑되는 권한 정의 문서다.
-
-DEK는 대용량 데이터를 고속으로 암호화하는 데 쓰고, 암호화가 끝나면 메모리에서 즉시 파기한다. KMS의 `Encrypt` API가 평문 4KB까지만 받기 때문에 큰 데이터는 이 구조 외의 선택지가 없다.
-</Quiz>
-
-<Quiz title="KMS 키 정책의 lockout 예방">
-KMS 키 정책 작성 중, root principal을 제외하는 `root-less` 키 정책을 만들고자 한다. 이때 AWS KMS API가 잘못된 키 정책으로 인해 키를 영구히 조작할 수 없게 되는 상황을 방지하기 위해 수행하는 자동 검사 메커니즘의 명칭은?
-
-- [x] Lockout Safety Check
-- [ ] IAM Boundary Check
-  > IAM 권한 경계(Permission Boundary)는 IAM 역할이 가질 수 있는 최대 권한을 제한하는 메커니즘이다.
-- [ ] STS Trust Verification
-  > STS 신뢰 관계 검증은 AssumeRole 시점에 수행하는 신원 문지기 평가다.
-- [ ] KMS Auto Rotation
-  > 자동 키 회전은 백킹 키를 주기적으로 교체하는 기능이다. 키 정책 검증과는 무관하다.
-
-AWS KMS는 키 정책을 적용하기 전에 키 관리 권한(`kms:PutKeyPolicy` 등)을 가진 유효한 Principal이 남는지 확인해 락아웃을 방지한다. 이 검사에 실패하면 `MalformedPolicyDocumentException` 과 함께 생성이 거부된다.
-</Quiz>
-
-<Quiz title="KMS 정책 및 채점 원리">
-KMS 키 정책과 대회 채점 원리에 대한 설명으로 올바른 것을 **모두** 고르시오.
-
-- [x] 키 정책이 없거나 관리자 권한 허용이 빠지면 root를 포함한 모든 신원의 접근이 차단된다.
-- [x] `mark.sh` 는 리소스가 어떤 키로 암호화됐는지를 별칭(Alias)으로 역조회해 판별한다.
-- [x] S3 SSE-KMS·DynamoDB SSE에서 데이터를 읽고 쓰는 역할에 필요한 최소 권한은 `kms:Decrypt` 와 `kms:GenerateDataKey*` 다.
-- [ ] 키 정책에서 다른 리소스(예: S3 버킷)의 ARN을 직접 하드코딩하는 것이 순환 참조(Cycle)를 막는 가장 좋은 방법이다.
-  > 반대다. 키 정책이 버킷 ARN을 참조하고 버킷이 키 ARN을 참조하면 상호 의존으로 Terraform 순환 참조 오류가 난다. 계정 ID 같은 동적 조건식으로 결합도를 낮춘다.
-
-**정리**: ① 키 정책이 단독 통제관이다, ② 별칭 매핑은 채점의 필수 요소다, ③ 순환 참조 우회가 HCL 설계의 핵심이다.
-</Quiz>
-
-<QuizResults confetti />
-
----
-
-## ⑥ 심화 개념 (응용력 기르기)
+## ⑤ 심화 개념 (응용력 기르기)
 
 ### 봉투 암호화를 쓰는 진짜 이유 — 4KB 상한
 
@@ -287,6 +241,88 @@ KMS는 리전·계정 단위로 초당 요청 수 할당량을 둔다. 넘으면
 | 회전을 켰는데 옛 객체가 그대로다 | 회전은 기존 데이터를 재암호화하지 않는다 | 정상 동작. 필요하면 `ReEncrypt` 호출 |
 | 트래픽 급증 시 `ThrottlingException` | 객체마다 KMS 호출 | S3 버킷 키 활성화, 데이터 키 캐싱 검토 |
 | Terraform이 `Cycle` 오류를 낸다 | 키 정책과 버킷이 서로의 ARN을 참조 | 계정 ID·조건식으로 결합도를 낮춘다 |
+
+---
+
+## ⑥ 자기 점검 퀴즈
+
+<Quiz title="봉투 암호화 키 역할 구분">
+봉투 암호화(Envelope Encryption) 흐름에서 실제 고속 데이터 암호화/복호화에 직접 사용되며, 사용 직후 메모리에서 파기되어야 하는 1회성 대칭 키의 명칭은 무엇인가?
+
+- [ ] CMK (Customer Master Key)
+  > CMK는 KMS HSM 내부에 보관되는 마스터 키다. 실제 데이터가 아니라 DEK를 암·복호화하는 용도로만 쓴다.
+- [x] DEK (Data Encryption Key)
+- [ ] OAC (Origin Access Control)
+  > OAC는 CloudFront가 S3 원본에 접근할 때 요청에 서명하는 구성 요소다. 암호화 키가 아니다.
+- [ ] IAM Role Policy
+  > IAM 정책은 자격 증명에 매핑되는 권한 정의 문서다.
+
+DEK는 대용량 데이터를 고속으로 암호화하는 데 쓰고, 암호화가 끝나면 메모리에서 즉시 파기한다. KMS의 `Encrypt` API가 평문 4KB까지만 받기 때문에 큰 데이터는 이 구조 외의 선택지가 없다.
+</Quiz>
+
+<Quiz title="KMS 키 정책의 lockout 예방">
+KMS 키 정책 작성 중, root principal을 제외하는 `root-less` 키 정책을 만들고자 한다. 이때 AWS KMS API가 잘못된 키 정책으로 인해 키를 영구히 조작할 수 없게 되는 상황을 방지하기 위해 수행하는 자동 검사 메커니즘의 명칭은?
+
+- [x] Lockout Safety Check
+- [ ] IAM Boundary Check
+  > IAM 권한 경계(Permission Boundary)는 IAM 역할이 가질 수 있는 최대 권한을 제한하는 메커니즘이다.
+- [ ] STS Trust Verification
+  > STS 신뢰 관계 검증은 AssumeRole 시점에 수행하는 신원 문지기 평가다.
+- [ ] KMS Auto Rotation
+  > 자동 키 회전은 백킹 키를 주기적으로 교체하는 기능이다. 키 정책 검증과는 무관하다.
+
+AWS KMS는 키 정책을 적용하기 전에 키 관리 권한(`kms:PutKeyPolicy` 등)을 가진 유효한 Principal이 남는지 확인해 락아웃을 방지한다. 이 검사에 실패하면 `MalformedPolicyDocumentException` 과 함께 생성이 거부된다.
+</Quiz>
+
+<Quiz title="KMS 정책 및 채점 원리">
+KMS 키 정책과 대회 채점 원리에 대한 설명으로 올바른 것을 **모두** 고르시오.
+
+- [x] 키 정책이 없거나 관리자 권한 허용이 빠지면 root를 포함한 모든 신원의 접근이 차단된다.
+- [x] `mark.sh` 는 리소스가 어떤 키로 암호화됐는지를 별칭(Alias)으로 역조회해 판별한다.
+- [x] S3 SSE-KMS·DynamoDB SSE에서 데이터를 읽고 쓰는 역할에 필요한 최소 권한은 `kms:Decrypt` 와 `kms:GenerateDataKey*` 다.
+- [ ] 키 정책에서 다른 리소스(예: S3 버킷)의 ARN을 직접 하드코딩하는 것이 순환 참조(Cycle)를 막는 가장 좋은 방법이다.
+  > 반대다. 키 정책이 버킷 ARN을 참조하고 버킷이 키 ARN을 참조하면 상호 의존으로 Terraform 순환 참조 오류가 난다. 계정 ID 같은 동적 조건식으로 결합도를 낮춘다.
+
+**정리**: ① 키 정책이 단독 통제관이다, ② 별칭 매핑은 채점의 필수 요소다, ③ 순환 참조 우회가 HCL 설계의 핵심이다.
+</Quiz>
+
+<Quiz title="S3 기본 암호화에 쓸 키 종류">
+S3 버킷 기본 암호화에 KMS 키를 지정했는데 설정이 거부됐다. 원인과 대응으로 옳은 것은?
+
+- [x] 비대칭 키를 지정했다. `GenerateDataKey` 를 발급하지 못하므로 대칭 키로 교체한다.
+- [ ] 키 회전이 꺼져 있다. 자동 회전을 켜면 해결된다.
+  > 회전은 백킹 키를 주기적으로 교체하는 기능이고, 키 ID·ARN·별칭도 그대로 유지된다. 기본 암호화 설정 가능 여부와 무관하다.
+- [ ] S3 버킷 키를 켜면 비대칭 키도 그대로 쓸 수 있다.
+  > 버킷 키는 KMS 호출 횟수를 줄이는 캐시 장치다. 키 종류 제약을 없애 주지는 않는다.
+- [ ] 키 정책에 `kms:GetPublicKey` 를 추가하면 된다.
+  > `GetPublicKey` 는 비대칭 키의 퍼블릭 키를 KMS 밖으로 가져오는 액션이다. 권한을 더해도 비대칭 키에서 데이터 키가 나오지는 않는다.
+
+AWS 서비스 통합은 전부 대칭 키를 요구한다. 봉투 암호화가 `GenerateDataKey` 로 발급받은 DEK 위에서 돌아가는데, 비대칭 키는 데이터 키 발급 자체가 불가능하기 때문이다. 비대칭 키는 서명 검증이나 AWS를 못 쓰는 상대와의 암호문 교환처럼 목적이 분명할 때만 고른다 — 대회에서 만드는 키는 전부 대칭이다.
+</Quiz>
+
+<Quiz title="키 회전이 바꾸지 않는 것">
+KMS 자동 키 회전에 대한 설명으로 올바른 것을 **모두** 고르시오.
+
+- [x] 키 ID·ARN·별칭은 그대로이므로 키를 참조하는 정책과 코드를 고칠 일이 없다.
+- [x] 이미 암호화된 데이터는 재암호화되지 않고, 새 암호화 요청만 최신 백킹 키를 쓴다.
+- [x] 이전 백킹 키가 보존되므로 옛 암호문은 계속 복호화된다.
+- [ ] 회전 직후 옛 객체가 그대로인 것은 설정 오류이므로 회전을 다시 걸어야 한다.
+  > 정상 동작이다. 과거 데이터까지 새 키로 바꾸려면 `ReEncrypt` 를 명시적으로 호출한다.
+- [ ] 수동 회전으로 별칭을 새 키에 옮겼다면 옛 키는 바로 삭제해 정리한다.
+  > 옛 키를 지우면 그 키로 암호화한 데이터가 영구히 복구 불가가 된다. 키 삭제에 최소 7일의 대기 기간이 걸린 것이 마지막 방어선이다.
+
+회전은 "앞으로 쓸 키를 바꾸는" 조치이지 과거 데이터를 다시 감싸는 조치가 아니다. 채점 시 옛 객체가 이전 백킹 키로 그대로 남아 있는 것을 실패로 오해해 키를 지우면, 되돌릴 수 없는 사고가 된다.
+</Quiz>
+
+<Quiz title="암호화 컨텍스트 불일치">
+암호화할 때 지정한 암호화 컨텍스트(Encryption Context)와 다른 값을 복호화 요청에 넘기면 [[InvalidCiphertextException]] 이 발생한다.
+
+---
+
+암호화 컨텍스트는 암호문에 묶여 저장되므로, 복호화 시 키-값이 완전히 같아야 성공한다. 컨텍스트 자체는 암호화되지 않고 평문으로 로그에 남으니 비밀 값을 넣지 않는다. 대신 CloudTrail에 남는다는 성질을 이용해 추적하거나, 키 정책의 `Condition` 에서 `kms:EncryptionContext:<키>` 로 검사해 특정 버킷을 위한 요청만 복호화를 허용할 수 있다.
+</Quiz>
+
+<QuizResults confetti />
 
 ---
 

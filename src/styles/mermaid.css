@@ -137,11 +137,12 @@ html.mfs-open {
 	border-color: var(--sl-color-accent);
 }
 
+/* 넘친 도식은 무대가 직접 스크롤한다 — overflow:hidden + 가운데 정렬이면 넓은
+   도식의 좌우가 잘린 채 되돌아올 방법이 없다. */
 .mfs-stage {
 	flex: 1;
-	display: grid;
-	place-items: center;
-	overflow: hidden;
+	display: flex;
+	overflow: auto;
 	cursor: grab;
 	touch-action: none; /* 핀치·드래그를 스크립트가 직접 처리한다 */
 }
@@ -150,10 +151,13 @@ html.mfs-open {
 	cursor: grabbing;
 }
 
-/* 크기는 스크립트가 인라인 width 로 정한다(레이아웃 확대 = 화질 유지).
-   여기서 transform 이나 will-change 를 얹으면 합성 레이어가 생겨 다시 뭉개진다. */
+/* 가운데 정렬은 margin:auto 로 한다. justify-content:center / place-items:center 는
+   내용이 컨테이너보다 커지는 순간 시작 쪽(왼쪽·위)이 스크롤로 닿지 않는 영역이 된다.
+   margin:auto 는 작을 때만 가운데로 밀고, 클 때는 0 으로 접혀 전부 스크롤된다.
+   크기는 스크립트가 인라인 width 로 정한다(레이아웃 확대 = 화질 유지) — 여기서
+   transform 이나 will-change 를 얹으면 합성 레이어가 생겨 다시 뭉개진다. */
 .mfs-canvas {
-	transform-origin: center;
+	margin: auto;
 }
 
 @media (max-width: 50rem) {
@@ -163,5 +167,13 @@ html.mfs-open {
 
 	.mfs-btn {
 		min-width: 2.75rem; /* 좁은 화면일수록 터치 타깃을 넉넉히 */
+	}
+
+	/* 도식을 원래 크기로 두면 세로로도 긴 아키텍처는 프레임 하나가 화면을 통째로
+	   먹는다(모바일에서 스크롤이 도식에 갇힌다). 글자 크기는 그대로 두고 프레임의
+	   높이만 잘라, 넘치는 만큼은 프레임 안에서 위아래로 스크롤시킨다. */
+	.mfs-frame > pre.mermaid {
+		max-height: 60vh;
+		overflow: auto;
 	}
 }

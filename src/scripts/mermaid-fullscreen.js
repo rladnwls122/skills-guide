@@ -53,43 +53,67 @@ function openViewer(svg, caption) {
 	clone.style.maxWidth = "none";
 	clone.style.maxHeight = "none";
 	canvas.appendChild(clone);
+	// 무대 크기를 재려면 먼저 문서에 붙어 있어야 한다.
+	document.documentElement.classList.add("mfs-open");
+	document.body.appendChild(overlay);
 
-	let scale = 1;
-	let x = 0;
-	let y = 0;
-
-	// 화면에 딱 맞는 기준 폭. viewBox 비율로 높이도 넘치지 않게 맞춘다.
+	/*
+	 * 기준 크기는 **도식의 원래 크기(viewBox)** 다. 예전처럼 화면 폭에 맞추면
+	 * 가로로 긴 아키텍처 도식이 좁은 화면에서 그대로 쪼그라들어(모바일에선 1/5 토막)
+	 * 확대해 보려고 연 전체화면이 오히려 더 작아진다.
+	 */
 	const box = clone.viewBox?.baseVal;
-	const ratio = box && box.width ? box.height / box.width : 0;
-	const fitW = Math.min(innerWidth * 0.92, 1600);
-	const maxH = innerHeight * 0.78;
-	const baseW = ratio && fitW * ratio > maxH ? maxH / ratio : fitW;
+	const natW = box && box.width ? box.width : clone.getBoundingClientRect().width || 1;
+	const natH = box && box.height ? box.height : 1;
 
 	/*
 	 * 확대는 transform: scale() 이 아니라 **레이아웃 폭**으로 한다.
 	 * scale() 은 이미 그려진 래스터를 늘리는 합성 연산이라 SVG 인데도 확대하면
 	 * 뭉개진다. 폭을 바꾸면 브라우저가 벡터를 그 해상도로 다시 그려서 몇 배를
-	 * 키워도 선과 글자가 또렷하다. 이동(translate)은 래스터를 늘리지 않으므로
-	 * 그대로 transform 에 둔다.
+	 * 키워도 선과 글자가 또렷하다.
 	 */
 	const apply = () => {
-		clone.style.width = `${baseW * scale}px`;
+		clone.style.width = `${natW * scale}px`;
 		clone.style.height = "auto";
-		canvas.style.transform = `translate(${x}px, ${y}px)`;
 	};
+
+	// 화면보다 작은 도식만 무대에 꽉 차게 키운다. 큰 도식은 원래 크기(1배)로 두고
+	// 넘치는 만큼은 스크롤·드래그로 본다 — 축소해서 안 보이게 만드는 것보다 낫다.
+	const fitScale = () => {
+		const r = stage.getBoundingClientRect();
+		return Math.min(r.width / natW, r.height / natH);
+	};
+	let scale = Math.max(1, fitScale());
 	apply();
+	// 원래 크기가 무대보다 크면 가운데부터 보여준다(왼쪽 위 귀퉁이는 대개 여백).
+	const center = () => {
+		stage.scrollLeft = (stage.scrollWidth - stage.clientWidth) / 2;
+		stage.scrollTop = (stage.scrollHeight - stage.clientHeight) / 2;
+	};
+	center();
+
+	/*
+	 * 이동은 무대의 **네이티브 스크롤**로 한다. 예전엔 canvas 를 translate 로 밀었는데,
+	 * 가운데 정렬된 채로 넘친 영역은 스크롤로 되돌아올 수 없어서 넓은 도식의 좌우가
+	 * 잘린 채 못 보는 구간이 생겼다. 스크롤이면 스크롤바가 곧 "여기 더 있다" 는 표시다.
+	 */
 	const zoom = (factor, originX, originY) => {
-		const next = Math.min(8, Math.max(0.25, scale * factor));
-		// 커서(또는 손가락) 아래 지점을 고정한 채 확대한다.
-		if (originX !== undefined) {
-			const rect = stage.getBoundingClientRect();
-			const cx = originX - rect.left - rect.width / 2;
-			const cy = originY - rect.top - rect.height / 2;
-			x = cx - ((cx - x) * next) / scale;
-			y = cy - ((cy - y) * next) / scale;
-		}
+		const next = Math.min(8, Math.max(0.1, scale * factor));
+		const r = stage.getBoundingClientRect();
+		// 커서(또는 두 손가락 가운데) 아래 지점을 고정한 채 확대한다.
+		const px = (originX ?? r.left + r.width / 2) - r.left;
+		const py = (originY ?? r.top + r.height / 2) - r.top;
+		const cx = (stage.scrollLeft + px) / scale;
+		const cy = (stage.scrollTop + py) / scale;
 		scale = next;
 		apply();
+		stage.scrollLeft = cx * scale - px;
+		stage.scrollTop = cy * scale - py;
+	};
+	const reset = () => {
+		scale = Math.max(1, fitScale());
+		apply();
+		center();
 	};
 
 	const close = () => {
@@ -101,12 +125,7 @@ function openViewer(svg, caption) {
 		if (e.key === "Escape") close();
 		else if (e.key === "+" || e.key === "=") zoom(1.25);
 		else if (e.key === "-") zoom(0.8);
-		else if (e.key === "0") {
-			scale = 1;
-			x = 0;
-			y = 0;
-			apply();
-		}
+		else if (e.key === "0") reset();
 	};
 
 	overlay.addEventListener("click", (e) => {
@@ -116,12 +135,7 @@ function openViewer(svg, caption) {
 		if (act === "close") close();
 		else if (act === "in") zoom(1.25);
 		else if (act === "out") zoom(0.8);
-		else if (act === "reset") {
-			scale = 1;
-			x = 0;
-			y = 0;
-			apply();
-		}
+		else if (act === "reset") reset();
 	});
 
 	stage.addEventListener(
@@ -154,9 +168,9 @@ function openViewer(svg, caption) {
 			}
 			pinchDist = dist;
 		} else if (pointers.size === 1) {
-			x += e.clientX - prev.clientX;
-			y += e.clientY - prev.clientY;
-			apply();
+			// 잡아끄는 방향으로 도식이 따라오도록 스크롤은 반대로 민다.
+			stage.scrollLeft -= e.clientX - prev.clientX;
+			stage.scrollTop -= e.clientY - prev.clientY;
 		}
 	});
 	const release = (e) => {
@@ -167,8 +181,6 @@ function openViewer(svg, caption) {
 	stage.addEventListener("pointercancel", release);
 
 	document.addEventListener("keydown", onKey);
-	document.documentElement.classList.add("mfs-open");
-	document.body.appendChild(overlay);
 	overlay.querySelector(".mfs-close").focus();
 }
 

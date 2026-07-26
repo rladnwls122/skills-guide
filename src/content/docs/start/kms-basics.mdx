@@ -43,8 +43,8 @@ S3 버킷에 파일(`main.jpeg`)을 업로드하고 다운로드할 때 일어�
 
 ```mermaid
 flowchart LR
-    subgraph KMS
-        CMK["CMK (wskorea26-s3-key)\n키 정책이 접근 통제"]
+    subgraph KMS["<span class='icon--logos icon--logos--aws-kms'></span> AWS KMS"]
+        CMK@{ icon: "logos:aws-kms", form: "square", label: "CMK (wskorea26-s3-key)<br/>키 정책이 접근 통제", pos: "b", h: 46, w: 46 }
     end
     subgraph 서비스["S3 / DynamoDB / EKS"]
         DEK["데이터 키 DEK"]

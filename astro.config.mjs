@@ -14,6 +14,7 @@ import starlightThemeExquisitus from 'starlight-theme-exquisitus';
 import remarkGfm from 'remark-gfm';
 
 import mdx from '@astrojs/mdx';
+import { iconifyUrl } from './src/mermaid-icons.mjs';
 
 /** @type {import('astro').AstroIntegration} */
 const mermaidFullscreen = {
@@ -43,6 +44,10 @@ export default defineConfig({
         fontSize: '18px',
       },
     },
+    iconPacks: [
+      { name: 'logos', url: iconifyUrl('logos', 'json') },
+      { name: 'mdi', url: iconifyUrl('mdi', 'json') },
+    ],
   }), mermaidFullscreen, starlight({
     title: 'skills-guide',
     description: '전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드',
@@ -53,6 +58,13 @@ export default defineConfig({
       './src/styles/mermaid.css',
       './src/styles/mobile.css',
       './src/styles/sidebar-toggle.css',
+    ],
+    /* subgraph 라벨의 <span class='icon--logos--*'> 를 정의하는 CSS.
+       아이콘이 데이터 URI 로 들어 있어 아이콘 개수와 무관하게 요청은 팩당 1건이다.
+       mdi 는 단색이라 색을 박아야 한다 — 다크·라이트 양쪽에서 읽히는 중간톤으로 고정. */
+    head: [
+      { tag: 'link', attrs: { rel: 'stylesheet', href: iconifyUrl('logos', 'css') } },
+      { tag: 'link', attrs: { rel: 'stylesheet', href: iconifyUrl('mdi', 'css', '&color=%238ab') } },
     ],
     components: { SiteTitle: './src/components/SiteTitle.astro' },
     plugins: [

@@ -19,13 +19,20 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 ```mermaid
 flowchart LR
-    U[선수/채점자] -->|"test.csv 업로드"| IN["S3 input/"]
-    IN -->|"이벤트 알림 (suffix .csv)"| TRG["트리거 Lambda\n(trigger.py)"]
-    TRG -->|StartExecution| SFN["Step Functions\nwsc2026-student-score-workflow\n(Standard)"]
-    SFN -->|Invoke| PROC["처리 Lambda\nwsc2026-student-score-function"]
-    PROC -->|"정상행: 평균·등급"| DDB[("DynamoDB\nwsc2026-student-score")]
-    PROC -->|"오류행: error_*.json"| ERR["S3 error/"]
-    SFN -->|"MoveToProcessed (Copy)"| PRC["S3 processed/"]
+    U@{ icon: "mdi:web", form: "square", label: "선수/채점자", pos: "b", h: 46, w: 46 }
+    IN@{ icon: "logos:aws-s3", form: "square", label: "S3 input/", pos: "b", h: 46, w: 46 }
+    U -->|"test.csv 업로드"| IN
+    TRG@{ icon: "logos:aws-lambda", form: "square", label: "트리거 Lambda<br/>(trigger.py)", pos: "b", h: 46, w: 46 }
+    IN -->|"이벤트 알림 (suffix .csv)"| TRG
+    SFN@{ icon: "logos:aws-step-functions", form: "square", label: "Step Functions<br/>wsc2026-student-score-workflow<br/>(Standard)", pos: "b", h: 46, w: 46 }
+    TRG -->|StartExecution| SFN
+    PROC@{ icon: "logos:aws-lambda", form: "square", label: "처리 Lambda<br/>wsc2026-student-score-function", pos: "b", h: 46, w: 46 }
+    SFN -->|Invoke| PROC
+    PROC -->|"정상행: 평균·등급"| DDB[("DynamoDB<br/>wsc2026-student-score")]
+    ERR@{ icon: "logos:aws-s3", form: "square", label: "S3 error/", pos: "b", h: 46, w: 46 }
+    PROC -->|"오류행: error_*.json"| ERR
+    PRC@{ icon: "logos:aws-s3", form: "square", label: "S3 processed/", pos: "b", h: 46, w: 46 }
+    SFN -->|"MoveToProcessed (Copy)"| PRC
     SFN -->|"DeleteInputProcessed (Delete)"| IN
 ```
 
@@ -138,17 +145,23 @@ ASL에서 S3 "이동"을 상태 하나로 구현할 수 없는 이유는?
 
 ```mermaid
 flowchart TB
-    subgraph 감지경로
-        EC2["EC2 wsc2026-event-ec2\n(t3.micro, default_tags Project)"]
-        EC2 -->|"stop/terminate\n네이티브 State-change\n(수 초)"| EBN["EventBridge 룰\nec2-stop-rule / ec2-terminate-rule"]
-        EC2 -->|"SG 변경·역할 교체·타입 변경\nAPI 호출 기록"| CT["CloudTrail\nwsc2026-event-trail"]
-        CT -->|"수십 초~1분 지연"| EBC["EventBridge 룰\nsg/role/type-change-rule"]
+    subgraph 감지경로["<span class='icon--mdi icon--mdi--layers-outline'></span> 감지경로"]
+        EC2@{ icon: "logos:aws-ec2", form: "square", label: "EC2 wsc2026-event-ec2<br/>(t3.micro, default_tags Project)", pos: "b", h: 46, w: 46 }
+        EBN@{ icon: "logos:aws-eventbridge", form: "square", label: "EventBridge 룰<br/>ec2-stop-rule / ec2-terminate-rule", pos: "b", h: 46, w: 46 }
+        EC2 -->|"stop/terminate<br/>네이티브 State-change<br/>(수 초)"| EBN
+        CT@{ icon: "logos:aws-cloudtrail", form: "square", label: "CloudTrail<br/>wsc2026-event-trail", pos: "b", h: 46, w: 46 }
+        EC2 -->|"SG 변경·역할 교체·타입 변경<br/>API 호출 기록"| CT
+        EBC@{ icon: "logos:aws-eventbridge", form: "square", label: "EventBridge 룰<br/>sg/role/type-change-rule", pos: "b", h: 46, w: 46 }
+        CT -->|"수십 초~1분 지연"| EBC
     end
-    EBN --> L1["Lambda 복구\nec2-stop-remediation 등"]
-    EBC --> L2["Lambda 복구\nsg/role/type-remediation"]
-    EBN --> SNS["SNS wsc2026-event-alert\n(terminate는 복구 불가 → 알림만)"]
-    subgraph 상시감시
-        CFG["AWS Config\nsg-ssh-rule / required-tags-rule\n(스코프: EC2 Instance·SG만)"]
+    L1@{ icon: "logos:aws-lambda", form: "square", label: "Lambda 복구<br/>ec2-stop-remediation 등", pos: "b", h: 46, w: 46 }
+    EBN --> L1
+    L2@{ icon: "logos:aws-lambda", form: "square", label: "Lambda 복구<br/>sg/role/type-remediation", pos: "b", h: 46, w: 46 }
+    EBC --> L2
+    SNS@{ icon: "logos:aws-sns", form: "square", label: "SNS wsc2026-event-alert<br/>(terminate는 복구 불가 → 알림만)", pos: "b", h: 46, w: 46 }
+    EBN --> SNS
+    subgraph 상시감시["<span class='icon--logos icon--logos--aws-config'></span> 상시감시"]
+        CFG@{ icon: "logos:aws-config", form: "square", label: "AWS Config<br/>sg-ssh-rule / required-tags-rule<br/>(스코프: EC2 Instance·SG만)", pos: "b", h: 46, w: 46 }
     end
     CFG -.->|NON_COMPLIANT 평가| EC2
 ```

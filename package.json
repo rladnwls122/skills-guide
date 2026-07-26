@@ -6,7 +6,8 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "font": "python scripts/subset-font.py"
+    "font": "python scripts/subset-font.py",
+    "check:icons": "node scripts/check-mermaid-icons.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^7.0.3",

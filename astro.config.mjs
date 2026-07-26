@@ -56,7 +56,6 @@ export default defineConfig({
     customCss: [
       './src/styles/korean-fonts.css',
       './src/styles/mermaid.css',
-      './src/styles/code-language-label.css',
       './src/styles/mobile.css',
       './src/styles/sidebar-toggle.css',
     ],

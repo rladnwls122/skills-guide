@@ -10,17 +10,30 @@
 	overflow: hidden;
 }
 
-/* 본문 폭보다 넓은 도식은 프레임 안에서 가로 스크롤 — 페이지 자체가 밀리면 안 된다. */
+/* 본문 폭보다 넓은 도식은 프레임 안에서 가로 스크롤 — 페이지 자체가 밀리면 안 된다.
+   justify-content:center(astro-mermaid 기본값)로 두면 넘친 만큼이 좌우로 똑같이
+   삐져나가는데, flex 컨테이너에서 중앙 정렬된 콘텐츠의 넘친 영역은 스크롤로 온전히
+   못 돌아온다(왼쪽 절반이 영영 안 보이는 브라우저 버그성 동작) — flex-start 로
+   왼쪽부터 쌓아야 스크롤이 처음부터 끝까지 닿는다. */
 .mfs-frame > pre.mermaid {
 	margin: 0;
 	padding: 1rem;
 	overflow-x: auto;
+	justify-content: flex-start;
 	background: none;
 	border: 0;
 }
 
+/* mermaid 는 svg 에 width="100%" 를 박아 컨테이너 폭에 맞춰 축소시킨다 — 도식이
+   본문보다 넓으면 글자까지 같이 쪼그라들어 못 읽게 된다(노트북·모바일에서 특히).
+   실제 픽셀 width 는 mermaid-fullscreen.js 가 viewBox 에서 읽어 인라인으로 박아준다.
+   여기서는 max-width 를 풀어주고(안 풀면 mermaid 가 박은 원본 max-width 만 남음),
+   flex-shrink:0 을 줘야 한다 — pre.mermaid 가 display:flex 라 기본 flex-shrink:1 이면
+   width 를 아무리 정해도 컨테이너 폭에 맞춰 다시 쪼그라든다. 넘치는 부분은 위
+   overflow-x:auto 로 스크롤한다. */
 .mfs-frame > pre.mermaid svg {
-	max-width: 100%;
+	flex-shrink: 0;
+	max-width: none;
 	height: auto;
 }
 

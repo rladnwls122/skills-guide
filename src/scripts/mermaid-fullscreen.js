@@ -10,6 +10,23 @@
  */
 
 const RENDERED = "data-mfs-ready";
+const SIZED = "data-mfs-sized";
+
+/*
+ * mermaid 는 svg 에 width="100%" 만 박아둔다(height 는 없음). viewBox 만 있고
+ * width/height 속성이 없는 인라인 svg 는, width:auto 를 줘도 "고유 크기 없음 +
+ * 고유 비율 있음" 규칙에 따라 컨테이너 폭을 그대로 채워버린다 — CSS 만으로는
+ * 못 막는다. viewBox 폭을 그대로 읽어 실제 픽셀 width 로 박아야 도식이 원래
+ * 크기로 그려지고, 넘치는 부분은 프레임의 overflow-x:auto 가 스크롤한다.
+ */
+function sizeSvg(svg) {
+	if (svg.hasAttribute(SIZED)) return;
+	const box = svg.viewBox?.baseVal;
+	if (box && box.width) {
+		svg.style.width = `${box.width}px`;
+	}
+	svg.setAttribute(SIZED, "");
+}
 
 function openViewer(svg, caption) {
 	const overlay = document.createElement("div");
@@ -94,7 +111,9 @@ function openViewer(svg, caption) {
 
 	overlay.addEventListener("click", (e) => {
 		const act = e.target.closest("[data-act]")?.dataset.act;
-		if (act === "close" || e.target === stage || e.target === overlay) close();
+		// stage 는 드래그로 도식을 옮기는 영역이다 — 빈 배경을 그냥 눌러도
+		// 닫히면 안 된다(닫기는 ✕ 버튼이나 Esc 로만). act==="close" 만 닫는다.
+		if (act === "close") close();
 		else if (act === "in") zoom(1.25);
 		else if (act === "out") zoom(0.8);
 		else if (act === "reset") {
@@ -176,6 +195,7 @@ function decorate(pre) {
 
 function scan() {
 	document.querySelectorAll("pre.mermaid").forEach(decorate);
+	document.querySelectorAll("pre.mermaid svg").forEach(sizeSvg);
 }
 
 function init() {

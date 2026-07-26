@@ -197,7 +197,10 @@ function decorate(pre) {
 		"<span aria-hidden='true'>⤢</span><span class='mfs-label'>크게 보기</span>";
 	// 도식 앞의 가장 가까운 문단을 설명 캡션으로 재활용한다.
 	const caption = pre.previousElementSibling?.textContent?.trim().slice(0, 80) || "";
-	btn.addEventListener("click", () => openViewer(svg, caption));
+	btn.addEventListener("click", () => {
+		const current = pre.querySelector("svg");
+		if (current) openViewer(current, caption);
+	});
 
 	const frame = document.createElement("figure");
 	frame.className = "mfs-frame";
@@ -248,7 +251,7 @@ function syncTheme() {
 	const light = isLightFill(getComputedStyle(svg).fill);
 	if (light === null) return;
 	themeRepairDone = true;
-	if (light !== wantDark) return; // 밝은 글자 = 다크 테마. 일치하면 할 일 없음
+	if (light === wantDark) return; // 밝은 글자 = 다크 테마. 일치하면 할 일 없음
 
 	const current = html.dataset.theme;
 	html.dataset.theme = current === "dark" ? "light" : "dark";

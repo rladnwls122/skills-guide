@@ -26,7 +26,8 @@ graph TD
     D --> P3["AZ 분산: topologySpreadConstraints<br/>topology.kubernetes.io/zone<br/>maxSkew 1, DoNotSchedule"]
     D --> P4["자원: requests=limits 아님<br/>req 100m/128Mi, lim 500m/256Mi"]
     D --> P5["무중단: preStop sleep 15 +<br/>terminationGracePeriodSeconds 45"]
-    D --> P6["IAM: serviceAccountName<br/>wskorea26-book-sa (IRSA, eksctl이 생성)"]
+    P6@{ icon: "logos:aws-iam", form: "square", label: "IAM: serviceAccountName<br/>wskorea26-book-sa (IRSA, eksctl이 생성)", pos: "b", h: 46, w: 46 }
+    D --> P6
 ```
 
 각 요소의 이유:
@@ -88,9 +89,12 @@ helm -n <ns> list / helm -n <ns> uninstall <release>
 
 ```mermaid
 graph LR
-    TF["Terraform<br/>aws_lb + aws_lb_target_group<br/>(이름 고정, target_type=ip)"] -->|TG ARN output| TGB["TargetGroupBinding CRD<br/>serviceRef: wskorea26-book-svc:8080<br/>targetGroupARN, targetType: ip"]
-    TGB --> LBC["LBC (kube-system,<br/>nodeSelector node-type=addon)"]
-    LBC -->|RegisterTargets| TG["wskorea26-book-tg"]
+    TF@{ icon: "logos:terraform-icon", form: "square", label: "Terraform<br/>aws_lb + aws_lb_target_group<br/>(이름 고정, target_type=ip)", pos: "b", h: 46, w: 46 }
+    TF -->|TG ARN output| TGB["TargetGroupBinding CRD<br/>serviceRef: wskorea26-book-svc:8080<br/>targetGroupARN, targetType: ip"]
+    LBC@{ icon: "logos:aws-elb", form: "square", label: "LBC (kube-system,<br/>nodeSelector node-type=addon)", pos: "b", h: 46, w: 46 }
+    TGB --> LBC
+    TG@{ icon: "logos:aws-elb", form: "square", label: "wskorea26-book-tg", pos: "b", h: 46, w: 46 }
+    LBC -->|RegisterTargets| TG
     SVC["Service ClusterIP"] -.->|엔드포인트 감시| LBC
     TG --> Pod["book Pod IP:8080"]
 ```
@@ -137,8 +141,13 @@ spec:
 
 ```mermaid
 graph TD
-    L["Listener :80"] --> R1["규칙 priority 10<br/>조건: X-Origin-Verify=wskorea26-cf<br/>AND method=POST"] --> TG1["wskorea26-book-tg (Pod)"]
-    L --> R2["규칙 priority 20<br/>조건: X-Origin-Verify=wskorea26-cf"] --> TG2["wskorea26-lambda-tg (Lambda)"]
+    L@{ icon: "logos:aws-elb", form: "square", label: "Listener :80", pos: "b", h: 46, w: 46 }
+    L --> R1["규칙 priority 10<br/>조건: X-Origin-Verify=wskorea26-cf<br/>AND method=POST"]
+    TG1@{ icon: "logos:aws-elb", form: "square", label: "wskorea26-book-tg (Pod)", pos: "b", h: 46, w: 46 }
+    R1 --> TG1
+    L --> R2["규칙 priority 20<br/>조건: X-Origin-Verify=wskorea26-cf"]
+    TG2@{ icon: "logos:aws-elb", form: "square", label: "wskorea26-lambda-tg (Lambda)", pos: "b", h: 46, w: 46 }
+    R2 --> TG2
     L --> DEF["default: fixed-response 403<br/>(CloudFront 미경유 차단)"]
 ```
 

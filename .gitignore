@@ -1,5 +1,10 @@
 .obsidian/
 node_modules/
+
+# 개인 설정 — .claude/settings.json 은 공유하고 이것만 제외한다
+.claude/settings.local.json
+.superpowers/
+
 dist/
 .astro/
 

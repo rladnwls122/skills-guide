@@ -5,7 +5,9 @@ description: 이 레포의 모든 문서가 따르는 Diátaxis 문서 체계와
 
 > 문서 유형: reference
 
-이 레포의 모든 md 문서가 따르는 규칙. 새 문서를 쓰거나 고칠 때 이 문서를 기준으로 판단한다.
+이 레포의 모든 문서가 따르는 규칙. 새 문서를 쓰거나 고칠 때 이 문서를 기준으로 판단한다.
+
+콘텐츠는 전부 `src/content/docs/` 아래의 `.mdx` 다. Starlight 가 frontmatter 의 `title` 을 제목으로 렌더하므로 본문에 H1 을 따로 쓰지 않는다.
 
 ---
 
@@ -26,14 +28,16 @@ description: 이 레포의 모든 문서가 따르는 Diátaxis 문서 체계와
 
 ### 이 레포 매핑
 
+모듈 디렉터리는 `index` / `theory` / `lab` 세 파일로 이뤄진다.
+
 | 파일 | 유형 | 담는 것 | 금지 |
 |---|---|---|---|
-| 모듈 `theory.md` | explanation (+끝의 퀴즈) | 원리·왜·채점 관점 | 절차(단계별 실행 지시) |
-| 모듈 `lab.md` (PART-1~4) | tutorial (검증 절차는 how-to 성격) | 학습 단계·검증 명령 | 개념 설명 — theory 링크로 대체 |
-| PART-5 `lab.md` | how-to | 훈련 절차·판정 기준 | 개념 설명 |
-| `reference/*.md` | reference | 조회용 표·명령·매핑 | 설명·훈련 지침 |
-| 모듈 `README.md` | 개요 | 목표/소요/비용/경로 | 내용 서술 |
-| `00-prerequisites/*.md` | explanation | 선수 지식 요약+퀴즈 | — |
+| 모듈 `theory.mdx` | explanation (+끝의 퀴즈) | 원리·왜·채점 관점 | 절차(단계별 실행 지시) |
+| 모듈 `lab.mdx` (PART-1~4) | tutorial (검증 절차는 how-to 성격) | 학습 단계·검증 명령 | 개념 설명 — theory 링크로 대체 |
+| PART-5 `lab.mdx` | how-to | 훈련 절차·판정 기준 | 개념 설명 |
+| 모듈 `index.mdx` | 개요 | 목표/소요/비용/경로 | 내용 서술 |
+| `reference/*.mdx` | reference | 조회용 표·명령·매핑 | 설명·훈련 지침 |
+| `start/*.mdx` | explanation | 선수 지식 요약+퀴즈 | — |
 
 ## B. 문장 규칙 (Google·Microsoft·Apple 종합)
 
@@ -66,8 +70,74 @@ description: 이 레포의 모든 문서가 따르는 Diátaxis 문서 체계와
 
 ## C. 파일 상단 유형 라벨
 
-각 md 파일의 제목(H1) 바로 아래 1행에 인용구로 유형을 명시한다.
+frontmatter(와 컴포넌트 import) 다음 1행에 인용구로 유형을 명시한다. 본문 첫 줄이다.
 
-```markdown
-> 문서 유형: explanation | tutorial | how-to | reference | 개요
+```mdx
+---
+title: 05. 이론 — k8s 워크로드와 ALB 연동
+description: ...
+---
+
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+
+> 문서 유형: explanation
 ```
+
+값은 `explanation` · `tutorial` · `how-to` · `reference` · `개요` 다섯 중 하나다.
+
+## D. 도식 (mermaid)
+
+도식은 ```` ```mermaid ```` 코드 펜스로 쓴다. 렌더·아이콘·전체화면 뷰어는 전부 사이트 쪽에서
+처리하므로 문서에서는 아래 규칙만 지킨다.
+
+### 줄바꿈은 `<br/>`
+
+라벨 안의 `\n` 은 mermaid 11 에서 줄바꿈이 **아니라 글자로 렌더된다**. 반드시 `<br/>` 를 쓴다.
+
+```
+DEP["Deployment<br/>replicas 2 · probe 3종"]
+```
+
+### AWS 서비스 노드에는 아이콘을 붙인다
+
+서비스·제품을 가리키는 노드는 아이콘 셰이프로 쓴다. 규격(`form`·`pos`·`h`·`w`)은 전 도식 공통이다.
+
+```
+S3@{ icon: "logos:aws-s3", form: "square", label: "S3 버킷<br/>정적 호스팅", pos: "b", h: 46, w: 46 }
+```
+
+개념·데이터·판단을 가리키는 노드(`{"…?"}` 마름모, `"실제 데이터"` 등)는 아이콘 없이 둔다.
+
+:::caution[아이콘 셰이프는 엣지 문장 안에 못 쓴다]
+`CF["CloudFront"] -->|"오리진"| ALB["ALB"]` 처럼 엣지 안에서 선언된 노드는 아이콘화할 수 없다.
+노드를 각자 줄에 선언하고 엣지는 id 로만 잇는다.
+:::
+
+### subgraph 는 `<span>` 으로 붙인다
+
+subgraph 라벨에는 `@{ icon: }` 문법이 없다. 클래스로 붙인다.
+
+```
+subgraph EKS["<span class='icon--logos icon--logos--aws-eks'></span> EKS 클러스터"]
+```
+
+라벨 없이 쓰던 `subgraph KMS` 는 대괄호 라벨을 만들어 붙인다.
+
+### 아이콘 고르는 순서
+
+1. `logos:aws-*` — Iconify 의 AWS 로고
+2. `aws:*` — Iconify 에 없는 서비스·리소스(ECR·CloudShell·NAT Gateway·서브넷 등). 공식 AWS 아이콘 패키지에서 뽑은 자체 팩
+3. `logos:*` — kubernetes·docker-icon·terraform-icon·helm·prometheus·grafana 등
+4. `mdi:*` — 위 어디에도 없는 개념일 때만
+
+`sequenceDiagram` 은 mermaid 가 아이콘을 지원하지 않는다 — 손대지 않는다.
+
+:::danger[아이콘 이름 오타는 빌드가 안 잡는다]
+목록에 없는 아이콘을 쓰면 그 노드만 조용히 깨지고 빌드는 통과한다. 도식을 고쳤으면 반드시 실행한다.
+
+```bash
+npm run check:icons
+```
+
+새 아이콘을 쓰려면 `src/mermaid-icons.mjs` 의 목록에 이름을 먼저 추가한다.
+:::

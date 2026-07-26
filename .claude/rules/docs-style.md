@@ -1,0 +1,13 @@
+---
+paths:
+  - "src/content/docs/**/*.mdx"
+---
+
+문장·용어·문서 분류 규칙의 원본은 `src/content/docs/reference/style.mdx` 다. 고치기 전에 그 문서를 확인한다.
+
+핵심만:
+
+- 한 문서에 Diátaxis 유형을 섞지 않는다. `theory` = explanation, `lab` = tutorial(PART-5 는 how-to), `index` = 개요, `reference/*` = reference, `start/*` = explanation.
+- frontmatter·import 다음 본문 첫 줄에 `> 문서 유형: ...` 을 둔다. 값은 `explanation` · `tutorial` · `how-to` · `reference` · `개요` 다섯 중 하나.
+- Starlight 가 frontmatter 의 `title` 을 제목으로 렌더한다. 본문에 H1 을 따로 쓰지 않는다.
+- 용어는 `style.mdx` 의 표준화 표를 따른다. 같은 개념을 두 가지로 표기하지 않는다.

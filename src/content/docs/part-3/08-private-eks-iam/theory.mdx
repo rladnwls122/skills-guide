@@ -46,11 +46,13 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    subgraph private-subnet[프라이빗 서브넷 노드]
+    subgraph private-subnet["<span class='icon--mdi icon--mdi--lan-connect'></span> 프라이빗 서브넷 노드"]
         N[노드/파드]
     end
-    N -->|경로 A| NAT[NAT Gateway] --> Internet[공개 레지스트리<br/>+ ECR + eks-auth]
-    N -->|경로 B| VPCE["VPC Endpoint<br/>s3(Gateway)/ecr.api/ecr.dkr"] --> ECR[(ECR)]
+    NAT@{ icon: "logos:aws-vpc", form: "square", label: "NAT Gateway", pos: "b", h: 46, w: 46 }
+    N -->|경로 A| NAT --> Internet[공개 레지스트리<br/>+ ECR + eks-auth]
+    VPCE@{ icon: "logos:aws-vpc", form: "square", label: "VPC Endpoint<br/>s3(Gateway)/ecr.api/ecr.dkr", pos: "b", h: 46, w: 46 }
+    N -->|경로 B| VPCE --> ECR[(ECR)]
     style VPCE fill:#e8f4e8
 ```
 
@@ -89,9 +91,12 @@ private 클러스터 과제에서 역할별로 실행 위치를 나누는 운영
 
 ```mermaid
 flowchart LR
-    PC["본 PC<br/>terraform apply<br/>outputs.json 생성"] -->|"aws s3 cp _transfer/"| S3[("S3 버킷<br/>_transfer/outputs.json<br/>_transfer/*.tgz")]
-    S3 -->|"aws s3 cp + tar xzf"| CS["VPC CloudShell / bastion<br/>kubectl·helm·채점"]
-    CS2["일반 CloudShell<br/>docker build → ECR push"] --> ECR[(ECR)]
+    PC@{ icon: "logos:terraform-icon", form: "square", label: "본 PC<br/>terraform apply<br/>outputs.json 생성", pos: "b", h: 46, w: 46 }
+    PC -->|"aws s3 cp _transfer/"| S3[("S3 버킷<br/>_transfer/outputs.json<br/>_transfer/*.tgz")]
+    CS@{ icon: "mdi:console-line", form: "square", label: "VPC CloudShell / bastion<br/>kubectl·helm·채점", pos: "b", h: 46, w: 46 }
+    S3 -->|"aws s3 cp + tar xzf"| CS
+    CS2@{ icon: "mdi:console-line", form: "square", label: "일반 CloudShell<br/>docker build → ECR push", pos: "b", h: 46, w: 46 }
+    CS2 --> ECR[(ECR)]
     CS -.->|채점 전| DEL["aws s3 rm _transfer/ --recursive<br/>(버킷이 채점 대상)"]
 ```
 
@@ -119,10 +124,13 @@ mark 4-1이 kubelet configz의 clusterDomain과 Corefile을 grep 한다. 한쪽�
 
 ```mermaid
 flowchart TD
-    A["① kubelet clusterDomain<br/>eksctl overrideBootstrapCommand에<br/>nodeadm NodeConfig<br/>(spec.kubelet.config.clusterDomain)"] --> C{양쪽 일치해야<br/>파드 DNS 정상}
-    B["② CoreDNS Corefile 패치<br/>(k8s manifest로 ConfigMap 교체<br/>+ rollout restart)"] --> C
+    A@{ icon: "logos:kubernetes", form: "square", label: "① kubelet clusterDomain<br/>eksctl overrideBootstrapCommand에<br/>nodeadm NodeConfig<br/>(spec.kubelet.config.clusterDomain)", pos: "b", h: 46, w: 46 }
+    A --> C{양쪽 일치해야<br/>파드 DNS 정상}
+    B@{ icon: "logos:kubernetes", form: "square", label: "② CoreDNS Corefile 패치<br/>(k8s manifest로 ConfigMap 교체<br/>+ rollout restart)", pos: "b", h: 46, w: 46 }
+    B --> C
     C --> D["nslookup kubernetes.default.svc.wsc2026.skills.local 성공"]
-    E["coredns addon 업데이트"] -.->|Corefile 초기화!| B
+    E@{ icon: "logos:kubernetes", form: "square", label: "coredns addon 업데이트", pos: "b", h: 46, w: 46 }
+    E -.->|Corefile 초기화!| B
 ```
 
 - kubelet 쪽: AL2023 MNG는 `overrideBootstrapCommand`에 nodeadm NodeConfig를 넣으면 기본 NodeConfig와 필드 단위 merge된다 — 노드그룹 **모두**에 넣는다.
@@ -157,11 +165,13 @@ ExternalId는 `unicorn-audit-2026<선수등번호>` — **apply 시 넣은 playe
 
 ```mermaid
 flowchart TD
-    U[호출자: IAM 사용자/역할] -->|sts:AssumeRole 요청| E{평가 1: 호출자의<br/>identity-based policy에<br/>sts:AssumeRole 허용?}
+    U@{ icon: "logos:aws-iam", form: "square", label: "호출자: IAM 사용자/역할", pos: "b", h: 46, w: 46 }
+    U -->|sts:AssumeRole 요청| E{평가 1: 호출자의<br/>identity-based policy에<br/>sts:AssumeRole 허용?}
     E -->|아니오| D1[AccessDenied<br/>trust가 :root여도 실패!]
     E -->|예| T{평가 2: 역할의 trust policy<br/>Principal 매칭 + ExternalId 조건?}
     T -->|아니오| D2[AccessDenied]
-    T -->|예| OK[임시 자격증명 발급<br/>최대 3600초]
+    OK@{ icon: "logos:aws-iam", form: "square", label: "임시 자격증명 발급<br/>최대 3600초", pos: "b", h: 46, w: 46 }
+    T -->|예| OK
 ```
 
 - trust의 `Principal: :root`는 "이 **계정의** principal이면 후보"라는 뜻이지 전원 허용이 아니다. **trust policy AND 호출자 identity-based policy 둘 다 통과**해야 한다 — 호출자가 admin(또는 sts:AssumeRole 허용 보유)이 아니면 assume은 실패한다. 이게 같은 계정 `:root` trust가 안전하게 쓰이는 이유.
@@ -186,13 +196,19 @@ set-07만 audit role이 명시 요구. set-03은 대신 root-less KMS가 하드 
 
 ```mermaid
 flowchart LR
-    User[사용자] --> CF[CloudFront<br/>unicorn-svc-cf + WAF]
-    CF -->|VPC Origin| ALB[internal ALB<br/>unicorn-alb]
+    User@{ icon: "mdi:web", form: "square", label: "사용자", pos: "b", h: 46, w: 46 }
+    CF@{ icon: "logos:aws-cloudfront", form: "square", label: "CloudFront<br/>unicorn-svc-cf + WAF", pos: "b", h: 46, w: 46 }
+    User --> CF
+    ALB@{ icon: "logos:aws-elb", form: "square", label: "internal ALB<br/>unicorn-alb", pos: "b", h: 46, w: 46 }
+    CF -->|VPC Origin| ALB
     CF -->|OAC| S3[(S3 정적)]
-    Direct[직접 curl] -.->|SG: CloudFront<br/>origin-facing prefix list만 80 허용| ALB
+    Direct@{ icon: "mdi:web", form: "square", label: "직접 curl", pos: "b", h: 46, w: 46 }
+    Direct -.->|SG: CloudFront<br/>origin-facing prefix list만 80 허용| ALB
     Direct -. "internal이라 인터넷에서 000(연결 불가),<br/>prefix list 밖 내부 접근은 거부" .-> X[403/000 기대]
-    subgraph KMS MRK
-        P["primary us-east-1<br/>(WAF 로그, 회전 관리)"] === R["replica ap-northeast-2<br/>(EKS/EBS/Log)"]
+    subgraph KMS["<span class='icon--logos icon--logos--aws-kms'></span> KMS MRK"]
+        P@{ icon: "logos:aws-kms", form: "square", label: "primary us-east-1<br/>(WAF 로그, 회전 관리)", pos: "b", h: 46, w: 46 }
+        R@{ icon: "logos:aws-kms", form: "square", label: "replica ap-northeast-2<br/>(EKS/EBS/Log)", pos: "b", h: 46, w: 46 }
+        P === R
     end
 ```
 

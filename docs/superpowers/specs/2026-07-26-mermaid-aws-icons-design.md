@@ -25,7 +25,8 @@
 | 적용 방식 | 기존 구조 유지 + AWS 서비스 노드만 아이콘 교체 | 시안 비교 후 선택. `architecture-beta`는 엣지 라벨을 못 붙여 현 문서의 설명 밀도를 못 담음 |
 | subgraph | 전부 아이콘 적용 | 시안 3 선택 |
 | 아이콘 우선순위 | `logos:aws-*` → `logos:*` → `mdi:*` | AWS 공식 로고 우선, 매칭 없을 때만 일반 아이콘 |
-| 아이콘 전달 | 생성 파일을 레포에 커밋 (인라인) | 외부 API 의존 제거, 오프라인 dev 가능 |
+| 아이콘 전달 | Iconify CDN (`api.iconify.design`) | 커밋할 자산도 생성 스크립트도 없음. 사용자 수가 적어 요청 예산이 넉넉함 |
+| 매칭 없는 아이콘 | 유사한 다른 아이콘으로 대체 | 빈 자리로 두지 않음 |
 | `graph` → `flowchart` | 통일하지 않음 | `graph`도 아이콘 문법을 그대로 처리함을 실측 확인 |
 | 라벨 문구 수정 | 범위 밖 | 내용 변경이라 별도 작업 |
 | 다크모드 버그 | 이번 작업에 포함 | 안 고치면 아이콘 작업 결과를 다크모드에서 판단할 수 없음 |
@@ -38,26 +39,33 @@
 | 비AWS 아이콘 | kubernetes, docker-icon, terraform-icon, prometheus, grafana, helm, nginx 존재 |
 | 35개 요청 시 누락 | 0건 (`not_found: none`) |
 | 서브셋 엔드포인트 | `api.iconify.design/logos.json?icons=...` → 유효한 IconifyJSON, `registerIconPacks`에 그대로 적용됨 |
-| 자산 크기 (35개 기준) | CSS 80KB / JSON 74KB (둘 다 SVG 텍스트라 압축 잘 됨) |
-| subgraph `<span>` | mermaid 기본 `securityLevel: 'strict'`(DOMPurify) 통과, 데이터 URI 배경 적용, 18×18 렌더, 추가 네트워크 요청 0건 |
+| 전송 크기 (35개 기준) | CSS 80KB / JSON 74KB (둘 다 SVG 텍스트라 압축 잘 됨) |
+| subgraph `<span>` | mermaid 기본 `securityLevel: 'strict'`(DOMPurify) 통과, 데이터 URI 배경 적용, 18×18 렌더 |
+| subgraph `<iconify-icon>` 웹 컴포넌트 | **DOMPurify가 제거함**. 커스텀 엘리먼트가 정상 등록된 상태에서도 태그가 통째로 사라지고 라벨 글자만 남음 |
+| subgraph `<img>` | 통과하고 렌더도 되나 아이콘당 요청 1건 |
+| `mdi.css?color=` | 지정한 색으로 치환됨 |
 | `graph`의 아이콘 문법 | `flowchart`와 동일하게 처리됨 |
 
 ## 설계
 
-### 1. 아이콘 자산 생성
+### 1. 아이콘 목록
 
-`scripts/gen-mermaid-icons.mjs` — 아이콘 목록 한 곳을 읽어 두 파일을 뽑는다.
+아이콘 이름 목록을 `src/mermaid-icons.mjs` 한 파일에 둔다. `astro.config.mjs`와 검증 스크립트가
+같이 import하므로 목록이 갈라지지 않는다. 설정 파일에 직접 두면 검증 스크립트가 `astro.config.mjs`를
+통째로 로드해야 하는데, 그러면 모든 integration이 딸려 들어온다.
 
-- 입력: 스크립트 상단의 아이콘 목록 (팩별)
-- 출력 1: `src/icons/mermaid-icons.json` — `{ "logos": <IconifyJSON>, "mdi": <IconifyJSON> }`.
-  팩별 IconifyJSON을 팩 이름으로 감싼 하나의 파일
-- 출력 2: `src/styles/mermaid-icons.css` — `.icon--logos--aws-kms { background-image: url("data:...") }` 형태.
-  `logos.css` + `mdi.css?color=%238ab` 두 응답을 이어 붙인 것
+```js
+// src/mermaid-icons.mjs
+export const MERMAID_ICONS = {
+  logos: ['aws-kms', 'aws-s3', 'aws-vpc', /* ... */],
+  mdi:   ['lan-connect', 'layers-outline', /* ... */],
+};
+export const iconifyUrl = (pack, ext, params = '') =>
+  `https://api.iconify.design/${pack}.${ext}?icons=${MERMAID_ICONS[pack].join(',')}${params}`;
+```
 
-출처는 `api.iconify.design`의 `?icons=` 서브셋 엔드포인트. 생성은 사람이 명령을 내릴 때만
-돌리고, 결과물은 커밋한다. 런타임·빌드타임 모두 외부 요청 없음.
-
-두 파일이 같은 목록에서 나오므로 노드 아이콘과 subgraph 아이콘이 어긋날 수 없다.
+`api.iconify.design`의 `?icons=` 서브셋 엔드포인트를 쓴다. 커밋할 아이콘 자산도, 자산을 뽑는
+생성 스크립트도 없다.
 
 ### 2. 노드 아이콘
 
@@ -70,14 +78,17 @@ CMK@{ icon: "logos:aws-kms", form: "square", label: "CMK<br/>키 정책이 접�
 `astro.config.mjs`:
 
 ```js
-import mermaidIcons from './src/icons/mermaid-icons.json';
-
 mermaid({
   mermaidConfig: { themeVariables: { fontSize: '18px' } },
-  iconPacks: [{ name: 'logos', icons: mermaidIcons.logos },
-              { name: 'mdi',   icons: mermaidIcons.mdi }],
+  iconPacks: [
+    { name: 'logos', url: iconifyUrl('logos', 'json') },
+    { name: 'mdi',   url: iconifyUrl('mdi',   'json') },
+  ],
 })
 ```
+
+`astro-mermaid`는 `url`을 받아 그대로 `fetch(pack.url).then(r => r.json())` 한다
+(`astro-mermaid-integration.js:451`). 쿼리스트링이 붙어도 무관.
 
 ### 3. subgraph 아이콘
 
@@ -87,9 +98,22 @@ subgraph에는 `@{ icon: }` 문법이 없으므로 HTML 라벨을 쓴다.
 subgraph KMS["<span class='icon--logos icon--logos--aws-kms'></span> AWS KMS"]
 ```
 
-`src/styles/mermaid-icons.css`를 Starlight `customCss`에 추가한다. 데이터 URI라 아이콘당
-네트워크 요청이 발생하지 않는다. `mdi`는 단색이라 생성 시 `?color=`로 중간톤(`#8ab`)을 박는다 —
-다크·라이트 양쪽에서 읽히는 값 하나로 고정 (CSS 엔드포인트의 `color` 파라미터 동작 확인함).
+클래스를 정의하는 CSS는 `starlight({ ... })`의 `head` 옵션으로 `<link>` 두 줄을 넣어 CDN에서 받는다.
+
+```js
+starlight({
+  // ...
+  head: [
+    { tag: 'link', attrs: { rel: 'stylesheet', href: iconifyUrl('logos', 'css') } },
+    { tag: 'link', attrs: { rel: 'stylesheet', href: iconifyUrl('mdi', 'css', '&color=%238ab') } },
+  ],
+})
+```
+
+CSS 안의 아이콘이 데이터 URI라 아이콘 개수와 무관하게 요청은 팩당 1건이다. 웹 컴포넌트
+(`<iconify-icon>`)는 DOMPurify가 제거하므로 쓰지 않고, `<img>`는 아이콘당 요청이 나가므로 쓰지 않는다.
+
+`mdi`는 단색이라 `?color=`로 중간톤(`#8ab`)을 박는다 — 다크·라이트 양쪽에서 읽히는 값 하나로 고정.
 
 알려진 비대칭: 같은 `mdi` 아이콘이라도 노드(JSON 팩)는 `currentColor`라 테마 글자색을 따라가고,
 subgraph(CSS)는 `#8ab`로 고정된다. `logos`는 원본이 컬러라 양쪽 동일. 실제로 눈에 거슬리면
@@ -124,8 +148,9 @@ subgraph(CSS)는 `#8ab`로 고정된다. `logos`는 원본이 컬러라 양쪽 �
 
 ### 6. 검증
 
-`scripts/check-mermaid-icons.mjs` — mdx 전체에서 `logos:` / `mdi:` / `icon--logos--*` 참조를
-긁어 생성된 자산에 실제로 들어 있는지 대조한다. 빠진 게 있으면 exit 1.
+`scripts/check-mermaid-icons.mjs` — mdx 전체에서 `logos:` / `mdi:` / `icon--logos--*` /
+`icon--mdi--*` 참조를 긁어 `src/mermaid-icons.mjs`의 `MERMAID_ICONS` 목록과 대조한다. 빠진 게
+있으면 exit 1. 반대로 목록에만 있고 아무 도식도 안 쓰는 이름은 경고로 알린다.
 
 아이콘 이름 하나만 틀려도 해당 노드가 깨지는데 43개 도식을 눈으로 확인할 수는 없다. 이 스크립트가
 그 회귀를 막는 유일한 장치다.
@@ -135,13 +160,12 @@ subgraph(CSS)는 `#8ab`로 고정된다. `logos`는 원본이 컬러라 양쪽 �
 
 ## 작업 순서
 
-1. `scripts/gen-mermaid-icons.mjs` 작성 + 자산 생성
-2. `astro.config.mjs`에 `iconPacks` + `customCss` 연결
-3. 다크모드 수정 (`mermaid-fullscreen.js`)
-4. 도식 적용 — 18개 파일, 파일 단위로 진행
-5. `scripts/check-mermaid-icons.mjs` 작성 + 통과 확인
-6. 브라우저 확인 (다크·라이트)
-7. 데모 파일 `public/mermaid-icon-demo.html` 삭제
+1. `src/mermaid-icons.mjs` 작성 → `astro.config.mjs`에 `iconPacks` + `head` `<link>` 연결
+2. 다크모드 수정 (`mermaid-fullscreen.js`)
+3. 도식 적용 — 18개 파일, 파일 단위로 진행. 새 아이콘을 쓸 때마다 `MERMAID_ICONS`에 추가
+4. `scripts/check-mermaid-icons.mjs` 작성 + 통과 확인
+5. 브라우저 확인 (다크·라이트)
+6. 데모 파일 `public/mermaid-icon-demo.html` 삭제
 
 ## 범위 밖
 

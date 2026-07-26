@@ -23,12 +23,18 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 ```mermaid
 graph TD
     CC["ClusterConfig YAML"] --> M["metadata<br/>name / region / version 1.35"]
-    CC --> V["vpc<br/>기존 VPC id + priv 서브넷만 등록<br/>securityGroup(CP 추가 SG)<br/>clusterEndpoints"]
-    CC --> SE["secretsEncryption<br/>keyARN = KMS (Secret 봉투암호화)"]
-    CC --> CW["cloudWatch.clusterLogging<br/>api audit authenticator<br/>controllerManager scheduler (5종)"]
-    CC --> I["iam<br/>withOIDC + serviceAccounts (IRSA)<br/>또는 podIdentityAssociations"]
-    CC --> NG["managedNodeGroups[]<br/>addon-ng / app-ng"]
-    CC --> AD["addonsConfig + addons[]<br/>vpc-cni / kube-proxy / coredns"]
+    V@{ icon: "logos:aws-vpc", form: "square", label: "vpc<br/>기존 VPC id + priv 서브넷만 등록<br/>securityGroup(CP 추가 SG)<br/>clusterEndpoints", pos: "b", h: 46, w: 46 }
+    CC --> V
+    SE@{ icon: "logos:aws-kms", form: "square", label: "secretsEncryption<br/>keyARN = KMS (Secret 봉투암호화)", pos: "b", h: 46, w: 46 }
+    CC --> SE
+    CW@{ icon: "logos:aws-cloudwatch", form: "square", label: "cloudWatch.clusterLogging<br/>api audit authenticator<br/>controllerManager scheduler (5종)", pos: "b", h: 46, w: 46 }
+    CC --> CW
+    I@{ icon: "logos:aws-iam", form: "square", label: "iam<br/>withOIDC + serviceAccounts (IRSA)<br/>또는 podIdentityAssociations", pos: "b", h: 46, w: 46 }
+    CC --> I
+    NG@{ icon: "logos:aws-ec2", form: "square", label: "managedNodeGroups[]<br/>addon-ng / app-ng", pos: "b", h: 46, w: 46 }
+    CC --> NG
+    AD@{ icon: "logos:kubernetes", form: "square", label: "addonsConfig + addons[]<br/>vpc-cni / kube-proxy / coredns", pos: "b", h: 46, w: 46 }
+    CC --> AD
 ```
 
 핵심 필드 요약 (set-02 실측):
@@ -65,14 +71,17 @@ graph TD
 
 ```mermaid
 graph LR
-    subgraph IRSA["IRSA (set-02)"]
-        SA1["SA + 토큰"] -->|OIDC 검증| STS1["STS AssumeRoleWithWebIdentity"] --> Role1["IAM Role"]
+    subgraph IRSA["<span class='icon--logos icon--logos--aws-eks'></span> IRSA (set-02)"]
+        SA1["SA + 토큰"] -->|OIDC 검증| STS1@{ icon: "logos:aws-iam", form: "square", label: "STS AssumeRoleWithWebIdentity", pos: "b", h: 46, w: 46 }
+        STS1 --> Role1@{ icon: "logos:aws-iam", form: "square", label: "IAM Role", pos: "b", h: 46, w: 46 }
     end
-    subgraph PI["Pod Identity (set-03/07)"]
-        SA2["SA"] --> Agent["eks-pod-identity-agent<br/>(전 노드 DaemonSet!)"] --> Role2["IAM Role<br/>trust=pods.eks.amazonaws.com"]
+    subgraph PI["<span class='icon--logos icon--logos--aws-eks'></span> Pod Identity (set-03/07)"]
+        SA2["SA"] --> Agent@{ icon: "logos:aws-eks", form: "square", label: "eks-pod-identity-agent<br/>(전 노드 DaemonSet!)", pos: "b", h: 46, w: 46 }
+        Agent --> Role2@{ icon: "logos:aws-iam", form: "square", label: "IAM Role<br/>trust=pods.eks.amazonaws.com", pos: "b", h: 46, w: 46 }
     end
-    subgraph AE["Access Entry (kubectl 사용자용)"]
-        User["IAM User/Role"] -->|EKS API| K8s["클러스터 RBAC"]
+    subgraph AE["<span class='icon--logos icon--logos--aws-eks'></span> Access Entry (kubectl 사용자용)"]
+        User@{ icon: "logos:aws-iam", form: "square", label: "IAM User/Role", pos: "b", h: 46, w: 46 }
+        User -->|EKS API| K8s["클러스터 RBAC"]
     end
 ```
 
@@ -125,10 +134,13 @@ YAML 작성법 비교 (실측):
 
 ```mermaid
 graph TD
-    subgraph addonNG["wskorea26-addon-ng (label node-type=addon)"]
-        core["coredns"] ~~~ lbc["aws-load-balancer-controller"] ~~~ mon["Prometheus/Grafana"]
+    subgraph addonNG["<span class='icon--logos icon--logos--aws-ec2'></span> wskorea26-addon-ng (label node-type=addon)"]
+        core@{ icon: "logos:kubernetes", form: "square", label: "coredns", pos: "b", h: 46, w: 46 }
+        lbc@{ icon: "logos:aws-elb", form: "square", label: "aws-load-balancer-controller", pos: "b", h: 46, w: 46 }
+        mon@{ icon: "logos:prometheus", form: "square", label: "Prometheus/Grafana", pos: "b", h: 46, w: 46 }
+        core ~~~ lbc ~~~ mon
     end
-    subgraph appNG["wskorea26-app-ng (label node-type=app)"]
+    subgraph appNG["<span class='icon--logos icon--logos--aws-ec2'></span> wskorea26-app-ng (label node-type=app)"]
         book["book Pod x2"]
     end
     ds["DaemonSet(aws-node, kube-proxy, fluent-bit)"] -.->|전 노드 - 채점 예외| addonNG
@@ -180,7 +192,10 @@ addons:
 
 ```mermaid
 graph LR
-    TF["terraform output"] --> ENV["환경변수 (.env.ps1)"] --> R["치환 (Replace/envsubst)"] --> Y["cluster.rendered.yaml"] --> E["eksctl create cluster -f"]
+    TF@{ icon: "logos:terraform-icon", form: "square", label: "terraform output", pos: "b", h: 46, w: 46 }
+    TF --> ENV["환경변수 (.env.ps1)"] --> R["치환 (Replace/envsubst)"] --> Y["cluster.rendered.yaml"]
+    E@{ icon: "logos:aws-eks", form: "square", label: "eksctl create cluster -f", pos: "b", h: 46, w: 46 }
+    Y --> E
 ```
 
 <Tabs syncKey="shell">

@@ -17,9 +17,10 @@ export const MERMAID_ICONS = {
     'aws-sqs', 'aws-sns', 'aws-eventbridge', 'aws-kinesis', 'aws-api-gateway',
     'aws-ecs', 'aws-fargate', 'aws-rds', 'aws-route53', 'aws-secrets-manager',
     'aws-xray', 'aws-step-functions', 'aws-cloudformation', 'aws-waf',
-    'aws-cognito', 'aws-elasticache', 'aws-glue',
+    'aws-cognito', 'aws-elasticache', 'aws-glue', 'aws-cloudtrail',
+    'aws-config', 'aws-msk',
     'kubernetes', 'docker-icon', 'terraform-icon', 'prometheus', 'grafana',
-    'helm', 'nginx',
+    'helm', 'nginx', 'apache-flink', 'opentelemetry',
   ],
   // AWS·제품 로고로 표현할 수 없는 개념(서브넷·계층·로그 등)에만 쓴다.
   mdi: [

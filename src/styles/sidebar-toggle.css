@@ -35,9 +35,9 @@
 	}
 
 	html[data-sidebar="closed"] {
+		/* 비운 폭은 읽는 열이 가져간다 — layout.css 가 band 를 고정하고 읽는 열을
+		   나머지로 계산하므로 여기서 폭을 따로 적을 필요가 없다. */
 		--sl-sidebar-width: 0rem;
-		/* 사이드바가 비운 폭 중 일부를 읽는 열에 돌려준다 (기본 37rem). */
-		--sl-exquisitus-measure: 46rem;
 	}
 
 	html[data-sidebar="closed"] .sidebar-pane {

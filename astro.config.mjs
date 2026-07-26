@@ -31,6 +31,24 @@ const mermaidFullscreen = {
   },
 };
 
+/** @type {import('astro').AstroIntegration} */
+const splitView = {
+  name: 'split-view',
+  hooks: {
+    'astro:config:setup': ({ injectScript }) => {
+      injectScript('page', `import '/src/scripts/split-view.js';`);
+    },
+  },
+};
+
+/* 저장된 레일 폭·접힘 상태를 첫 페인트 전에 되돌린다. head 인라인이 아니면
+   페이지를 넘길 때마다 기본 폭이 한 프레임 보였다가 바뀐다. */
+const splitViewRestore = `(()=>{try{var r=document.documentElement,
+w=JSON.parse(localStorage.getItem('sl-split-widths')||'{}');
+if(w.sidebar)r.style.setProperty('--sl-sidebar-width',w.sidebar+'rem');
+if(w.toc)r.style.setProperty('--sl-exquisitus-toc-width',w.toc+'rem');
+if(localStorage.getItem('sl-toc-collapsed')==='1')r.dataset.toc='closed';}catch(e){}})()`;
+
 export default defineConfig({
   /* Vercel 은 프로젝트를 도메인 루트에 그대로 배포한다 — base 불필요, 문서의
      `/part-1/...` 절대 링크가 손 안 대고 그대로 산다. 커스텀 도메인을 붙이면
@@ -58,7 +76,7 @@ export default defineConfig({
       { name: 'aws', icons: awsIcons },
       { name: 'k8s', icons: k8sIcons },
     ],
-  }), mermaidFullscreen, starlight({
+  }), mermaidFullscreen, splitView, starlight({
     title: 'skills-guide',
     description: '전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드',
     defaultLocale: 'root',
@@ -70,6 +88,7 @@ export default defineConfig({
       './src/styles/mermaid-k8s-icons.css',
       './src/styles/mobile.css',
       './src/styles/sidebar-toggle.css',
+      './src/styles/layout.css',
     ],
     /* subgraph 라벨의 <span class='icon--logos--*'> 를 정의하는 CSS.
        아이콘이 데이터 URI 로 들어 있어 아이콘 개수와 무관하게 요청은 팩당 1건이다.
@@ -77,6 +96,7 @@ export default defineConfig({
     head: [
       { tag: 'link', attrs: { rel: 'stylesheet', href: iconifyUrl('logos', 'css') } },
       { tag: 'link', attrs: { rel: 'stylesheet', href: iconifyUrl('mdi', 'css', '&color=%238ab') } },
+      { tag: 'script', content: splitViewRestore },
     ],
     components: { SiteTitle: './src/components/SiteTitle.astro' },
     plugins: [

@@ -104,6 +104,7 @@ export default defineConfig({
       './src/styles/sidebar-toggle.css',
       './src/styles/layout.css',
       './src/styles/scrollbar.css',
+      './src/styles/landing.css',
     ],
     /* subgraph 라벨의 <span class='icon--logos--*'> 를 정의하는 CSS.
        아이콘이 데이터 URI 로 들어 있어 아이콘 개수와 무관하게 요청은 팩당 1건이다.
@@ -166,7 +167,9 @@ export default defineConfig({
           items: [{ label: 'Reference', items: [{ autogenerate: { directory: 'reference' } }] }],
         },
       ]),
-      starlightLinksValidator({ errorOnRelativeLinks: false }),
+      /* `#roadmap` 은 DayRail 컴포넌트가 다는 id 다. 검증기는 마크다운 제목에서만
+         앵커를 모으므로 컴포넌트가 만든 id 를 보지 못한다 — 링크는 실제로 살아 있다. */
+      starlightLinksValidator({ errorOnRelativeLinks: false, exclude: ['#roadmap'] }),
     ],
   }), mdx()],
 });

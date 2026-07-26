@@ -14,42 +14,14 @@ hero:
       icon: right-arrow
       variant: primary
     - text: 로드맵 보기
-      link: "#학습-로드맵-14일"
+      link: "#roadmap"
       variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
-import FeatureGrid from 'starlight-theme-exquisitus/components/FeatureGrid.astro';
+import { CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+import DayRail from '../../components/DayRail.astro';
 
-<FeatureGrid layout="lead">
-  <Card title="PART 2 — 1과제 · EKS·관측성 · D4~8" icon="rocket">
-    eksctl·k8s·LBC·관측성을 거쳐 **set-02 1과제를 완주**한다. 이 커리큘럼의 중심축 —
-    여기서 mark.sh 80% 이상이 나와야 나머지가 의미를 갖는다.
-    [모듈 04부터 시작](/part-2/04-eksctl-cluster/)
-  </Card>
-  <Card title="PART 0 — 시작 · D0" icon="approve-check">
-    계정·도구·비용 가드레일·자가진단. [선수 지식 7종](/start/)
-  </Card>
-  <Card title="PART 1 — Foundation·IaC · D1~3" icon="seti:terraform">
-    Terraform·VPC·KMS·S3/CloudFront·컨테이너·Lambda·DynamoDB.
-    [미니 스택 배포](/part-1/01-terraform-vpc/)
-  </Card>
-  <Card title="PART 3 — Hard Mode · D9" icon="bars">
-    fully-private EKS·IAM 심화·CoreDNS 커스텀 도메인. 1과제가 어렵게 나올 때의 보험.
-    [모듈 08](/part-3/08-private-eks-iam/)
-  </Card>
-  <Card title="PART 4 — 2과제 모듈 · D10~12" icon="puzzle">
-    서버리스·스케일링·로깅·스트리밍 + DocumentDB·VPC Lattice·CDN Function.
-    [모듈 09](/part-4/09-serverless-event/)
-  </Card>
-  <Card title="PART 5 — 3과제 운영 · D13~14" icon="setting">
-    부하 하 가용성·성능·비용 ratio 40점. [모듈 14](/part-5/14-task3-load-ops/)
-  </Card>
-  <Card title="PART 6 — Battle Drills · 일차 없음" icon="warning">
-    30% 변동 드릴·파괴/복구 12종·4시간 모의 대회 — 위 일정 안에서 끼워 넣는다.
-    [모듈 15](/part-6/15-mutation-drill/)
-  </Card>
-</FeatureGrid>
+<DayRail />
 
 ## 최종 목표
 
@@ -60,20 +32,6 @@ import FeatureGrid from 'starlight-theme-exquisitus/components/FeatureGrid.astro
    개념 이해로 원인을 짚고, 필요한 리소스를 **콘솔·manifest·tf 혼합**으로 직접 만든다.
 3. 과제지 30% 변동을 **30분 내 반영** (grep/sed 드릴).
 4. 대표 장애 12종을 **AI 없이** 확인 명령→원인→조치 순서로 해결.
-
-## 학습 로드맵 (14일)
-
-| PART | 모듈 | 일차 | 주제 | 종료 조건 |
-| --- | --- | --- | --- | --- |
-| [0](/start/) | 00 | D0 | 계정·도구·비용 가드레일·자가진단 | 자가진단 통과 |
-| [1](/part-1/01-terraform-vpc/) | 01–03 | D1~3 | Terraform·VPC·KMS·S3/CF·컨테이너·Lambda·DynamoDB | 미니 스택 배포 |
-| [2](/part-2/04-eksctl-cluster/) | 04–07 | D4~8 | eksctl·k8s·LBC·**관측성** → **set-02 1과제 완주** | mark.sh 80%+ · No Data 0개 |
-| [3](/part-3/08-private-eks-iam/) | 08 | D9 | fully-private EKS·IAM 심화 | 부분 재현 |
-| [4](/part-4/09-serverless-event/) | 09–13 | D10~12 | 2과제 후보 모듈 — 서버리스·스케일링·로깅·스트리밍·DocumentDB·VPC Lattice·CDN Function | 모듈별 1회 배포 |
-| [5](/part-5/14-task3-load-ops/) | 14 | D13~14 | 3과제 부하·운영 — 가용성·성능·비용 ratio | 부하 드릴 3회 |
-| [6](/part-6/15-mutation-drill/) | 15–17 | 일차 없음 | 변동 드릴·파괴/복구·모의 대회 | 모의 대회 90%+ |
-
-하루 8~10h 기준: 이론 2h + 실습 6~7h + 회고·정리 1h(고정).
 
 ## 모듈 사용법 (매 모듈 동일 순서)
 

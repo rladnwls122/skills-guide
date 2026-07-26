@@ -249,7 +249,7 @@ function syncTheme() {
 	const light = isLightFill(getComputedStyle(svg).fill);
 	if (light === null) return;
 	themeRepairDone = true;
-	if (light !== wantDark) return; // 밝은 글자 = 다크 테마. 일치하면 할 일 없음
+	if (light === wantDark) return; // 밝은 글자 = 다크 테마. 일치하면 할 일 없음
 
 	const current = html.dataset.theme;
 	html.dataset.theme = current === "dark" ? "light" : "dark";

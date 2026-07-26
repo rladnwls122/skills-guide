@@ -51,7 +51,9 @@ export default defineConfig({
       { name: 'logos', url: iconifyUrl('logos', 'json') },
       { name: 'mdi', url: iconifyUrl('mdi', 'json') },
       { name: 'simple-icons', url: iconifyUrl('simple-icons', 'json') },
-      { name: 'aws', icons: awsIcons.icons },
+      /* IconifyJSON 전체를 넘긴다 — 안쪽 icons 맵만 주면 크기만 잡히고
+         body 가 비어 아이콘이 빈 사각형으로 그려진다. */
+      { name: 'aws', icons: awsIcons },
     ],
   }), mermaidFullscreen, starlight({
     title: 'skills-guide',

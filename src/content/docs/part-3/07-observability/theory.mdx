@@ -29,16 +29,22 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 ```mermaid
 flowchart LR
     A[Book App Pod<br/>stdout logfmt 로그] -->|kubelet이 파일로 기록| B["/var/log/containers/<br/>*_wsc2026_*.log"]
-    B -->|tail INPUT + cri 파서| C[Fluent Bit<br/>DaemonSet]
+    C@{ icon: "mdi:script-text-outline", form: "square", label: "Fluent Bit<br/>DaemonSet", pos: "b", h: 46, w: 46 }
+    B -->|tail INPUT + cri 파서| C
     C -->|parser 필터: method/path/<br/>status/duration 추출| D{Lua 필터}
     D -->|"/health·비액세스 라인 드롭<br/>duration→초 float"| E[정제된 레코드]
-    E -->|format.lua로 형식 조립| F[cloudwatch_logs OUTPUT]
+    F@{ icon: "logos:aws-cloudwatch", form: "square", label: "cloudwatch_logs OUTPUT", pos: "b", h: 46, w: 46 }
+    E -->|format.lua로 형식 조립| F
     F --> G[(CloudWatch Logs<br/>/wsc2026/eks/book-app)]
     E -->|log_to_metrics 필터| H[counter: requests/errors<br/>histogram: duration]
-    H -->|prometheus_exporter :2021| I[PodMonitor]
-    I --> J[Prometheus]
-    J --> K[Grafana 대시보드]
-    J --> L[PrometheusRule 알람 6종<br/>→ Alertmanager]
+    I[PodMonitor]
+    H -->|prometheus_exporter :2021| I
+    J@{ icon: "logos:prometheus", form: "square", label: "Prometheus", pos: "b", h: 46, w: 46 }
+    I --> J
+    K@{ icon: "logos:grafana", form: "square", label: "Grafana 대시보드", pos: "b", h: 46, w: 46 }
+    J --> K
+    L@{ icon: "logos:prometheus", form: "square", label: "PrometheusRule 알람 6종<br/>→ Alertmanager", pos: "b", h: 46, w: 46 }
+    J --> L
 ```
 
 핵심: **한 번 파싱한 레코드를 태그 분기(`app.access` / `app.metrics`)로 두 OUTPUT에 나눠 보낸다.** CloudWatch 갈래는 형식 재조립(format.lua), 메트릭 갈래는 log_to_metrics를 거친다.
@@ -69,9 +75,9 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    subgraph 노드
+    subgraph 노드["<span class='icon--logos icon--logos--aws-ec2'></span> 노드"]
         HP["hostPath /var/log<br/>(+ /var/lib/docker/containers)"]
-        FB[fluent-bit 컨테이너<br/>image: aws-for-fluent-bit]
+        FB@{ icon: "mdi:script-text-outline", form: "square", label: "fluent-bit 컨테이너<br/>image: aws-for-fluent-bit", pos: "b", h: 46, w: 46 }
     end
     HP -->|readOnly mount| FB
     CM[ConfigMap fluent-bit-config<br/>fluent-bit.conf / parsers.conf / *.lua] -->|/fluent-bit/etc/| FB
@@ -109,8 +115,10 @@ flowchart LR
     R[정제된 레코드<br/>method/path/status/duration_seconds] --> F1["log_to_metrics counter<br/>wsc2026_requests_total<br/>(Label_field: method,path,status)"]
     R --> F2["log_to_metrics counter<br/>wsc2026_errors_total<br/>(Regex: status ^[45])"]
     R --> F3["log_to_metrics histogram<br/>wsc2026_request_duration_seconds<br/>(Value_field: duration_seconds)"]
-    F1 & F2 & F3 -->|Tag app.metrics| P[prometheus_exporter<br/>0.0.0.0:2021]
-    P -->|PodMonitor port metrics /metrics 15s| PR[Prometheus]
+    P@{ icon: "logos:prometheus", form: "square", label: "prometheus_exporter<br/>0.0.0.0:2021", pos: "b", h: 46, w: 46 }
+    F1 & F2 & F3 -->|Tag app.metrics| P
+    PR@{ icon: "logos:prometheus", form: "square", label: "Prometheus", pos: "b", h: 46, w: 46 }
+    P -->|PodMonitor port metrics /metrics 15s| PR
 ```
 
 :::note[실측 — 메트릭명 접두어]
@@ -147,9 +155,13 @@ Prometheus Operator + Prometheus + Alertmanager + node-exporter + kube-state-met
 ```mermaid
 flowchart TD
     V[kps values.yaml] -->|additionalDataSources| DS[Grafana datasource 3종<br/>prometheus/alertmanager/cloudwatch]
-    CM["ConfigMap wsc2026-grafana-dashboard<br/>(dashboard.json) + label grafana_dashboard=1"] -->|sidecar가 라벨 watch| SC[Grafana dashboard sidecar]
-    SC -->|자동 import| G[Grafana]
-    PRul[PrometheusRule wsc2026-alerts<br/>알람 6종] -->|ruleSelectorNilUsesHelmValues=false| P[Prometheus]
+    SC@{ icon: "logos:grafana", form: "square", label: "Grafana dashboard sidecar", pos: "b", h: 46, w: 46 }
+    CM["ConfigMap wsc2026-grafana-dashboard<br/>(dashboard.json) + label grafana_dashboard=1"] -->|sidecar가 라벨 watch| SC
+    G@{ icon: "logos:grafana", form: "square", label: "Grafana", pos: "b", h: 46, w: 46 }
+    SC -->|자동 import| G
+    PRul[PrometheusRule wsc2026-alerts<br/>알람 6종]
+    P@{ icon: "logos:prometheus", form: "square", label: "Prometheus", pos: "b", h: 46, w: 46 }
+    PRul -->|ruleSelectorNilUsesHelmValues=false| P
     PM[PodMonitor fluent-bit] -->|podMonitorSelectorNilUsesHelmValues=false| P
 ```
 

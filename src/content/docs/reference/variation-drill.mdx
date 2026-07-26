@@ -1,0 +1,119 @@
+---
+title: 변동 대비 — 후보 밖 과제에서 나온 개념
+description: 수상 후보(set-02·03·07)에는 없지만 다른 제출작에서 확인된 개념 모음. 변동으로 낯선 요구가 나왔을 때만 펼친다.
+---
+
+> 문서 유형: reference
+
+:::caution[언제 펴나 — 우선순위 낮음]
+평소에는 읽지 않는다. 대회 당일 과제지의 약 30%가 바뀌고, 출제자가 수상 후보가 아닌 다른 제출작의 요구사항을 가져다 붙일 가능성이 있다. 이 문서는 그때만 펼치는 부록이다 — 후보(set-02·03·07)에 없는 개념을 모았을 뿐 평소 학습 순서에 넣는 내용이 아니다.
+:::
+
+이름·리소스명·개수 같은 스펙을 통째로 바꿔치기하는 절차 훈련은 모듈 11([변동 드릴](/part-5/11-mutation-drill/))이 담당한다. 이 문서는 절차가 아니라 **후보 세트에 아예 없는 개념**을 다룬다 — set-05·set-06 제출작에서만 확인된 것들이다.
+
+## 이미 배운 것과 겹치는 개념
+
+아래는 후보 세트가 이미 다루므로 여기서 반복하지 않는다.
+
+- EKS 컨트롤 플레인 로그 5종(api·audit·authenticator·controllerManager·scheduler) 전부 활성화, IRSA·Pod Identity·Access Entry 3방식 — [eksctl 클러스터 이론](/part-2/04-eksctl-cluster/theory/)
+- fully-private 클러스터 접근(SSM bastion, VPC CloudShell 3분할) — [Fully-Private EKS + IAM 이론](/part-3/08-private-eks-iam/theory/)
+
+## Bastion·노드 접근 (set-05)
+
+### Bastion SSH 패스워드 접속
+
+- 무엇을 요구하나: 채점이 `sshpass`로 Bastion에 SSH 접속한다. 패스워드 `Skill53##`, Public Subnet 배치, SG는 외부 SSH만 허용, awscli 입력 시 Admin 권한 상당, 재시작해도 Elastic IP로 IP 불변. `awscliv2`·`jq`·`curl`·`ping`·`kubectl`·`eksctl` 사전 설치.
+- 왜 걸리나: 후보 세트는 SSM 세션(키·비밀번호 없음)만 다룬다. Password 인증은 `sshd_config`의 `PasswordAuthentication yes` + 유저 비밀번호 설정이 함께 필요하고, 기본 AL2023 AMI는 둘 다 꺼져 있다.
+- 확인:
+  ```bash
+  sshpass -p 'Skill53##' ssh -o StrictHostKeyChecking=no ec2-user@<bastion-ip> 'aws sts get-caller-identity'
+  ```
+
+### 노드에도 SSH 패스워드 접속
+
+- 무엇을 요구하나: Bastion에서 같은 패스워드로 노드그룹 EC2에도 SSH 접속이 가능해야 하고, 노드에서 `curl`·`ping`이 동작해야 한다.
+- 왜 걸리나: managed 노드그룹 부팅 스크립트에 Password 인증 설정을 심어야 한다 — Bottlerocket이면 셸 자체가 없어 이 방식이 아예 통하지 않는다(아래 Bottlerocket 항목).
+- 확인: Bastion에서 `sshpass -p 'Skill53##' ssh ec2-user@<node-private-ip> 'curl -s -o /dev/null -w "%{http_code}\n" https://example.com && ping -c1 8.8.8.8'`
+
+## EKS 클러스터·노드 구성
+
+### 노드 hostname 커스터마이징 :badge[실측]{variant=note}
+
+- 무엇을 요구하나: 노드 이름을 기본 private DNS name이 아닌 커스텀 포맷으로 바꾼다. set-05는 `<INSTANCE_ID>.ap-northeast-2.computer.internal`, set-06은 `gj2026.<instance_id>.(addon|app).node` — **두 제출작에 공통으로 나온 패턴이라 변동 가능성이 높다.**
+- 왜 걸리나: AL2023 managed 노드그룹은 `overrideBootstrapCommand`로 nodeadm NodeConfig를 커스터마이즈해야 하고, Bottlerocket은 셸이 없어 bootstrap container로 우회해야 한다. 어느 경로든 managed 노드그룹이 자동 생성하는 access entry의 username 템플릿(`system:node:{{EC2PrivateDNSName}}`)이 실제 노드명과 어긋나면 Node authorizer가 거부해 노드가 join조차 못 한다 — set-06의 채점 스크립트(mark.sh) 4-3 대응 항목에서 카나리 노드그룹으로 원인을 실측 확정했다(access entry 삭제 + aws-auth `{{SessionName}}` 매핑으로 우회).
+- 확인:
+  ```bash
+  kubectl get nodes -o custom-columns=NAME:.metadata.name
+  kubectl get csr -o name | xargs -n1 kubectl certificate approve   # 커스텀 노드명은 kubelet-serving CSR 자동승인이 안 걸린다
+  ```
+
+### 노드그룹 스토리지 KMS 암호화
+
+- 무엇을 요구하나: 노드그룹 EC2의 EBS 루트 볼륨을 KMS로 암호화한다.
+- 왜 걸리나: eksctl managed 노드그룹 기본값은 AWS 관리형 키다 — launch template에 `volumeEncrypted: true` + `volumeKmsKeyID`를 명시해야 CMK로 바뀐다. PVC용 EBS CSI 암호화(데이터 볼륨)와는 별개로 **노드 자체의 루트 볼륨**이 대상이다.
+- 확인: `aws ec2 describe-volumes --filters Name=attachment.instance-id,Values=<node-instance-id> --query 'Volumes[].{Enc:Encrypted,Key:KmsKeyId}'`
+
+### Bottlerocket AMI
+
+- 무엇을 요구하나: 노드그룹 AMI를 `BOTTLEROCKET_x86_64`로 지정한다.
+- 왜 걸리나: 후보 세트는 전부 AL2023만 다룬다. Bottlerocket은 읽기 전용 루트 파일시스템 + 컨테이너 전용 OS라 `preBootstrapCommands`·`overrideBootstrapCommand`가 **미지원**이고 SSH도 없다 — 노드 진입은 SSM 경유 **admin container**로 한다. 노드 커스터마이징이 필요하면 kubelet보다 먼저 실행되는 **bootstrap container**(`bottlerocket.settings.bootstrap-containers`)로 우회한다.
+- 확인: `aws eks describe-nodegroup --cluster-name <c> --nodegroup-name <ng> --query 'nodegroup.amiType'` → `BOTTLEROCKET_x86_64`(set-06 mark.sh 4-2). **`ami:` 필드를 직접 지정하면 amiType이 `CUSTOM`으로 바뀌어 문자열 비교가 깨진다** — `amiFamily`만 쓴다.
+
+### SecurityGroupPolicy — Pod 보안 그룹
+
+- 무엇을 요구하나: 같은 네임스페이스의 다른 Pod가 특정 Pod에 직접 접근하지 못하게, 지정된 소스(예: ALB)만 통과시킨다.
+- 왜 걸리나: Pod IP와 ALB(VPC Origin) ENI IP가 같은 서브넷 CIDR을 공유할 수 있어 CIDR 기반 NetworkPolicy로는 구분이 안 된다. `SecurityGroupPolicy`(vpc-resources.k8s.aws)로 Pod에 전용 SG를 붙이고 그 SG 인바운드를 소스 SG 참조로 제한하면 걸러진다. 클러스터 role에 `AmazonEKSVPCResourceController` 권한이 있어야 동작하고, `ENABLE_POD_ENI=true` 모드 전환은 **이미 떠 있는 Pod에는 적용되지 않아 `rollout restart`가 필수**다. t3 계열은 trunk ENI를 지원하지 않아 SGP가 안 먹는다.
+- 확인:
+  ```bash
+  kubectl exec -n <ns> <other-pod> -- curl -m5 http://<target-svc>:<port>/health   # 격리됐다면 타임아웃(set-06 mark.sh 4-5)
+  aws ec2 describe-instance-types --instance-types t3.medium --query 'InstanceTypes[].NetworkInfo.IsTrunkingCompatible'   # false면 SGP 무력
+  ```
+
+## 컨테이너·이미지
+
+### ECR 이미지 크기 제한
+
+- 무엇을 요구하나: `imageSizeInBytes`가 세트가 정한 상한 이하여야 한다(`latest` 태그 기준). set-05는 8MB, set-06은 3MB.
+- 왜 걸리나: 후보 세트도 이미지를 줄이지만, 3MB급 상한은 **`docker` 기본 gzip 압축으로 통과 못 하고 zstd 압축이 사실상 필수**다(set-06 실측: gzip -9 = 3.32MiB, zstd -19 = 2.75MiB). 멀티스테이지 빌드로 빌드 도구를 떼어내고, 정적 링크 바이너리면 `scratch` 베이스로 바이너리 레이어 하나만 남긴다.
+- 확인:
+  ```bash
+  docker buildx build --platform linux/amd64 --provenance=false \
+    --output type=image,name=$ECR:latest,oci-mediatypes=true,compression=zstd,compression-level=19,force-compression=true,push=true .
+  aws ecr describe-images --repository-name <repo> --query 'imageDetails[?imageTags[0]==`latest`].imageSizeInBytes'   # set-06 mark.sh 2-2
+  ```
+  `oci-mediatypes=true`와 `force-compression=true`를 빠뜨리면 containerd가 못 읽는 미디어 타입으로 나가거나 캐시된 gzip 레이어가 그대로 재사용된다.
+
+### DynamoDB 리소스 정책으로 관리자도 차단
+
+- 무엇을 요구하나: 테이블 리소스 기반 정책으로 지정 역할 외 전원(관리자 포함)의 쓰기를 Deny한다. 관리자 CloudShell의 `put-item`도 `AccessDeniedException`이 나야 통과(set-06 mark.sh 3-3).
+- 왜 걸리나: 후보 세트에서 다룬 DynamoDB 보안은 IAM identity-based 정책(호출 주체 쪽 권한 제한)뿐이다 — 리소스 기반 정책은 **주체와 무관하게 리소스 쪽에서 Deny**를 건다는 점이 다르다. `Principal: "*"` + `Effect: Deny` + `Condition: StringNotLike aws:PrincipalArn`로 예외 역할만 빼고 막는다. 관리자도 예외 조건에 없으면 그대로 막힌다.
+- 확인:
+  ```bash
+  aws dynamodb put-item --table-name <table> --item '{"pk":{"S":"probe"}}'   # AccessDeniedException 기대
+  ```
+  재적용 직후에는 전파 지연이 수초~수분 있다 — Deny가 실제로 걸릴 때까지 확인한 뒤 채점을 시작한다. 정리용 쓰기가 필요하면 정책을 일시적으로 비활성화하는 변수를 하나 두는 편이 안전하다.
+
+## 엣지·서버리스
+
+### WAF 커스텀 응답
+
+- 무엇을 요구하나: CLOUDFRONT scope WAF에서 HTTP 메서드 위반은 405 `Method Not Allowed`, 잘못된 쿼리스트링은 403 `Access Denied`를 커스텀 본문으로 반환한다(set-06 mark.sh 9-1/9-2).
+- 왜 걸리나: 후보 세트가 다루는 WAF는 관리형 룰 그룹·레이트 기반 룰뿐이다 — `custom_response_body` + `and_statement`로 특정 경로·조건만 좁혀 차단하는 패턴은 새롭다. 두 함정: ① 정규식은 부분 매칭이라 앵커(`^...$`) 없이 쓰면 URL 인코딩된 문자열 안쪽에서 우연히 매칭돼 통과해버린다. ② 값이 조건과 안 맞는 것과 값 자체가 없는 것을 구분하지 않고 `NOT(regex)` 단독으로 걸면 파라미터가 아예 없는 정상 요청까지 막힌다 — 존재 검사(`CONTAINS`)를 먼저 AND로 건다.
+- 확인: `curl -s -w " %{http_code}" <url>` 로 본문 문구 + 공백 + 상태 코드가 기대값과 정확히 일치하는지 본다. CLOUDFRONT scope Web ACL은 **us-east-1에서만 생성 가능**하다 — REGIONAL과 달리 provider alias가 필요하다.
+
+### Lambda Function URL
+
+- 무엇을 요구하나: API Gateway 없이 Lambda가 직접 HTTPS 엔드포인트를 갖고, CloudFront가 거기로 바로 연결한다.
+- 왜 걸리나: 후보 세트의 Lambda는 ALB 타깃그룹으로 붙는다 — 이벤트·응답 포맷이 다르다. Function URL 이벤트는 API Gateway v2.0 포맷 고정이라 `event["queryStringParameters"]`가 **단일값 dict**다(ALB의 `multiValueQueryStringParameters`와 다르다). 응답에 `statusCode`가 없으면 502. CloudFront에서 붙일 때는 OAC의 `origin_access_control_origin_type = "lambda"`와, Lambda 쪽 리소스 정책에 `lambda:InvokeFunctionUrl`(및 `lambda:InvokeFunction`도 함께) 허용이 필요하다.
+- 확인: `aws lambda get-function-url-config --function-name <fn> --query AuthType` → `AWS_IAM`이면 OAC 서명 경로다. `NONE`이면 서명 없이도 호출되어 CloudFront 경유를 강제하지 못한다.
+
+### CloudFront Function 캐시 제어
+
+- 무엇을 요구하나: `/`는 캐시 Miss, `/index.html`은 캐시 Hit가 되도록 만든다(set-06 mark.sh 8-1).
+- 왜 걸리나: 후보 세트의 CloudFront Function은 A/B 테스트용 쿠키·리라이트가 목적이다([CDN Function 모듈](/part-4/17-cdn-function/theory/)) — 여기서는 **캐시 키 정렬**이 목적이라는 점이 다르다. viewer-request 함수는 캐시 조회 **전에** 실행되고, 반환한 요청의 URI가 그대로 캐시 키가 된다. `/` 요청의 URI를 `/index.html`로 재작성하면 두 요청이 같은 캐시 키를 공유해 두 번째부터 Hit가 된다. `default_root_object`만 설정해서는 캐시 키가 합쳐지지 않는다.
+- 확인:
+  ```bash
+  curl -s -o /dev/null -w "%{http_code} %header{x-cache}\n" https://<cf-domain>/
+  curl -s -o /dev/null -w "%{http_code} %header{x-cache}\n" https://<cf-domain>/index.html
+  ```
+  함수는 **기본 behavior에만** 연결한다 — API 경로 behavior에 붙이면 확장자 없는 API 경로까지 `/index.html`로 재작성되어 오리진 라우팅이 깨진다.

@@ -77,9 +77,13 @@
     opacity: 1;
   }
 
+  /* 경계에 걸치지 않고 거터 쪽으로 밀어 둔다. 인덱스 패널의 스크롤바가 패널
+     오른쪽 끝 11px 를 쓰는데, 손잡이를 경계 중앙에 두면 그 위를 통째로 덮어
+     스크롤바를 잡을 수 없다 — 손잡이가 z-index 5 의 fixed 라 포인터를 전부
+     가져간다. 목차 쪽은 스크롤바가 반대편(화면 바깥쪽) 끝이라 겹치지 않는다. */
   .split-handle--sidebar {
     inset-inline-start: calc(
-      var(--sl-exquisitus-shell-inset) + var(--sl-sidebar-width) - 0.625rem
+      var(--sl-exquisitus-shell-inset) + var(--sl-sidebar-width) + 0.25rem
     );
   }
 

@@ -47,7 +47,6 @@
 	/* 탭 라벨이 많으면 줄바꿈 대신 가로 스크롤 — 탭 줄이 3줄로 쌓이면 못 쓴다. */
 	.sl-tabs {
 		overflow-x: auto;
-		scrollbar-width: thin;
 	}
 
 	.sl-tabs .tablist-wrapper ul {

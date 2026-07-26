@@ -32,6 +32,16 @@ const mermaidFullscreen = {
 };
 
 /** @type {import('astro').AstroIntegration} */
+const scrollbars = {
+  name: 'scrollbars',
+  hooks: {
+    'astro:config:setup': ({ injectScript }) => {
+      injectScript('page', `import '/src/scripts/scrollbars.js';`);
+    },
+  },
+};
+
+/** @type {import('astro').AstroIntegration} */
 const splitView = {
   name: 'split-view',
   hooks: {
@@ -80,7 +90,7 @@ export default defineConfig({
       { name: 'aws', icons: awsIcons },
       { name: 'k8s', icons: k8sIcons },
     ],
-  }), mermaidFullscreen, splitView, starlight({
+  }), mermaidFullscreen, splitView, scrollbars, starlight({
     title: 'skills-guide',
     description: '전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드',
     defaultLocale: 'root',
@@ -93,6 +103,7 @@ export default defineConfig({
       './src/styles/mobile.css',
       './src/styles/sidebar-toggle.css',
       './src/styles/layout.css',
+      './src/styles/scrollbar.css',
     ],
     /* subgraph 라벨의 <span class='icon--logos--*'> 를 정의하는 CSS.
        아이콘이 데이터 URI 로 들어 있어 아이콘 개수와 무관하게 요청은 팩당 1건이다.

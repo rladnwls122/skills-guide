@@ -30,7 +30,10 @@
    여기서는 max-width 를 풀어주고(안 풀면 mermaid 가 박은 원본 max-width 만 남음),
    flex-shrink:0 을 줘야 한다 — pre.mermaid 가 display:flex 라 기본 flex-shrink:1 이면
    width 를 아무리 정해도 컨테이너 폭에 맞춰 다시 쪼그라든다. 넘치는 부분은 위
-   overflow-x:auto 로 스크롤한다. */
+   overflow-x:auto 로 스크롤한다.
+
+   hover 로 크기를 바꾸던 이전 시도(ebe13c8)는 걷어냈다 — 평상시/호버 크기가
+   달라져 도식이 튀고, 터치 기기에는 hover 가 없어 영영 작은 채로 남는다. */
 .mfs-frame > pre.mermaid svg {
 	flex-shrink: 0;
 	max-width: none;

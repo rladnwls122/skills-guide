@@ -43,7 +43,9 @@ CDN 팩(`logos`·`mdi`·`simple-icons`)에 없으면 **외부 공식 소스에�
 | 팩 | 출처 | 생성 스크립트 | 산출물 |
 |---|---|---|---|
 | `aws` | AWS 공식 아키텍처 아이콘 패키지 (로컬 zip) | `scripts/build-aws-icons.mjs` | `src/icons/aws.json` · `src/styles/mermaid-aws-icons.css` |
-| `k8s` | `kubernetes/community` 저장소 (원격 fetch) | `scripts/build-k8s-icons.mjs` | `src/icons/k8s.json` · `src/styles/mermaid-k8s-icons.css` |
+| `k8s` | `kubernetes/community` 저장소 (원격 fetch) + `src/assets/icons/` 의 로컬 원본 | `scripts/build-k8s-icons.mjs` | `src/icons/k8s.json` · `src/styles/mermaid-k8s-icons.css` |
+
+공식 세트에도 없는 생태계 프로젝트 로고(Karpenter·KEDA 등)는 원본 파일을 `src/assets/icons/` 에 두고 생성 스크립트의 `LOCAL` 에 등록한다. 스크립트가 96×96 PNG 로 구워 데이터 URI 로 담는다 — 벡터를 그대로 인라인하면 로고가 쓰는 `.cls-1` 같은 일반적인 클래스명이 페이지의 다른 도식과 충돌한다.
 
 절차:
 

@@ -21,9 +21,9 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 flowchart LR
     P["메시지 주입<br/>채점: 100건"]
     SQS@{ icon: "logos:aws-sqs", form: "square", label: "SQS<br/>skm-order-queue", pos: "b", h: 46, w: 46 }
-    KEDA@{ icon: "k8s:hpa", form: "square", label: "KEDA ScaledObject<br/>order-scaler<br/>min 1 / max 5 / queueLength 5", pos: "b", h: 46, w: 46 }
+    KEDA@{ icon: "k8s:keda", form: "square", label: "KEDA ScaledObject<br/>order-scaler<br/>min 1 / max 5 / queueLength 5", pos: "b", h: 46, w: 46 }
     DEP@{ icon: "k8s:deploy", form: "square", label: "Deployment order-processor<br/>requests 500m/512Mi<br/>nodeSelector: skm-app-nodepool", pos: "b", h: 46, w: 46 }
-    KARP@{ icon: "logos:kubernetes", form: "square", label: "Karpenter (kube-system)<br/>NodePool skm-app-nodepool<br/>taint dedicated=app", pos: "b", h: 46, w: 46 }
+    KARP@{ icon: "k8s:karpenter", form: "square", label: "Karpenter (kube-system)<br/>NodePool skm-app-nodepool<br/>taint dedicated=app", pos: "b", h: 46, w: 46 }
     NODE@{ icon: "logos:aws-ec2", form: "square", label: "앱 노드 1~2대+", pos: "b", h: 46, w: 46 }
 
     P --> SQS

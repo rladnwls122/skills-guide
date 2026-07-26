@@ -1,5 +1,6 @@
 /**
- * kubernetes/community 의 공식 아이콘에서 필요한 것만 받아 mermaid 용 자산을 만든다.
+ * 쿠버네티스 생태계 아이콘을 mermaid 용 자산으로 만든다. 공식 세트(kubernetes/community)에서
+ * 필요한 것만 받고, 거기 없는 프로젝트 로고는 src/assets/icons/ 의 원본에서 굽는다.
  *
  * Iconify 에는 `logos:kubernetes` 로고 하나뿐이라 Deployment·Pod·Service 같은
  * 리소스를 구분할 수 없다. 공식 세트를 쓰면 리소스별로 다른 아이콘이 붙는다.
@@ -15,8 +16,23 @@
  * 결과물이 커밋되어 있으므로 아이콘을 늘릴 때만 다시 돌린다.
  */
 import { writeFile, mkdir } from 'node:fs/promises';
+import sharp from 'sharp';
 
 const BASE = 'https://raw.githubusercontent.com/kubernetes/community/master/icons/svg';
+
+/**
+ * 공식 세트에 없어 따로 받아 둔 생태계 프로젝트 로고. `src/assets/icons/` 의 원본을
+ * 96×96 PNG 로 굽고 데이터 URI 로 담는다.
+ *
+ * 왜 벡터를 그대로 안 쓰나: KEDA 로고는 `<defs>` 안에 `.cls-1` 같은 일반적인 클래스명과
+ * 그라디언트를 쓴다. mermaid 는 아이콘 body 를 페이지 SVG 안에 그대로 인라인하므로
+ * 클래스명이 다른 도식과 충돌한다. 46px 로 그려지는 아이콘이라 96px 래스터로 충분하다.
+ */
+const LOCAL = {
+  karpenter: 'src/assets/icons/karpenter.png',
+  keda: 'src/assets/icons/keda.svg',
+};
+const RASTER = 96;
 
 /** 아이콘 이름 → 저장소 안 경로. 도식에서 `k8s:이름` 으로 쓴다. */
 const WANTED = {
@@ -27,7 +43,6 @@ const WANTED = {
   cm: 'resources/unlabeled/cm.svg',
   secret: 'resources/unlabeled/secret.svg',
   sa: 'resources/unlabeled/sa.svg',
-  hpa: 'resources/unlabeled/hpa.svg',
   etcd: 'infrastructure_components/unlabeled/etcd.svg',
   'control-plane': 'infrastructure_components/unlabeled/control-plane.svg',
 };
@@ -64,6 +79,19 @@ for (const [name, path] of Object.entries(WANTED)) {
   const res = await fetch(`${BASE}/${path}`);
   if (!res.ok) throw new Error(`${name}: ${res.status} ${path}`);
   icons[name] = toIconifyIcon(await res.text());
+}
+
+for (const [name, file] of Object.entries(LOCAL)) {
+  // density 는 svg 원본을 크게 렌더시켜 축소 전 계단현상을 없앤다. png 원본에는 무해하다.
+  const png = await sharp(file, { density: 300 })
+    .resize(RASTER, RASTER, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  icons[name] = {
+    body: `<image width="${RASTER}" height="${RASTER}" href="data:image/png;base64,${png.toString('base64')}"/>`,
+    width: RASTER,
+    height: RASTER,
+  };
 }
 
 await mkdir('src/icons', { recursive: true });

@@ -141,7 +141,7 @@ export default defineConfig({
         {
           label: 'PART 5 — Battle Drills',
           link: '/part-5/11-mutation-drill/',
-          items: [{ label: 'D12~14', items: [{ autogenerate: { directory: 'part-5' } }] }],
+          items: [{ label: 'D14', items: [{ autogenerate: { directory: 'part-5' } }] }],
         },
         {
           label: 'PART 6 — 3과제 운영',

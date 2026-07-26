@@ -12,7 +12,10 @@ paths:
 ## 아이콘 팩
 
 - `logos` · `mdi` · `simple-icons` 는 Iconify 서브셋 엔드포인트(`api.iconify.design/<pack>.json?icons=...`)에서 받는다. 목록은 `src/mermaid-icons.mjs`.
-- `aws` 는 자체 팩이다. `scripts/build-aws-icons.mjs` 가 AWS 공식 아이콘 패키지에서 뽑아 `src/icons/aws.json`(노드용)과 `src/styles/mermaid-aws-icons.css`(subgraph `<span>` 용) 두 파일을 만든다. 둘 다 생성물이지만 커밋한다.
+- **CDN 팩에 없는 아이콘은 외부 공식 소스에서 받아 자체 팩으로 만들고, `astro.config.mjs` 가 그 `.json` 을 import 한다.** 지금 둘 있다.
+  - `aws` — AWS 공식 아키텍처 아이콘 패키지(로컬) → `scripts/build-aws-icons.mjs` → `src/icons/aws.json` + `src/styles/mermaid-aws-icons.css`
+  - `k8s` — `kubernetes/community` 저장소(원격 fetch) → `scripts/build-k8s-icons.mjs` → `src/icons/k8s.json` + `src/styles/mermaid-k8s-icons.css`. `unlabeled` 변형만 받는다 — `labeled` 은 아이콘에 글자가 그려져 있어 노드 라벨과 겹친다.
+- 자체 팩 산출물은 전부 생성물이지만 **커밋한다.** 빌드 때 다시 받지 않는다. 새 팩을 추가하면 `iconPacks` 와 `customCss` 양쪽에 등록하고, `scripts/check-mermaid-icons.mjs` 의 `DECLARED` 에도 넣는다.
 - **`iconPacks` 의 `icons` 에는 IconifyJSON 전체(`{prefix, icons}`)를 넘긴다.** 안쪽 `icons` 맵만 넘기면 크기만 잡히고 body 가 비어 모든 아이콘이 빈 사각형으로 렌더된다. 빌드·검증 스크립트가 전부 통과하므로 브라우저로 봐야 드러난다.
 - subgraph 용 CSS 는 아이콘을 데이터 URI 로 담는다. 아이콘 개수와 무관하게 요청은 팩당 1건이다.
 

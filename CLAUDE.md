@@ -34,6 +34,7 @@ docs/superpowers/    설계 문서(spec)와 구현 계획(plan)
 - **`npm run dev` 는 데몬화된다.** 이미 떠 있는지 먼저 확인하고, 없을 때만 띄운다. 종료는 `npx astro dev stop`.
 - **GFM 이 꺼져 있다.** `markdown.gfm: false` + `remark-gfm` 을 `singleTilde: false` 로 직접 넣었다. 홑물결 취소선이 `D4~7`·`8~10h` 같은 범위 표기를 먹어치웠기 때문이다. 표·작업 목록 등 나머지 GFM 기능은 그대로 산다.
 - **도식 아이콘 이름 오타는 빌드가 잡지 못한다.** 해당 노드만 조용히 깨지고 빌드는 통과한다. 도식을 건드렸으면 `npm run check:icons` 를 돌린다.
+- **아이콘 팩은 다섯 개다.** `logos`·`mdi`·`simple-icons` 는 Iconify CDN 에서, `aws`·`k8s` 는 외부 공식 소스에서 받아 만든 자체 팩을 `astro.config.mjs` 가 `.json` 으로 import 한다. CDN 에 없다고 비슷한 걸로 때우지 않는다 — 생성 스크립트에 항목을 추가한다.
 - **`docs/` 는 사이트에 발행되지 않는다.** 설계 근거를 남기는 곳이고, 콘텐츠는 `src/content/docs/` 다. 두 경로를 혼동하지 않는다.
 
 ## 작업 규칙

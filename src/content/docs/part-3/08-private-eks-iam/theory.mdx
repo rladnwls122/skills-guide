@@ -126,10 +126,10 @@ mark 4-1이 kubelet configz의 clusterDomain과 Corefile을 grep 한다. 한쪽�
 flowchart TD
     A@{ icon: "logos:kubernetes", form: "square", label: "① kubelet clusterDomain<br/>eksctl overrideBootstrapCommand에<br/>nodeadm NodeConfig<br/>(spec.kubelet.config.clusterDomain)", pos: "b", h: 46, w: 46 }
     A --> C{양쪽 일치해야<br/>파드 DNS 정상}
-    B@{ icon: "logos:kubernetes", form: "square", label: "② CoreDNS Corefile 패치<br/>(k8s manifest로 ConfigMap 교체<br/>+ rollout restart)", pos: "b", h: 46, w: 46 }
+    B@{ icon: "k8s:cm", form: "square", label: "② CoreDNS Corefile 패치<br/>(k8s manifest로 ConfigMap 교체<br/>+ rollout restart)", pos: "b", h: 46, w: 46 }
     B --> C
     C --> D["nslookup kubernetes.default.svc.wsc2026.skills.local 성공"]
-    E@{ icon: "logos:kubernetes", form: "square", label: "coredns addon 업데이트", pos: "b", h: 46, w: 46 }
+    E@{ icon: "k8s:deploy", form: "square", label: "coredns addon 업데이트", pos: "b", h: 46, w: 46 }
     E -.->|Corefile 초기화!| B
 ```
 

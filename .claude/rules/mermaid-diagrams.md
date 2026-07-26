@@ -27,12 +27,36 @@ paths:
 
 ## 아이콘 고르는 순서
 
-1. `logos:aws-*` — Iconify 의 AWS 로고
-2. `aws:*` — Iconify 에 없는 것(ECR·CloudShell·NAT Gateway·서브넷·리전 등). 공식 AWS 패키지에서 뽑은 자체 팩
-3. `logos:*` — kubernetes·docker-icon·terraform-icon·helm·prometheus·grafana 등
-4. `mdi:*` — 위 어디에도 없는 개념일 때만
+1. `aws:*` — AWS 서비스·리소스. 공식 아키텍처 아이콘 패키지에서 뽑은 자체 팩
+2. `logos:aws-*` — 자체 팩에 없는 AWS 로고
+3. `k8s:*` — 쿠버네티스 리소스. Deployment·Pod·Service·ConfigMap 처럼 종류를 구분해야 할 때. `logos:kubernetes` 는 로고 하나뿐이라 전부 같아 보인다
+4. `logos:*` — docker-icon·terraform-icon·helm·prometheus·grafana 등 제품 로고
+5. `simple-icons:*` — `logos` 에 없는 브랜드 (fluentbit 등)
+6. `mdi:*` — 위 어디에도 없는 **개념**일 때만 (서브넷·계층·라우팅 등)
 
-새 이름을 쓰려면 먼저 `src/mermaid-icons.mjs` 목록에 추가한다. `aws:*` 는 생성물이라 `scripts/build-aws-icons.mjs` 의 `WANTED` 에 항목을 넣고 다시 돌려야 한다.
+## 어디에도 없는 아이콘이 필요할 때
+
+CDN 팩(`logos`·`mdi`·`simple-icons`)에 없으면 **외부 공식 소스에서 받아 자체 팩으로 만들어
+`astro.config.mjs` 가 `.json` 을 import 하는 방식**으로 붙인다. CDN 에 없다고 비슷한 걸로
+때우거나 아이콘을 생략하지 않는다.
+
+| 팩 | 출처 | 생성 스크립트 | 산출물 |
+|---|---|---|---|
+| `aws` | AWS 공식 아키텍처 아이콘 패키지 (로컬 zip) | `scripts/build-aws-icons.mjs` | `src/icons/aws.json` · `src/styles/mermaid-aws-icons.css` |
+| `k8s` | `kubernetes/community` 저장소 (원격 fetch) | `scripts/build-k8s-icons.mjs` | `src/icons/k8s.json` · `src/styles/mermaid-k8s-icons.css` |
+
+절차:
+
+1. 생성 스크립트의 `WANTED` 에 `이름: 소스경로` 를 추가한다. **필요한 것만** 넣는다 — 안 쓰는 아이콘은 데이터 URI 로 CSS 를 불린다.
+2. 스크립트를 돌린다. `.json`(노드용)과 `.css`(subgraph `<span>` 용)가 함께 나온다.
+3. 산출물을 커밋한다. 빌드 때 다시 받지 않는다.
+4. 새 팩이면 `astro.config.mjs` 의 `iconPacks` 와 `customCss` 양쪽에 등록한다.
+
+k8s 아이콘은 **`unlabeled` 변형만** 쓴다. `labeled` 은 아이콘 안에 글자가 그려져 있어 노드
+라벨과 겹쳐 두 번 나온다. 그래서 `control_plane_components`(unlabeled 변형이 없다)의
+api·sched·kubelet 은 팩에 없다.
+
+CDN 팩(`logos`·`mdi`·`simple-icons`)에서 새 이름을 쓸 때는 `src/mermaid-icons.mjs` 목록에 추가한다.
 
 ## 확인
 

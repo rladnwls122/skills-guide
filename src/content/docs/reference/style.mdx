@@ -125,10 +125,15 @@ subgraph EKS["<span class='icon--logos icon--logos--aws-eks'></span> EKS 클러�
 
 ### 아이콘 고르는 순서
 
-1. `logos:aws-*` — Iconify 의 AWS 로고
-2. `aws:*` — Iconify 에 없는 서비스·리소스(ECR·CloudShell·NAT Gateway·서브넷 등). 공식 AWS 아이콘 패키지에서 뽑은 자체 팩
-3. `logos:*` — kubernetes·docker-icon·terraform-icon·helm·prometheus·grafana 등
-4. `mdi:*` — 위 어디에도 없는 개념일 때만
+1. `aws:*` — AWS 서비스·리소스. 공식 아키텍처 아이콘 패키지에서 뽑은 자체 팩
+2. `logos:aws-*` — 자체 팩에 없는 AWS 로고
+3. `k8s:*` — 쿠버네티스 리소스. Deployment·Pod·Service·ConfigMap 처럼 종류를 구분해야 할 때
+4. `logos:*` — docker-icon·terraform-icon·helm·prometheus·grafana 등 제품 로고
+5. `simple-icons:*` — `logos` 에 없는 브랜드
+6. `mdi:*` — 위 어디에도 없는 **개념**일 때만
+
+`logos:kubernetes` 는 로고 하나뿐이라 Deployment 도 Pod 도 Service 도 전부 같아 보인다.
+쿠버네티스 리소스에는 `k8s:*` 를 쓴다.
 
 `sequenceDiagram` 은 mermaid 가 아이콘을 지원하지 않는다 — 손대지 않는다.
 

@@ -18,6 +18,8 @@ import { iconifyUrl } from './src/mermaid-icons.mjs';
 /* Iconify 에 없는 AWS 서비스·리소스용 자체 팩. scripts/build-aws-icons.mjs 가
    AWS 공식 아이콘 패키지에서 뽑아 만든다. */
 import awsIcons from './src/icons/aws.json';
+/* kubernetes 공식 리소스 아이콘. scripts/build-k8s-icons.mjs 가 만든다. */
+import k8sIcons from './src/icons/k8s.json';
 
 /** @type {import('astro').AstroIntegration} */
 const mermaidFullscreen = {
@@ -54,6 +56,7 @@ export default defineConfig({
       /* IconifyJSON 전체를 넘긴다 — 안쪽 icons 맵만 주면 크기만 잡히고
          body 가 비어 아이콘이 빈 사각형으로 그려진다. */
       { name: 'aws', icons: awsIcons },
+      { name: 'k8s', icons: k8sIcons },
     ],
   }), mermaidFullscreen, starlight({
     title: 'skills-guide',
@@ -64,6 +67,7 @@ export default defineConfig({
       './src/styles/korean-fonts.css',
       './src/styles/mermaid.css',
       './src/styles/mermaid-aws-icons.css',
+      './src/styles/mermaid-k8s-icons.css',
       './src/styles/mobile.css',
       './src/styles/sidebar-toggle.css',
     ],

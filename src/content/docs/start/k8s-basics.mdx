@@ -27,18 +27,18 @@ Kubernetes = **컨트롤 플레인**(두뇌)이 **노드**(작업자, EC2)에 �
 ```mermaid
 flowchart TB
     subgraph CP["<span class='icon--logos icon--logos--aws-eks'></span> 컨트롤 플레인 (EKS가 관리)"]
-        API@{ icon: "logos:kubernetes", form: "square", label: "kube-apiserver<br/>(kubectl이 여기로 요청)", pos: "b", h: 46, w: 46 }
-        SCHED@{ icon: "logos:kubernetes", form: "square", label: "scheduler<br/>(Pod을 어느 노드에 놓을지)", pos: "b", h: 46, w: 46 }
-        ETCD[("etcd<br/>(상태 저장소)")]
+        API@{ icon: "k8s:control-plane", form: "square", label: "kube-apiserver<br/>(kubectl이 여기로 요청)", pos: "b", h: 46, w: 46 }
+        SCHED@{ icon: "k8s:control-plane", form: "square", label: "scheduler<br/>(Pod을 어느 노드에 놓을지)", pos: "b", h: 46, w: 46 }
+        ETCD@{ icon: "k8s:etcd", form: "square", label: "etcd<br/>(상태 저장소)", pos: "b", h: 46, w: 46 }
     end
     subgraph N1["<span class='icon--logos icon--logos--aws-ec2'></span> 노드 1 (EC2)"]
-        P1["Pod<br/>app 컨테이너"]
-        P2["Pod<br/>app 컨테이너"]
+        P1@{ icon: "k8s:pod", form: "square", label: "Pod<br/>app 컨테이너", pos: "b", h: 46, w: 46 }
+        P2@{ icon: "k8s:pod", form: "square", label: "Pod<br/>app 컨테이너", pos: "b", h: 46, w: 46 }
     end
     subgraph N2["<span class='icon--logos icon--logos--aws-ec2'></span> 노드 2 (EC2)"]
-        P3["Pod<br/>app 컨테이너"]
+        P3@{ icon: "k8s:pod", form: "square", label: "Pod<br/>app 컨테이너", pos: "b", h: 46, w: 46 }
     end
-    SVC["Service (ClusterIP)<br/>안정적인 가상 IP + DNS"]
+    SVC@{ icon: "k8s:svc", form: "square", label: "Service (ClusterIP)<br/>안정적인 가상 IP + DNS", pos: "b", h: 46, w: 46 }
 
     API --> SCHED
     API --> ETCD
@@ -108,19 +108,19 @@ flowchart TB
         end
         subgraph NGAPP["<span class='icon--logos icon--logos--aws-ec2'></span> app 노드그룹 (label: node-type=app)"]
             FB2@{ icon: "simple-icons:fluentbit", form: "square", label: "DaemonSet: Fluent Bit", pos: "b", h: 46, w: 46 }
-            subgraph NSAPP["<span class='icon--logos icon--logos--kubernetes'></span> Namespace: app (채점이 ns 검사)"]
-                DEP["Deployment<br/>replicas 2 · probe 3종<br/>topologySpread(AZ)"]
-                POD1["Pod"]
-                POD2["Pod"]
+            subgraph NSAPP["<span class='icon--k8s icon--k8s--ns'></span> Namespace: app (채점이 ns 검사)"]
+                DEP@{ icon: "k8s:deploy", form: "square", label: "Deployment<br/>replicas 2 · probe 3종<br/>topologySpread(AZ)", pos: "b", h: 46, w: 46 }
+                POD1@{ icon: "k8s:pod", form: "square", label: "Pod", pos: "b", h: 46, w: 46 }
+                POD2@{ icon: "k8s:pod", form: "square", label: "Pod", pos: "b", h: 46, w: 46 }
                 PDB["PDB"]
-                CM["ConfigMap"]
-                SEC["Secret (KMS 암호화)"]
-                SA["ServiceAccount"]
-                SVC["Service (ClusterIP)"]
+                CM@{ icon: "k8s:cm", form: "square", label: "ConfigMap", pos: "b", h: 46, w: 46 }
+                SEC@{ icon: "k8s:secret", form: "square", label: "Secret (KMS 암호화)", pos: "b", h: 46, w: 46 }
+                SA@{ icon: "k8s:sa", form: "square", label: "ServiceAccount", pos: "b", h: 46, w: 46 }
+                SVC@{ icon: "k8s:svc", form: "square", label: "Service (ClusterIP)", pos: "b", h: 46, w: 46 }
                 TGB["TargetGroupBinding"]
             end
         end
-        NSMON["Namespace: monitoring<br/>(kube-prometheus-stack 리소스)"]
+        NSMON@{ icon: "k8s:ns", form: "square", label: "Namespace: monitoring<br/>(kube-prometheus-stack 리소스)", pos: "b", h: 46, w: 46 }
     end
     IAM@{ icon: "logos:aws-iam", form: "square", label: "AWS IAM Role", pos: "b", h: 46, w: 46 }
 

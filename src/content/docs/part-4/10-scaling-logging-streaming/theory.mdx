@@ -21,8 +21,8 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 flowchart LR
     P["메시지 주입<br/>채점: 100건"]
     SQS@{ icon: "logos:aws-sqs", form: "square", label: "SQS<br/>skm-order-queue", pos: "b", h: 46, w: 46 }
-    KEDA@{ icon: "logos:kubernetes", form: "square", label: "KEDA ScaledObject<br/>order-scaler<br/>min 1 / max 5 / queueLength 5", pos: "b", h: 46, w: 46 }
-    DEP@{ icon: "logos:kubernetes", form: "square", label: "Deployment order-processor<br/>requests 500m/512Mi<br/>nodeSelector: skm-app-nodepool", pos: "b", h: 46, w: 46 }
+    KEDA@{ icon: "k8s:hpa", form: "square", label: "KEDA ScaledObject<br/>order-scaler<br/>min 1 / max 5 / queueLength 5", pos: "b", h: 46, w: 46 }
+    DEP@{ icon: "k8s:deploy", form: "square", label: "Deployment order-processor<br/>requests 500m/512Mi<br/>nodeSelector: skm-app-nodepool", pos: "b", h: 46, w: 46 }
     KARP@{ icon: "logos:kubernetes", form: "square", label: "Karpenter (kube-system)<br/>NodePool skm-app-nodepool<br/>taint dedicated=app", pos: "b", h: 46, w: 46 }
     NODE@{ icon: "logos:aws-ec2", form: "square", label: "앱 노드 1~2대+", pos: "b", h: 46, w: 46 }
 
@@ -141,7 +141,7 @@ Deployment `order-processor`에 configMapRef나 valueFrom으로 env를 하나 �
 ```mermaid
 flowchart LR
     subgraph EKS["<span class='icon--logos icon--logos--aws-eks'></span> EKS o11y-cluster (노드 2대 Multi-AZ)"]
-        APP@{ icon: "logos:kubernetes", form: "square", label: "log-generator ×2 (ns o11y)<br/>제공 app.py: /healthz /log<br/>+ 자체 Dockerfile", pos: "b", h: 46, w: 46 }
+        APP@{ icon: "k8s:deploy", form: "square", label: "log-generator ×2 (ns o11y)<br/>제공 app.py: /healthz /log<br/>+ 자체 Dockerfile", pos: "b", h: 46, w: 46 }
         OTEL@{ icon: "logos:opentelemetry", form: "square", label: "OTel Collector DaemonSet<br/>o11y-otel (ns monitoring)<br/>filelog + container 파서", pos: "b", h: 46, w: 46 }
         LOKI@{ icon: "logos:grafana", form: "square", label: "Loki o11y-loki<br/>Single Binary + PV", pos: "b", h: 46, w: 46 }
         GRAF@{ icon: "logos:grafana", form: "square", label: "Grafana o11y-grafana<br/>Log Overview 3패널", pos: "b", h: 46, w: 46 }

@@ -12,8 +12,13 @@ const CONTENT_DIR = 'src/content/docs';
 
 /* CDN 팩(logos·mdi·simple-icons)에 자체 팩(aws)을 합쳐 하나의 목록으로 본다.
    자체 팩은 생성물이라 이름 목록을 따로 관리하지 않고 파일에서 바로 읽는다. */
-const awsPack = JSON.parse(await readFile('src/icons/aws.json', 'utf8'));
-const DECLARED = { ...MERMAID_ICONS, aws: Object.keys(awsPack.icons) };
+const localPack = async (name) =>
+  Object.keys(JSON.parse(await readFile(`src/icons/${name}.json`, 'utf8')).icons);
+const DECLARED = {
+  ...MERMAID_ICONS,
+  aws: await localPack('aws'),
+  k8s: await localPack('k8s'),
+};
 
 /* 팩 이름에 하이픈이 들어가면(simple-icons) 팩과 아이콘 경계가 모호해진다 —
    아는 팩 이름만 후보로 두고 가장 긴 것부터 맞춘다. */

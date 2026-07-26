@@ -15,11 +15,28 @@
 
 | 경로 | 내용 |
 |---|---|
-| `C:\Users\kryuk\Downloads\national-skills-v7` | 1·2과제 문제지·채점지 PDF, **채점 스크립트 5개**(`asgmt1_check.sh`, `asgmt2_module1~4_check.sh`), 지급파일, 다이어그램, 출제기준·출제가이드 PDF |
+| `C:\Users\kryuk\Downloads\national-skills-v7` | **set-08 제출작**의 1·2과제 문제지·채점지 PDF, 채점 스크립트 5개, 지급파일, 다이어그램 + 출제기준·출제가이드 PDF |
 | `C:\Users\kryuk\Downloads\I_331_클라우드컴퓨팅.pdf` | 직종설명서. 실체는 **WorldSkills International Technical Description**(`WSC2024_TD53_en`, 영문 28쪽) |
-| `C:\Users\kryuk\practice\skills-2026` | 수상 과제 정답지. `.tf` 191개 약 14,000줄, set-02·03·05·07·08·09 + **`task-3`(3과제 과제지·채점지 포함)** |
+| `C:\Users\kryuk\practice\skills-2026` | 과제 구현 저장소. `.tf` 191개 약 14,000줄, set-02·03·05·07·08·09 + `task-3` |
 
 채점 스크립트가 가장 확실한 근거다. 문제지가 애매하게 쓴 것도 스크립트는 정확한 값으로 검사한다.
+
+### `national-skills-v7` 의 정체 — 처음에 잘못 읽었다
+
+이 폴더를 "2026 실제 시험지"로 읽고 방향을 잡았는데 **틀렸다.** `1과제/asgmt1_check.sh` 와
+`skills-2026/set-08/task-1/mark.sh` 가 **완전히 동일한 파일**이고(`diff` 무차이), `task.md` 첫 줄이
+`# 2026년도 전국기능경기대회 과제출제 양식 (별첨3)` 이다. 즉 **set-08 이라는 한 편의 공모전
+제출작**이지 확정된 경기 과제가 아니다.
+
+### 수상 후보 — 실제로 출제될 수 있는 것만
+
+| 과제 | 후보 세트 |
+|---|---|
+| 1과제 | **00002 · 00007 · 00003** (동점자 우선기준 35점), 그 아래 000006 (30점) |
+| 2과제 | **00002 · 00007 · 00008** |
+
+최종 경기과제는 각 과제 시작 직전에 이 후보군에서 선정된다. **set-05·set-09 는 후보가 아니므로
+근거로 쓰지 않는다.** set-06 은 저장소에 없다.
 
 ## 발견
 
@@ -55,34 +72,78 @@ Communication and interpersonal skills / Problem solving, innovation, and creati
 **Operational considerations** / **Sustainability**. 채점 유형에 `Processed messages`(처리량)와
 `Operational efficiency`(인프라 스케일 업·다운)가 있는 것이 3과제 성격과 정확히 맞는다.
 
-### 2. 2026 1과제는 ECS Fargate 다 — EKS 로 풀면 0점
+### 2. 1과제 후보 3개는 전부 EKS 다 — EKS 축 유지가 맞다
 
-1과제 채점지의 0점 처리 규칙에 이것이 있다.
+처음에는 `national-skills-v7`(= set-08)의 채점지에 있는 0점 규칙 —
 
 > Fargate 아닌 **EC2·EKS 직접 구동** → 0점
 
-채점 스크립트도 ECS 를 전제로 짜여 있다. `family=skills-book-task`, `launchType=FARGATE`,
-`networkMode=awsvpc`, `assignPublicIp=DISABLED`, Target Group `TargetType=ip`.
+— 을 근거로 "1과제는 ECS 이므로 ECS 경로를 신설해야 한다"고 판단했다. **틀렸다.** 그 규칙은
+set-08 제출작 안에서만 유효하고, set-08 은 **2과제 후보**다. 그 1과제는 후보가 아니다.
 
-출제기준상 1과제 컴퓨트 필수 항목은 `Container(ECS·EKS, EC2·Fargate)` 로 **양쪽 다 출제 가능**하다.
-2026 은 ECS 였을 뿐이다. `skills-2026` 에도 set-08·set-09 가 ECS Fargate 기반이다.
+1과제 후보 세 편의 컴퓨트는 이렇다.
 
-**현재 사이트에는 ECS·Fargate 실습이 없다.** PART-2 전체(D4~D7)가 EKS·eksctl 축이고, 1과제 완주
-모듈(06)도 set-02(EKS) 기준이다.
-
-### 3. 2과제 13개 모듈 풀 중 7개가 비어 있다
-
-2과제는 13개 모듈 풀에서 4개가 출제되고, **모듈마다 리전이 다르다**(틀리면 0점).
-
-| 2026 실출제 모듈 | 리전 | 사이트 |
+| 세트 | 아키텍처 | 컴퓨트 |
 |---|---|---|
-| DocumentDB NoSQL | 서울 | ❌ 없음 |
-| VPC Lattice | 도쿄 | ❌ 없음 |
-| Cloud Event Handling | 싱가포르 | ✅ PART-4 모듈 09 |
-| SQS + KEDA Pod Scaling | 오레곤 | ✅ PART-4 모듈 10 |
+| set-02 | 글로벌 티켓 예매 | EKS |
+| set-03 | Book 예약 플랫폼 | EKS |
+| set-07 | Unicorn Tickets — WAF→CloudFront→(S3 + internal ALB VPC Origin)→EKS | EKS |
 
-풀 전체 기준 미커버: **DocumentDB · VPC Lattice · CDN Functions/Lambda@Edge · RDS Proxy/Data API ·
-Client VPN · Keycloak SSO · REST API(Lambda+APIGW)**.
+**셋 다 EKS다.** 저장소에서 ECS 를 쓰는 것은 set-08·set-09 둘뿐인데 set-09 는 후보가 아니고
+set-08 은 2과제로만 후보다.
+
+출제기준상 1과제 컴퓨트 필수 항목이 `Container(ECS·EKS, EC2·Fargate)` 라 ECS 가 원리적으로
+불가능한 것은 아니다. 하지만 **확정된 후보군 안에 ECS 1과제가 없으므로 ECS 경로 신설은
+우선순위가 아니다.** 현재 사이트의 EKS 축(PART-2)이 1과제에 맞게 조준돼 있다.
+
+다만 후보가 셋이므로 **set-02 만이 아니라 set-03·set-07 의 차이도 다뤄야 한다.** 세 편의 스택을
+나란히 놓으면 이렇다(각 `task-1/task.md` 의 Software Stack 절).
+
+| 구성 | set-02 | set-03 | set-07 | 사이트 |
+|---|---|---|---|---|
+| 컴퓨트 | EKS | EKS | EKS | PART-2 |
+| Lambda | ○ | ○ | ○ | 모듈 03·09 |
+| KMS | ○ | ○ (**root-less 강제**) | ○ | 모듈 02 |
+| **WAF** | ✗ | **○** | **○** | **언급만** |
+| EC2 | ✗ | ○ | ○ | — |
+| **관측성**(Prometheus·Grafana·Fluent Bit) | ✗ | ✗ | **○ — 1과제 안에 포함** | PART-3 모듈 07(D8) |
+
+두 가지가 걸린다.
+
+**WAF 가 후보 셋 중 둘에 있는데 사이트는 언급만 한다.** set-03 과 set-07 이 선정되면 WAF 구성이
+채점 대상이 된다. 최소한 관리형 룰 적용과 CloudFront 연결은 다뤄야 한다.
+
+**set-07 은 관측성을 1과제 안에서 요구한다.** 사이트는 관측성을 PART-3 모듈 07(D8)에 별도로 두는데,
+set-07 이 나오면 그것을 **1과제 4시간 안에** 끝내야 한다. 커리큘럼 순서상 D4~D7 에 1과제를 완주하고
+D8 에 관측성을 배우므로, set-07 시나리오에서는 순서가 맞지 않는다. 모듈 07 의 일부(Fluent Bit·
+kube-prometheus-stack 설치)를 1과제 완주 모듈에서 최소한 언급하고 링크해야 한다.
+
+set-03 의 root-less KMS 와 CoreDNS 커스텀 도메인은 이미 모듈 02·08 이 다룬다.
+
+### 3. 2과제 후보 12개 모듈 중 3개가 비어 있다
+
+2과제는 후보 세 세트가 각각 모듈 4개를 낸다. 최종 선정된 세트의 4개 모듈이 출제되고,
+**모듈마다 리전이 다르다**(틀리면 0점).
+
+| 세트 | 모듈 1 | 모듈 2 | 모듈 3 | 모듈 4 |
+|---|---|---|---|---|
+| set-02 | Workflow (Step Functions) | Real-time analytics (Flink) | Cloud Event Handling | MSK |
+| set-07 | NoSQL (싱가포르) | **CDN Function** (버지니아) | EKS Scaling (서울) | Container Logging (도쿄) |
+| set-08 | **DocumentDB** | **VPC Lattice** | Cloud Event Handling | SQS + KEDA |
+
+set-08 의 task-2 는 저장소에 **아직 구현되지 않았다.** 과제지·채점지·지급파일은
+`national-skills-v7/2과제` 에 있으므로 근거는 확보돼 있다.
+
+사이트 커버리지를 대조하면 이렇다.
+
+| 상태 | 모듈 |
+|---|---|
+| 커버됨 | Workflow · Cloud Event Handling(모듈 09) · EKS Scaling · SQS+KEDA · Container Logging(모듈 07·10) · NoSQL-DynamoDB(모듈 03) |
+| 실습 없이 함정 암기만 | Real-time analytics(Flink) · MSK — 모듈 10 Part C |
+| **전무** | **DocumentDB · VPC Lattice · CDN Function** |
+
+메워야 할 것은 셋이다. 이전 판(7개 미커버)은 확정되지 않은 13개 모듈 풀 전체를 대상으로 삼아
+과대 추정한 것이다 — Client VPN·Keycloak SSO·RDS Proxy 등은 후보 세 세트 어디에도 없다.
 
 ### 4. 3과제는 배점이 가장 크고 성격이 완전히 다르다
 
@@ -139,10 +200,14 @@ SLO 는 user·product ≤0.2초, stress ≤1.0초이고 공통 5초가 마지노
 
 ## 결정
 
-1. **ECS Fargate 축을 추가하고 EKS 는 유지한다.** 어느 쪽이 출제돼도 대응한다.
+1. ~~ECS Fargate 축을 추가하고 EKS 는 유지한다.~~ → **축소.** 1과제 후보 세 편이 모두 EKS 이므로
+   D4~D5 를 차지하는 ECS 경로는 만들지 않는다. 대신 **EKS 축 안에서 set-02·03·07 의 구성 차이를
+   다루고, ECS 는 부록 한 편으로 남긴다**(아래 "ECS 를 부록으로 남기는 이유").
 2. **Terraform 은 유지하되 위치를 재정의한다.** "채점 대상이 아니라 변동 대응 수단"임을 모듈
    약속에 명시하고, 콘솔·CLI 대안 경로를 병기한다.
 3. **방향 문서를 먼저 내고 승인 후 콘텐츠를 고친다.**
+4. **근거는 수상 후보 세트로 한정한다.** 1과제는 set-02·03·07, 2과제는 set-02·07·08.
+   set-05·set-09 는 후보가 아니므로 인용하지 않는다.
 
 ## 개편안
 
@@ -155,14 +220,20 @@ SLO 는 user·product ≤0.2초, stress ≤1.0초이고 공통 5초가 마지노
 |---|---|---|---|
 | 선수 지식 | D0 | 자가진단 + 기초 문서 | 현행 유지 |
 | PART-1 공통 기반 | D1~D3 | VPC · IAM · KMS · S3 · CloudFront · DynamoDB · ECR · Terraform | 1·2·3과제 공통 부품 |
-| PART-2 1과제 · ECS 경로 | D4~D5 | ECS Fargate · ALB · CloudFront 이중 오리진 → set-08/09 완주 | **신설**. 2026 실출제 |
-| PART-3 1과제 · EKS 경로 | D6~D7 | eksctl · k8s 워크로드 · LBC · TargetGroupBinding → set-02 완주 | 현행 PART-2 이관 |
-| PART-4 2과제 모듈 풀 | D8~D10 | 13개 모듈을 얕고 넓게. 실출제 4개 우선 | 모듈당 1시간 분량이 출제기준 |
-| PART-5 3과제 | D11~D13 | 부하 운영 · SLO 튜닝 · RDS Proxy·인덱스 · **비용 최적화** | **배점 40점. 승격** |
-| PART-6 모의 대회 | D14 | 4시간 타이머 · AI 금지 · 봉인 변형 | 현행 모듈 13 |
-| 변동 드릴 | **일차 없음** | 30분 치환 드릴 · "이름이 숨는 곳" 8종 | **시간 여유 있을 때만** |
+| PART-2 1과제 · EKS | D4~D7 | eksctl · k8s 워크로드 · LBC · TargetGroupBinding → 1과제 완주 | 현행 유지. 후보 3편 모두 EKS |
+| PART-3 관측성·Hard Mode | D8~D9 | 관측성 · fully-private EKS · IAM 심화 | 현행 유지 |
+| PART-4 2과제 모듈 | D10~D11 | 후보 12개 모듈. **DocumentDB · VPC Lattice · CDN Function 신설** | 후보 세 세트 실측 |
+| PART-5 3과제 | D12~D14 | 부하 운영 · SLO 튜닝 · RDS Proxy·인덱스 · **비용 최적화** | **배점 40점. 승격** |
+| 모의 대회 | 위 일정 안에서 | 4시간 타이머 · AI 금지 · 봉인 변형 | 현행 모듈 13 |
+| 변동 드릴 · 파괴/복구 | **일차 없음** | 30분 치환 드릴 · 12종 자력 복구 | **시간 여유 있을 때만** |
 
+ECS 경로가 빠지면서 D4~D7 이 EKS 1과제로 되돌아갔고, 그만큼 2과제·3과제에 여유가 생겼다.
 합계 14일로 "2주 완성"과 맞는다.
+
+**ECS 경로 철회로 바뀐 것** — 초판은 D4~D5 를 ECS, D6~D7 을 EKS 로 쪼개려 했다. 1과제 후보가
+전부 EKS 로 확인되면서 그 분할이 불필요해졌다. 대신 **현행 PART-2(D4~D7)에서 set-02 만이 아니라
+set-03·set-07 의 구성 차이를 함께 다루는 쪽**으로 방향을 바꾼다. set-07 의 `internal ALB +
+CloudFront VPC Origin`·WAF 가 set-02 에 없는 대표적 차이다.
 
 **3과제에 3일을 준 이유** — 배점이 40점으로 가장 크고, 채점 모드(부하 하 SLO 유지·비용 ratio)가
 1·2과제와 완전히 달라 기존 학습이 전이되지 않는다. 새로 가르쳐야 할 것이 많다.
@@ -203,8 +274,44 @@ SLO 는 user·product ≤0.2초, stress ≤1.0초이고 공통 5초가 마지노
 
 **결과** — PART-5 는 이제 모듈 13(모의 대회)만 D14 를 갖고, 11·12 는 그 앞에 뜨는 미고정 준비
 모듈이다. 루트 로드맵 표·카드·사이드바 라벨을 `D12~14` → `D14` 로 맞췄다. PART 재배치(전체
-Day 재번호)는 여전히 실행 단계 8번 몫이다 — ECS·2과제·3과제 콘텐츠가 없는 상태에서 먼저 하면
+Day 재번호)는 여전히 실행 단계 마지막 몫이다 — 2과제·3과제 콘텐츠가 없는 상태에서 먼저 하면
 존재하지 않는 문서를 가리키게 된다.
+
+### ECS 경로 신설을 착수 직전에 철회했다
+
+실행 단계 5번(ECS 경로 신설)의 문서 작성을 시작하려던 시점에, 근거로 삼던 `national-skills-v7`
+이 확정된 경기 과제가 아니라 **set-08 제출작**이라는 것이 드러났다(위 "정체" 절). 수상 후보
+목록을 대조하니 1과제 후보 세 편이 모두 EKS 였다.
+
+**아무 파일도 만들지 않은 상태에서 멈췄다.** 잘못된 전제로 모듈 6개(index·theory·lab × 2)를
+쓸 뻔했다. 이 문서의 초판이 "2026 실출제는 ECS"라고 단정한 것이 원인이다 — 근거 자료의
+정체를 확인하지 않고 파일 이름(`national-skills-v7`)과 내용의 완성도만 보고 실제 시험지로
+단정했다.
+
+**교훈으로 남길 것** — 근거 자료를 인용하기 전에 그 자료가 무엇인지부터 확인한다. 이 경우
+`diff` 한 번으로 `set-08/task-1/mark.sh` 와 동일하다는 것이 나왔고, `task.md` 첫 줄에
+`과제출제 양식 (별첨3)` 이라고 적혀 있었다.
+
+### ECS 를 부록으로 남기는 이유
+
+경로 신설은 접었지만 ECS 를 완전히 버리지는 않는다. 근거가 셋 있다.
+
+1. **당일 30% 변동**이 컴퓨트를 건드릴 여지가 있다. 변동은 보통 이름·CIDR·개수·스펙 수준이지만
+   범위가 규정돼 있지 않다.
+2. **출제기준의 1과제 컴퓨트 필수 항목이 `Container(ECS·EKS, EC2·Fargate)`** 다. ECS 가 규정상
+   배제돼 있지 않다.
+3. **set-08 이 실제로 ECS 1과제를 제출했다.** 그 1과제가 후보에 들지 못했을 뿐, 같은 유형의 문제가
+   나올 수 있다는 증거다. 채점 스크립트와 정답 구현이 모두 남아 있어 근거도 확보돼 있다.
+
+다만 **비용 대비 효과가 낮으므로 하루를 쓰지 않는다.** EKS 를 아는 사람이 ECS 로 넘어가는 데
+필요한 것은 대응 관계와 함정 몇 개지 새 커리큘럼이 아니다. `reference/` 에 대응표 한 편으로
+둔다 — 후보가 EKS 인 이상 평소에는 읽지 않고, 변동으로 ECS 가 나왔을 때만 펴는 문서다.
+
+담을 것: ECS 클러스터·태스크 정의·서비스가 각각 k8s 의 무엇에 대응하는지 / **실행 역할과 태스크
+역할을 분리해야 하는 이유**(set-08 채점 5-4 가 두 ARN 이 서로 다른지 본다) / `awsvpc` 네트워크
+모드와 Target Group `ip` 타입의 연결 / private 서브넷 + `assign_public_ip = false` 일 때 ECR pull
+경로(NAT 또는 VPC Endpoint 없으면 태스크가 기동조차 못 한다) / `runtime_platform` 의
+`cpu_architecture` — 제공 바이너리가 정적 링크 x86-64 ELF 라 arm 으로 빌드하면 전부 무너진다.
 
 ### 각 모듈이 지켜야 할 것
 
@@ -215,16 +322,21 @@ Day 재번호)는 여전히 실행 단계 8번 몫이다 — ECS·2과제·3과�
 
 ### 신규로 써야 할 문서
 
-| 문서 | 이유 |
-|---|---|
-| ECS Fargate 이론 + 실습 | 1과제 실출제 컴퓨트. 현재 전무 |
-| VPC Lattice 모듈 | 2026 실출제. 현재 전무 |
-| DocumentDB 모듈 | 2026 실출제. 현재 전무 |
-| 나머지 2과제 모듈 요약 | CDN Functions · RDS Proxy · Client VPN · Keycloak SSO · REST API |
-| **비용 최적화** | 3과제 12점. 인스턴스 사이징·cost ratio·감점 규칙. 현재 독립 주제로 없음 |
-| **부하 테스트와 SLO 튜닝** | 3과제 24점(고가용성 12 + 성능 12). k6 · HPA · Karpenter 실측 |
-| **RDS Proxy·인덱스 설계** | 3과제 성능의 핵심. API 캐시가 불가하므로 여기서만 점수가 난다 |
-| `reference/mark-script-guide` 보강 | 실제 채점 스크립트 5개를 근거로 재작성 |
+| 문서 | 이유 | 근거 |
+|---|---|---|
+| **DocumentDB 모듈** | 2과제 후보. 현재 전무 | set-08 모듈 1 (`national-skills-v7/2과제`) |
+| **VPC Lattice 모듈** | 2과제 후보. 현재 전무 | set-08 모듈 2 (`national-skills-v7/2과제`) |
+| **CDN Function 모듈** | 2과제 후보. 현재 전무 | set-07 모듈 2 (`set-07/task-2/module-2-cdn-function`) |
+| Flink · MSK 실습 보강 | 2과제 후보인데 모듈 10 이 함정 암기로만 다룬다 | set-02 모듈 2·4 |
+| set-03·set-07 1과제 차이 | 1과제 후보 3편 중 둘을 안 다룬다. set-07 의 internal ALB + CloudFront VPC Origin·WAF 가 대표 차이 | set-03·set-07 task-1 |
+| **비용 최적화** | 3과제 12점. 인스턴스 사이징·cost ratio·감점 규칙. 현재 독립 주제로 없음 | `task-3/mark.pdf` |
+| **부하 테스트와 SLO 튜닝** | 3과제 24점(고가용성 12 + 성능 12). k6 · HPA · Karpenter 실측 | `task-3/` |
+| **RDS Proxy·인덱스 설계** | 3과제 성능의 핵심. API 캐시가 불가하므로 여기서만 점수가 난다 | `task-3/ARCHITECTURE.md` |
+| `reference/mark-script-guide` 보강 | 실제 채점 스크립트를 근거로 재작성 | 후보 세트 `mark.sh` |
+| **`reference/ecs-fallback`** (부록) | 30% 변동으로 ECS 가 나올 경우의 대응표. 하루를 쓰지 않고 한 편으로 | set-08 task-1 + `national-skills-v7/1과제` |
+
+~~ECS Fargate 경로 신설(D4~D5)~~ 은 부록 한 편으로 축소했다(위 절 참고). Client VPN·Keycloak SSO·
+RDS Proxy 모듈 요약은 뺐다 — 후보 세 세트 어디에도 없다.
 
 ### HCL 선수 지식 문서
 
@@ -249,13 +361,17 @@ Day 재번호)는 여전히 실행 단계 8번 몫이다 — ECS·2과제·3과�
 | 2 | HCL 선수 지식 문서 신설 + `part-1/01` 0번 섹션 분리 | 없음 | 완료 |
 | 3 | 변동 드릴·파괴/복구 일차 제거 — 모듈 유지, "시간 여유 시"로 전환. troubleshooting 통합은 실행하지 않음(위 교정 참고) | 확정 | 완료 |
 | 4 | 로드맵·인덱스·사이드바에서 `D12~14` → `D14` 로 맞춤 | 확정 | 완료 |
-| 5 | ECS Fargate 경로 신설 | 확정 | 대기 |
-| 6 | 2과제 공백 — VPC Lattice · DocumentDB 우선, 나머지 요약 | 확정 | 대기 |
-| 7 | 3과제 승격 — 부하·SLO·비용 최적화 신규 | 확정 | 대기 |
-| 8 | PART 재배치와 로드맵·인덱스 갱신 | 7까지 끝난 뒤 | 대기 |
+| ~~5~~ | ~~ECS Fargate 경로 신설(D4~D5)~~ | — | **축소** — 부록 1편으로(9번) |
+| 5 | 2과제 공백 — **DocumentDB · VPC Lattice · CDN Function** 신설 | 확정 | 대기 |
+| 6 | 1과제 후보 차이 — set-03·set-07 구성을 PART-2 에 반영 | 확정 | 대기 |
+| 7 | Flink · MSK 실습 보강 (현재 함정 암기만) | 확정 | 대기 |
+| 8 | 3과제 승격 — 부하·SLO·비용 최적화 신규 | 확정 | 대기 |
+| 9 | `reference/ecs-fallback` 부록 | 확정 | 대기 |
+| 10 | PART 재배치와 로드맵·인덱스 갱신 | 9까지 끝난 뒤 | 대기 |
 
-1~2번은 방향과 무관하므로 먼저 친다. 5~7번은 분량이 크니 단계마다 끊고 검토받는다. 8번은 앞이
-다 끝나야 의미가 있다 — 먼저 하면 존재하지 않는 문서를 가리키게 된다.
+1~4번은 완료했다. 5번이 가장 급하다 — 후보 12개 모듈 중 셋이 사이트에 아예 없고, 그중 둘
+(DocumentDB·VPC Lattice)은 저장소에도 구현이 없어 사이트가 유일한 학습 경로가 된다. 5~8번은
+분량이 크니 단계마다 끊고 검토받는다. 9번은 앞이 다 끝나야 의미가 있다.
 
 ## 미확인
 
@@ -267,3 +383,9 @@ Day 재번호)는 여전히 실행 단계 8번 몫이다 — ECS·2과제·3과�
   형식을 확인해야 알 수 있다.
 - 직종설명서는 확보했으나 **구체 범위의 근거가 아니었다**(위 발견 1 참조). 한국 출제기준이 참조하는
   실제 세부 규정이 따로 있는지는 확인 불가.
+- **3과제 후보 목록을 모른다.** 1·2과제 후보는 확인했으나 3과제는 받지 못했다. `skills-2026/task-3`
+  가 후보 중 하나인지, 유일한 것인지 알 수 없다.
+- **set-06(000006)이 저장소에 없다.** 1과제 동점자 우선기준 30점 후보라 선정될 여지가 있는데
+  구현도 과제지도 확보하지 못했다.
+- **set-08 task-2 는 저장소에 구현이 없다.** 과제지·채점지·지급파일은 `national-skills-v7/2과제` 에
+  있으므로 요구사항은 알 수 있지만, 정답 구현과 대조할 수는 없다.

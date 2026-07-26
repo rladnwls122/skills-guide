@@ -1,5 +1,5 @@
 ---
-title: Lab 16 — VPC Lattice 서비스 네트워킹 (도쿄 ap-northeast-1)
+title: Lab 12 — VPC Lattice 서비스 네트워킹 (도쿄 ap-northeast-1)
 description: Client/Service VPC를 VPC Lattice만으로 연결하고, 채점 스크립트(asgmt2_module2_check.sh) 5항목을 백지에서 재현하는 실습.
 ---
 
@@ -233,7 +233,7 @@ import { Steps } from '@astrojs/starlight/components';
    $VPC_ASSOC_ID = aws vpc-lattice create-service-network-vpc-association --service-network-identifier $SERVICE_NETWORK_ID --vpc-identifier $CLIENT_VPC_ID --security-group-ids $ASSOC_SG_ID --query "id" --output text
    ```
 
-   Service VPC는 Association하지 않는다 — Target Group의 `vpcIdentifier`로만 연결된다([이론](/part-4/16-vpc-lattice/theory/) 참고). ACTIVE 전환까지 1~2분 걸린다.
+   Service VPC는 Association하지 않는다 — Target Group의 `vpcIdentifier`로만 연결된다([이론](/part-4/12-vpc-lattice/theory/) 참고). ACTIVE 전환까지 1~2분 걸린다.
 
    ```powershell
    aws vpc-lattice get-service-network-vpc-association --service-network-vpc-association-identifier $VPC_ASSOC_ID --query "{Status:status,SecurityGroupIds:securityGroupIds}" --output table

@@ -9,7 +9,7 @@ description: 수상 후보(set-02·03·07)에는 없지만 다른 제출작에�
 평소에는 읽지 않는다. 대회 당일 과제지의 약 30%가 바뀌고, 출제자가 수상 후보가 아닌 다른 제출작의 요구사항을 가져다 붙일 가능성이 있다. 이 문서는 그때만 펼치는 부록이다 — 후보(set-02·03·07)에 없는 개념을 모았을 뿐 평소 학습 순서에 넣는 내용이 아니다.
 :::
 
-이름·리소스명·개수 같은 스펙을 통째로 바꿔치기하는 절차 훈련은 모듈 11([변동 드릴](/part-5/11-mutation-drill/))이 담당한다. 이 문서는 절차가 아니라 **후보 세트에 아예 없는 개념**을 다룬다 — set-05·set-06 제출작에서만 확인된 것들이다.
+이름·리소스명·개수 같은 스펙을 통째로 바꿔치기하는 절차 훈련은 모듈 15([변동 드릴](/part-6/15-mutation-drill/))이 담당한다. 이 문서는 절차가 아니라 **후보 세트에 아예 없는 개념**을 다룬다 — set-05·set-06 제출작에서만 확인된 것들이다.
 
 ## 이미 배운 것과 겹치는 개념
 
@@ -110,7 +110,7 @@ description: 수상 후보(set-02·03·07)에는 없지만 다른 제출작에�
 ### CloudFront Function 캐시 제어
 
 - 무엇을 요구하나: `/`는 캐시 Miss, `/index.html`은 캐시 Hit가 되도록 만든다(set-06 mark.sh 8-1).
-- 왜 걸리나: 후보 세트의 CloudFront Function은 A/B 테스트용 쿠키·리라이트가 목적이다([CDN Function 모듈](/part-4/17-cdn-function/theory/)) — 여기서는 **캐시 키 정렬**이 목적이라는 점이 다르다. viewer-request 함수는 캐시 조회 **전에** 실행되고, 반환한 요청의 URI가 그대로 캐시 키가 된다. `/` 요청의 URI를 `/index.html`로 재작성하면 두 요청이 같은 캐시 키를 공유해 두 번째부터 Hit가 된다. `default_root_object`만 설정해서는 캐시 키가 합쳐지지 않는다.
+- 왜 걸리나: 후보 세트의 CloudFront Function은 A/B 테스트용 쿠키·리라이트가 목적이다([CDN Function 모듈](/part-4/13-cdn-function/theory/)) — 여기서는 **캐시 키 정렬**이 목적이라는 점이 다르다. viewer-request 함수는 캐시 조회 **전에** 실행되고, 반환한 요청의 URI가 그대로 캐시 키가 된다. `/` 요청의 URI를 `/index.html`로 재작성하면 두 요청이 같은 캐시 키를 공유해 두 번째부터 Hit가 된다. `default_root_object`만 설정해서는 캐시 키가 합쳐지지 않는다.
 - 확인:
   ```bash
   curl -s -o /dev/null -w "%{http_code} %header{x-cache}\n" https://<cf-domain>/

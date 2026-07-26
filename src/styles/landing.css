@@ -1,51 +1,48 @@
-/* 랜딩 — 15일 척도를 한가운데 세우고 모든 요소를 그 축에 모은다.
+/* 랜딩의 페이지 골격 — 시선을 축 하나로 모은다.
  *
- * 이 파일의 규칙은 랜딩에만 걸린다. 판별은 `body:has(.day-rail)` 하나로 한다 —
- * 척도가 있는 페이지가 곧 랜딩이다. 프론트매터에 표시를 하나 더 두지 않는다.
+ * 척도 자체는 Svelte 컴포넌트(DayRail.svelte)가 Tailwind 로 그린다. 여기 남은 것은
+ * 유틸리티로 도달할 수 없는 것들뿐이다 — 테마가 만든 마크업(.hero, .sl-markdown-content,
+ * .sl-heading-wrapper)을 덮는 규칙. 판별은 `body:has(#roadmap)` 하나로 한다.
  *
- * 움직임은 CSS 스크롤 구동 애니메이션이다. 자바스크립트가 없고, 스크롤을 되감으면
- * 그대로 되감긴다 — 진행 표시가 실제 진행을 따라가야 하므로 한 번 켜지고 마는
- * IntersectionObserver 방식은 맞지 않는다. 지원하지 않는 브라우저에는 처음부터
- * 다 보이는 정적 페이지가 나간다(@supports 로 감춤 자체를 가둔다).
+ * 이 선언들은 캐스케이드 레이어 밖이라 @layer starlight 안의 테마 규칙보다 우선한다.
  */
 
 /* ───────────────────────────── 히어로 ───────────────────────────── */
 
 /* 테마는 50rem 이상에서 히어로를 2단으로 벌린다 — 글은 왼쪽, 로고는 오른쪽.
-   축이 하나여야 하므로 한 단으로 되돌린다. 이 선언들은 캐스케이드 레이어 밖이라
-   @layer starlight.core 안의 테마 규칙보다 우선한다. */
+   축이 하나여야 하므로 한 단으로 되돌린다. */
 @media (min-width: 50rem) {
-	body:has(.day-rail) .hero {
+	body:has(#roadmap) .hero {
 		grid-template-columns: 100%;
 		justify-items: center;
 	}
 
 	/* 로고는 글 위, 축 위에 둔다. 자동 여백으로 가운데를 잡는다 — justify-items 만으로는
 	   테마가 걸어 둔 정렬을 못 이긴다. */
-	body:has(.day-rail) .hero > img,
-	body:has(.day-rail) .hero > .hero-html {
+	body:has(#roadmap) .hero > img,
+	body:has(#roadmap) .hero > .hero-html {
 		order: 0;
 		justify-self: center;
 		margin-inline: auto;
 		width: min(60%, 9rem);
 	}
 
-	body:has(.day-rail) .hero .stack {
+	body:has(#roadmap) .hero .stack {
 		text-align: center;
 	}
 
-	body:has(.day-rail) .hero .copy {
+	body:has(#roadmap) .hero .copy {
 		align-items: center;
 	}
 
-	body:has(.day-rail) .hero .actions {
+	body:has(#roadmap) .hero .actions {
 		justify-content: center;
 	}
 }
 
 /* ───────────────────────────── 본문 열 ───────────────────────────── */
 
-body:has(.day-rail) .sl-markdown-content {
+body:has(#roadmap) .sl-markdown-content {
 	max-width: 46rem;
 	margin-inline: auto;
 }
@@ -55,215 +52,24 @@ body:has(.day-rail) .sl-markdown-content {
    제목 배지 플러그인이 h2 를 `.sl-heading-wrapper.level-h2` 로 감싸고 h2 자체를
    `display: inline` 으로 만든다 — 인라인 상자에는 text-align 도 세로 여백도 걸리지
    않으므로 래퍼에 걸어야 한다. */
-body:has(.day-rail) .sl-markdown-content :is(h2, .level-h2):not(:where(.not-content *)) {
+body:has(#roadmap) .sl-markdown-content :is(h2, .level-h2):not(:where(.not-content *)) {
 	text-align: center;
 	margin-block-start: 5rem;
 }
 
-/* ───────────────────────────── 척도 ───────────────────────────── */
-
-.day-rail {
-	--rail-node: 0.75rem;
-	--rail-line: 2px;
-	/* 마디 사이 빈칸. 잇는 선은 이 구간에만 그린다. */
-	--stop-gap: 4rem;
-	margin-block: 4rem 5rem;
-}
-
-.day-rail__stops {
-	list-style: none;
-	margin: 0;
-	padding: 0;
-}
-
-.stop {
-	position: relative;
-	/* 빈칸을 li 안에 두어야 잇는 선이 그 사이를 지난다. gap 으로 벌리면 선이 끊긴다. */
-	padding-block-end: var(--stop-gap);
-	text-align: center;
-}
-
-.stop:last-child {
-	padding-block-end: 0;
-}
-
-/* 잇는 선 — 지나온 자리(::after)가 남은 자리(::before) 위에 덧그려진다.
-   두 겹으로 두는 이유는 스크롤 진행을 색으로 보이기 위해서다.
-   글을 관통하지 않도록 카드 아래 빈칸에만 그린다. */
-.stop--tail::before,
-.stop--tail::after {
-	content: '';
-	position: absolute;
-	inset-block-start: calc(100% - var(--stop-gap));
-	inset-block-end: 0;
-	inset-inline-start: 50%;
-	width: var(--rail-line);
-	transform: translateX(-50%);
-}
-
-.stop--tail::before {
-	background-color: var(--sl-color-gray-5);
-}
-
-.stop--tail::after {
-	background-color: var(--sl-color-text-accent);
-	transform-origin: top;
-	scale: 1 0;
-}
-
-.stop__node {
-	display: block;
-	width: var(--rail-node);
-	height: var(--rail-node);
-	margin-inline: auto;
-	border: var(--rail-line) solid var(--sl-color-gray-4);
-	border-radius: 999px;
-	/* 선이 마디 뒤로 비치지 않게 배경색으로 막는다 */
-	background-color: var(--sl-color-bg);
-}
-
-/* 일차가 없는 PART. 선에서 떼고 마디를 비운다 — 일정 안에 자리가 없다는 사실 그대로다. */
-.stop--detached {
-	margin-block-start: 2rem;
-}
-
-.stop--detached .stop__node {
-	border-style: dashed;
-}
-
-.stop__card {
-	max-width: 34rem;
-	margin-inline: auto;
-	padding-block-start: 1.25rem;
-}
-
-/* 숫자와 라벨은 고정폭으로 — 배우는 것은 명조, 세는 것은 터미널 서체다. */
-.stop__meta {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 0.625rem;
-	margin: 0;
-	font-family: var(--sl-font-mono);
-	font-size: var(--sl-text-xs);
-	line-height: 1;
-}
-
-.stop__part {
-	color: var(--sl-color-gray-3);
-	letter-spacing: 0.08em;
-}
-
-.stop__day {
-	color: var(--sl-color-text-accent);
-}
-
-/* 눈금 하나가 하루다 */
-.stop__ticks {
-	display: flex;
-	gap: 3px;
-}
-
-.stop__ticks > i {
-	width: 2px;
-	height: 0.5rem;
-	background-color: var(--sl-color-gray-4);
-}
-
-.stop__title {
-	margin-block: 0.625rem 0;
-	font-size: var(--sl-text-2xl);
-	line-height: 1.25;
-}
-
-.stop__title > a {
-	color: var(--sl-color-white);
-	text-decoration: none;
-}
-
-.stop__title > a:hover {
-	color: var(--sl-color-text-accent);
-	text-decoration: underline;
-	text-underline-offset: 0.2em;
-}
-
-.stop__body {
-	margin-block: 0.5rem 0;
-	color: var(--sl-color-gray-2);
-	text-wrap: pretty;
-}
-
-.stop__done {
-	margin-block-start: 0.75rem;
-	font-family: var(--sl-font-mono);
-	font-size: var(--sl-text-xs);
-	color: var(--sl-color-gray-3);
-}
-
-.stop__done > span {
-	margin-inline-end: 0.5rem;
-	color: var(--sl-color-gray-4);
-}
-
-.stop__done > span::after {
-	content: ' ·';
-}
-
-/* 척도 전체에 붙는 주석 — 하루의 크기를 알려 준다. */
-.day-rail__note {
-	margin-block-start: 3rem;
-	text-align: center;
-	font-family: var(--sl-font-mono);
-	font-size: var(--sl-text-xs);
-	color: var(--sl-color-gray-3);
-}
-
-/* ─────────────────── 스크롤 구동 애니메이션 ─────────────────── */
-
+/* 제목만 스크롤에 맞춰 올라온다. 척도의 움직임은 GSAP 이 맡고, 이 하나는 CSS 로 둔다 —
+   자바스크립트를 기다릴 이유가 없다. */
 @supports (animation-timeline: view()) {
 	@media (prefers-reduced-motion: no-preference) {
-		/* 지나온 만큼 선이 찬다. 마디마다 자기 구간을 채우므로 길이를 미리 알
-		   필요가 없다 — PART 를 더하고 빼도 그대로 맞는다. */
-		.stop--tail::after {
-			animation: rail-fill linear both;
-			animation-timeline: view();
-			animation-range: entry 70% exit 30%;
-		}
-
-		/* 마디는 읽는 줄을 지날 때 켜진다. 되감으면 꺼진다 — 진행 표시니까. */
-		.stop__node {
-			animation: node-pass steps(1) both;
-			animation-timeline: view();
-			animation-range: entry 75% entry 90%;
-		}
-
-		.stop__card,
-		.day-rail__note,
-		body:has(.day-rail) .sl-markdown-content .level-h2:not(:where(.not-content *)) {
-			animation: rise linear both;
+		body:has(#roadmap) .sl-markdown-content .level-h2:not(:where(.not-content *)) {
+			animation: landing-rise linear both;
 			animation-timeline: view();
 			animation-range: entry 5% entry 45%;
 		}
 	}
 }
 
-@keyframes rail-fill {
-	from {
-		scale: 1 0;
-	}
-	to {
-		scale: 1 1;
-	}
-}
-
-@keyframes node-pass {
-	to {
-		border-color: var(--sl-color-text-accent);
-		background-color: var(--sl-color-text-accent);
-	}
-}
-
-@keyframes rise {
+@keyframes landing-rise {
 	from {
 		opacity: 0;
 		translate: 0 1.25rem;
@@ -271,16 +77,5 @@ body:has(.day-rail) .sl-markdown-content :is(h2, .level-h2):not(:where(.not-cont
 	to {
 		opacity: 1;
 		translate: 0 0;
-	}
-}
-
-@media (max-width: 50rem) {
-	.day-rail {
-		--stop-gap: 3rem;
-		margin-block: 2.5rem 3.5rem;
-	}
-
-	.stop__title {
-		font-size: var(--sl-text-xl);
 	}
 }

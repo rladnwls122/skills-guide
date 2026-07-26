@@ -1,6 +1,8 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import svelte from '@astrojs/svelte';
+import tailwindcss from '@tailwindcss/vite';
 import mermaid from 'astro-mermaid';
 import starlightQuiz from 'starlight-quiz';
 import starlightHeadingBadges from 'starlight-heading-badges';
@@ -96,6 +98,9 @@ export default defineConfig({
     defaultLocale: 'root',
     locales: { root: { label: '한국어', lang: 'ko' } },
     customCss: [
+      /* 레이어 순서를 먼저 선언해야 한다 — 뒤에 오는 파일들이 그 순서를 전제한다.
+         자세한 것은 파일 안 주석. */
+      './src/styles/tailwind.css',
       './src/styles/korean-fonts.css',
       './src/styles/mermaid.css',
       './src/styles/mermaid-aws-icons.css',
@@ -171,5 +176,6 @@ export default defineConfig({
          앵커를 모으므로 컴포넌트가 만든 id 를 보지 못한다 — 링크는 실제로 살아 있다. */
       starlightLinksValidator({ errorOnRelativeLinks: false, exclude: ['#roadmap'] }),
     ],
-  }), mdx()],
+  }), mdx(), svelte()],
+  vite: { plugins: [tailwindcss()] },
 });

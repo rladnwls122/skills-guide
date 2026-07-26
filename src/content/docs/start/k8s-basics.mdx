@@ -26,19 +26,19 @@ Kubernetes = **컨트롤 플레인**(두뇌)이 **노드**(작업자, EC2)에 �
 
 ```mermaid
 flowchart TB
-    subgraph CP["컨트롤 플레인 (EKS가 관리)"]
-        API["kube-apiserver\n(kubectl이 여기로 요청)"]
-        SCHED["scheduler\n(Pod을 어느 노드에 놓을지)"]
-        ETCD[("etcd\n(상태 저장소)")]
+    subgraph CP["<span class='icon--logos icon--logos--aws-eks'></span> 컨트롤 플레인 (EKS가 관리)"]
+        API@{ icon: "logos:kubernetes", form: "square", label: "kube-apiserver<br/>(kubectl이 여기로 요청)", pos: "b", h: 46, w: 46 }
+        SCHED@{ icon: "logos:kubernetes", form: "square", label: "scheduler<br/>(Pod을 어느 노드에 놓을지)", pos: "b", h: 46, w: 46 }
+        ETCD[("etcd<br/>(상태 저장소)")]
     end
-    subgraph N1["노드 1 (EC2)"]
-        P1["Pod\napp 컨테이너"]
-        P2["Pod\napp 컨테이너"]
+    subgraph N1["<span class='icon--logos icon--logos--aws-ec2'></span> 노드 1 (EC2)"]
+        P1["Pod<br/>app 컨테이너"]
+        P2["Pod<br/>app 컨테이너"]
     end
-    subgraph N2["노드 2 (EC2)"]
-        P3["Pod\napp 컨테이너"]
+    subgraph N2["<span class='icon--logos icon--logos--aws-ec2'></span> 노드 2 (EC2)"]
+        P3["Pod<br/>app 컨테이너"]
     end
-    SVC["Service (ClusterIP)\n안정적인 가상 IP + DNS"]
+    SVC["Service (ClusterIP)<br/>안정적인 가상 IP + DNS"]
 
     API --> SCHED
     API --> ETCD
@@ -95,19 +95,21 @@ Pod IP는 재시작마다 바뀐다 → **Service**가 고정 가상 IP + DNS �
 
 ```mermaid
 flowchart TB
-    CF["CloudFront"] -->|"오리진"| ALB["ALB (Terraform 생성 — 이름 채점)"]
-    ALB -->|"포워드"| TG["ALB TargetGroup\n(타깃 타입: IP)"]
+    CF@{ icon: "logos:aws-cloudfront", form: "square", label: "CloudFront", pos: "b", h: 46, w: 46 }
+    ALB@{ icon: "logos:aws-elb", form: "square", label: "ALB (Terraform 생성 — 이름 채점)", pos: "b", h: 46, w: 46 }
+    CF -->|"오리진"| ALB
+    ALB -->|"포워드"| TG["ALB TargetGroup<br/>(타깃 타입: IP)"]
 
-    subgraph CLUSTER["EKS 클러스터"]
-        subgraph NGADDON["addon 노드그룹 (taint/label: node-type=addon)"]
-            LBC["Helm 릴리스: LBC\n(AWS Load Balancer Controller)"]
-            KPS["Helm 릴리스:\nkube-prometheus-stack"]
-            FB1["DaemonSet: Fluent Bit"]
+    subgraph CLUSTER["<span class='icon--logos icon--logos--aws-eks'></span> EKS 클러스터"]
+        subgraph NGADDON["<span class='icon--logos icon--logos--aws-ec2'></span> addon 노드그룹 (taint/label: node-type=addon)"]
+            LBC@{ icon: "logos:helm", form: "square", label: "Helm 릴리스: LBC<br/>(AWS Load Balancer Controller)", pos: "b", h: 46, w: 46 }
+            KPS@{ icon: "logos:prometheus", form: "square", label: "Helm 릴리스:<br/>kube-prometheus-stack", pos: "b", h: 46, w: 46 }
+            FB1@{ icon: "mdi:script-text-outline", form: "square", label: "DaemonSet: Fluent Bit", pos: "b", h: 46, w: 46 }
         end
-        subgraph NGAPP["app 노드그룹 (label: node-type=app)"]
-            FB2["DaemonSet: Fluent Bit"]
-            subgraph NSAPP["Namespace: app (채점이 ns 검사)"]
-                DEP["Deployment\nreplicas 2 · probe 3종\ntopologySpread(AZ)"]
+        subgraph NGAPP["<span class='icon--logos icon--logos--aws-ec2'></span> app 노드그룹 (label: node-type=app)"]
+            FB2@{ icon: "mdi:script-text-outline", form: "square", label: "DaemonSet: Fluent Bit", pos: "b", h: 46, w: 46 }
+            subgraph NSAPP["<span class='icon--logos icon--logos--kubernetes'></span> Namespace: app (채점이 ns 검사)"]
+                DEP["Deployment<br/>replicas 2 · probe 3종<br/>topologySpread(AZ)"]
                 POD1["Pod"]
                 POD2["Pod"]
                 PDB["PDB"]
@@ -118,9 +120,9 @@ flowchart TB
                 TGB["TargetGroupBinding"]
             end
         end
-        NSMON["Namespace: monitoring\n(kube-prometheus-stack 리소스)"]
+        NSMON["Namespace: monitoring<br/>(kube-prometheus-stack 리소스)"]
     end
-    IAM["AWS IAM Role"]
+    IAM@{ icon: "logos:aws-iam", form: "square", label: "AWS IAM Role", pos: "b", h: 46, w: 46 }
 
     DEP -->|"생성·유지"| POD1
     DEP -->|"생성·유지"| POD2

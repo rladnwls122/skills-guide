@@ -46,7 +46,7 @@ flowchart LR
     subgraph KMS["<span class='icon--logos icon--logos--aws-kms'></span> AWS KMS"]
         CMK@{ icon: "logos:aws-kms", form: "square", label: "CMK (wskorea26-s3-key)<br/>키 정책이 접근 통제", pos: "b", h: 46, w: 46 }
     end
-    subgraph 서비스["S3 / DynamoDB / EKS"]
+    subgraph 서비스["<span class='icon--mdi icon--mdi--layers-outline'></span> S3 / DynamoDB / EKS"]
         DEK["데이터 키 DEK"]
         DATA["실제 데이터"]
     end

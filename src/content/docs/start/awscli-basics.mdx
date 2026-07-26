@@ -32,8 +32,9 @@ import { Tabs, TabItem, LinkButton } from '@astrojs/starlight/components';
 
 ```mermaid
 flowchart LR
-    CLI["aws ec2 describe-vpcs"] --> Q["--query 'Vpcs[0].VpcId'\nCLI 내장 JMESPath"]
-    CLI --> J["| jq -r '.Vpcs[0].VpcId'\n외부 도구, 문법 다름"]
+    CLI@{ icon: "logos:aws", form: "square", label: "aws ec2 describe-vpcs", pos: "b", h: 46, w: 46 }
+    CLI --> Q["--query 'Vpcs[0].VpcId'<br/>CLI 내장 JMESPath"]
+    CLI --> J["| jq -r '.Vpcs[0].VpcId'<br/>외부 도구, 문법 다름"]
     Q --> V["vpc-0abc123"]
     J --> V
 ```

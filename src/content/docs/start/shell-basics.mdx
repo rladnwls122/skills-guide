@@ -19,7 +19,11 @@ import { Steps, LinkButton } from '@astrojs/starlight/components';
 
 ```mermaid
 flowchart LR
-    A["grep -rl 'old-name' .\n어느 파일에 있나 찾기"] --> B["sed -i 's/old-name/new-name/g' 파일\n일괄 치환"] --> C["terraform plan/output"] --> D["jq -r '.key.value'\n결과에서 값 추출"]
+    A@{ icon: "mdi:console-line", form: "square", label: "grep -rl 'old-name' .<br/>어느 파일에 있나 찾기", pos: "b", h: 46, w: 46 }
+    B["sed -i 's/old-name/new-name/g' 파일<br/>일괄 치환"]
+    C@{ icon: "logos:terraform-icon", form: "square", label: "terraform plan/output", pos: "b", h: 46, w: 46 }
+    D["jq -r '.key.value'<br/>결과에서 값 추출"]
+    A --> B --> C --> D
 ```
 
 | 명령                        | 핵심 사용법                          |

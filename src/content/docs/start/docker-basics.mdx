@@ -39,10 +39,14 @@ ENTRYPOINT ["python", "/app/app.py"]  # 컨테이너 시작 시 실행할 명령
 
 ```mermaid
 flowchart LR
-    DF["Dockerfile"] -- "docker build -t app:v1 ." --> IMG["로컬 이미지 app:v1"]
+    DF@{ icon: "logos:docker-icon", form: "square", label: "Dockerfile", pos: "b", h: 46, w: 46 }
+    IMG@{ icon: "logos:docker-icon", form: "square", label: "로컬 이미지 app:v1", pos: "b", h: 46, w: 46 }
+    ECR@{ icon: "logos:aws", form: "square", label: "ECR 레지스트리", pos: "b", h: 46, w: 46 }
+    EKS@{ icon: "logos:aws-eks", form: "square", label: "EKS 노드가 pull → 컨테이너 실행", pos: "b", h: 46, w: 46 }
+    DF -- "docker build -t app:v1 ." --> IMG
     IMG -- "docker tag app:v1 &lt;ECR주소&gt;/app:v1" --> TAG["ECR 태그"]
-    TAG -- "docker push" --> ECR[("ECR 레지스트리")]
-    ECR -- "pull" --> EKS["EKS 노드가 pull → 컨테이너 실행"]
+    TAG -- "docker push" --> ECR
+    ECR -- "pull" --> EKS
 ```
 
 push 3단계 암기: **build → tag(레지스트리 주소 포함) → push**. tag 없이 push하면 Docker Hub로 가려다 실패한다.

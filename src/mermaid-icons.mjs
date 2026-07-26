@@ -10,6 +10,8 @@
  */
 export const MERMAID_ICONS = {
   logos: [
+    // ECR 은 Iconify logos 팩에 없다 — 범용 AWS 로고로 대체한다.
+    'aws',
     'aws-kms', 'aws-s3', 'aws-vpc', 'aws-eks', 'aws-ec2', 'aws-lambda',
     'aws-dynamodb', 'aws-iam', 'aws-cloudfront', 'aws-cloudwatch', 'aws-elb',
     'aws-sqs', 'aws-sns', 'aws-eventbridge', 'aws-kinesis', 'aws-api-gateway',
@@ -19,8 +21,10 @@ export const MERMAID_ICONS = {
     'kubernetes', 'docker-icon', 'terraform-icon', 'prometheus', 'grafana',
     'helm', 'nginx',
   ],
+  // AWS·제품 로고로 표현할 수 없는 개념(서브넷·계층·로그 등)에만 쓴다.
   mdi: [
-    'lan-connect', 'layers-outline',
+    'lan-connect', 'layers-outline', 'script-text-outline', 'console-line',
+    'server-network', 'web', 'routes', 'card-text-outline',
   ],
 };
 

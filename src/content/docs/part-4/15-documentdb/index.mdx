@@ -1,0 +1,76 @@
+---
+title: 15. DocumentDB NoSQL (서울 ap-northeast-2)
+description: 2과제 후보 set-08 task-2 module-1 개요 — Amazon DocumentDB(MongoDB 호환)에 주문·상품·세션 데이터를 저장하고 조회하는 NoSQL 모듈. 정답 구현이 없어 이 문서가 유일한 학습 경로다.
+---
+
+import { LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+2과제 후보 **set-08 task-2 module-1**을 다룬다. Amazon DocumentDB(MongoDB 호환)에 소매 주문·상품·세션 데이터를 저장하고, 지급된 Python 클라이언트(`docdb_client.py`)로 조회 API를 서비스한다. 본 모듈은 **ap-northeast-2(서울)** 리전에 리소스를 생성한다 — 2과제는 모듈마다 리전이 다르고, 틀리면 그 모듈은 0점이다.
+
+이 주제는 `skills-2026` 정답지에 구현이 없다 — set-08은 2과제 후보에 포함되지만 저장소에 커밋된 코드가 없다. 문제지·채점지·지급 코드가 유일한 근거이고, 이 문서가 유일한 학습 경로다.
+
+## 학습 목표
+
+- [ ] `aws docdb describe-db-clusters`·`describe-db-instances`·`aws kms describe-key` 조회에서 클러스터·인스턴스가 `available`, 스토리지 암호화 `Enabled`, 백업보존 1일 이상, KMS 키 `Enabled`를 통과시킬 수 있다
+- [ ] Secret `skills-nosql-docdb-secret`에 `username`·`password`·`host` 3키를 채우고, `skills-nosql-client-ec2` 이름의 EC2를 `running` + Public IP 상태로 만들 수 있다
+- [ ] `curl http://<IP>:8080/health`와 `/v1/admin/summary`가 HTTP 200과 `orders 8 / products 6 / sessions 3` + BSON Date 적재 상태를 반환하게 만들 수 있다
+- [ ] `/v1/admin/indexes` 채점을 통과시킬 수 있다 — unique·복합·정렬 방향·TTL(`expireAfterSeconds: 0`)까지 전부 직접 만들어서
+- [ ] `/v1/orders/O-1001`·`/v1/customers/C001/orders`·`/v1/orders/pending`·`/v1/products/low-stock?warehouseId=W-A` 4종 조회를 모두 HTTP 200 + 기대 데이터로 통과시킬 수 있다
+
+## 소요 시간
+
+- PART-4 신설 모듈. 기존 09~10과 같은 D10~D11 구간 안에서 진행한다 — 이 모듈만을 위한 별도 신규 일차는 없다.
+- 약 4~5시간 (이론 1~1.5h + 실습 3~3.5h). DocumentDB 자체 개념은 얕지만 VPC·IAM·EC2 준비 절차가 길어 실습 비중이 크다.
+
+## 과금 리소스와 destroy 방침
+
+| 리소스 | 과금 | 방침 |
+|---|---|---|
+| DocumentDB 인스턴스 db.t3.medium ×1 | 시간당 과금 (이 모듈에서 가장 큼) | 실습 종료 즉시 인스턴스→클러스터 순서로 삭제 |
+| DocumentDB 클러스터 스토리지·I/O | 사용량 기반 | 인스턴스·클러스터 삭제로 함께 정리 |
+| EC2 (Client) ×1 | 시간당 과금 (소액) | 실습 종료 즉시 종료 |
+| Secrets Manager 시크릿 | 월정액 소액 | 기본 삭제는 복구 대기 기간이 있다 — 강제 삭제 옵션으로 즉시 정리 |
+| KMS 고객관리형 키(`alias/skills-nosql-docdb`) | 월정액 소액 | alias만 지워서는 과금이 멈추지 않는다 — 키 자체를 삭제 예약 |
+
+:::caution[과금 주의]
+DocumentDB 인스턴스는 RDS와 달리 **중지(stop) 기능이 없다.** 삭제만이 과금을 멈춘다 — 실습을 하루 안에 못 끝내도 인스턴스는 그날 지운다.
+:::
+
+## 선행 지식
+
+- VPC·서브넷·보안 그룹으로 "공개 앱 계층 + 비공개 데이터 계층"을 가르는 법 — [vpc-basics](/start/vpc-basics/)
+- 인스턴스 프로파일과 최소 권한 정책 — EC2가 Secrets Manager를 읽으려면 역할이 필요하다 — [iam-basics](/start/iam-basics/)
+- CMK와 별칭(alias)의 관계 — [kms-basics](/start/kms-basics/)
+- `aws ... --query`로 리소스 상태를 조회하는 법 — [awscli-basics](/start/awscli-basics/)
+
+막히면 위 링크, 아니면 바로 다음 파일로.
+
+## 선행 모듈
+
+- PART-1 전체 (VPC·IAM·KMS 기초). 특히 `03-container-lambda-dynamodb`의 DynamoDB 설계 — 이론에서 DocumentDB와 정면으로 비교한다
+
+## 근거 자료 — 정답지 없음
+
+:::note[이 모듈은 저장소에 정답 구현이 없다]
+`skills-2026` 실습 저장소에는 set-08 task-2 구현이 없다. 아래 네 파일이 유일한 근거다.
+:::
+
+- `2과제_문제지.pdf` 3장 "DocumentDB based NoSQL Application" — 요구사항 원문
+- `2과제_채점지.pdf` 채점기준표 1번 항목 — 배점·채점 명령
+- `asgmt2_module1_check.sh` — 채점 스크립트 (채점지의 채점 명령과 동일)
+- `모듈1_지급파일/docdb_client.py`·`retail_dataset.json` — 수정 금지 클라이언트 코드와 적재 데이터
+
+## 공식 문서
+
+- [Amazon DocumentDB란 무엇인가](https://docs.aws.amazon.com/documentdb/latest/developerguide/what-is.html) — 클러스터·인스턴스 구조
+- [Amazon DocumentDB 보안](https://docs.aws.amazon.com/documentdb/latest/developerguide/security.html) — VPC 격리·TLS·저장 암호화
+- [Amazon DocumentDB 동작 방식](https://docs.aws.amazon.com/documentdb/latest/developerguide/how-it-works.html) — 인덱스·TTL 동작
+- [AWS Secrets Manager 사용 설명서](https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html)
+- [PyMongo 문서](https://pymongo.readthedocs.io/en/stable/) — `docdb_client.py`가 쓰는 드라이버
+
+## 다음 단계
+
+<LinkButton href="/part-4/15-documentdb/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-4/15-documentdb/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

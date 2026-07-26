@@ -18,7 +18,7 @@ export const MERMAID_ICONS = {
     'aws-ecs', 'aws-fargate', 'aws-rds', 'aws-route53', 'aws-secrets-manager',
     'aws-xray', 'aws-step-functions', 'aws-cloudformation', 'aws-waf',
     'aws-cognito', 'aws-elasticache', 'aws-glue', 'aws-cloudtrail',
-    'aws-config', 'aws-msk',
+    'aws-config', 'aws-msk', 'aws-documentdb',
     'kubernetes', 'docker-icon', 'terraform-icon', 'prometheus', 'grafana',
     'helm', 'nginx', 'apache-flink', 'opentelemetry',
   ],

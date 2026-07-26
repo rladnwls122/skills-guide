@@ -1,0 +1,349 @@
+---
+title: Lab 15 — DocumentDB NoSQL (서울 ap-northeast-2)
+description: 클러스터·Secret·EC2·CA 번들부터 데이터 적재·인덱스 생성·조회 검증까지 백지에서 배포하는 실습. 정답지가 없어 채점 스크립트와 지급 코드가 유일한 근거다.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+이 모듈은 `skills-2026` 정답지에 구현이 없다. 아래 절차는 문제지·채점지·지급 코드(`docdb_client.py`)만 근거로 한다. 명령은 PowerShell 기준이고 리전은 전부 `ap-northeast-2`(서울)로 고정한다. 지급 파일 경로는 예시(`national-skills-v7\2과제\모듈1_지급파일`)를 그대로 썼다 — 실제 대회에서는 대회 플랫폼이 지급하는 경로로 바꾼다.
+
+## 실습 목표
+
+- [ ] DocumentDB 클러스터+인스턴스를 KMS 암호화·백업보존 1일 이상으로 배포한다
+- [ ] Secret 3키(`username`/`password`/`host`)를 스킴·포트 없는 값으로 채운다
+- [ ] Client EC2에 CA 번들과 지급 코드를 올리고 `0.0.0.0:8080`으로 서비스를 띄운다
+- [ ] `POST /v1/admin/seed`로 데이터를 적재하고 `dateFieldTypes`가 전부 `datetime`인지 확인한다
+- [ ] 인덱스 8개(unique·복합·TTL)를 직접 만들어 `/v1/admin/indexes` 채점을 통과시킨다
+- [ ] 조회 4종을 전부 HTTP 200 + 기대 데이터로 재현한다
+- [ ] 실습 종료 시 전 리소스를 destroy한다
+
+---
+
+<Steps>
+
+1. **사전 준비 — 서브넷·보안 그룹**
+
+   DocumentDB 서브넷 그룹은 서로 다른 AZ의 서브넷 2개 이상이 필요하다. 새 VPC를 만들지 않고 리전 기본 VPC의 기본 서브넷을 쓴다(계정에 기본 VPC가 없다면 [vpc-basics](/start/vpc-basics/)대로 서브넷 2개 이상을 먼저 만든다).
+
+   ```powershell
+   $env:AWS_DEFAULT_REGION = "ap-northeast-2"
+
+   $subnets = aws ec2 describe-subnets --filters "Name=default-for-az,Values=true" --query "Subnets[].SubnetId" --output json | ConvertFrom-Json
+   $SUBNET_1 = $subnets[0]
+   $SUBNET_2 = $subnets[1]
+   $VPC_ID = aws ec2 describe-subnets --subnet-ids $SUBNET_1 --query "Subnets[0].VpcId" --output text
+
+   $DOCDB_SG = aws ec2 create-security-group --group-name skills-nosql-docdb-sg --description "DocumentDB - client only" --vpc-id $VPC_ID --query GroupId --output text
+   $CLIENT_SG = aws ec2 create-security-group --group-name skills-nosql-client-sg --description "Client EC2 - app + SSH" --vpc-id $VPC_ID --query GroupId --output text
+
+   aws ec2 authorize-security-group-ingress --group-id $DOCDB_SG --protocol tcp --port 27017 --source-group $CLIENT_SG
+   aws ec2 authorize-security-group-ingress --group-id $CLIENT_SG --protocol tcp --port 8080 --cidr 0.0.0.0/0
+   aws ec2 authorize-security-group-ingress --group-id $CLIENT_SG --protocol tcp --port 22 --cidr 0.0.0.0/0
+   ```
+
+   SSH(22)는 채점 대상이 아니다. 본인 IP만 허용하도록 `--cidr`를 좁힐 수 있으면 좁힌다.
+
+2. **KMS 키 생성**
+
+   ```powershell
+   $KMS_KEY_ID = aws kms create-key --description "skills-nosql DocumentDB storage encryption" --query KeyMetadata.KeyId --output text
+   aws kms create-alias --alias-name alias/skills-nosql-docdb --target-key-id $KMS_KEY_ID
+   ```
+
+   검증:
+
+   ```powershell
+   aws kms describe-key --key-id alias/skills-nosql-docdb --query 'KeyMetadata.{Arn:Arn,Enabled:Enabled,KeyManager:KeyManager,KeyUsage:KeyUsage}' --output table
+   ```
+
+   기대: `Enabled  True`.
+
+3. **DocumentDB 서브넷 그룹 + 클러스터 + 인스턴스**
+
+   ```powershell
+   aws docdb create-db-subnet-group --db-subnet-group-name skills-nosql-docdb-subnets --db-subnet-group-description "DocumentDB subnets" --subnet-ids $SUBNET_1 $SUBNET_2
+
+   $DOCDB_PASSWORD = "<본인이 정한 12자 이상 비밀번호>"
+   aws docdb create-db-cluster --db-cluster-identifier skills-nosql-docdb-cluster --engine docdb --master-username skillsadmin --master-user-password $DOCDB_PASSWORD --db-subnet-group-name skills-nosql-docdb-subnets --vpc-security-group-ids $DOCDB_SG --storage-encrypted --kms-key-id alias/skills-nosql-docdb --backup-retention-period 1 --port 27017
+
+   aws docdb create-db-instance --db-instance-identifier skills-nosql-docdb-instance-1 --db-instance-class db.t3.medium --engine docdb --db-cluster-identifier skills-nosql-docdb-cluster
+   aws docdb wait db-instance-available --db-instance-identifier skills-nosql-docdb-instance-1
+   ```
+
+   `username`/`password` 값 자체는 채점 대상이 아니다(Secret에 값이 채워져 있는지만 본다) — 대신 비밀번호를 잊지 않게 적어 둔다.
+
+   검증 (mark 1-1, 채점 스크립트와 동일):
+
+   ```powershell
+   aws docdb describe-db-clusters --region ap-northeast-2 --db-cluster-identifier skills-nosql-docdb-cluster --query 'DBClusters[0].{Cluster:DBClusterIdentifier,Status:Status,Engine:Engine,Version:EngineVersion,Encrypted:StorageEncrypted,KmsKeyId:KmsKeyId,BackupRetention:BackupRetentionPeriod,Endpoint:Endpoint,Port:Port}' --output table
+   aws docdb describe-db-instances --region ap-northeast-2 --db-instance-identifier skills-nosql-docdb-instance-1 --query 'DBInstances[0].{Instance:DBInstanceIdentifier,Status:DBInstanceStatus,Class:DBInstanceClass,Engine:Engine,Cluster:DBClusterIdentifier,AZ:AvailabilityZone}' --output table
+   ```
+
+   기대: 클러스터 `Status: available`, `Encrypted: True`, `BackupRetention: 1`. 인스턴스 `Status: available`, `Class: db.t3.medium`.
+
+4. **Secret 생성**
+
+   ```powershell
+   $DOCDB_ENDPOINT = aws docdb describe-db-clusters --db-cluster-identifier skills-nosql-docdb-cluster --query 'DBClusters[0].Endpoint' --output text
+
+   $secretObj = @{ username = "skillsadmin"; password = $DOCDB_PASSWORD; host = $DOCDB_ENDPOINT }
+   aws secretsmanager create-secret --name skills-nosql-docdb-secret --secret-string ($secretObj | ConvertTo-Json -Compress)
+   ```
+
+   `describe-db-clusters`의 `Endpoint` 필드는 이미 스킴·포트가 없는 순수 호스트명이다. 콘솔에서 연결 문자열을 복사해 붙여넣지 않는다 — `mongodb://host:27017` 형태가 그대로 들어가면 `docdb_client.py`가 즉시 `RuntimeError`를 던진다.
+
+   검증 (mark 1-2 Secret 부분):
+
+   ```powershell
+   aws secretsmanager describe-secret --secret-id skills-nosql-docdb-secret --query '{Name:Name,ARN:ARN,KmsKeyId:KmsKeyId}' --output table
+   (aws secretsmanager get-secret-value --secret-id skills-nosql-docdb-secret --query SecretString --output text | ConvertFrom-Json) | Select-Object username, host, @{N='password_set'; E={ -not [string]::IsNullOrEmpty($_.password) }}
+   ```
+
+5. **Client EC2 — IAM 역할 → 키 페어 → 인스턴스**
+
+   IAM 역할(Secrets Manager 읽기 전용) → 인스턴스 프로파일 → 키 페어 순서로 준비한다.
+
+   ```powershell
+   $SECRET_ARN = aws secretsmanager describe-secret --secret-id skills-nosql-docdb-secret --query ARN --output text
+
+   aws iam create-role --role-name skills-nosql-client-ec2-role --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+   aws iam put-role-policy --role-name skills-nosql-client-ec2-role --policy-name secret-read --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"secretsmanager:GetSecretValue\",\"Resource\":\"$SECRET_ARN\"}]}"
+   aws iam create-instance-profile --instance-profile-name skills-nosql-client-ec2-profile
+   aws iam add-role-to-instance-profile --instance-profile-name skills-nosql-client-ec2-profile --role-name skills-nosql-client-ec2-role
+   Start-Sleep -Seconds 15   # 인스턴스 프로파일 전파 대기 — 너무 빨리 run-instances 하면 실패한다
+
+   aws ec2 create-key-pair --key-name skills-nosql-key --query "KeyMaterial" --output text | Out-File -Encoding ascii skills-nosql-key.pem
+   ```
+
+   다음 내용을 `user-data.sh`로 저장한다 — 부팅 시 의존성 설치와 CA 번들 다운로드, systemd 유닛 등록까지 한다(앱 파일은 아직 없으므로 서비스는 등록만 하고 시작하지 않는다):
+
+   ```bash title="user-data.sh"
+   #!/bin/bash
+   dnf install -y python3-pip
+   pip3 install boto3 pymongo
+   mkdir -p /opt/skills-nosql
+   curl -o /opt/skills-nosql/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+
+   cat > /etc/systemd/system/skills-nosql.service <<'EOF'
+   [Unit]
+   Description=skills-nosql DocumentDB client
+   After=network.target
+
+   [Service]
+   ExecStart=/usr/bin/python3 /opt/skills-nosql/docdb_client.py serve
+   Restart=always
+   User=root
+
+   [Install]
+   WantedBy=multi-user.target
+   EOF
+   systemctl daemon-reload
+   systemctl enable skills-nosql
+   ```
+
+   인스턴스를 생성한다:
+
+   ```powershell
+   $AMI_ID = aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 --query "Parameters[0].Value" --output text
+
+   $INSTANCE_ID = aws ec2 run-instances --image-id $AMI_ID --instance-type t3.micro --key-name skills-nosql-key --security-group-ids $CLIENT_SG --subnet-id $SUBNET_1 --associate-public-ip-address --iam-instance-profile Name=skills-nosql-client-ec2-profile --user-data file://user-data.sh --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=skills-nosql-client-ec2}]' --query "Instances[0].InstanceId" --output text
+
+   aws ec2 wait instance-running --instance-ids $INSTANCE_ID
+   $CLIENT_IP = aws ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text
+   ```
+
+   검증 (mark 1-2 EC2 부분):
+
+   ```powershell
+   aws ec2 describe-instances --filters Name=tag:Name,Values=skills-nosql-client-ec2 Name=instance-state-name,Values=running --query 'Reservations[].Instances[].{Name:Tags[?Key==`Name`].Value|[0],InstanceId:InstanceId,State:State.Name,Type:InstanceType,PublicIp:PublicIpAddress}' --output table
+   ```
+
+   기대: `State: running`, `PublicIp`가 비어 있지 않음.
+
+6. **TLS CA 번들 확인**
+
+   user-data가 부팅 중에 이미 받아 뒀어야 한다. 접속 전에 확인한다(1~2분 뒤에도 안 보이면 user-data 로그를 확인한다):
+
+   ```powershell
+   ssh -i skills-nosql-key.pem ec2-user@$CLIENT_IP "test -f /opt/skills-nosql/global-bundle.pem && echo OK"
+   ```
+
+   `OK`가 안 나오면 `sudo cat /var/log/cloud-init-output.log`로 user-data 실행 로그를 본다. 이 파일 없이는 `mongo_client()`가 연결을 시도하지도 않는다.
+
+7. **지급 코드 배치 + 서비스 기동**
+
+   ```powershell
+   scp -i skills-nosql-key.pem "C:\Users\kryuk\Downloads\national-skills-v7\2과제\모듈1_지급파일\docdb_client.py" "C:\Users\kryuk\Downloads\national-skills-v7\2과제\모듈1_지급파일\retail_dataset.json" ec2-user@${CLIENT_IP}:/tmp/
+   ssh -i skills-nosql-key.pem ec2-user@$CLIENT_IP "sudo mv /tmp/docdb_client.py /tmp/retail_dataset.json /opt/skills-nosql/ && sudo systemctl start skills-nosql"
+   ```
+
+   `docdb_client.py`는 수정하지 않고 그대로 옮긴다.
+
+   검증 (mark 1-3 앞부분):
+
+   ```powershell
+   curl -s -w "`nhttp_code=%{http_code}`n" http://${CLIENT_IP}:8080/health
+   ```
+
+   기대: `{"status": "ok", "database": "skills_retail", "port": 27017, "tls": true}` + `http_code=200`.
+
+8. **데이터 적재**
+
+   ```powershell
+   curl -X POST -s -w "`nhttp_code=%{http_code}`n" http://${CLIENT_IP}:8080/v1/admin/seed
+   curl -s -w "`nhttp_code=%{http_code}`n" http://${CLIENT_IP}:8080/v1/admin/summary
+   ```
+
+   기대 (mark 1-3 뒷부분):
+
+   ```json
+   {
+     "database": "skills_retail",
+     "counts": { "orders": 8, "products": 6, "sessions": 3 },
+     "dateFieldTypes": {
+       "orders": { "createdAt": "datetime", "dueAt": "datetime" },
+       "products": { "updatedAt": "datetime" },
+       "sessions": { "lastSeen": "datetime", "expiresAt": "datetime" }
+     }
+   }
+   ```
+
+   `dateFieldTypes`에 `"str"`이 하나라도 보이면 seed 엔드포인트가 아닌 다른 경로로 데이터를 넣은 것이다 — 컬렉션을 비우고 `/v1/admin/seed`를 다시 호출한다.
+
+9. **인덱스 생성**
+
+   `docdb_client.py`는 인덱스를 만들지 않는다. 같은 연결 패턴(URI·TLS·CA 번들)을 재사용하는 별도 스크립트를 하나 작성해서 실행한다. 로컬에서 다음을 `create_indexes.py`로 저장한다:
+
+   ```python title="create_indexes.py"
+   import json
+   from urllib.parse import quote_plus
+
+   import boto3
+   from pymongo import ASCENDING, DESCENDING, MongoClient
+
+   AWS_REGION = "ap-northeast-2"
+   SECRET_NAME = "skills-nosql-docdb-secret"
+
+   sec = json.loads(
+       boto3.client("secretsmanager", region_name=AWS_REGION)
+       .get_secret_value(SecretId=SECRET_NAME)["SecretString"]
+   )
+   uri = (
+       f'mongodb://{quote_plus(sec["username"])}:{quote_plus(sec["password"])}'
+       f'@{sec["host"]}:27017/?replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false'
+   )
+   db = MongoClient(uri, tls=True, tlsCAFile="/opt/skills-nosql/global-bundle.pem")["skills_retail"]
+
+   db.orders.create_index([("orderId", ASCENDING)], unique=True)
+   db.orders.create_index([("customerId", ASCENDING), ("createdAt", DESCENDING)])
+   db.orders.create_index([("status", ASCENDING), ("dueAt", ASCENDING)])
+
+   db.products.create_index([("productId", ASCENDING)], unique=True)
+   db.products.create_index([("warehouseId", ASCENDING), ("stock", ASCENDING)])
+
+   db.sessions.create_index([("sessionId", ASCENDING)], unique=True)
+   db.sessions.create_index([("expiresAt", ASCENDING)], expireAfterSeconds=0)
+   db.sessions.create_index([("customerId", ASCENDING), ("lastSeen", DESCENDING)])
+
+   print("indexes created")
+   ```
+
+   Client EC2는 이미 pymongo·CA 번들·Secrets Manager 권한을 전부 갖고 있으므로 그 위에서 실행한다:
+
+   ```powershell
+   scp -i skills-nosql-key.pem create_indexes.py ec2-user@${CLIENT_IP}:/tmp/
+   ssh -i skills-nosql-key.pem ec2-user@$CLIENT_IP "cd /tmp && sudo python3 create_indexes.py"
+   ```
+
+   검증 (mark 1-4):
+
+   ```powershell
+   curl -s -w "`nhttp_code=%{http_code}`n" http://${CLIENT_IP}:8080/v1/admin/indexes
+   ```
+
+   각 컬렉션에 기본 `_id_` 인덱스 + 위 표의 인덱스가 전부 보여야 한다(orders 4개·products 3개·sessions 4개, `_id_` 포함).
+
+10. **조회 검증**
+
+    mark 1-5, 채점 스크립트와 동일한 4개 요청:
+
+    ```powershell
+    curl -s -w "`nhttp_code=%{http_code}`n" http://${CLIENT_IP}:8080/v1/orders/O-1001
+    curl -s -w "`nhttp_code=%{http_code}`n" http://${CLIENT_IP}:8080/v1/customers/C001/orders
+    curl -s -w "`nhttp_code=%{http_code}`n" "http://${CLIENT_IP}:8080/v1/orders/pending?from=2026-06-01T00:00:00Z&to=2026-06-08T00:00:00Z"
+    curl -s -w "`nhttp_code=%{http_code}`n" "http://${CLIENT_IP}:8080/v1/products/low-stock?warehouseId=W-A"
+    ```
+
+    지급 데이터셋으로 직접 계산한 기대값:
+
+    - `/v1/orders/O-1001` → `customerId: C001`, `status: PENDING`, `warehouseId: W-A`, `totalAmount: 135.5`
+    - `/v1/customers/C001/orders` → `createdAt` 내림차순으로 `O-1006`(06-03) → `O-1001`(06-01) → `O-1004`(05-20, CANCELLED) 3건
+    - `/v1/orders/pending?from=2026-06-01...&to=2026-06-08...` → `dueAt` 오름차순으로 `O-1001`(06-04) → `O-1003`(06-06) → `O-1006`(06-07) 3건 (`O-1007`은 dueAt이 06-12라 범위 밖)
+    - `/v1/products/low-stock?warehouseId=W-A` → `stock` 오름차순으로 `P-BLU-003`(재고1≤재고점5) → `P-RED-001`(재고4≤재고점10) 2건 (`P-GRN-002`는 재고18>재고점8이라 제외)
+
+</Steps>
+
+---
+
+## 함정 :badge[함정]{variant=danger}
+
+- **Secret의 `host`에 스킴·포트가 섞이면** — `mongo_client()`가 URI를 만들기도 전에 `RuntimeError`. 모든 조회 API가 500. `describe-db-clusters`의 `Endpoint` 값을 그대로 쓴다.
+- **`retail_dataset.json`을 mongoimport로 직접 적재하면** — 날짜가 문자열로 들어가 `dateFieldTypes`가 `"str"`이 되고 `pending` 범위 조회가 빈다. 반드시 `POST /v1/admin/seed`.
+- **인덱스는 코드가 만들지 않는다** — `list_indexes()`만 있고 `create_index()`는 없다. 8단계를 건너뛰면 `/v1/admin/indexes`가 `_id_`만 보여준다.
+- **`global-bundle.pem` 없이 접속 시도** — `os.path.exists(CA_FILE)` 체크에서 즉시 `RuntimeError`. user-data 로그(`cloud-init-output.log`)로 다운로드 성공 여부부터 확인한다.
+- **인스턴스 프로파일을 만들자마자 `run-instances`** — 전파 지연으로 첫 시도가 실패할 수 있다. 몇 초 기다렸다 재시도한다.
+- **systemd 서비스를 앱 파일 없이 `enable --now`** — 실패 상태로 남는다. user-data는 `enable`까지만 하고, 파일을 올린 뒤 `systemctl start`를 따로 호출하는 순서를 지킨다.
+- **DocumentDB 인스턴스는 stop이 없다** — 잠깐 쉴 때도 삭제 아니면 계속 과금된다.
+
+## 통과 기준
+
+- [ ] 1-1: 클러스터·인스턴스 `available`, `StorageEncrypted: True`, `BackupRetentionPeriod >= 1`, KMS 키 `Enabled: True` (1.5점)
+- [ ] 1-2: Secret에 `username`/`password`/`host` 3키, EC2 `running` + Public IP (1.5점)
+- [ ] 1-3: `/health`·`/v1/admin/summary` HTTP 200 + `counts`/`dateFieldTypes` 기대값 일치 (1.5점)
+- [ ] 1-4: `/v1/admin/indexes`가 8개 인덱스(unique·복합·TTL) 전부 반영 (1.5점)
+- [ ] 1-5: 조회 4종 전부 HTTP 200 + 기대 데이터 (1.5점)
+
+---
+
+## 정리 (당일 필수)
+
+의존 순서 — 인스턴스 → 클러스터 → 서브넷 그룹, EC2 → 보안 그룹 → 키 페어, Secret과 KMS는 마지막:
+
+```powershell
+aws docdb delete-db-instance --db-instance-identifier skills-nosql-docdb-instance-1
+aws docdb wait db-instance-deleted --db-instance-identifier skills-nosql-docdb-instance-1
+aws docdb delete-db-cluster --db-cluster-identifier skills-nosql-docdb-cluster --skip-final-snapshot
+aws docdb delete-db-subnet-group --db-subnet-group-name skills-nosql-docdb-subnets
+
+aws ec2 terminate-instances --instance-ids $INSTANCE_ID
+aws ec2 wait instance-terminated --instance-ids $INSTANCE_ID
+aws ec2 delete-security-group --group-id $CLIENT_SG
+aws ec2 delete-security-group --group-id $DOCDB_SG
+aws ec2 delete-key-pair --key-name skills-nosql-key
+
+aws secretsmanager delete-secret --secret-id skills-nosql-docdb-secret --force-delete-without-recovery
+aws kms disable-key --key-id alias/skills-nosql-docdb
+aws kms schedule-key-deletion --key-id alias/skills-nosql-docdb --pending-window-in-days 7
+
+aws iam remove-role-from-instance-profile --instance-profile-name skills-nosql-client-ec2-profile --role-name skills-nosql-client-ec2-role
+aws iam delete-instance-profile --instance-profile-name skills-nosql-client-ec2-profile
+aws iam delete-role-policy --role-name skills-nosql-client-ec2-role --policy-name secret-read
+aws iam delete-role --role-name skills-nosql-client-ec2-role
+```
+
+:::caution[과금 주의]
+DocumentDB 인스턴스는 stop이 없다 — **삭제만이 과금을 멈춘다.** KMS 키는 삭제 예약 후에도 대기 기간(위 예시 7일) 동안 잔존 리소스로 남는다 — alias만 지우고 끝냈다고 착각하지 않는다.
+:::
+
+## 오답 노트 양식
+
+```
+| 증상 | 원인 | 다음에 칠 명령 |
+|---|---|---|
+| /health가 500 | Secret host에 mongodb://가 섞임 | get-secret-value로 host 재확인 → 순수 호스트명으로 교체 |
+```
+
+- 런북 밖에서 10분 이상 소모한 항목을 한 행으로 기록한다.
+- 작성 후 [troubleshooting](/reference/troubleshooting/)에 자기 언어로 추가한다.

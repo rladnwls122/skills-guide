@@ -1,0 +1,149 @@
+---
+title: 17. 실습 — CDN Function A/B 배포 검증 (버지니아 북부 us-east-1)
+description: S3(OAC)+KeyValueStore+CloudFront Functions로 A/B 테스팅 스택을 배포하고 curl로 쿠키 강제·무작위 배정·KVS 동적 반영을 검증하는 실습.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+정답지는 `skills-2026/set-07/task-2/module-2-cdn-function/`에 있다. 리전은 **us-east-1** — task.md·mark.md 양쪽에서 확인했다.
+
+## 실습 목표
+
+- [ ] S3(OAC) + KVS + CloudFront Functions 스택을 배포하고 distribution 전파를 기다린다
+- [ ] `curl.exe -I`로 HTTP→HTTPS 리다이렉트의 상태 코드·헤더를 확인한다
+- [ ] 쿠키 강제 시 동작(mark 2-4), 무작위 배정·쿠키 보존(mark 2-5), KVS 동적 반영(mark 2-6)을 각각 재현한다
+- [ ] `mark2.sh`로 셀프 채점하고, 실습 종료 시 destroy까지 마친다
+
+---
+
+<Steps>
+
+1. **배포**
+
+   ```powershell
+   cd skills-2026\set-07\task-2\module-2-cdn-function\terraform
+   terraform init
+   terraform apply -auto-approve
+   ```
+
+   distribution 전파 대기가 대부분이다 — 실측 약 4분(NOTES.md), 넉넉히 5~7분까지 잡는다.
+
+2. **리소스 검증 — S3 · KVS · 함수**
+
+   ```powershell
+   $env:AWS_DEFAULT_REGION = "us-east-1"
+   $BUCKET = terraform output -raw bucket_name
+   $URL    = terraform output -raw landing_url
+   $DOMAIN = ([Uri]$URL).Host
+
+   aws s3api list-objects-v2 --bucket $BUCKET --query "Contents[].Key" --output text
+   # 기대: version-a/index.html   version-b/index.html
+
+   aws cloudfront describe-function --name skillsphone-cdn-ab-req-fn --stage LIVE --query "FunctionSummary.[Status,FunctionConfig.Runtime]" --output text
+   aws cloudfront describe-function --name skillsphone-cdn-ab-res-fn --stage LIVE --query "FunctionSummary.[Status,FunctionConfig.Runtime]" --output text
+   # 기대: 둘 다   DEPLOYED    cloudfront-js-2.0
+   ```
+
+3. **HTTP → HTTPS 리다이렉트 (헤더·상태 코드만)**
+
+   ```powershell
+   curl.exe -I "http://$DOMAIN/"
+   ```
+
+   기대: 상태 코드 `301` 또는 `302` + `location: https://...` 헤더 — distribution의 `redirect-to-https` 정책.
+
+4. **쿠키 강제 시 동작** (mark 2-4-A 상당)
+
+   ```powershell
+   curl.exe -si -b "x-sp-ab=a" $URL | Select-String "version_a|version_b|set-cookie"
+   curl.exe -si -b "x-sp-ab=b" $URL | Select-String "version_a|version_b|set-cookie"
+   ```
+
+   기대: 각각 `version_a`/`version_b` 본문만 나오고 `set-cookie` 줄은 보이지 않는다 — 이미 배정된 쿠키라 req-fn이 `x-sp-ab-assigned` 헤더를 세우지 않고, res-fn이 그 헤더로 재발급 여부를 판단하기 때문이다.
+
+5. **무작위 배정 · 쿠키 보존** (mark 2-5-A 상당)
+
+   ```powershell
+   curl.exe -si $URL | Select-String "version_a|version_b|set-cookie"
+   ```
+
+   기대: `version_a` 또는 `version_b` 중 하나 + `set-cookie: x-sp-ab=<a|b>; Path=/; Max-Age=86400`. 배정된 값을 적어 두고 같은 쿠키로 재방문한다.
+
+   ```powershell
+   $V = "a"   # 위에서 확인한 값으로 바꾼다
+   curl.exe -si -b "x-sp-ab=$V" $URL | Select-String "version_$V|set-cookie"
+   ```
+
+   기대: 같은 버전 본문 + `set-cookie` 없음.
+
+6. **KVS 동적 반영** (mark 2-6-A 상당, 코드 재배포 없이)
+
+   ```powershell
+   $KVS  = aws cloudfront list-key-value-stores --query "KeyValueStoreList.Items[?Name=='skillsphone-cdn-ab-config'].ARN" --output text
+   $ETAG = aws cloudfront-keyvaluestore describe-key-value-store --kvs-arn $KVS --query ETag --output text
+
+   $ETAG = aws cloudfront-keyvaluestore put-key --kvs-arn $KVS --if-match $ETAG --key weight --value "1.0" --query ETag --output text
+   curl.exe -s $URL | Select-String "version_a|version_b"
+   # 기대: version_b (weight=1.0 → Math.random() < 1.0 은 항상 참) — 쿠키 없이 새 요청이어야 관찰된다
+
+   $ETAG = aws cloudfront-keyvaluestore put-key --kvs-arn $KVS --if-match $ETAG --key weight --value "0.3" --query ETag --output text
+   ```
+
+   원래 값(`0.3`)으로 복원해 둔다. KVS 값은 엣지 로케이션까지 전파에 시간이 걸린다 — README.md 실측 기준 최대 ~2분이므로, 바로 옛 버전이 나와도 실패가 아니라 몇 초~몇 분 뒤 다시 확인한다. (`mark2.sh`는 이 전파를 `aws cloudfront test-function`으로 최대 60회·1초 간격 폴링해 흡수한다.)
+
+7. **CloudShell 셀프 채점**
+
+   us-east-1 CloudShell에서 정답지의 `mark/mark2.sh`를 그대로 돌리면 위 단계를 자동으로 재확인한다.
+
+   ```bash
+   bash mark/mark2.sh
+   ```
+
+</Steps>
+
+---
+
+## :badge[함정]{variant=danger} 목록
+
+| 함정 | 증상 / 결과 |
+|---|---|
+| `await`를 함수 인자 자리에 직접 사용(`parseFloat(await ...)`) | apply는 통과하지만 실행 시 전 요청 503 + `x-cache: FunctionThrottledError`(스로틀로 오인하기 쉬움). `aws cloudfront test-function --stage LIVE`로 행 번호까지 확인 |
+| 함수 미publish(`DEVELOPMENT` 스테이지 방치) | distribution의 cache behavior에 애초에 연결이 안 됨 |
+| `response.headers['set-cookie']`로 직접 설정 | 이벤트에 반영되지 않아 Set-Cookie가 응답에 실리지 않음 — 반드시 `response.cookies` |
+| 쿠키명·헤더명·KVS 키명 변경(30% 변동) | `cloudfront/*.js`는 정적 파일이라 변수 치환 밖 — `req-fn.js`·`res-fn.js` 직접 수정 필요, 쿠키명은 캐시 정책 화이트리스트도 함께 |
+| 콘솔에서 KVS 키 수동 추가 후 미apply | `keys_exclusive` 리소스가 다음 apply 때 자동 제거하지만, apply 전에 채점하면 여분 키로 mark 2-2 정확 일치 실패 |
+| "Pay-as-you-go 타입"을 어떤 인자로 설정하려 시도 | flat-rate 요금제는 콘솔 전용 opt-in이라 Terraform·API에 인자 자체가 없음 — 아무 설정도 안 하는 것이 정답(기본값) |
+| Response Headers Policy에 AWS Managed Policy 사용 | 과제지가 명시적으로 금지 — 커스텀 정책 리소스로 작성 |
+
+## 통과 기준 (mark 항목 연결)
+
+- [ ] S3 오브젝트 2개 + 퍼블릭 차단 4종 true + OAC 버킷 정책 (mark 2-1)
+- [ ] KVS 키 3개 정확 일치 + 함수 2개 LIVE/DEPLOYED/`cloudfront-js-2.0` + req 함수 KVS 연결 (mark 2-2)
+- [ ] 캐시 정책(쿠키 화이트리스트 `x-sp-ab`, TTL 0/300/3600) + distribution(OAC·redirect-to-https·함수 2개) (mark 2-3)
+- [ ] 쿠키 강제 시 해당 버전 본문 + Set-Cookie 없음, HTTP→HTTPS 30x (mark 2-4)
+- [ ] 첫 방문 무작위 배정 + Set-Cookie(`Path=/; Max-Age=86400`), 재방문 시 유지 + Set-Cookie 없음 (mark 2-5)
+- [ ] `weight` 변경이 재배포 없이 즉시 반영 (mark 2-6)
+
+## 정리 (당일 필수)
+
+```powershell
+cd skills-2026\set-07\task-2\module-2-cdn-function\terraform
+terraform destroy -auto-approve
+```
+
+:::caution[과금 주의]
+CloudFront distribution은 disable→삭제 순서로 진행돼 몇 분 걸릴 수 있다(같은 서비스 기준 [02-kms-s3-cloudfront](/part-1/02-kms-s3-cloudfront/lab/) 실측 5~10분 수준). destroy 명령이 끝난 뒤 다음 작업으로 넘어간다.
+:::
+
+## 오답 노트 양식 (3열)
+
+```
+| 증상 | 원인 | 다음에 칠 명령 |
+|---|---|---|
+| 전 요청 503 + FunctionThrottledError | await가 함수 인자 자리에 있음(js-2.0 SyntaxError) | aws cloudfront test-function --stage LIVE --if-match <ETag> --name skillsphone-cdn-ab-req-fn --event-object fileb://e.json |
+```
+
+- 런북 밖에서 10분+ 소모한 항목을 한 행으로 기록한다.
+- 작성 후 실패 항목을 [트러블슈팅](/reference/troubleshooting/)에 자기 언어로 추가한다.

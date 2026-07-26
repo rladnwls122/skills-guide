@@ -16,7 +16,8 @@
 | 경로 | 내용 |
 |---|---|
 | `C:\Users\kryuk\Downloads\national-skills-v7` | 1·2과제 문제지·채점지 PDF, **채점 스크립트 5개**(`asgmt1_check.sh`, `asgmt2_module1~4_check.sh`), 지급파일, 다이어그램, 출제기준·출제가이드 PDF |
-| `C:\Users\kryuk\practice\skills-2026` | 수상 과제 정답지. `.tf` 191개 약 14,000줄, set-02·03·05·07·08·09 + task-3 |
+| `C:\Users\kryuk\Downloads\I_331_클라우드컴퓨팅.pdf` | 직종설명서. 실체는 **WorldSkills International Technical Description**(`WSC2024_TD53_en`, 영문 28쪽) |
+| `C:\Users\kryuk\practice\skills-2026` | 수상 과제 정답지. `.tf` 191개 약 14,000줄, set-02·03·05·07·08·09 + **`task-3`(3과제 과제지·채점지 포함)** |
 
 채점 스크립트가 가장 확실한 근거다. 문제지가 애매하게 쓴 것도 스크립트는 정확한 값으로 검사한다.
 
@@ -28,11 +29,31 @@
 AWS CLI 로 **배포된 리소스 상태만** 검사한다. 제출물은 비번호와 Custom Header 값뿐이다.
 
 Terraform 은 출제기준 체크리스트의 `"AWS, Terraform, GitHub 및 직종설명서에 명시된 범위"` 라는
-대회 전체 범위 문구에만 나온다. 직종설명서는 확보하지 못했다.
+대회 전체 범위 문구에만 나온다. **그래서 직종설명서를 확인했는데, 근거가 없었다.**
+
+직종설명서(`I_331_클라우드컴퓨팅.pdf`)의 실체는 한국 전국대회 전용 문서가 아니라 WorldSkills
+International 의 영문 Technical Description(`WSC2024_TD53_en`, 28쪽)이다. 여기서:
+
+- `Terraform` · `GitHub` · `Git` 이 **전체 0회**
+- `AWS` 는 2회뿐이고 둘 다 플랫폼 지정 문장이 아니다 (AWS JAM 챌린지 규정, 자문 조직 크레딧)
+- `EC2` · `S3` · `VPC` · `IAM` · `Lambda` · `EKS` 등 서비스명 **전부 0회**
+- IaC 관련 서술은 도구 무관한 한 문장뿐 — *"Automate infrastructure creation and modification
+  through the use of scripting or programming"* (WSOS 3절)
+- 문서가 스스로 명시 — *"The Assessment Criteria, the allocation of marks, and the assessment
+  methods, should not be set out within this Technical Description."*
+
+즉 출제기준 문구의 Terraform·GitHub 은 **한국 출제기준이 자체적으로 얹은 것**이고 직종설명서
+근거가 아니다.
 
 **함의** — Terraform 은 채점 항목이 아니라 **30% 변동을 30분에 반영하는 수단**이다. 사이트가 이걸
 "배워야 할 대상"처럼 제시하면 학습자가 우선순위를 잘못 잡는다. 정답지가 전부 Terraform 이므로
 읽는 능력은 여전히 필요하다.
+
+참고로 직종설명서가 규정하는 평가 축은 WSOS 8영역이다 — Work organization and management /
+Communication and interpersonal skills / Problem solving, innovation, and creativity /
+**Cybersecurity** / **Reliability, scalability, and elasticity** / **Performance and optimization** /
+**Operational considerations** / **Sustainability**. 채점 유형에 `Processed messages`(처리량)와
+`Operational efficiency`(인프라 스케일 업·다운)가 있는 것이 3과제 성격과 정확히 맞는다.
 
 ### 2. 2026 1과제는 ECS Fargate 다 — EKS 로 풀면 0점
 
@@ -63,7 +84,7 @@ Terraform 은 출제기준 체크리스트의 `"AWS, Terraform, GitHub 및 직�
 풀 전체 기준 미커버: **DocumentDB · VPC Lattice · CDN Functions/Lambda@Edge · RDS Proxy/Data API ·
 Client VPN · Keycloak SSO · REST API(Lambda+APIGW)**.
 
-### 4. 3과제가 최대 배점인데 "예비"로 밀려 있다
+### 4. 3과제는 배점이 가장 크고 성격이 완전히 다르다
 
 | 과제 | 시간 | 배점 |
 |---|---|---|
@@ -72,8 +93,37 @@ Client VPN · Keycloak SSO · REST API(Lambda+APIGW)**.
 | **3과제** | **3h** | **40점** |
 
 사이트는 3과제를 PART-6 모듈 14 하나로 D15~16 에 두고 "예비"로 표기한다. 2주 밖이다.
-`skills-2026` 의 `task-3` 는 System operation — EKS Auto Mode, RDS Multi-AZ + Proxy, 부하 처리와
-비용 최적화다.
+
+`skills-2026/task-3/task.pdf`·`mark.pdf` 를 확인해 보니 1·2과제와 **채점 모드 자체가 다르다.**
+
+| | 1과제 | 3과제 |
+|---|---|---|
+| 성격 | 만들면 끝 | **T+60분부터 채점 플랫폼이 실제 트래픽을 주입한다** |
+| 컴퓨트 | ECS Fargate (EKS 쓰면 0점) | **EKS 필수 · EC2 만 · Fargate·Lambda 전면 금지** |
+| 채점 | 리소스 상태 스냅샷 | 채점자가 로드 인스턴스에 SSH 접속해 `results_<비번호>.log` 확인 |
+
+**이것이 ECS/EKS 문제를 정리한다.** 1과제는 ECS, 3과제는 EKS 필수다. 둘 다 가르쳐야 한다.
+
+40점 구성:
+
+| 항목 | 배점 | 방식 |
+|---|---|---|
+| 비정상 요청 처리 | 4 | 이미지 처리율 4단계 + 403/404 정확도 4단계 |
+| 고가용성 | 12 | user·product·stress 3앱 × availability 8단계 |
+| 성능 효율성 | 12 | 3앱 × SLO 달성률 8단계 |
+| **비용 최적화** | **12** | 인스턴스 cost ratio 12단계. 단계마다 "3앱 performance ≥30%" 게이트 |
+
+**전체 100점 중 12점이 비용이다.** 현재 사이트에 비용 최적화는 독립 주제로 없다.
+
+고정 제약 — DB identifier `apdev-rds-instance`(대소문자 구분), RDS MySQL Community 8.0 · Multi-AZ ·
+`db.t3.micro` · gp3. 앱은 Golang/Gin 바이너리로 지급된다.
+
+0점 게이트가 무겁다 — 제출 엔드포인트가 본인 시스템이 아님(전체 0점) / DB 타입·대수 불일치(3·4번
+항목 전체 0점) / **Lambda 부적절 사용(전체 0점)**.
+
+기술적 핵심 — 응답이 요청 uuid 를 그대로 되돌려주므로 **API 캐시가 원천적으로 불가능하다**
+(`CachingDisabled`). 성능은 전적으로 DB 단(RDS Proxy · 인덱스)과 HPA·Karpenter 튜닝에서 나온다.
+SLO 는 user·product ≤0.2초, stress ≤1.0초이고 공통 5초가 마지노선이다.
 
 ### 5. 문서 위생
 
@@ -107,11 +157,26 @@ Client VPN · Keycloak SSO · REST API(Lambda+APIGW)**.
 | PART-1 공통 기반 | D1~D3 | VPC · IAM · KMS · S3 · CloudFront · DynamoDB · ECR · Terraform | 1·2·3과제 공통 부품 |
 | PART-2 1과제 · ECS 경로 | D4~D5 | ECS Fargate · ALB · CloudFront 이중 오리진 → set-08/09 완주 | **신설**. 2026 실출제 |
 | PART-3 1과제 · EKS 경로 | D6~D7 | eksctl · k8s 워크로드 · LBC · TargetGroupBinding → set-02 완주 | 현행 PART-2 이관 |
-| PART-4 2과제 모듈 풀 | D8~D11 | 13개 모듈을 얕고 넓게. 실출제 4개 우선 | 모듈당 1시간 분량이 출제기준 |
-| PART-5 3과제 | D12 | 부하 운영 · EKS Auto Mode · RDS Multi-AZ+Proxy · 비용 | **배점 40점. 승격** |
-| PART-6 실전 | D13~D14 | 변동 드릴 · 파괴/복구 · 모의 대회 | 현행 PART-5 이관 |
+| PART-4 2과제 모듈 풀 | D8~D10 | 13개 모듈을 얕고 넓게. 실출제 4개 우선 | 모듈당 1시간 분량이 출제기준 |
+| PART-5 3과제 | D11~D13 | 부하 운영 · SLO 튜닝 · RDS Proxy·인덱스 · **비용 최적화** | **배점 40점. 승격** |
+| PART-6 실전 | D14 | 변동 드릴 · 파괴/복구 · 모의 대회 | 현행 PART-5 압축 |
 
 합계 14일로 "2주 완성"과 맞는다.
+
+**3과제에 3일을 준 이유** — 배점이 40점으로 가장 크고, 채점 모드(부하 하 SLO 유지·비용 ratio)가
+1·2과제와 완전히 달라 기존 학습이 전이되지 않는다. 새로 가르쳐야 할 것이 많다.
+
+1. 부하를 실제로 걸고 HPA·Karpenter 를 실측 튜닝하는 절차 (k6)
+2. SLO 를 기준으로 CPU limit·scaleUp/scaleDown 정책을 정하는 판단
+3. RDS Proxy 커넥션 풀링과 인덱스 설계 — 과제지가 "테이블 구조 재설계가 필요할 수 있다"고만 하고
+   정답을 주지 않는다
+4. **비용 ratio 를 점수로 다루는 사고** — 12점짜리인데 현재 사이트에 독립 주제로 없다
+5. 403/404 계약을 인프라 레이어(WAF·ALB)로 분리 구현
+6. "API 캐시 불가 vs 정적 콘텐츠 캐시" 구분
+
+**대신 PART-6 이 1일로 줄었다.** 현행 PART-5 는 변동 드릴(D12)·파괴 복구(D13)·모의 대회(D14) 3일이다.
+변동 드릴과 파괴 복구를 각 PART 말미로 분산 흡수하고 D14 는 모의 대회만 남기는 안을 제안한다.
+이 압축이 과한지는 검토가 필요하다.
 
 ### 각 모듈이 지켜야 할 것
 
@@ -127,7 +192,10 @@ Client VPN · Keycloak SSO · REST API(Lambda+APIGW)**.
 | ECS Fargate 이론 + 실습 | 1과제 실출제 컴퓨트. 현재 전무 |
 | VPC Lattice 모듈 | 2026 실출제. 현재 전무 |
 | DocumentDB 모듈 | 2026 실출제. 현재 전무 |
-| 나머지 2과제 모듈 4종 요약 | CDN Functions · RDS Proxy · Client VPN · Keycloak SSO · REST API |
+| 나머지 2과제 모듈 요약 | CDN Functions · RDS Proxy · Client VPN · Keycloak SSO · REST API |
+| **비용 최적화** | 3과제 12점. 인스턴스 사이징·cost ratio·감점 규칙. 현재 독립 주제로 없음 |
+| **부하 테스트와 SLO 튜닝** | 3과제 24점(고가용성 12 + 성능 12). k6 · HPA · Karpenter 실측 |
+| **RDS Proxy·인덱스 설계** | 3과제 성능의 핵심. API 캐시가 불가하므로 여기서만 점수가 난다 |
 | `reference/mark-script-guide` 보강 | 실제 채점 스크립트 5개를 근거로 재작성 |
 
 ### HCL 선수 지식 문서
@@ -159,8 +227,11 @@ Client VPN · Keycloak SSO · REST API(Lambda+APIGW)**.
 
 ## 미확인
 
-- **3과제 출제가이드가 없다.** 40점짜리인데 범위를 문서로 확인하지 못했다. `skills-2026/task-3` 구현
-  에서 역추정한 상태다.
-- **직종설명서가 없다.** 출제기준이 "직종설명서에 명시된 범위"를 참조하는데 확보하지 못했다.
+- **3과제 비용 ratio 산식이 없다.** 12점짜리인데 `task.pdf`·`mark.pdf` 어디에도 계산식이 없다.
+  "0.50~X.XX 범위 안이면 단계당 1.0점"만 있다. 실제 대회에서 어떻게 계산되는지 알 수 없다.
+- **3과제 이미지 다운로드 5초 SLO** 를 별도 채점하는 항목이 채점지에 없다. 과제지는 요구하는데
+  채점 항목은 "이미지 처리율"(4점 안) 하나뿐이다.
 - 1과제 채점의 Metric Filter Pattern 정답은 문제지에 없다. 제공된 `book` 바이너리를 실행해 로그
   형식을 확인해야 알 수 있다.
+- 직종설명서는 확보했으나 **구체 범위의 근거가 아니었다**(위 발견 1 참조). 한국 출제기준이 참조하는
+  실제 세부 규정이 따로 있는지는 확인 불가.

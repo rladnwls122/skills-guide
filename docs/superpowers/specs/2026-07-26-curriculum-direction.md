@@ -375,12 +375,21 @@ RDS Proxy 모듈 요약은 뺐다 — 후보 세 세트 어디에도 없다.
 | 3 | 변동 드릴·파괴/복구 일차 제거 — 모듈 유지, "시간 여유 시"로 전환. troubleshooting 통합은 실행하지 않음(위 교정 참고) | 확정 | 완료 |
 | 4 | 로드맵·인덱스·사이드바에서 `D12~14` → `D14` 로 맞춤 | 확정 | 완료 |
 | ~~5~~ | ~~ECS Fargate 경로 신설(D4~D5)~~ | — | **축소** — 부록 1편으로(9번) |
-| 5 | 2과제 공백 — **DocumentDB · VPC Lattice · CDN Function** 신설 | 확정 | 대기 |
-| 6 | 1과제 후보 차이 — set-03·set-07 구성을 PART-2 에 반영 | 확정 | 대기 |
-| 7 | Flink · MSK 실습 보강 (현재 함정 암기만) | 확정 | 대기 |
-| 8 | 3과제 승격 — 부하·SLO·비용 최적화 신규 | 확정 | 대기 |
-| 9 | `reference/ecs-fallback` 부록 | 확정 | 대기 |
+| 5 | 2과제 공백 — **DocumentDB · VPC Lattice · CDN Function** 신설 | 확정 | 완료 |
+| 6 | 변동 대비 부록 — `reference/variation-drill` · `reference/ecs-fallback` | 확정 | 완료 |
+| 7 | 1과제 후보 차이 — set-03·set-07 구성을 PART-2 에 반영 (WAF·set-07 관측성) | 확정 | 대기 |
+| 8 | Flink · MSK 실습 보강 (현재 함정 암기만) | 확정 | 대기 |
+| 9 | 3과제 승격 — 부하·SLO·비용 최적화 신규 | 확정 | 대기 |
 | 10 | PART 재배치와 로드맵·인덱스 갱신 | 9까지 끝난 뒤 | 대기 |
+
+**6번 부록의 범위** — 후보 밖 제출작(set-05·06·08·09)의 개념을 모았다. 30% 변동에서 출제자가
+다른 제출작의 요구사항을 가져다 붙일 수 있다는 판단이다. `variation-drill` 은 EKS 계열 12항목
+(Bastion sshpass 접속, 노드 hostname 커스터마이징, Bottlerocket, Pod SG, ECR 3MB·zstd, WAF
+커스텀 응답 등), `ecs-fallback` 은 컴퓨트가 ECS 로 바뀔 때의 대응표다. 둘 다 `reference` 유형이고
+우선순위가 낮다는 것을 문서 첫머리에 밝혔다.
+
+노드 hostname 커스터마이징은 set-05 와 set-06 **양쪽에 독립적으로 나온다** — 후보 밖이지만
+출제자들이 공유하는 관심사라는 뜻이라 변동 가능성이 상대적으로 높다.
 
 1~4번은 완료했다. 5번이 가장 급하다 — 후보 12개 모듈 중 셋이 사이트에 아예 없고, 그중 둘
 (DocumentDB·VPC Lattice)은 저장소에도 구현이 없어 사이트가 유일한 학습 경로가 된다. 5~8번은

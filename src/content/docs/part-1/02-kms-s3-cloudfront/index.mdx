@@ -36,6 +36,10 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 - 정책 JSON 4요소(Effect/Action/Resource/Condition)와 **명시적 Deny 우선** — [iam-basics](/start/iam-basics/)
 - 권한 정책 vs 신뢰 정책의 차이 — KMS 키 정책은 리소스에 붙는 권한 정책이다 — [iam-basics](/start/iam-basics/)
 - root를 Principal에서 빼는 이유 — root로 만든 리소스는 이후 키 사용이 막힌다 — [iam-basics](/start/iam-basics/)
+- 봉투 암호화 — 데이터 키로 데이터를 암호화하고 CMK 는 그 데이터 키만 감싼다 — [kms-basics](/start/kms-basics/)
+- 키 정책과 IAM 정책이 왜 둘 다 필요한가 — [kms-basics](/start/kms-basics/)
+- 접근 통제 4층(BPA · 버킷 정책 · ACL · IAM)과 BPA 가 가장 먼저 이긴다는 것 — [s3-basics](/start/s3-basics/)
+- OAC 와 OAI 의 차이 — SSE-KMS 버킷은 OAI 로 못 읽는다 — [s3-basics](/start/s3-basics/)
 - `aws ... --query`로 배포·버킷 속성만 뽑아 확인하는 법 — [awscli-basics](/start/awscli-basics/)
 
 막히면 위 링크, 아니면 바로 다음 파일로.

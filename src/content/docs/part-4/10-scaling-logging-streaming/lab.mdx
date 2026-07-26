@@ -13,7 +13,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 - [ ] (유형 3) SQS→KEDA→Karpenter 스택을 배포하고 메시지 100건 → Pod ≥ 5 / Node ≥ 2, purge → Pod 1 / Node 1 수렴을 재현한다
 - [ ] (유형 4) OTel→Loki→Grafana 파이프라인을 배포하고 LogQL로 ERROR 로그를 조회, 대시보드 3패널을 채운다
-- [ ] 유형 5는 theory.md 함정 목록 암기로 대체한다 (실습 없음 — MSK 30분 생성·과금 회피)
+- [ ] 유형 5는 [이론](/part-4/10-scaling-logging-streaming/theory/) 함정 목록 암기로 대체한다 (실습 없음 — MSK 30분 생성·과금 회피)
 - [ ] 두 클러스터·VPC를 전부 정리한다
 
 ---
@@ -136,7 +136,7 @@ MSK 생성 ~30분 + 시간당 과금이 커서 실습하지 않는다. 아래를
 - [ ] Kinesis 커넥터 Maven 주입, 노트북 READY 채점, TIMESTAMP(3)+LTZ CAST 우회, `%flink.conf parallelism.default 1` 첫 문단, Glue 카탈로그 전체 권한
 - [ ] MSK: IAM+비인증 TLS 병행 이유, 전 속성 String 저장, python3.14, ESM LATEST, SG 셀프 참조, BOOTSTRAP_SERVERS/BOOTSTRAP_SERVER 구분
 
-막히면 `theory.md` 유형 5와 set-02 module-2/4 README를 다시 읽는다.
+막히면 [이론](/part-4/10-scaling-logging-streaming/theory/) 유형 5와 set-02 module-2/4 README를 다시 읽는다.
 
 ---
 

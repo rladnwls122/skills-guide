@@ -9,7 +9,6 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 ## 학습 목표
 
-- [ ] HCL 블록 구조(블록 타입·라벨 2개·인자)와 참조 주소 5종을 읽고, 참조가 실행 순서를 만든다는 것을 설명할 수 있다
 - [ ] provider / variable / tfvars / output / data source / locals / `for_each` / `aws_iam_policy_document` 문법을 남의 코드 없이 직접 쓸 수 있다
 - [ ] set-02 기준 VPC(172.16.0.0/16, pub/priv 서브넷 4, IGW, NAT 2, RTB 3)를 백지에서 작성할 수 있다
 - [ ] RTB↔서브넷 매핑(공용 public RTB 1개 + AZ별 private RTB 2개)이 채점 대상임을 이해하고 정확히 연결할 수 있다
@@ -34,6 +33,9 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 ## 선행 지식
 
+- 블록 타입·라벨 2개·인자로 이뤄진 HCL 블록 구조와 참조 주소 5종 — [hcl-basics](/start/hcl-basics/)
+- 참조 관계가 실행 순서를 만든다. 순환 참조면 apply 가 거부된다 — [hcl-basics](/start/hcl-basics/)
+- `for_each` 가 list 를 거부하고 `toset()` 을 요구하는 이유 — [hcl-basics](/start/hcl-basics/)
 - 서브넷이 퍼블릭인지 결정하는 것은 이름이 아니라 **연결된 RTB** — [vpc-basics](/start/vpc-basics/)
 - 프라이빗 인스턴스의 아웃바운드 경로: 프라이빗 RTB → NAT GW → 퍼블릭 RTB → IGW — [vpc-basics](/start/vpc-basics/)
 - SG는 스테이트풀, NACL은 스테이트리스 — [vpc-basics](/start/vpc-basics/)

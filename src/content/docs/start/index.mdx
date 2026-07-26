@@ -79,9 +79,12 @@ git clone https://github.com/ishs-cloud-computing/skills-2026.git
 | 4 | 컨테이너/이미지/레지스트리 개념을 안다 | Docker getting-started 2h |
 | 5 | grep/sed/jq, heredoc을 쓸 수 있다 | 셸 원라이너 연습 1h |
 | 6 | Git clone/branch/diff를 쓸 수 있다 | 생략 가능 |
-| 7 | Pod/Deployment/Service 차이를 설명할 수 있다 | k8s-basics.md로 보충 |
+| 7 | Pod/Deployment/Service 차이를 설명할 수 있다 | [k8s-basics](/start/k8s-basics/)로 보충 |
+| 8 | 키 정책과 IAM 정책이 왜 둘 다 필요한지 설명할 수 있다 | [kms-basics](/start/kms-basics/)로 보충 |
 
-Kubernetes·Terraform·eksctl은 선수 지식 아님 — PART 1~2에서 배운다.
+Kubernetes·eksctl은 선수 지식 아님 — PART 1~2에서 배운다.
+
+Terraform 은 다르다. **채점 대상이 아니다** — 과제지·채점지 어디에도 IaC 요구가 없고, 채점은 배포된 리소스 상태만 본다. 다만 수상 과제 정답지가 전부 Terraform 이고 당일 30% 변동을 30분에 반영하려면 읽고 고칠 줄 알아야 한다. 문법이 낯설면 [hcl-basics](/start/hcl-basics/) 로 먼저 보충한다.
 
 ## 완료 체크
 
@@ -110,6 +113,10 @@ Kubernetes·Terraform·eksctl은 선수 지식 아님 — PART 1~2에서 배운�
     자가진단 2 — BPA·버킷 정책·OAC, PART-1 모듈 02
     [읽기](/start/s3-basics/)
   </Card>
+  <Card title="KMS 기초" icon="seti:lock">
+    자가진단 8 — 봉투 암호화·키 정책·root-less, PART-1 모듈 02
+    [읽기](/start/kms-basics/)
+  </Card>
   <Card title="Docker 기초" icon="rocket">
     자가진단 4 — CloudShell 빌드·ECR, PART-1 모듈 03
     [읽기](/start/docker-basics/)
@@ -129,6 +136,10 @@ Kubernetes·Terraform·eksctl은 선수 지식 아님 — PART 1~2에서 배운�
   <Card title="EKS 기초" icon="cloud-download">
     자가진단 7 (권장) — IRSA·VPC CNI·ALB, PART-2 모듈 04
     [읽기](/start/eks-basics/)
+  </Card>
+  <Card title="HCL 기초" icon="seti:config">
+    채점 대상은 아니지만 정답지를 읽으려면 필요 — PART-1 전체
+    [읽기](/start/hcl-basics/)
   </Card>
 </CardGrid>
 

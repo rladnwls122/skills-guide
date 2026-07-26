@@ -11,3 +11,5 @@ paths:
 - frontmatter·import 다음 본문 첫 줄에 `> 문서 유형: ...` 을 둔다. 값은 `explanation` · `tutorial` · `how-to` · `reference` · `개요` 다섯 중 하나.
 - Starlight 가 frontmatter 의 `title` 을 제목으로 렌더한다. 본문에 H1 을 따로 쓰지 않는다.
 - 용어는 `style.mdx` 의 표준화 표를 따른다. 같은 개념을 두 가지로 표기하지 않는다.
+- 산문에서 사이트 문서를 `troubleshooting.md` 같은 옛 파일명으로 지칭하지 않는다. 절대 경로 링크(`/reference/troubleshooting/`)를 쓴다. **산문 속 파일명은 `starlight-links-validator` 가 잡지 못한다.**
+- `start/*` 는 `①~⑦` 번호 절 구조다. **심화 개념이 자기 점검 퀴즈보다 앞에 온다** — 배운 뒤 점검하는 순서다.

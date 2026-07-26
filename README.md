@@ -7,7 +7,6 @@
 - 콘텐츠: `src/content/docs/` (시작 / part-1~6 / reference)
 - 디자인: [starlight-theme-exquisitus](https://github.com/anaxite/starlight-theme-exquisitus) — 팔레트·서체는 테마가 전담
 - 한글 서체: 제목·본문 조선일보명조 · UI Pretendard — `src/styles/korean-fonts.css`
-- 설계·계획: `docs/superpowers/`
 
 ## 개발
 

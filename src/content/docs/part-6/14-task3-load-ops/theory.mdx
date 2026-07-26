@@ -7,7 +7,13 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 > 문서 유형: explanation
 
-1·2과제는 리소스의 존재와 이름을 검사한다. 3과제 채점지(`mark.md`)는 리소스를 보지 않고 부하 주입 인스턴스의 `results_<비번호>.log` 안의 **네 비율**만 읽는다. 그래서 "배포가 끝났다"는 0점에서 출발한다는 뜻이고, 점수는 트래픽 2시간 동안의 운영이 만든다.
+1·2과제는 리소스의 존재와 이름을 검사한다. 3과제는 리소스를 보지 않고 부하 주입 인스턴스의 `results_<비번호>.log` 안의 **네 비율**만 읽는다 — 채점 방식 자체가 다르다. 그래서 "배포가 끝났다"는 0점에서 출발한다는 뜻이고, 점수는 트래픽 2시간 동안의 운영이 만든다.
+
+:::caution[이 문서의 수치는 예상 풀이 기준이다]
+3과제 공식 과제지·채점지는 아직 공개되지 않았다. 이 문서의 4축 배점·SLO 정확값·계단 비율·비용 ratio 구간은 `task-3` 예상 풀이(파일명 그대로 `task-sample.md`·`mark-sample.md`)에서 가져온 예측이며 실제 대회에서 달라질 수 있다. 총점 40점은 1·2과제 각 30점·전체 100점에서 역산되므로 비교적 안정적이지만, 그 **안의 구성은 예상**이다.
+
+반대로 이 문서가 가르치는 **튜닝 방법론** — SLO로 HPA를 역산하는 사고, CPU limit을 제거하는 판단, RDS Proxy 풀링·인덱스 설계, 비용을 성능의 게이트로 다루는 사고 — 는 정확한 배점이 달라져도 유효하다.
+:::
 
 ## 채점 4축의 구조
 
@@ -18,6 +24,8 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 | 성능 효율성 | 12 | user·product ≤ 0.2s 비율, stress ≤ 1.0s 비율 | 위와 동일 8단계 |
 | 비용 최적화 | 12 | 인스턴스 비용 ratio | 0.5 이상 1.00~3.75 이하 12단계 |
 
+*(배점·임계값은 예상 채점지 `mark-sample.md`를 그대로 옮겼다 — 위 캐션 참고.)*
+
 세 가지 구조적 사실이 전략을 결정한다.
 
 **① 계단식이라 부분 점수가 크다.** 30%만 넘겨도 축마다 득점이 시작된다. 완벽한 0.2초를 못 맞춰도 절반은 건진다 — 부하 중 스택을 통째로 갈아엎는 도박보다 지금 비율을 한 계단 올리는 조정이 항상 낫다.
@@ -26,7 +34,7 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 **③ 하한 0.5가 있다.** ratio가 낮을수록 좋은 것이 아니다. 리소스를 지나치게 줄이면 하한 아래로 떨어져 12점 전체가 0이 된다. 목표는 최소가 아니라 **밴드 안**이다.
 
-:::danger[사전준비 조항 — 배포 시점에 이미 확정된다]
+:::danger[사전준비 조항(예상) — 배포 시점에 이미 확정된다]
 계단식 채점보다 사전준비 조항이 더 무겁다.
 
 - 엔드포인트가 선수 시스템이 아니면 **전 항목 0점**
@@ -40,6 +48,34 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 과제지는 "채점 시 사용되는 응답시간 및 코드는 모두 클라이언트 도착 기준"이라고 못박는다. 즉 0.2초 안에 **CloudFront → WAF 평가 → ALB → 파드 → RDS Proxy → RDS** 왕복이 전부 들어간다. 앱 내부 처리 시간만 보고 안심하면 안 된다. 홉마다 붙는 지연이 예산을 먹으므로, 예산을 태우는 큰 덩어리 세 개(DB 풀스캔, CPU 스로틀링, 스케일 지연)를 먼저 없앤다.
 
+```mermaid
+flowchart LR
+    U["사용자"]
+    CF@{ icon: "logos:aws-cloudfront", form: "square", label: "CloudFront<br/>단일 엔드포인트", pos: "b", h: 46, w: 46 }
+    WAF@{ icon: "logos:aws-waf", form: "square", label: "WAF<br/>SQLi·KnownBadInputs", pos: "b", h: 46, w: 46 }
+    BLK["403<br/>(비정상 요청)"]
+    IMG{"/images/*?"}
+    S3@{ icon: "logos:aws-s3", form: "square", label: "S3(OAC)<br/>CachingOptimized", pos: "b", h: 46, w: 46 }
+    ALB@{ icon: "logos:aws-elb", form: "square", label: "ALB<br/>internet-facing", pos: "b", h: 46, w: 46 }
+    API{"정의된 /v1/* 경로?"}
+    NF["404<br/>(리스너 기본 액션)"]
+    TG@{ icon: "logos:aws-elb", form: "square", label: "타깃그룹<br/>user·product·stress", pos: "b", h: 46, w: 46 }
+    POD@{ icon: "k8s:pod", form: "square", label: "파드<br/>CachingDisabled", pos: "b", h: 46, w: 46 }
+    PRX@{ icon: "logos:aws-rds", form: "square", label: "RDS Proxy<br/>커넥션 멀티플렉싱", pos: "b", h: 46, w: 46 }
+    RDS@{ icon: "logos:aws-rds", form: "square", label: "RDS<br/>db.t3.micro Multi-AZ", pos: "b", h: 46, w: 46 }
+
+    U --> CF --> WAF
+    WAF -->|비정상 요청| BLK
+    WAF --> IMG
+    IMG -->|"예 · strip 후"| S3
+    IMG -->|아니오| ALB --> API
+    API -->|아니오| NF
+    API -->|예| TG --> POD
+    POD -->|"user·product만"| PRX --> RDS
+```
+
+0.2초 예산은 이 경로 전체에 걸린다 — CloudFront에서 RDS까지 홉마다 지연이 쌓인다. 같은 진입점 위에서 403은 WAF가, 404는 ALB 리스너 기본 액션이 낸다.
+
 ## 스케일 리드타임이 초반 가용성을 결정한다
 
 트래픽은 T+60분에 **스텝으로** 들어온다. 그 순간부터 새 파드가 트래픽을 받기까지의 사슬은 이렇다.
@@ -49,7 +85,66 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 3. 노드가 부족하면 Karpenter 노드 프로비저닝 — 부팅 약 20초, 등록·Ready까지 약 2분
 4. TargetGroupBinding 등록 + 헬스체크 통과 — `interval 10s × healthy_threshold 2` ≈ 20~30초
 
+```mermaid
+flowchart TD
+    T["T+60분 스텝 트래픽"]
+    LIVE@{ icon: "k8s:pod", form: "square", label: "이미 떠 있는 파드<br/>minReplicas 2", pos: "b", h: 46, w: 46 }
+    MS["metrics-server 스크레이프<br/>+ HPA 평가 (최대 15s)"]
+    HPACHECK{"이용률 > 목표 75%?"}
+    SCALE@{ icon: "k8s:deploy", form: "square", label: "신규 파드<br/>scaleUp 창 0 · 15s당 100%/4파드", pos: "b", h: 46, w: 46 }
+    ROOM{"노드에 스케줄 자리<br/>있음?"}
+    PEND["Pending"]
+    KARP@{ icon: "k8s:karpenter", form: "square", label: "Karpenter<br/>NodePool default", pos: "b", h: 46, w: 46 }
+    NODE@{ icon: "logos:aws-ec2", form: "square", label: "신규 t3.medium<br/>부팅 ~20s + Ready ~2분", pos: "b", h: 46, w: 46 }
+    TGB["TGB 등록 + 헬스체크<br/>10s × 2회 통과"]
+    SERVE["트래픽 수신"]
+
+    T --> LIVE --> SERVE
+    T --> MS --> HPACHECK
+    HPACHECK -->|예| SCALE --> ROOM
+    ROOM -->|예| TGB --> SERVE
+    ROOM -->|아니오| PEND --> KARP --> NODE --> TGB
+    NODE -.->|"consolidateAfter 30s<br/>유휴·저활용 시 회수"| KARP
+```
+
 낙관적으로 40초, 노드가 새로 필요하면 2~3분이다. **그 시간의 트래픽은 이미 떠 있는 파드로 받는다.** 그래서 `minReplicas`를 2로 두고, HPA `scaleUp.stabilizationWindowSeconds: 0`에 15초당 100%·4파드 정책을 건다. 반대로 `scaleDown`은 120초 안정창을 둔다 — 스파이크 사이 골짜기마다 파드를 버리면 다음 파도에서 같은 사슬을 다시 탄다.
+
+```yaml
+# k8s/10-user.yaml 발췌 — product·stress도 동일 behavior
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: user
+spec:
+  minReplicas: 2
+  maxReplicas: 9
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+  behavior:
+    # T+60분에 트래픽이 스텝으로 들어오므로 스케일아웃은 즉시·공격적으로
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+    # 스파이크 종료 후 빠른 회수로 비용 ratio를 낮춘다
+    scaleDown:
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 30
+```
 
 노드를 미리 확보하는 사전 워밍은 비용 ratio를 올리므로 무료가 아니다. 채점 트래픽 개시 직전에만 워밍하고, 개시 후에는 오토스케일에 맡기는 것이 밴드 안에 머무는 방법이다.
 
@@ -63,7 +158,32 @@ CPU limit은 CFS 쿼터로 구현된다. 쿼터를 소진한 컨테이너는 다
 
 과제지가 준 스키마에는 `email` 인덱스가 없는데 `GET /v1/user?email=`이 유일한 조회 패턴이다. 50만 행 풀스캔은 db.t3.micro에서 0.2초 예산을 통째로 태운다. 과제지의 "테이블 구조 재설계가 필요할 수 있다"는 문장이 이 인덱스를 가리킨다.
 
+```sql
+-- db/01-schema.sql (과제지 SQL 그대로) — email 컬럼에 인덱스가 없다
+CREATE TABLE user (
+    id VARCHAR(255) NOT NULL,
+    username VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_username (username)
+);
+
+-- db/02-index.sql — dump 적재 후 필수. dump가 DROP/CREATE TABLE을 포함할 수 있어 순서가 중요하다.
+ALTER TABLE user ADD INDEX idx_email (email);
+```
+
 db.t3.micro의 진짜 병목은 스토리지가 아니라 **커넥션 수와 CPU**다. user 테이블 수십 MB는 InnoDB 버퍼풀에 상주해 디스크 IOPS를 거의 쓰지 않는다. 반면 파드가 9개로 늘면 각 파드의 커넥션 풀이 곱해져 `max_connections`에 먼저 닿는다. RDS Proxy가 클라이언트 커넥션을 백엔드 커넥션에 멀티플렉싱해 이 곱셈을 끊는다.
+
+```hcl
+# terraform/rds-proxy.tf 발췌 — 파드 수가 늘어도 백엔드 커넥션은 이 풀 안에서 재사용된다
+resource "aws_db_proxy_default_target_group" "this" {
+  db_proxy_name = aws_db_proxy.this.name
+  connection_pool_config {
+    max_connections_percent      = 100   # RDS max_connections 대비 상한
+    max_idle_connections_percent = 50
+  }
+}
+```
 
 :::danger[RDS Proxy 의 두 가지 함정]
 - **피닝(pinning)**: 세션 상태를 만드는 문장(대형 트랜잭션, 임시 테이블, 큰 구문)은 클라이언트를 백엔드 커넥션에 고정시켜 멀티플렉싱을 무효화한다. `load_user.dump` 적재는 프록시가 아니라 **인스턴스 직결**로 넣는다.
@@ -86,6 +206,8 @@ db.t3.micro의 진짜 병목은 스토리지가 아니라 **커넥션 수와 CPU
 
 응답 코드는 **두 계층으로 나뉜다**. 비정상 요청 403은 WAF가, API 외 경로 404는 ALB 리스너 기본 액션이 낸다. 순서가 중요하다 — WAF가 먼저 평가되므로 `/v1/none`으로 오는 공격 문자열은 404가 아니라 403이 나갈 수 있다. 관리형 룰은 SQLi와 KnownBadInputs만 block으로 둔다. CommonRuleSet은 `NoUserAgent`·`SizeRestrictions` 같은 규칙이 정상 채점 트래픽을 오차단해, 403 처리율에서 버는 것보다 availability에서 잃는 것이 크다.
 
+API 경로에서 캐시로 벌 수 있는 점수는 없다 — 성능 축 12점(user·product·stress 응답시간 비율)은 전적으로 **DB 단(인덱스·커넥션 풀링)**에서 결정된다. 캐시라는 흔한 성능 레버가 이 과제에서만 원천 봉쇄되는 것이 데이터 계층을 핵심으로 만드는 이유다.
+
 ## 비용 ratio는 노드 수의 함수다
 
 인스턴스 타입이 t3.medium으로 고정돼 있으므로 비용을 움직이는 변수는 **노드 수 × 시간**뿐이다. 밴드 안에 머무는 구조는 세 층으로 만든다.
@@ -93,6 +215,24 @@ db.t3.micro의 진짜 병목은 스토리지가 아니라 **커넥션 수와 CPU
 - HPA 목표 이용률 75% — 파드를 뜨겁게 굴려 같은 트래픽을 더 적은 파드로 처리한다.
 - NodePool `limits.cpu` — 폭주 상한. HPA 전체 상한(3앱 × 9파드 × 600m ≈ 16.2 vCPU)을 수용하는 t3.medium 9대 = 18 vCPU.
 - Karpenter consolidation 30초 — 스파이크가 끝나면 빈 노드를 즉시 회수한다. PDB와 `budgets: nodes 1`이 회수 중 가용성을 지킨다.
+
+```yaml
+# k8s/01-nodepool.yaml 발췌
+spec:
+  template:
+    spec:
+      requirements:
+        - key: "node.kubernetes.io/instance-type"
+          operator: In
+          values: ["t3.medium"]        # 인스턴스 타입 고정 — 바꾸려면 여기만
+  limits:
+    cpu: "18"                          # 폭주 상한: t3.medium 9대 몫
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 30s              # 빈 노드를 빨리 회수 → 비용 ratio
+    budgets:
+      - nodes: "1"                     # 자발적 중단은 한 번에 1대까지 — 가용성 보호
+```
 
 ## 연구 자료를 그대로 믿지 않는다 — :badge[실측]{variant=note} 대조
 
@@ -109,7 +249,7 @@ db.t3.micro의 진짜 병목은 스토리지가 아니라 **커넥션 수와 CPU
 
 ---
 
-## 퀴즈 (5문)
+## 자기 점검 퀴즈
 
 <Quiz title="성능 축이 무너질 때의 실제 손실">
 user·product·stress 중 하나라도 performance가 30% 아래로 떨어졌다. 잃는 점수는?
@@ -177,6 +317,20 @@ API 동작 경로에 CachingDisabled 캐시 정책을 쓰는 이유는?
 **변조 판정 때문이다.** 앱은 변조 방지를 위해 요청의 `requestid`·`uuid` 를 응답에 echo한다. 캐시된 응답이 다른 요청에 재사용되면 uuid가 어긋나 변조로 간주된다.
 
 캐시로 성능을 버는 곳은 `/images/*` 하나뿐이고, 이쪽은 비정상 요청 처리 축의 image download 비율에 직결한다. 다만 이미지는 트래픽 중 product의 PUT으로 갱신되므로 stale 위험이 있다 — 제공 바이너리를 고칠 수 없어 키 버전 관리는 불가하고, 실질 선택지는 **무효화**(즉시, 월 1000건 무료)와 **짧은 TTL 커스텀 정책** 둘뿐이다.
+</Quiz>
+
+<Quiz title="이 문서의 수치를 대하는 법">
+3과제 채점 배점·SLO 수치를 실제 대회에서 어느 정도까지 믿어도 되나?
+
+- [x] 총점 40점은 1·2과제 각 30점·전체 100점에서 역산돼 비교적 안정적이지만, 4축 배점·계단 비율·SLO 정확값(0.2초 등)·비용 ratio 구간은 예상 풀이의 예측이라 실제와 다를 수 있다 — 반면 SLO로 HPA를 역산하는 사고 같은 튜닝 방법론은 배점이 달라져도 유효하다
+- [ ] 예상 풀이(`task-3`)가 실측 코드로 구현돼 있으므로 모든 수치를 확정 사실로 취급해도 된다
+  > 실측 코드라는 것과 공식 과제지·채점지라는 것은 다르다. `task-3`는 공식 자료가 아직 없는 상태에서 만든 예상 풀이(`task-sample.md`·`mark-sample.md`)다.
+- [ ] 총점 40점을 포함해 이 문서의 모든 숫자는 실제 대회와 무관하므로 무시해도 된다
+  > 40점은 1·2과제 각 30점·전체 100점에서 역산되므로 다른 수치보다 신뢰도가 높다. "전부 예측이니 전부 무시"는 과도한 결론이다.
+- [ ] SLO 수치가 예상이라는 것은 CPU limit 제거·인덱스 설계 같은 튜닝 판단도 실제 대회에서는 소용없다는 뜻이다
+  > 배점·SLO 정확값과 튜닝 방법론은 다른 층위다. CFS 스로틀링이 p99를 깎는다는 사실, email 인덱스가 없으면 풀스캔이라는 사실은 과제가 달라져도 그대로 유효하다.
+
+배점 구조와 튜닝 방법론을 같은 확신 수준으로 취급하지 않는 것이 이 문서를 읽는 법이다. 숫자(40점의 내부 구성·SLO 정확값·비용 ratio 밴드)는 예상 풀이의 예측이고, 원리(SLO 예산 역산·CPU limit 제거·RDS Proxy 풀링·인덱스 설계·비용을 성능의 게이트로 보는 사고)는 과제가 30% 변형되어도 그대로 옮겨 쓸 수 있다.
 </Quiz>
 
 <QuizResults confetti />

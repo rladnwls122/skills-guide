@@ -1,13 +1,13 @@
 ---
 title: 2과제 유형별 아키텍처 패턴 1장 요약 — 오토스케일링 · 로깅 · 스트리밍
-description: 2과제 유형 3·4는 실습 기준으로, 유형 5는 개념과 함정 암기 기준으로 도식·연결 고리·채점 상태를 정리한다.
+description: 2과제 유형 3·4는 실습 기준으로, 유형 5는 아키텍처와 채점 항목 대조 기준으로 도식·연결 고리·채점 상태를 정리한다.
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 > 문서 유형: explanation
 
-유형 3·4는 실습까지, 유형 5는 개념+함정 암기만 한다. 각 유형은 ① 도식 ② 언제 나오나 ③ 핵심 연결 고리 ④ 채점이 보는 상태 ⑤ 퀴즈 순서다.
+유형 3·4는 실습까지, 유형 5는 아키텍처 이해와 채점 항목 대조까지 한다(배포는 [Lab](/part-4/10-scaling-logging-streaming/lab/)에서 선택). 각 유형은 ① 도식 ② 언제 나오나 ③ 핵심 연결 고리 ④ 채점이 보는 상태 ⑤ 퀴즈 순서다.
 
 ---
 
@@ -257,9 +257,9 @@ Grafana는 웹 수동 채점 항목이 있고, **No Data 패널이 하나라도 
 
 ---
 
-## 유형 5 — 스트리밍 (Kinesis + Flink Studio / MSK) — 개념+:badge[함정]{variant=danger} 암기만, 실습 생략
+## 유형 5 — 스트리밍 (Kinesis + Flink Studio / MSK) — 아키텍처 + :badge[함정]{variant=danger} 대조
 
-실측 근거: set-02 task-2 module-2(Flink Studio), module-4(MSK). MSK 생성 ~30분·과금이 커서 **이 유형은 실습하지 않고 함정 목록을 암기한다.**
+실측 근거: set-02 task-2 module-2(Flink Studio), module-4(MSK). 후보 세트에 포함돼 있어 출제 가능성이 있다 — 배포하지 않아도 아래 아키텍처·채점 항목·함정을 정답지 코드와 대조해 두면 학습 목표를 채울 수 있다. 실제 배포 절차(선택)는 [Lab Part C](/part-4/10-scaling-logging-streaming/lab/)에 있다.
 
 ### ① 도식
 
@@ -269,22 +269,27 @@ flowchart LR
         EC2A@{ icon: "logos:aws-ec2", form: "square", label: "Flask 앱 (EC2, systemd 'app')<br/>POST /order", pos: "b", h: 46, w: 46 }
         KIN@{ icon: "logos:aws-kinesis", form: "square", label: "Kinesis<br/>wsc2026-order-stream<br/>ON_DEMAND", pos: "b", h: 46, w: 46 }
         FLINK@{ icon: "aws:flink", form: "square", label: "Managed Flink Studio<br/>wsc2026-analytics-flink<br/>(Zeppelin, 채점 시 READY)", pos: "b", h: 46, w: 46 }
+        RESULT["SQL 결과 2종<br/>(1분 주문 수 · 상품별 매출)<br/>노트북 화면 출력만, 별도 저장 없음"]
 
         EC2A --> KIN
         KIN --> FLINK
+        FLINK -.-> RESULT
     end
     subgraph MSK["<span class='icon--logos icon--logos--aws-msk'></span> MSK (set-02 m4)"]
         PROD@{ icon: "logos:aws-ec2", form: "square", label: "Go producer EC2<br/>(제공 바이너리, TLS 9094)", pos: "b", h: 46, w: 46 }
         MSKC@{ icon: "aws:msk", form: "square", label: "MSK wsc2026-msk-cluster<br/>IAM 인증 + 비인증 TLS 병행", pos: "b", h: 46, w: 46 }
-        LC@{ icon: "logos:aws-lambda", form: "square", label: "Lambda consumer ×2<br/>python3.14", pos: "b", h: 46, w: 46 }
+        LC1@{ icon: "logos:aws-lambda", form: "square", label: "Lambda<br/>wsc2026-sensor-consumer<br/>(raw 토픽 ESM)", pos: "b", h: 46, w: 46 }
+        LC2@{ icon: "logos:aws-lambda", form: "square", label: "Lambda<br/>wsc2026-sensor-alert-consumer<br/>(alert 토픽 ESM)", pos: "b", h: 46, w: 46 }
         DDB@{ icon: "logos:aws-dynamodb", form: "square", label: "DynamoDB<br/>wsc2026-sensor-data", pos: "b", h: 46, w: 46 }
         SNS2@{ icon: "logos:aws-sns", form: "square", label: "SNS", pos: "b", h: 46, w: 46 }
         S3A@{ icon: "logos:aws-s3", form: "square", label: "S3 alert/", pos: "b", h: 46, w: 46 }
 
-        PROD --> MSKC
-        MSKC -->|"ESM (LATEST)"| LC
-        LC -->|"정상: 전 속성 String"| DDB
-        LC -->|"이상치"| SNS2 & S3A
+        PROD -->|"토픽 wsc2026-sensor-raw"| MSKC
+        MSKC -->|"ESM (LATEST)"| LC1
+        LC1 -->|"정상: 전 속성 String"| DDB
+        LC1 -->|"이상치: 토픽 wsc2026-sensor-alert 로 재발행"| MSKC
+        MSKC -->|"ESM (LATEST)"| LC2
+        LC2 --> SNS2 & S3A
     end
 ```
 
@@ -300,8 +305,11 @@ flowchart LR
 3. **bare timestamp 파싱 우회**: 프로듀서가 `2026-07-13 08:10:51`(T/Z 없음)을 보낸다. TIMESTAMP_LTZ로 직접 파싱하면 DateTimeParseException, TIMESTAMP(3)로 파싱하면 CURRENT_TIMESTAMP 비교에서 Incomparable types → **베이스 테이블은 `TIMESTAMP(3)`로 파싱, 뷰에서 `TIMESTAMP_LTZ(3)`로 CAST**해 둘 다 우회.
 4. **`%flink.conf parallelism.default 1`을 반드시 첫 문단에** — 인터프리터 기동 전에만 적용된다. shard보다 서브태스크가 많으면 나는 `ShardConsumer RejectedExecutionException` 원천 차단. 세션이 망가지면 인터프리터 재시작.
 5. **Flink 역할 Glue 권한은 카탈로그 전체**(`database/*`, `table/*/*`) — Zeppelin이 hive/default DB도 GetDatabase로 탐침해서 좁히면 AccessDenied.
+6. **SQL 결과는 노트북 화면에 표시될 뿐 어디에도 저장되지 않는다** — 두 `%flink.ssql(type=update)` 쿼리에 sink 커넥터를 두지 않았다. task.md는 "쿼리가 정상 실행"만 요구하고, mark 2-4도 애플리케이션 상태(`READY`/`ZEPPELIN-FLINK-3_0`)만 볼 뿐 쿼리 실행 결과는 채점하지 않는다 — 그래도 Run 상태에서 두 쿼리가 성공하는 시연 자체는 과제지 요구라 생략할 수 없다.
 
 ### ③′ 핵심 연결 고리 — MSK
+
+프로듀서는 Go 바이너리 EC2 하나, 컨슈머는 Lambda 둘이다 — `wsc2026-sensor-consumer`가 raw 토픽을, `wsc2026-sensor-alert-consumer`가 alert 토픽을 각각 별도 ESM으로 구독한다. 이상치는 sensor-consumer가 alert 토픽에 다시 발행해 alert-consumer로 넘어간다(위 도식의 루프백).
 
 1. **MSK 클러스터 생성 ~30분** — EC2 user_data가 브로커 주소를 참조하므로 클러스터 ACTIVE 후 부팅. `-target`으로 EC2 먼저 만들지 말 것.
 2. **제공 producer 바이너리는 SASL/IAM 불가** → 클러스터를 **IAM 인증 + 비인증 TLS(9094) 병행**으로 구성해 mark(Sasl.Iam.Enabled=True만 확인)를 통과시키는 실측 경로. 9098을 주면 `unexpected EOF: broker appears to be expecting TLS`.
@@ -313,12 +321,27 @@ flowchart LR
 
 ### ④ 채점이 보는 상태
 
+**Kinesis + Flink (mark 2-1~2-6)**
+
+- 2-1 EC2 서브넷: `analytics-priv-a`(Name 태그 정확 일치).
+- 2-2 ALB: 리스너 `80`/`HTTP`, TG `wsc2026-analytics-tg`/`5000`.
+- 2-3-A Kinesis: `wsc2026-order-stream` / `ACTIVE` / `ON_DEMAND`.
+- 2-3-B `POST /order` 응답 JSON의 5개 필드(`event_time`·`order_id`·`price`·`product_name`·`quantity`)가 전부 채워져야 한다.
+- 2-5 `GET /health` → `{"status":"healthy"}` 정확 일치(대소문자 포함).
+- 2-6 systemd `app` 유닛이 SSM 명령으로 `active`/`enabled` 둘 다 나와야 한다.
+
 :::caution[채점 직전 Flink 상태는 READY]
-`wsc2026-analytics-flink`가 **READY** / `ZEPPELIN-FLINK-3_0`이어야 한다 — 시연(Run→RUNNING) 후 **반드시 Stop**해 READY로 복귀. RUNNING이면 오답. DDL은 Glue DB에 저장돼 Stop해도 유지된다.
+`wsc2026-analytics-flink`가 **READY** / `ZEPPELIN-FLINK-3_0`이어야 한다(mark 2-4) — 시연(Run→RUNNING) 후 **반드시 Stop**해 READY로 복귀. RUNNING이면 오답. DDL은 Glue DB에 저장돼 Stop해도 유지된다. task.md가 "Flink 1.19"라 해도 mark가 `ZEPPELIN-FLINK-3_0`을 채점하면 **mark 우선**.
 :::
 
-- task.md가 "Flink 1.19"라 해도 mark가 `ZEPPELIN-FLINK-3_0`을 채점하면 **mark 우선**.
-- MSK: ACTIVE / 3.6.0 / kafka.t3.small / Sasl.Iam.Enabled True, ESM 2개 Enabled, DynamoDB 항목이 `.S`로 조회, alert 경로는 S3 `alert/`에 객체.
+**MSK (mark 4-1~4-5-B)**
+
+- 4-1 DynamoDB `wsc2026-sensor-data`(PK `sensorId`/SK `timestamp`) + S3 `wsc2026-sensor-alert-bucket-<비번호>` head-bucket 성공.
+- 4-2 Lambda `wsc2026-sensor-consumer`·`wsc2026-sensor-alert-consumer` 둘 다 런타임 `python3.14` 정확 일치.
+- 4-3 MSK `wsc2026-msk-cluster` / `ACTIVE` / `3.6.0` / `kafka.t3.small` / `Sasl.Iam.Enabled` **`True`**.
+- 4-4 두 Lambda의 이벤트 소스 매핑 상태가 **모두** `Enabled`.
+- 4-5-A DynamoDB 스캔 결과가 `temperature.S`/`status.S`로 조회(문자열 저장 확인).
+- 4-5-B `timestamp`가 `YYYY-MM-DDTHH:mm:ss±HH:mm` 형식(producer가 계속 돌고 있다는 증거).
 - 이름 오타도 원문 유지: `wsc2026-alaytics-ec2-role`(과제지 오타) — 고치면 오답.
 
 ### ⑤ 퀴즈
@@ -391,6 +414,62 @@ MSK 모듈에서 Lambda consumer가 `temperature`를 Number 타입으로 저장�
 ---
 
 한 글자 차이지만 통일하거나 "고쳐주면" 동작이 깨진다. 이름을 원문 그대로 유지하는 원칙은 과제지 오타에도 그대로 적용된다 — set-02의 `wsc2026-alaytics-ec2-role`(alaytics)을 고치면 이름 정확 일치 채점에서 오답이다.
+</Quiz>
+
+<Quiz title="bare 타임스탬프와 TIMESTAMP_LTZ">
+프로듀서가 보내는 `event_time`은 `2026-07-13 08:10:51`처럼 `T`/`Z`가 없는 bare 문자열이다. 베이스 테이블 컬럼을 곧장 `TIMESTAMP_LTZ(3)`로 파싱하면 나는 오류와 실측 해법은?
+
+- [x] `DateTimeParseException`이 난다(JSON SQL 포맷이 `TIMESTAMP_LTZ`엔 끝에 리터럴 `Z`를 요구) — 베이스 테이블은 `TIMESTAMP(3)`로 파싱하고, `CURRENT_TIMESTAMP`와 비교할 뷰에서만 `TIMESTAMP_LTZ(3)`로 CAST한다
+- [ ] `Incomparable types` 오류가 나므로 `CURRENT_TIMESTAMP` 대신 다른 함수를 쓴다
+  > `Incomparable types`는 반대 경우(TIMESTAMP(3)로 파싱한 컬럼을 TIMESTAMP_LTZ인 CURRENT_TIMESTAMP와 바로 비교할 때) 나는 오류다. 해법은 비교 함수를 바꾸는 게 아니라 뷰에서 CAST하는 것이다.
+- [ ] 프로듀서(EC2 user_data가 그대로 주입하는 app.py)의 시간 포맷 문자열에 `Z`를 추가해 재배포한다
+  > app.py는 제공 원본을 그대로 주입한다(수정 금지, ec2.tf 주석). 프로듀서를 고치지 않고 SQL 레이어에서 두 예외를 동시에 흡수하는 것이 실측 경로다.
+- [ ] `json.timestamp-format.standard`를 `ISO-8601`로 바꾼다
+  > 포맷을 바꾸면 프로듀서가 실제로 보내는 bare 문자열과 어긋나 오히려 파싱이 깨진다.
+
+베이스 테이블 `TIMESTAMP(3)` 파싱 + 뷰 `TIMESTAMP_LTZ(3)` CAST 조합이 두 예외를 동시에 피하는 유일한 경로다. 과제 쿼리 원문(`FROM order_stream`, `event_time > CURRENT_TIMESTAMP`)은 그대로 유지된다.
+</Quiz>
+
+<Quiz title="Flink 역할의 Glue 권한 범위">
+Flink 서비스 역할의 Glue 권한을 `wsc2026_analytics_db` 하나로만 좁히면 Zeppelin에서 무슨 일이 나나?
+
+- [x] `hive`/`default` 등 다른 DB 조회에서 `glue:GetDatabase` **AccessDenied**가 난다 — Zeppelin이 SQL 플래닝 시 다른 카탈로그 DB 존재 여부까지 탐침하므로, 권한은 `database/*`·`table/*/*` 전체로 부여해야 한다
+- [ ] `wsc2026_analytics_db` 안의 테이블 조회까지 막혀 CREATE TABLE 자체가 실패한다
+  > 대상 DB 자체에 대한 권한은 있으므로 그 안의 CREATE TABLE/VIEW는 성공한다. 실패는 그 DB *밖*을 탐침할 때 난다.
+- [ ] Kinesis 커넥터 로딩이 막혀 `Could not find any factory` 오류가 재현된다
+  > 그 오류는 Maven 커넥터 미주입 문제이고 IAM 권한과는 별개다.
+- [ ] 문제없다 — Glue 권한은 CREATE TABLE 시점에만 필요하고 이후 SELECT는 캐시된 스키마를 쓴다
+  > SQL 플래닝은 쿼리를 실행할 때마다 카탈로그를 다시 탐침한다.
+
+AWS Managed Flink Studio 문서가 권장하는 대로 카탈로그 전체(`catalog`/`database/*`/`table/*/*`) 스코프가 필요한 이유다.
+</Quiz>
+
+<Quiz title="MSK가 IAM과 비인증 TLS를 동시에 켜는 이유">
+`wsc2026-msk-cluster`는 `client_authentication`에서 SASL/IAM과 비인증(`unauthenticated`)을 함께 켠다. mark 4-3이 실제로 확인하는 값과, 병행 구성이 필요한 이유는?
+
+- [x] mark 4-3은 `Sasl.Iam.Enabled` **`True`** 한 값만 확인한다 — 하지만 제공 producer 바이너리(수정 금지)는 리버싱으로 확인한 결과 SASL 메커니즘 구현체·SigV4 서명 리터럴이 전부 0건이라 9098(IAM)로 못 붙는다. IAM은 채점용으로 켜두고, 실제 발행은 비인증 TLS(9094)로 병행한다
+- [ ] MSK는 SASL/IAM 단독으로는 브로커를 띄울 수 없어 반드시 비인증을 함께 켜야 한다
+  > MSK는 IAM 전용(`unauthenticated=false`) 구성도 정상 지원한다. 병행이 필요한 이유는 클러스터 제약이 아니라 제공 바이너리의 한계다.
+- [ ] 비인증 TLS는 bastion의 kafka CLI 디버깅 전용이고 producer는 어차피 IAM을 쓴다
+  > 반대다. bastion의 kafka CLI는 9098(IAM)을 쓰고, producer가 실제로 붙는 경로가 9094(비인증 TLS)다.
+- [ ] Lambda ESM이 비인증 클러스터에서만 자동 인증하므로 unauthenticated를 켜야 한다
+  > ESM은 IAM 전용 클러스터에서도 함수 실행 역할로 자동 인증한다. 병행 이유와 무관하다.
+
+과제지는 "IAM 인증을 통해서만 접근 가능해야 한다"고 요구하지만, mark는 `Sasl.Iam.Enabled=True`만 본다 — 이 간극이 병행 구성을 실측 정답으로 만든다.
+</Quiz>
+
+<Quiz title="MSK 보안 그룹 셀프 참조">
+`wsc2026-msk-sg`에는 자기 자신을 참조하는 전체 허용 인바운드 규칙이 있다. 이 규칙을 지우면 가장 먼저 깨지는 것은?
+
+- [x] Lambda MSK 트리거의 ESM 폴러 ENI — ESM은 클러스터 자신의 서브넷/SG를 그대로 써서 브로커를 폴링하므로, 셀프 참조가 없으면 폴러가 브로커에 닿지 못해 4-4·4-5 계열이 전멸한다
+- [ ] producer EC2 → MSK 9094 TLS 연결
+  > 그 경로는 producer SG를 참조하는 별도 규칙이 담당한다. 셀프 참조와 무관하다.
+- [ ] bastion → MSK 9098 kafka CLI 접속
+  > bastion도 자신의 SG를 참조하는 별도 인그레스 규칙으로 허용된다.
+- [ ] alert-consumer Lambda → SNS/S3 호출
+  > alert-consumer는 VPC 밖에 있어 MSK SG와 아예 무관하다 — 퍼블릭 엔드포인트로 직접 나간다.
+
+브로커 간·ZooKeeper 통신과 ESM 폴러 ENI 통신이 전부 이 셀프 참조 규칙 하나로 묶여 있다.
 </Quiz>
 
 <QuizResults confetti />

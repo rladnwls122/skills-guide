@@ -11,12 +11,17 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 
 이 모듈은 배포를 T+50분 안에 끝내고, 부하 중 4축을 동시에 지키는 튜닝·감시·복구를 훈련한다.
 
+:::caution[이 모듈의 근거는 예상 풀이다]
+3과제 공식 과제지·채점지는 아직 공개되지 않았다. 이 모듈의 배점 40점·SLO 수치·비용 ratio 밴드는 전부 `skills-2026/task-3`(예상 풀이, 파일명 그대로 `task-sample.md`·`mark-sample.md`)에서 가져온 예측이며 실제 대회에서 달라질 수 있다. 40점이라는 총점은 1·2과제 각 30점·전체 100점에서 역산되므로 비교적 안정적이지만, 그 안의 구성은 예상이다. 반면 이 모듈이 훈련하는 SLO 기반 HPA 튜닝·RDS Proxy 풀링·인덱스 설계·비용을 게이트로 다루는 사고는 배점이 달라져도 그대로 쓸 수 있다.
+:::
+
 ## 목표
 
 - [ ] 정답지(`skills-2026/task-3`) 런북으로 CloudFront 스택을 **T+50분 내** 배포하고 스모크 6종 통과
 - [ ] 부하 드릴에서 user·product `p(90) < 200ms`, stress `p(90) < 1000ms`, 실패율 < 10% 달성
 - [ ] 부하 전 구간에서 노드 2~9대 밴드 유지 (비용 ratio 0.5~3.75)
 - [ ] 부하 중 장애 10종 중 7개 이상을 확인 명령 → 조치 순서로 5분 내 복구
+- [ ] 노브 1개를 변경 → 재측정해 지표 변화를 원인과 결과로 설명한다
 
 ## 소요 / 일차
 
@@ -57,7 +62,7 @@ EKS + NAT GW + ALB + CloudFront + RDS Multi-AZ(db.t3.micro) + 노드 최대 9대
     [읽기](/part-6/14-task3-load-ops/theory/)
   </Card>
   <Card title="lab" icon="rocket">
-    타임라인 드릴·튜닝 노브 표·k6 3단 프로파일·부하 중 장애 대응.
+    타임라인 드릴·k6 3단 프로파일·노브 조정 루프·부하 중 장애 대응.
 
     [실습하기](/part-6/14-task3-load-ops/lab/)
   </Card>

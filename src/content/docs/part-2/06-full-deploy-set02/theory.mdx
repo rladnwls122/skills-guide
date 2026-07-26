@@ -158,7 +158,36 @@ graph LR
 
 ---
 
-## 4. 자기 점검 퀴즈
+## 4. 후보 세트 차이 — set-02·set-03·set-07
+
+**① 한 줄 정의** — 이 모듈과 이 커리큘럼의 PART-2는 set-02로 고정되어 있지만, 실제 1과제는 경기 시작 직전 수상 후보 **세 편(set-02·set-03·set-07) 중 하나**가 선정된다.
+
+**② 왜 (채점 관점)** — set-02 런북만 외우고 가면 WAF·심화 KMS 문항 전체(set-03) 또는 WAF·관측성(set-07)을 놓친다. 세 세트 모두 EKS+ALB+CloudFront+DynamoDB+Lambda 뼈대는 같지만, 아래 표의 항목은 세트마다 있고 없고가 갈린다. 이 표를 못 봤다면 시험장에서 "이런 요구사항은 처음 본다"는 상태로 4시간을 시작하게 된다.
+
+**③ 핵심 원리 — 구성 차이(각 세트 `task.md` Software Stack·요구사항 절, `mark.md` 배점표 실측)**:
+
+| 구성 | set-02 | set-03 | set-07 |
+|---|---|---|---|
+| WAF | 없음 | 있음 — 커스텀 SQLi/XSS 매치 규칙 + Rate(200/60s), 로깅 없음. 배점 1.5/30 | 있음 — 관리형 규칙 그룹(CommonRuleSet+KnownBadInputsRuleSet) + Rate(50/60s) + 커스텀 응답(403) + 로깅. 배점 2.5/30 |
+| 관측성 | 있음 — Prometheus·Fluent Bit 이름 미지정(도구 자유), Grafana 대시보드 5개 패널만 지정. 배점 3.5/30 | 있음 — Prometheus+Alertmanager+Node Exporter+Fluent Bit+Grafana 스택 지정, 부하 생성 후 실시간 자동 채점. 배점 5.2/30 | 있음 — Fluent Bit+Prometheus+Grafana 스택 지정, 대시보드 패널 구성·배치까지 정밀 채점. 배점 5.0/30(Observability 2.0 + Grafana 1.5 + Log Pipeline Test 1.5) |
+| KMS 키 정책 | root principal 위임 허용 | **root·`kms:*` 금지**(root-less, lockout safety check 통과 필요) — [PART-1 모듈 02 이론 3절](/part-1/02-kms-s3-cloudfront/theory/) | root 위임 허용(Platform 키 1개만 WAF 로그용 us-east-1 MRK) |
+| 기타 | — | Software Stack에 EC2 명시(본문 요구사항은 EKS 노드그룹으로 충족 — 별도 EC2 자원 없음) | Audit IAM Role(External ID 필수, 최대 세션 1시간) 별도 절 |
+
+관측성은 **세 후보 전부에 있다** — "set-02만 있고 나머지는 없다"가 아니라, set-02는 도구를 자유롭게 고르고 수동 채점 위주라 부담이 적고, set-03·set-07은 Prometheus+Grafana+Fluent Bit 스택이 못박혀 있고 mark.sh가 부하를 직접 생성해 실시간으로 확인한다는 게 실제 차이다. WAF는 set-03·set-07 배점이 각각 1.5·2.5인데 관측성은 5.2·5.0이다 — WAF보다 관측성 쪽 배점이 더 크다.
+
+**④ 세트가 확정되면 먼저 볼 것**:
+
+| 선정된 세트 | 먼저 확인 |
+|---|---|
+| set-02 | 이 모듈 그대로 진행 |
+| set-03 | [WAF](/part-1/02-kms-s3-cloudfront/theory/) 커스텀 매치 규칙 절 + 같은 모듈의 root-less KMS 심화 절 + [PART-3 모듈 07](/part-3/07-observability/theory/) 관측성 스택을 4시간 안에 압축할 순서 |
+| set-07 | 위와 동일한 WAF(관리형 규칙 그룹 버전)·관측성 + Security 절의 Audit Role(External ID) |
+
+세부 구현은 각 세트의 `terraform/`을 직접 열어 본다 — 이 표는 방향을 잡는 용도지 정답지를 대체하지 않는다.
+
+---
+
+## 5. 자기 점검 퀴즈
 
 <Quiz title="GET /book 을 재작성하지 않는 이유">
 CloudFront Function 이 `GET /book` 은 재작성하지 않는 이유를 모두 고르라.

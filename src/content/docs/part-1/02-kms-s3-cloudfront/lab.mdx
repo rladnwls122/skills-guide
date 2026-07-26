@@ -16,6 +16,7 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] OAC + CloudFront 배포 + SourceArn 버킷 정책 연결
 - [ ] 순환 참조를 일부러 만들어 에러를 눈으로 본 뒤 SourceAccount 로 우회
 - [ ] (심화) s3 키 정책을 set-03 방식 root-less 로 재작성
+- [ ] (보너스) WAF Web ACL을 CloudFront에 붙이고, 오탐 규칙을 Count로 돌렸다가 검증 후 Block으로 복구하는 절차를 실행
 
 ## 사전 준비
 
@@ -126,6 +127,38 @@ mkdir provided
 
    확인 관점: `source_policy_documents` 합성 여부, `bucket_key_enabled`, `content_type` 처리, comment 로 배포 식별, 버킷 정책 SourceArn vs 키 정책 SourceAccount 구분.
 
+6. **(보너스) WAF Web ACL 부착 — CLOUDFRONT scope**
+
+   set-02 에는 WAF 가 없다. set-03·set-07 후보를 대비한 보너스 스텝이다 — 개념(scope·override 계층)은 [이론 7절](/part-1/02-kms-s3-cloudfront/theory/)을 먼저 읽는다. 여기서는 3번에서 만든 CloudFront 배포에 set-03 방식(관리형 규칙 그룹 없이 커스텀 매치)으로 Web ACL 을 붙인다.
+
+   작성/수정 파일: `providers.tf`(`us-east-1` alias 추가), `waf.tf`(신설)
+
+   | 항목 | 스펙 (set-03 실측) |
+   |---|---|
+   | provider | `alias = "use1"`, `region = "us-east-1"` |
+   | Web ACL | `scope = "CLOUDFRONT"`(provider `aws.use1`), `default_action` allow |
+   | SQLi 규칙 | priority 1, `sqli_match_statement`(query_string, `sensitivity_level = "HIGH"`, text_transformation `URL_DECODE`) → block |
+   | XSS 규칙 | priority 2, `xss_match_statement`(query_string, text_transformation `URL_DECODE`→`HTML_ENTITY_DECODE`) → block |
+   | Rate 규칙 | priority 3, `rate_based_statement`(`aggregate_key_type = "IP"`, `limit = 200`, `evaluation_window_sec = 60`) → block |
+   | 연결 | `aws_cloudfront_distribution.cdn` 의 `web_acl_id = aws_wafv2_web_acl.this.arn` |
+
+   ```powershell
+   # 배포 전파 후 검증
+   curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/?probe=1%27%20OR%201=1--"       # SQLi 페이로드 → 403 기대
+   curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/?probe=<script>alert(1)</script>" # XSS 페이로드 → 403 기대
+   curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/"                                 # 정상 요청 → 200 기대
+   ```
+
+   **오탐 대응 훈련(Count → 검증 → Block 복구)**: SQLi 규칙의 `action`을 `block{}`에서 `count{}`로 바꿔 `apply`한 뒤, 같은 SQLi 페이로드 요청이 200으로 통과하는지 확인한다(차단은 안 되지만 CloudWatch 메트릭·sampled requests엔 여전히 잡힌다). 확인했으면 `action`을 다시 `block{}`으로 되돌려 `apply`한다 — 관리형 규칙 그룹(set-07 방식)이었다면 이 자리에 `rule_action_override`가 들어간다.
+
+   정답 대조:
+
+   ```powershell
+   git diff --no-index .\waf.tf C:\Users\kryuk\practice\skills-2026\set-03\task-1\terraform\waf.tf
+   # 관리형 규칙 그룹 구조를 보고 싶다면(set-07 은 이 모듈의 스펙과 다르므로 참고용)
+   git diff --no-index .\waf.tf C:\Users\kryuk\practice\skills-2026\set-07\task-1\terraform\waf.tf
+   ```
+
 </Steps>
 
 ## :badge[함정]{variant=danger} 목록
@@ -141,6 +174,8 @@ mkdir provided
 | root-less 키를 다른 신원으로 사용 | AccessDenied — terraform 과 같은 자격증명으로만 작업 |
 | ECR 등 이름 없는 서비스에 CMK 생성 | 불필요 리소스 감점 (set-02 유의사항 10) |
 | CloudFront 전파 전 채점/검증 | 간헐 403 — `wait distribution-deployed` 후 확인 |
+| WAF Web ACL을 서울 리전에 생성 | apply 실패 또는 CloudFront가 연결을 거부 — CLOUDFRONT scope는 us-east-1 고정 |
+| 관리형 규칙 그룹 전체를 override_action count로 전환 | 오탐 규칙 하나 때문에 그룹 전체 보호가 무력화 — RuleActionOverrides로 해당 규칙만 좁힐 것 |
 
 ## 통과 기준 (mark 항목 연결)
 
@@ -150,6 +185,7 @@ mkdir provided
 - [ ] CloudFront 200 / S3 직접 403 / http→https 리다이렉트 (mark 8-3/8-5 상당)
 - [ ] (심화) 키 정책 텍스트에 `:root`·`kms:*` 없음 + apply 성공 (set-03 check_kms)
 - [ ] 재 plan 시 `No changes`
+- [ ] (보너스) SQLi/XSS 페이로드 403 + 정상 요청 200 + rate 규칙 block↔count 전환·복구 확인 (set-03 mark 10-1 상당)
 
 ## 정리 (destroy 순서)
 

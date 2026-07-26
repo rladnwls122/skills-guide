@@ -125,17 +125,23 @@ kubectl delete -f warm.yaml   # 자리를 실제 파드에 넘긴다
    $env:VUS='20'; $env:DURATION='2m'; k6 run script/load.js
    ```
 
+   관찰: `kubectl get hpa -w` — 정상 부하에서 이용률이 목표(75%) 근방에서 안정되는지.
+
 3. **② Spike** — 스텝 증가에 스케일이 따라붙는지
 
    ```powershell
    $env:VUS='80'; $env:DURATION='1m'; k6 run script/load.js
    ```
 
+   관찰: `kubectl top pods` + `kubectl describe hpa <name>`의 Events — 급증에 스케일이 따라붙는 속도.
+
 4. **③ Soak** — 지속 부하에서 DB·커넥션·크레딧이 버티는지
 
    ```powershell
    $env:VUS='40'; $env:DURATION='10m'; k6 run script/load.js
    ```
+
+   관찰: CloudWatch RDS Proxy `DatabaseConnections`·`DatabaseConnectionsBorrowLatency` — 지속 부하에서 커넥션이 버티는지.
 
 </Steps>
 
@@ -155,6 +161,8 @@ DELETE FROM product WHERE id LIKE 'k6-%';
 $tg = terraform -chdir=terraform output -json tg_arns | ConvertFrom-Json
 while ($true) {
   kubectl get hpa
+  kubectl top nodes
+  kubectl top pods
   "nodes: " + (kubectl get nodes --no-headers | Measure-Object).Count
   aws elbv2 describe-target-health --target-group-arn $tg.user `
     --query 'TargetHealthDescriptions[].TargetHealth.State' --output text
@@ -188,7 +196,53 @@ CloudWatch에서는 Container Insights(파드 CPU)와 RDS Proxy 지표(`Database
 aws cloudfront create-invalidation --distribution-id <id> --paths "/images/*"
 ```
 
-## 드릴 C — 부하 중 장애 10종
+## 드릴 C — 노브 조정 루프 (관찰 → 노브 1개 → 재측정)
+
+드릴 B의 한 프로파일(예: Spike)을 부하를 건 채로 반복하며 아래 순서를 돈다. **노브는 한 번에 하나만** — 두 개를 같이 바꾸면 다음 회차에서 어느 쪽이 개선의 원인인지 알 수 없다.
+
+<Steps>
+
+1. **관찰 3종을 동시에 연다**
+
+   ```powershell
+   # ── Windows PowerShell (별도 창) ──
+   kubectl get hpa -w   # 이용률·replicas 변화를 실시간으로
+   kubectl top pods     # 파드별 실측 CPU/메모리
+   ```
+
+   세 번째 창에는 CloudWatch 콘솔 Container Insights(파드 CPU)와 RDS Proxy `DatabaseConnections`를 연다.
+
+2. **증상 하나를 확정하고 튜닝 노브 표의 1순위 확인부터 한다**
+
+   ```powershell
+   kubectl describe hpa <name>   # 최근 이벤트 — 왜 안 늘었는지/왜 못 늘었는지
+   ```
+
+   `<unknown>/75%`가 보이면 metrics-server 문제이지 노브 문제가 아니다 — 노브를 바꾸기 전에 이것부터 배제한다.
+
+3. **노브를 하나만 바꾸고 시각을 기록한다**
+
+   예: `k8s/01-nodepool.yaml`을 열어 `limits.cpu`를 18에서 24로 고친 뒤 적용한다.
+
+   ```powershell
+   kubectl apply -f k8s/01-nodepool.yaml
+   ```
+
+4. **직전 회차와 같은 조건으로 재측정한다**
+
+   `VUS`·`DURATION`을 그대로 유지한다 — 조건이 하나만 달라야 대조가 성립한다.
+
+   ```powershell
+   $env:VUS='80'; $env:DURATION='1m'; k6 run script/load.js
+   ```
+
+5. **변경 전/후를 기록하고 판정한다**
+
+   p90·실패율·최대 노드 수가 의도한 방향으로 움직였으면 유지한다. 아니면 되돌리고 다음 노브로 — 여전히 한 번에 하나씩. 회차마다 이 문서 끝의 회고 양식에 한 줄씩 남긴다.
+
+</Steps>
+
+## 드릴 D — 부하 중 장애 10종
 
 부하를 돌린 채로 [트러블슈팅](/reference/troubleshooting/)의 "부하 운영(3과제)" 10개 항목을 하나씩 재현하고 복구한다. 규칙은 모듈 12와 같다 — **확인 명령 → 원인 → 조치**, 추측 수리는 실패 처리.
 
@@ -219,6 +273,14 @@ aws cloudfront create-invalidation --distribution-id <id> --paths "/images/*"
 - 노브 1개 변경 → 지표 변화 (변경 전/후):
 - 복구 실패 항목의 증상→확인 명령→원인→조치를 자기 언어로
   /reference/troubleshooting/ 에 추가
+```
+
+## 오답 노트 양식 (3열)
+
+```
+| 증상 | 원인 | 다음에 칠 명령 |
+|---|---|---|
+| 스케일다운 직후 502/503 | draining 중 요청 유입 (preStop 없음) | aws elbv2 describe-target-health --target-group-arn <arn> |
 ```
 
 종료 후 부하 중지 → 스택 destroy → [잔존 리소스 점검](/reference/cleanup-check/).

@@ -21,8 +21,11 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 ```mermaid
 flowchart TD
-    A["베이스 선택"] --> S["scratch"]
-    A --> AL["alpine (고정 버전)"]
+    A@{ icon: "logos:docker-icon", form: "square", label: "베이스 선택", pos: "b", h: 46, w: 46 }
+    S["scratch"]
+    AL["alpine (고정 버전)"]
+    A --> S
+    A --> AL
     S --> S1["ECR Basic 스캔 불가<br/>(스캔 항목 검증 실패 위험)"]
     S --> S2["CA 번들 없음<br/>→ DynamoDB TLS 실패"]
     S --> S3["zoneinfo 없음<br/>→ created_at UTC 저장"]
@@ -113,12 +116,12 @@ aws ecr describe-image-scan-findings --repository-name wskorea26-book-repo --ima
 
 ```mermaid
 graph LR
-    subgraph TABLE["wskorea26-data-table (PK: client_id)"]
+    subgraph TABLE["<span class='icon--logos icon--logos--aws-dynamodb'></span> wskorea26-data-table (PK: client_id)"]
         I1["client_id=c1<br/>concert_name=A, created_at=t3"]
         I2["client_id=c2<br/>concert_name=A, created_at=t1"]
         I3["client_id=c3<br/>concert_name=B, created_at=t2"]
     end
-    subgraph GSI["GSI concert_name-created_at-index<br/>(HASH concert_name + RANGE created_at)"]
+    subgraph GSI["<span class='icon--mdi icon--mdi--layers-outline'></span> GSI concert_name-created_at-index<br/>(HASH concert_name + RANGE created_at)"]
         G1["A: [t1, t3] 정렬 저장"]
         G2["B: [t2]"]
     end

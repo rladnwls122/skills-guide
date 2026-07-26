@@ -242,22 +242,22 @@ resource "aws_route_table_association" "public" {
 
 ```mermaid
 graph TB
-    subgraph VPC["wskorea26-vpc 172.16.0.0/16"]
-        subgraph AZC["ap-northeast-2c"]
+    subgraph VPC["<span class='icon--logos icon--logos--aws-vpc'></span> wskorea26-vpc 172.16.0.0/16"]
+        subgraph AZC["<span class='icon--mdi icon--mdi--server-network'></span> ap-northeast-2c"]
             PUBC["pub-subnet-c<br/>172.16.1.0/24"]
             PRIVC["priv-subnet-c<br/>172.16.201.0/24"]
-            NATC["book-ngw-c<br/>(pub-subnet-c 안에 배치)"]
+            NATC@{ icon: "logos:aws-vpc", form: "square", label: "book-ngw-c<br/>(pub-subnet-c 안에 배치)", pos: "b", h: 46, w: 46 }
         end
-        subgraph AZD["ap-northeast-2d"]
+        subgraph AZD["<span class='icon--mdi icon--mdi--server-network'></span> ap-northeast-2d"]
             PUBD["pub-subnet-d<br/>172.16.2.0/24"]
             PRIVD["priv-subnet-d<br/>172.16.202.0/24"]
-            NATD["book-ngw-d<br/>(pub-subnet-d 안에 배치)"]
+            NATD@{ icon: "logos:aws-vpc", form: "square", label: "book-ngw-d<br/>(pub-subnet-d 안에 배치)", pos: "b", h: 46, w: 46 }
         end
-        RTBPUB["wskorea26-public-rtb<br/>0.0.0.0/0 → IGW"]
-        RTBC["wskorea26-private-rtb-c<br/>0.0.0.0/0 → ngw-c"]
-        RTBD["wskorea26-private-rtb-d<br/>0.0.0.0/0 → ngw-d"]
+        RTBPUB@{ icon: "mdi:routes", form: "square", label: "wskorea26-public-rtb<br/>0.0.0.0/0 → IGW", pos: "b", h: 46, w: 46 }
+        RTBC@{ icon: "mdi:routes", form: "square", label: "wskorea26-private-rtb-c<br/>0.0.0.0/0 → ngw-c", pos: "b", h: 46, w: 46 }
+        RTBD@{ icon: "mdi:routes", form: "square", label: "wskorea26-private-rtb-d<br/>0.0.0.0/0 → ngw-d", pos: "b", h: 46, w: 46 }
     end
-    IGW["book-igw"]
+    IGW@{ icon: "logos:aws-vpc", form: "square", label: "book-igw", pos: "b", h: 46, w: 46 }
 
     PUBC --- RTBPUB
     PUBD --- RTBPUB

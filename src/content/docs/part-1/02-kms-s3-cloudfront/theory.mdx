@@ -21,10 +21,10 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 ```mermaid
 graph LR
-    subgraph KMS
-        CMK["CMK (wskorea26-s3-key)<br/>키 정책이 접근 통제"]
+    subgraph KMS["<span class='icon--logos icon--logos--aws-kms'></span> AWS KMS"]
+        CMK@{ icon: "logos:aws-kms", form: "square", label: "CMK (wskorea26-s3-key)<br/>키 정책이 접근 통제", pos: "b", h: 46, w: 46 }
     end
-    subgraph 서비스["S3 / DynamoDB / EKS"]
+    subgraph 서비스["<span class='icon--mdi icon--mdi--layers-outline'></span> S3 / DynamoDB / EKS"]
         DEK["데이터 키 DEK"]
         DATA["실제 데이터"]
     end
@@ -143,7 +143,8 @@ data "aws_iam_policy_document" "kms_admin" {
 
 ```mermaid
 flowchart TD
-    A["키 정책 작성"] --> B{"root principal<br/>또는 kms:* 포함?"}
+    A@{ icon: "logos:aws-kms", form: "square", label: "키 정책 작성", pos: "b", h: 46, w: 46 }
+    A --> B{"root principal<br/>또는 kms:* 포함?"}
     B -- "예" --> C["mark grep 실격"]
     B -- "아니오" --> D{"kms:Create*/Put* 등<br/>관리 액션 포함?"}
     D -- "아니오" --> E["KMS lockout safety check 거부<br/>→ apply 실패"]
@@ -286,8 +287,11 @@ data "aws_iam_policy_document" "web_bucket" {
 
 ```mermaid
 graph LR
-    K["KMS key<br/>(정책이 배포 ARN 참조)"] --> D["CloudFront distribution<br/>(origin 이 bucket 참조)"]
-    D --> B["S3 bucket<br/>(SSE 설정이 key 참조)"]
+    K@{ icon: "logos:aws-kms", form: "square", label: "KMS key<br/>(정책이 배포 ARN 참조)", pos: "b", h: 46, w: 46 }
+    D@{ icon: "logos:aws-cloudfront", form: "square", label: "CloudFront distribution<br/>(origin 이 bucket 참조)", pos: "b", h: 46, w: 46 }
+    B@{ icon: "logos:aws-s3", form: "square", label: "S3 bucket<br/>(SSE 설정이 key 참조)", pos: "b", h: 46, w: 46 }
+    K --> D
+    D --> B
     B --> K
 ```
 

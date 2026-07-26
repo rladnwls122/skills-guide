@@ -1,29 +1,104 @@
 ---
 title: mark.sh 읽는 법 — 채점 스크립트 리버스 엔지니어링 가이드
-description: 구현 전에 mark 스크립트를 읽어 채점 기준을 역추적하는 판단 원칙과 절차.
+description: 후보 세트 채점 스크립트를 직접 읽어 정리한, 구현 전에 채점 기준을 역추적하는 원칙과 절차.
 ---
 
 import { Steps } from '@astrojs/starlight/components';
 
 > 문서 유형: reference
 
-수상의 실제 비결. **구현 전에 mark 스크립트부터 읽는다.**
+수상의 실제 비결. **구현 전에 채점 스크립트부터 읽는다.**
 
-## 판단 원칙 (수상 과제 :badge[실측]{variant=note})
+아래는 후보 세트(1과제 set-02·03·07, 2과제 set-02·07·08)의 `mark.sh` 를 직접 읽고 정리한 것이다.
 
-1. **mark 스크립트가 1순위.** 과제지(task)와 채점지(mark)가 다르면 mark를 따른다.
-   - set-02 m1: 처리 Lambda 이름이 task엔 없고 mark에만 등장 → mark 이름으로 생성.
-2. **오타도 사양이다.** set-02 m2 역할명 `wsc2026-alaytics-ec2-role` — 고치면 오답.
-3. **둘 다 애매하면 합집합 구현.** set-02 m3: 함수 6개·룰 6개 전부 생성, mark는 그중 일부만 채점.
+## 스크립트는 두 종류다 :badge[실측]{variant=note}
+
+| 유형 | 세트 | 출력 | 사양이 어디 있나 |
+|---|---|---|---|
+| **출력형** | set-02 · set-07 | 값만 찍는다 (`--output text`) | **무엇을 출력하는지**. 채점자가 채점지와 눈으로 대조한다 |
+| **판정형** | set-03 | `PASS` / `FAIL` 을 스스로 낸다 | **`if` 안의 비교 대상**. 조건문이 곧 정답이다 |
+
+판정형이 편해 보이지만 반대다. 출력형은 값이 조금 달라도 채점자가 맥락을 볼 여지가 있고, 판정형은 문자열 하나 어긋나면 그냥 FAIL 이다.
+
+set-03 의 `check_kms()` 가 전형이다 — 네 갈래로 FAIL 을 낸다.
+
+```bash title="set-03/task-1/mark.sh"
+# 키 없음 / ARN 불일치 / 정책에 "kms:*" / 정책에 :root"
+if echo "$POLICY" | grep -q '"kms:\*"'; then echo "KMS ${ALIAS}: FAIL (kms:*)"
+elif echo "$POLICY" | grep -q ':root"'; then echo "KMS ${ALIAS}: FAIL (root)"
+else echo "KMS ${ALIAS}: PASS"; fi
+```
+
+root-less 키 정책이 "권장"이 아니라 **`grep` 한 줄로 떨어지는 채점 항목**인 이유다.
+
+## 판단 원칙 :badge[실측]{variant=note}
+
+1. **mark 스크립트가 1순위.** 과제지(task)와 채점지(mark)가 다르면 mark 를 따른다.
+   - set-02 m1: 처리 Lambda 이름이 task 엔 없고 mark 에만 등장 — mark 이름으로 생성.
+2. **오타도 사양이다.** set-02 m2 역할명 `wsc2026-alaytics-ec2-role` — 과제지 원문 오타(`analytics` → `alaytics`)다. 고치면 오답.
+3. **둘 다 애매하면 합집합 구현.** set-02 m3: 함수 6개·룰 6개 전부 생성, mark 는 그중 일부만 채점.
 4. **문자열 정확 일치.** 이름·필드 순서·개수·대소문자·키 순서(JSON 출력)까지 본다.
-5. **개수도 채점이다.** ALB 규칙 "정확히 2개", 버킷정책 `Statement[0]`만 검사, env 리터럴 3개만.
+5. **개수도 채점이다.** ALB 규칙 "정확히 2개", 버킷 정책 `Statement[0]` 만 검사, env 리터럴 3개만.
 6. **상태도 채점이다.** Flink 노트북 READY(시연 후 Stop), Pod 1/Node 1 수렴, Grafana No Data 0개.
+7. **넓은 권한은 감점이 아니라 그 항목 0점이다.** 아래 표.
+
+## 있으면 FAIL 인 것
+
+편의로 넓게 준 권한이 그 항목을 통째로 날린다. 전부 set-03 판정형에서 뽑았다.
+
+| 대상 | FAIL 조건 | 항목 |
+|---|---|---|
+| IAM 역할 | `AdministratorAccess` 부착 | 4-3 (클러스터·애드온 노드·워크로드 노드 역할 3개), 7-2 (Lambda 역할) |
+| IAM 정책 | 액션에 `*` | 5-5 (Pod Identity 역할), 7-2 |
+| KMS 키 정책 | `"kms:*"` 또는 `:root"` | 2-1 · 3-1 · 4-1 · 6-1 · 7-1 전부 |
+| 클러스터 SG | 프로토콜 `-1` 인 규칙에 IpRanges 존재 | 4-1 |
+| ALB 직접 호출 | 응답이 오면 FAIL (`000` = 타임아웃이어야 BLOCKED) | 8-1 |
+| 캐시 동작 | AWS 관리형 정책 ID 불일치 | 9-2 |
+
+마지막 줄이 특히 위험하다. set-03 9-2 는 `658327ea-f89d-4fab-a63d-7e88639e58f6`(CachingOptimized)와 `4135ea2d-6df8-44a3-9df3-4b5a84be39ad`(CachingDisabled)를 **ID 로 하드코딩**해 비교한다. 같은 동작의 커스텀 캐시 정책을 만들면 FAIL 이다 — **관리형을 그대로 쓴다.**
+
+ALB 차단은 후보끼리 방식이 다르다. set-03 8-1 은 SG 로 아예 막아 `000` 을 기대하고, set-07 8-5 는 CloudFront 커스텀 헤더 검사로 **403** 을 기대한다. 어느 쪽인지는 스크립트에만 나온다.
+
+## 검사 유형과 대응
+
+| 유형 | 예 | 대응 |
+|---|---|---|
+| 값 일치 | 거의 전부 | 리터럴을 그대로 옮겨 적는다 |
+| 집합 비교(순서 무관) | set-07 5-1 `sort(imageTags[])`, 11-1 로그 JSON 키를 정렬 후 결합 | 순서는 자유, **구성원은 정확히** |
+| 음성 검사 | set-03 8-1, set-07 9-2 `[1] no external-id: AccessDenied` | 되는 것만이 아니라 **막히는 것도** 확인 |
+| 실제 요청 | set-07 8-3 POST 후 반환된 `booking_id` 로 DynamoDB 조회 | 응답 형식과 저장 결과가 **둘 다** 맞아야 한다 |
+| 채점자가 만든 이상 상황 | set-03 11-1 | 아래 절 |
+| 수동 채점 | set-03 11-3·11-4, set-02 10-1, set-07 13-1 | 채점자가 화면을 본다. URL·계정을 스크립트가 찍어준다 |
+
+set-07 11-1 은 로그 메시지의 **JSON 키 이름 집합**을 검사한다. 값이 아니라 키다. 로그가 JSON 이어야 하고, CloudWatch Logs 필터 `{ $.method = "POST" && $.path = "/v1/book" }` 가 먹는 구조여야 한다.
+
+## 채점자가 직접 부하를 만든다
+
+set-03 11-1 은 채점 스크립트가 파드 6개를 직접 심는다 — `not-ready` · `error-gen` · `latency-gen` · `crash-test` · `stress-cpu` · `stress-mem`. 180초 기다린 뒤 Grafana 를 본다. 11-4 는 `PodHighCPU` · `PodHighMemory` · `PodNotReady` · `HighErrorRate` · `HighLatency` 5개가 **Firing(빨강)** 인지 확인한다.
+
+대시보드는 "데이터가 보이면 통과"가 아니다. **채점자가 주입한 이상을 잡아내야** 한다. 패널만 만들고 알림 규칙을 안 만들면 11-4 가 통째로 날아간다.
+
+Grafana 자격증명도 스크립트에 박혀 있다 — set-03 은 `admin` / `Skills$#$@!`, set-02 는 `skills-<비번호>-admin` / `$korea26!!`. **비밀번호도 사양이다.** 마음대로 바꾸면 채점자가 못 들어온다.
+
+CDN Function 도 실트래픽으로 채점하지 않는다. set-07 2과제 2-6 은 KVS 의 `weight` 를 `1.0`·`0.0` 으로 직접 바꿔가며 `aws cloudfront test-function` 으로 URI 를 확인하고, 끝나면 원래 값으로 되돌린다. 함수가 **호출마다 KVS 를 읽어야** 한다 — 배포 시점 값을 캐시하면 weight 를 바꿔도 URI 가 안 변해 FAIL.
+
+## 시간이 드는 항목 :badge[실측]{variant=note}
+
+| 항목 | 대기 | 근거 |
+|---|---|---|
+| 로그 파이프라인 반영 | 30초 | set-07 12-1 |
+| Rate 규칙 회복 | 60초 + 100회 요청 + 30초 | set-07 12-2 |
+| 관측성 이상 주입 | 180초 | set-03 11-1 |
+| CDN Function KVS 전파 | 최대 60초 (1초 간격 재시도) | set-07 2과제 2-6 |
+| SSM 명령 결과 | 3초 | set-02 2과제 모듈 2 |
+
+채점 시간은 무한하지 않다. 이 대기가 붙은 항목은 **채점 시작 전에 이미 돌고 있어야** 재시도 여유가 생긴다.
 
 ## 읽기 절차
 
 <Steps>
 
-1. 스크립트를 항목(N-N) 단위로 자른다.
+1. 스크립트를 항목(`N-N`) 단위로 자른다. `echo "=== 8-3-A ==="` 같은 구분자가 항목 경계다.
 
 2. 각 항목을 표로 정리: **어떤 명령으로 → 무엇을 grep/비교 → 기대값**.
 
@@ -32,17 +107,19 @@ import { Steps } from '@astrojs/starlight/components';
    | 7-2 | aws elbv2 describe-rules ... jq HttpHeaderConfig.Values[] | wskorea26-cf 2줄 |
    ```
 
-3. 기대값에 등장하는 **모든 리터럴**(이름/태그/키/문자열)을 구현 체크리스트로 옮긴다.
+3. 기대값에 등장하는 **모든 리터럴**(이름·태그·키·문자열·비밀번호)을 구현 체크리스트로 옮긴다.
 
-4. `sleep`/재시도 로직 → 시간 의존 항목 표시 (예: 로그 30초, rate-limit 60+30초 대기).
+4. 판정형이면 `if` 조건을 **부정형까지** 읽는다. `grep -q` 로 무엇이 **없어야** 하는지가 절반이다.
 
-5. 스크립트 첫머리의 환경 준비(예: `rm -rf ~/.aws`, `export number=`) → **어디서 실행해야 하는지** 결정.
+5. `sleep` / 재시도 루프 → 시간 의존 항목으로 표시한다.
+
+6. 스크립트 첫머리의 환경 준비를 보고 **어디서 실행할지** 정한다.
 
    :::danger[본 PC 자격증명]
-   `rm -rf ~/.aws` 있으면 반드시 CloudShell에서 (본 PC 자격증명 날아감).
+   `rm -rf ~/.aws` 가 있으면 반드시 CloudShell 에서 (본 PC 자격증명이 날아간다).
    :::
 
-   `export number=<등번호>`는 apply 시 `player_number`와 정확 일치 필요 (set-07 9-1/9-2 실측).
+   `export number=<비번호>` 는 apply 시 `player_number` 와 정확히 일치해야 한다. set-07 9-2 는 external-id 를 `unicorn-audit-2026$number` 로 조립한다 — 비번호가 문자열 안에 박힌다.
 
 </Steps>
 

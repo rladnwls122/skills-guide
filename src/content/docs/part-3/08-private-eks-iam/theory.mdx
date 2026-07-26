@@ -134,7 +134,7 @@ flowchart TD
 ```
 
 - kubelet 쪽: AL2023 MNG는 `overrideBootstrapCommand`에 nodeadm NodeConfig를 넣으면 기본 NodeConfig와 필드 단위 merge된다 — 노드그룹 **모두**에 넣는다.
-- kps의 Alertmanager도 `clusterDomain` 설정이 있어 함께 맞춘다(모듈 07 연계).
+- kps의 Alertmanager도 `clusterDomain` 설정이 있어 함께 맞춘다(모듈 06 연계).
 
 :::caution[coredns addon 업데이트 금지]
 addon을 업데이트하면 **Corefile이 초기화**될 수 있다. 이미 했다면 패치를 재적용하고 grep으로 재확인한다.

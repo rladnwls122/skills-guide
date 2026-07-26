@@ -1,6 +1,6 @@
 ---
-title: 14. 3과제 부하 운영 — System operation (Day 15~16)
-description: 리소스가 아니라 결과 로그의 4개 비율로 채점되는 3과제를 T+50분 배포와 부하 중 운영 관점에서 훈련하는 모듈 개요.
+title: 14. 3과제 부하 운영 — System operation (Day 13~14)
+description: "Day 13~14 모듈 개요 — 리소스가 아니라 결과 로그의 4개 비율로 채점되는 3과제를 T+50분 배포와 부하 중 운영 관점에서 훈련한다."
 ---
 
 import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
@@ -25,7 +25,7 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 
 ## 소요 / 일차
 
-- Day 15~16, 각 8~10시간 (배포 1시간 + 부하 드릴 3회 + 장애 드릴)
+- Day 13~14, 각 8~10시간 (배포 1시간 + 부하 드릴 3회 + 장애 드릴). 배점 40점으로 세 과제 중 가장 크다 — 2주 일정 안에 넣는다.
 
 ## 과금 / destroy
 
@@ -50,7 +50,7 @@ EKS + NAT GW + ALB + CloudFront + RDS Multi-AZ(db.t3.micro) + 노드 최대 9대
 ## 선행 모듈
 
 - 06-full-deploy-set02 (EKS·ALB·CloudFront 배포 완주)
-- 12-break-fix ([트러블슈팅](/reference/troubleshooting/) 표가 손에 붙은 상태)
+- 16-break-fix ([트러블슈팅](/reference/troubleshooting/) 표가 손에 붙은 상태)
 - 정답지 `skills-2026/task-3`의 `README.md`·`ARCHITECTURE.md` 정독
 
 ## 파일
@@ -59,16 +59,16 @@ EKS + NAT GW + ALB + CloudFront + RDS Multi-AZ(db.t3.micro) + 노드 최대 9대
   <Card title="theory" icon="open-book">
     채점 4축의 구조, 스케일 리드타임, 데이터·엣지 병목, 비용 밴드 + 퀴즈.
 
-    [읽기](/part-6/14-task3-load-ops/theory/)
+    [읽기](/part-5/14-task3-load-ops/theory/)
   </Card>
   <Card title="lab" icon="rocket">
     타임라인 드릴·k6 3단 프로파일·노브 조정 루프·부하 중 장애 대응.
 
-    [실습하기](/part-6/14-task3-load-ops/lab/)
+    [실습하기](/part-5/14-task3-load-ops/lab/)
   </Card>
 </CardGrid>
 
-<LinkButton href="/part-6/14-task3-load-ops/theory/" icon="right-arrow">이론부터 시작</LinkButton>
+<LinkButton href="/part-5/14-task3-load-ops/theory/" icon="right-arrow">이론부터 시작</LinkButton>
 
 ## 공식 문서
 

@@ -1,6 +1,6 @@
 ---
-title: 06. set-02 1과제 완주 — 배포 10단계 런북 훈련
-description: "set-02 1과제 배포 10단계 런북과 백지 도식·mark.sh 득점 목표."
+title: 07. set-02 1과제 완주 — 배포 10단계 런북 훈련 (Day 7~8)
+description: "Day 7~8 모듈 개요 — set-02 1과제 배포 10단계 런북과 백지 도식·mark.sh 득점 목표."
 ---
 
 import { LinkButton } from '@astrojs/starlight/components';
@@ -15,12 +15,12 @@ import { LinkButton } from '@astrojs/starlight/components';
 - [ ] CloudShell VPC Environment에서 mark.sh를 실행해 **80% 이상** 득점
 
 :::danger[실제 시험은 세 후보 중 하나 — 이 모듈은 set-02 기준]
-1과제는 경기 시작 직전 수상 후보 **set-02·set-03·set-07 중 하나**가 선정된다. 이 모듈과 런북은 set-02 기준이며, set-03·set-07이 선정되면 WAF·관측성 등 요구사항이 달라진다. 세 후보의 구성 차이는 [이론 4절](/part-2/06-full-deploy-set02/theory/)에서 표로 정리한다 — set-03·set-07은 특히 Prometheus·Grafana·Fluent Bit 관측성이 **이 모듈(1과제, 4시간) 안에** 들어 있어 [PART-3 모듈 07](/part-3/07-observability/)보다 먼저 필요해진다.
+1과제는 경기 시작 직전 수상 후보 **set-02·set-03·set-07 중 하나**가 선정된다. 이 모듈과 런북은 set-02 기준이며, set-03·set-07이 선정되면 WAF·관측성 등 요구사항이 달라진다. 세 후보의 구성 차이는 [이론 4절](/part-2/07-full-deploy-set02/theory/)에서 표로 정리한다 — Prometheus·Grafana·Fluent Bit 관측성은 후보 세 편 모두 **이 모듈(1과제, 4시간) 안에** 들어 있으므로 바로 앞 [모듈 06 관측성](/part-2/06-observability/)을 끝내고 온다.
 :::
 
 ## 소요 시간 / 일차
 
-- **Day 6~7** (2일): Day 6 = 1~7단계(배포 완료), Day 7 = 8~10단계(검증·채점·정리) + 백지 도식 반복
+- **Day 7~8** (2일): Day 7 = 1~7단계(배포 완료), Day 8 = 8~10단계(검증·채점·정리) + 백지 도식 반복
 - 총 실습 8~10h (eksctl 20분 + CloudFront Deployed 대기 수 분 포함)
 
 ## 과금 리소스 & destroy 방침
@@ -33,8 +33,8 @@ import { LinkButton } from '@astrojs/starlight/components';
 | CloudFront / Lambda / DynamoDB / S3 | 사용량 기반 (실습 수준 ~무료) |
 
 :::danger[정리 순서 엄수]
-**Day 6 → Day 7은 전체 유지** (완주 흐름 유지가 목적).
-**Day 7 종료 시 반드시 10단계 정리 절차로 전부 삭제** — helm → eksctl → DynamoDB 삭제방지 해제 → terraform destroy 순서를 지켜야 destroy가 안 막힌다.
+**Day 7 → Day 8은 전체 유지** (완주 흐름 유지가 목적).
+**Day 8 종료 시 반드시 10단계 정리 절차로 전부 삭제** — helm → eksctl → DynamoDB 삭제방지 해제 → terraform destroy 순서를 지켜야 destroy가 안 막힌다.
 :::
 
 ## 선행 지식
@@ -48,7 +48,7 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 ## 선행 모듈
 
-- 04-eksctl-cluster, 05-k8s-workloads-alb (개념은 전부 선행 — 06은 통합 리허설)
+- 04-eksctl-cluster, 05-k8s-workloads-alb, 06-observability (개념은 전부 선행 — 07은 통합 리허설)
 
 ## 참고 경로
 
@@ -65,5 +65,5 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 ## 다음 단계
 
-<LinkButton href="/part-2/06-full-deploy-set02/theory/" icon="right-arrow">이론 읽기</LinkButton>
-<LinkButton href="/part-2/06-full-deploy-set02/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>
+<LinkButton href="/part-2/07-full-deploy-set02/theory/" icon="right-arrow">이론 읽기</LinkButton>
+<LinkButton href="/part-2/07-full-deploy-set02/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

@@ -1,5 +1,5 @@
 ---
-title: 16. VPC Lattice 서비스 네트워킹 (도쿄 ap-northeast-1)
+title: 12. VPC Lattice 서비스 네트워킹 (도쿄 ap-northeast-1, Day 12)
 description: VPC 피어링·Transit Gateway 없이 VPC Lattice만으로 두 VPC의 서비스를 연결하는 2과제 모듈. 참고 구현이 없어 이 문서가 유일한 학습 경로다.
 ---
 
@@ -21,7 +21,7 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 ## 소요 시간 / 일차
 
-- PART-4 2과제 모듈 확장분(D10~D11 블록)이다. 약 3~4시간 (이론 1~1.5h + 실습 2~2.5h). 신설 3종(DocumentDB · VPC Lattice · CDN Function)의 정확한 일차 배정은 PART 재배치 이후 확정된다.
+- **Day 12** (모듈 11~13 묶음). 약 3~4시간 (이론 1~1.5h + 실습 2~2.5h).
 
 ## 과금 리소스와 destroy 방침
 
@@ -34,7 +34,7 @@ import { LinkButton } from '@astrojs/starlight/components';
 | NAT Gateway | 사용 안 함 | Service EC2는 프라이빗 서브넷 + Lattice 경로만 쓰므로 애초에 불필요 |
 
 :::caution[과금 주의]
-VPC Lattice는 **Service Network VPC Association 시간당 + Service 처리량(GB)** 과금이 겹친다. 리소스 개수가 적어 보여도 켜둔 시간만큼 계속 청구된다 — 실습 종료 즉시 [lab](/part-4/16-vpc-lattice/lab/) 말미의 정리 절차를 순서대로 실행한다.
+VPC Lattice는 **Service Network VPC Association 시간당 + Service 처리량(GB)** 과금이 겹친다. 리소스 개수가 적어 보여도 켜둔 시간만큼 계속 청구된다 — 실습 종료 즉시 [lab](/part-4/12-vpc-lattice/lab/) 말미의 정리 절차를 순서대로 실행한다.
 :::
 
 ## 선행 지식
@@ -53,7 +53,7 @@ VPC Lattice는 **Service Network VPC Association 시간당 + Service 처리량(G
 
 ## 정답지가 없는 모듈
 
-다른 2과제 패턴 모듈(09·10)은 `skills-2026` 저장소에 참고할 구현이 있다. **이 모듈은 없다** — `national-skills-v7/2과제`의 과제지·채점지·채점 스크립트(`asgmt2_module2_check.sh`)가 유일한 근거다. [lab](/part-4/16-vpc-lattice/lab/)을 정답지 삼아 진행하고, 막히면 채점 스크립트가 정확히 무엇을 조회하는지부터 역추적한다.
+다른 2과제 패턴 모듈(09·10)은 `skills-2026` 저장소에 참고할 구현이 있다. **이 모듈은 없다** — `national-skills-v7/2과제`의 과제지·채점지·채점 스크립트(`asgmt2_module2_check.sh`)가 유일한 근거다. [lab](/part-4/12-vpc-lattice/lab/)을 정답지 삼아 진행하고, 막히면 채점 스크립트가 정확히 무엇을 조회하는지부터 역추적한다.
 
 ## 공식 문서
 
@@ -64,5 +64,5 @@ VPC Lattice는 **Service Network VPC Association 시간당 + Service 처리량(G
 
 ## 다음 단계
 
-<LinkButton href="/part-4/16-vpc-lattice/theory/" icon="open-book">이론 읽기</LinkButton>
-<LinkButton href="/part-4/16-vpc-lattice/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>
+<LinkButton href="/part-4/12-vpc-lattice/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-4/12-vpc-lattice/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

@@ -22,8 +22,8 @@ import { Card, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
 import FeatureGrid from 'starlight-theme-exquisitus/components/FeatureGrid.astro';
 
 <FeatureGrid layout="lead">
-  <Card title="PART 2 — EKS Core · D4~7" icon="rocket">
-    eksctl·k8s·LBC·CloudFront 심화를 거쳐 **set-02 1과제를 완주**한다. 이 커리큘럼의 중심축 —
+  <Card title="PART 2 — 1과제 · EKS·관측성 · D4~8" icon="rocket">
+    eksctl·k8s·LBC·관측성을 거쳐 **set-02 1과제를 완주**한다. 이 커리큘럼의 중심축 —
     여기서 mark.sh 80% 이상이 나와야 나머지가 의미를 갖는다.
     [모듈 04부터 시작](/part-2/04-eksctl-cluster/)
   </Card>
@@ -34,20 +34,20 @@ import FeatureGrid from 'starlight-theme-exquisitus/components/FeatureGrid.astro
     Terraform·VPC·KMS·S3/CloudFront·컨테이너·Lambda·DynamoDB.
     [미니 스택 배포](/part-1/01-terraform-vpc/)
   </Card>
-  <Card title="PART 3 — 관측성·Hard Mode · D8~9" icon="bars">
-    관측성·fully-private EKS·IAM 심화. 목표는 No Data 0개.
-    [모듈 07](/part-3/07-observability/)
+  <Card title="PART 3 — Hard Mode · D9" icon="bars">
+    fully-private EKS·IAM 심화·CoreDNS 커스텀 도메인. 1과제가 어렵게 나올 때의 보험.
+    [모듈 08](/part-3/08-private-eks-iam/)
   </Card>
-  <Card title="PART 4 — 2과제 패턴 · D10~11" icon="puzzle">
-    서버리스·이벤트, 스케일링·로깅·스트리밍 — 2과제 5유형.
+  <Card title="PART 4 — 2과제 모듈 · D10~12" icon="puzzle">
+    서버리스·스케일링·로깅·스트리밍 + DocumentDB·VPC Lattice·CDN Function.
     [모듈 09](/part-4/09-serverless-event/)
   </Card>
-  <Card title="PART 5 — Battle Drills · D14" icon="warning">
-    30% 변동 드릴·파괴/복구 12종(여유 시간에)을 거쳐 4시간 모의 대회로 마감.
-    [모듈 11](/part-5/11-mutation-drill/)
+  <Card title="PART 5 — 3과제 운영 · D13~14" icon="setting">
+    부하 하 가용성·성능·비용 ratio 40점. [모듈 14](/part-5/14-task3-load-ops/)
   </Card>
-  <Card title="PART 6 — 3과제 운영" icon="setting">
-    부하 시험과 운영 대응. [모듈 14](/part-6/14-task3-load-ops/)
+  <Card title="PART 6 — Battle Drills · 일차 없음" icon="warning">
+    30% 변동 드릴·파괴/복구 12종·4시간 모의 대회 — 위 일정 안에서 끼워 넣는다.
+    [모듈 15](/part-6/15-mutation-drill/)
   </Card>
 </FeatureGrid>
 
@@ -67,11 +67,11 @@ import FeatureGrid from 'starlight-theme-exquisitus/components/FeatureGrid.astro
 | --- | --- | --- | --- | --- |
 | [0](/start/) | 00 | D0 | 계정·도구·비용 가드레일·자가진단 | 자가진단 통과 |
 | [1](/part-1/01-terraform-vpc/) | 01–03 | D1~3 | Terraform·VPC·KMS·S3/CF·컨테이너·Lambda·DynamoDB | 미니 스택 배포 |
-| [2](/part-2/04-eksctl-cluster/) | 04–06 | D4~7 | eksctl·k8s·LBC·CloudFront 심화 → **set-02 1과제 완주** | mark.sh 80%+ |
-| [3](/part-3/07-observability/) | 07–08 | D8~9 | 관측성·fully-private EKS·IAM 심화 | No Data 0개 + 부분 재현 |
-| [4](/part-4/09-serverless-event/) | 09–10 | D10~11 | 2과제 5유형 패턴 | 유형별 1회 배포 |
-| [5](/part-5/11-mutation-drill/) | 11–13 | D14 | 변동 드릴·파괴/복구(정해진 일차 없음)·모의 대회 | 모의 대회 90%+ |
-| [6](/part-6/14-task3-load-ops/) | 14 | 예비 | 3과제 부하·운영 대응 | 시나리오 1회 수행 |
+| [2](/part-2/04-eksctl-cluster/) | 04–07 | D4~8 | eksctl·k8s·LBC·**관측성** → **set-02 1과제 완주** | mark.sh 80%+ · No Data 0개 |
+| [3](/part-3/08-private-eks-iam/) | 08 | D9 | fully-private EKS·IAM 심화 | 부분 재현 |
+| [4](/part-4/09-serverless-event/) | 09–13 | D10~12 | 2과제 후보 모듈 — 서버리스·스케일링·로깅·스트리밍·DocumentDB·VPC Lattice·CDN Function | 모듈별 1회 배포 |
+| [5](/part-5/14-task3-load-ops/) | 14 | D13~14 | 3과제 부하·운영 — 가용성·성능·비용 ratio | 부하 드릴 3회 |
+| [6](/part-6/15-mutation-drill/) | 15–17 | 일차 없음 | 변동 드릴·파괴/복구·모의 대회 | 모의 대회 90%+ |
 
 하루 8~10h 기준: 이론 2h + 실습 6~7h + 회고·정리 1h(고정).
 
@@ -104,7 +104,7 @@ import FeatureGrid from 'starlight-theme-exquisitus/components/FeatureGrid.astro
 
 :::caution[매일 destroy]
 시간당 과금 리소스(NAT GW, EKS, MSK, ALB)는 **당일 destroy** 가 원칙이다.
-EKS 를 이어서 쓰는 날(D4→D5)만 예외이고, 그것도 모듈 인덱스에 명시된 날만이다.
+EKS 를 이어서 쓰는 날(D4→D5→D6)만 예외이고, 그것도 모듈 인덱스에 명시된 날만이다.
 :::
 
 - AWS Budgets 알람 $50 설정(00 모듈에서 수행). 2주 총 예산 목표 < $100.

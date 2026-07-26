@@ -1,11 +1,13 @@
 ---
-title: 07. 관측성 — Fluent Bit + kube-prometheus-stack + Grafana
-description: "로그 파이프라인, log_to_metrics, Grafana provisioning, 알람 6종의 학습 목표."
+title: 06. 관측성 — Fluent Bit + kube-prometheus-stack + Grafana (Day 6)
+description: "Day 6 모듈 개요 — 로그 파이프라인, log_to_metrics, Grafana provisioning, 알람 6종의 학습 목표. 1과제 후보 세 편이 모두 요구하는 스택이다."
 ---
 
 import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: 개요
+
+관측성은 별도 심화 주제가 아니라 **1과제 안에 들어 있다.** 후보 세 편(set-02·set-03·set-07)이 모두 Prometheus·Grafana·Fluent Bit 을 요구하고, 배점은 30점 중 3.5~5.2점이다 — set-02 만 도구 선택이 자유롭고 수동 채점이며, set-03·set-07 은 스택이 고정되고 실시간 채점이다. 그래서 이 모듈은 [1과제 완주](/part-2/07-full-deploy-set02/) 앞에 온다. 완주 런북의 "모니터링·로깅" 단계가 여기서 배운 것을 그대로 쓴다.
 
 ## 학습 목표
 
@@ -19,20 +21,20 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 ## 소요 시간 / 일차
 
-- **Day 8** (1일)
-- 이론 3h + 실습 4h (PART-2 클러스터 위에서 실습)
+- **Day 6** (1일)
+- 이론 3h + 실습 4h (모듈 04~05에서 만든 클러스터 위에서 실습)
 
 ## 과금 리소스 & destroy 방침
 
 | 리소스 | 요금(서울) | 비고 |
 |---|---|---|
-| EKS Control Plane + 노드 | 약 $0.31/h | PART-2에서 유지 중인 클러스터 재사용 |
+| EKS Control Plane + 노드 | 약 $0.31/h | 모듈 04~05에서 유지 중인 클러스터 재사용 |
 | Grafana LoadBalancer(NLB) | 약 $0.028/h | kps values의 `service.type: LoadBalancer`가 생성 |
 | CloudWatch Logs | 수집량 과금 (실습 수준 무시 가능) | 로그 그룹은 남으면 삭제 |
 
 :::caution[과금 주의]
-08(Day 9)도 같은 클러스터를 쓰므로 이틀 연속이면 유지, 하루 이상 쉬면
-`helm uninstall` + `eksctl delete cluster` 후 재생성. 클러스터 방치 ≈ **$7.4/일**.
+다음 모듈(07 완주, Day 7~8)은 런북 1단계부터 클러스터를 다시 만든다 — 이 모듈이 끝나면
+`helm uninstall` + `eksctl delete cluster` 로 정리한다. 클러스터 방치 ≈ **$7.4/일**.
 :::
 
 ## 선행 지식
@@ -46,7 +48,7 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 ## 선행 모듈
 
-- PART-2 전체 (04 eksctl 클러스터, 05 워크로드/ALB — 앱이 떠 있어야 액세스 로그가 나온다)
+- 모듈 04 eksctl 클러스터, 05 워크로드/ALB — 앱이 떠 있어야 액세스 로그가 나온다
 
 ## 참고 경로
 
@@ -79,5 +81,5 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 ## 다음 단계
 
-<LinkButton href="/part-3/07-observability/theory/" icon="open-book">이론 읽기</LinkButton>
-<LinkButton href="/part-3/07-observability/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>
+<LinkButton href="/part-2/06-observability/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-2/06-observability/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

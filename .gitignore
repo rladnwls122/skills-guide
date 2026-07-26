@@ -9,3 +9,7 @@ dist/
 .astro/
 
 scripts/.font-cache/
+
+# 브라우저 확인 산출물 — 스크린샷과 playwright 스냅샷은 커밋하지 않는다
+.playwright-mcp/
+/*.png

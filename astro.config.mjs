@@ -43,11 +43,15 @@ const splitView = {
 
 /* 저장된 레일 폭·접힘 상태를 첫 페인트 전에 되돌린다. head 인라인이 아니면
    페이지를 넘길 때마다 기본 폭이 한 프레임 보였다가 바뀐다. */
+/* 접혀 있는 레일에는 저장된 폭을 다시 얹지 않는다 — 인라인 커스텀 속성이
+   html[data-*='closed'] 의 0rem 규칙을 이겨서, 패널만 숨고 폭은 그대로 남는다. */
 const splitViewRestore = `(()=>{try{var r=document.documentElement,
-w=JSON.parse(localStorage.getItem('sl-split-widths')||'{}');
-if(w.sidebar)r.style.setProperty('--sl-sidebar-width',w.sidebar+'rem');
-if(w.toc)r.style.setProperty('--sl-exquisitus-toc-width',w.toc+'rem');
-if(localStorage.getItem('sl-toc-collapsed')==='1')r.dataset.toc='closed';}catch(e){}})()`;
+w=JSON.parse(localStorage.getItem('sl-split-steps')||'{}'),
+sc=localStorage.getItem('sl-sidebar-collapsed')==='1',
+tc=localStorage.getItem('sl-toc-collapsed')==='1';
+if(w.sidebar&&!sc)r.style.setProperty('--sl-sidebar-width',w.sidebar+'rem');
+if(w.toc&&!tc)r.style.setProperty('--sl-exquisitus-toc-width',w.toc+'rem');
+if(tc)r.dataset.toc='closed';}catch(e){}})()`;
 
 export default defineConfig({
   /* Vercel 은 프로젝트를 도메인 루트에 그대로 배포한다 — base 불필요, 문서의

@@ -5,6 +5,9 @@
  * 칸이 그만큼 줄고 늘어난다. 바깥 여백은 움직이지 않는다 — 스플릿 뷰가 기대하는
  * 동작이다.
  *
+ * 폭은 연속이 아니라 레일마다 정해진 세 단계(닫기·좁게·기본)로만 간다. 드래그하면
+ * 가장 가까운 단계로 붙는다. 단계가 곧 상·하한이므로 따로 클램프하지 않는다.
+ *
  * 접기는 새로 만들지 않고 인덱스 토글이 쓰던 상태(html[data-sidebar="closed"] +
  * localStorage 'sl-sidebar-collapsed')를 그대로 쓴다. 목차 쪽만 같은 모양으로
  * 하나 더 뒀다.
@@ -13,27 +16,29 @@
  * 페이지를 넘길 때마다 기본 폭이 한 프레임 보였다가 바뀐다.
  */
 
-const BAND = 82.5; /* layout.css 의 --sl-exquisitus-shell-band 와 같은 값 */
-const GUTTER = 2.5;
-const MIN_MEASURE = 24; /* 읽는 칸이 이보다 좁아지면 표가 깨진다 */
-const MIN_RAIL = 8;
-const SNAP = 6; /* 이보다 좁게 밀면 접힌다 */
-const WIDTH_KEY = 'sl-split-widths';
+/* 폭이 연속이던 시절의 저장값은 프리셋에 없는 값이라 그대로 복원하면 어느
+   단계와도 맞지 않는다. 키를 바꿔 옛 값을 버린다 — 한 번 기본 폭으로 돌아갈 뿐이다. */
+const WIDTH_KEY = 'sl-split-steps';
 
 const RAILS = {
   sidebar: {
     prop: '--sl-sidebar-width',
-    fallback: 16.5,
     attr: 'sidebar',
     key: 'sl-sidebar-collapsed',
+    /* 이 레일이 실제로 있는 페이지에서만 손잡이를 만든다.
+     * 랜딩(template: splash)에는 인덱스도 목차도 없다. */
+    target: 'nav.sidebar',
+    /* 닫기 · 좁게 · 기본. 0 은 접힘이다. */
+    steps: [0, 11, 16.5],
     /* 오른쪽으로 끌면 넓어진다 */
     sign: 1,
   },
   toc: {
     prop: '--sl-exquisitus-toc-width',
-    fallback: 15,
     attr: 'toc',
     key: 'sl-toc-collapsed',
+    target: '.right-sidebar',
+    steps: [0, 10, 15],
     /* 왼쪽으로 끌면 넓어진다 */
     sign: -1,
   },
@@ -60,6 +65,10 @@ const isClosed = (rail) => root.dataset[rail.attr] === 'closed';
 
 const setClosed = (rail, closed) => {
   root.dataset[rail.attr] = closed ? 'closed' : 'open';
+  /* 인라인 커스텀 속성은 html[data-*='closed'] 의 0rem 규칙을 이긴다. 접을 때
+     지워 주지 않으면 패널만 숨고 폭은 남아 읽는 칸이 넓어지지 않는다.
+     다시 열 때는 localStorage 에 남은 값으로 setWidth 가 되살린다. */
+  if (closed) root.style.removeProperty(rail.prop);
   try {
     localStorage.setItem(rail.key, closed ? '1' : '0');
   } catch {}
@@ -71,7 +80,7 @@ const setClosed = (rail, closed) => {
 
 /** 화면에 지금 적용된 레일 폭(rem). 접혀 있으면 0 이다. */
 const currentWidth = (rail) =>
-  parseFloat(getComputedStyle(root).getPropertyValue(rail.prop)) || 0;
+  isClosed(rail) ? 0 : parseFloat(getComputedStyle(root).getPropertyValue(rail.prop)) || 0;
 
 const setWidth = (name, value) => {
   const rail = RAILS[name];
@@ -81,11 +90,9 @@ const setWidth = (name, value) => {
   writeWidths(widths);
 };
 
-/** 반대쪽 레일과 읽는 칸의 최소 폭을 빼고 남는 만큼이 이 레일의 상한이다. */
-const maxWidth = (name) => {
-  const other = name === 'sidebar' ? 'toc' : 'sidebar';
-  return BAND - 2 * GUTTER - MIN_MEASURE - currentWidth(RAILS[other]);
-};
+/** 끌어놓은 위치에서 가장 가까운 단계. */
+const nearestStep = (steps, value) =>
+  steps.reduce((a, b) => (Math.abs(b - value) < Math.abs(a - value) ? b : a));
 
 const reset = (name) => {
   const rail = RAILS[name];
@@ -107,16 +114,22 @@ function startDrag(name, handle, event) {
   /* 드래그 중에는 본문 텍스트가 딸려 선택되지 않게 한다 */
   root.style.userSelect = 'none';
 
+  /* 마지막으로 적용한 단계. pointermove 는 자주 오지만 단계는 가끔 바뀐다 —
+     같은 단계면 아무것도 하지 않아 localStorage 쓰기와 스타일 재계산을 아낀다. */
+  let applied = null;
+
   const onMove = (moveEvent) => {
     const delta = ((moveEvent.clientX - startX) * rail.sign) / px;
-    const raw = startWidth + delta;
+    const step = nearestStep(rail.steps, startWidth + delta);
+    if (step === applied) return;
+    applied = step;
 
-    if (raw < SNAP) {
-      if (!isClosed(rail)) setClosed(rail, true);
+    if (step === 0) {
+      setClosed(rail, true);
       return;
     }
     if (isClosed(rail)) setClosed(rail, false);
-    setWidth(name, Math.min(Math.max(raw, MIN_RAIL), maxWidth(name)));
+    setWidth(name, step);
   };
 
   const onUp = () => {
@@ -132,7 +145,9 @@ function startDrag(name, handle, event) {
   handle.addEventListener('pointercancel', onUp);
 }
 
-for (const name of Object.keys(RAILS)) {
+for (const [name, rail] of Object.entries(RAILS)) {
+  if (!document.querySelector(rail.target)) continue;
+
   const handle = document.createElement('div');
   handle.className = `split-handle split-handle--${name}`;
   handle.setAttribute('role', 'separator');

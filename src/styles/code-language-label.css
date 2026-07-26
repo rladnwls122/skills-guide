@@ -1,0 +1,36 @@
+/* 코드블록 좌측 상단에 언어 표시 (```bash → "bash")
+
+   Expressive Code 는 언어를 <pre data-language="..."> 에 담는데, 헤더인
+   <figcaption> 은 pre 의 형제라 attr() 로 그 값을 읽을 수 없다. pre 가
+   position:static 이라 pre::before 의 기준 박스는 figure 가 되므로,
+   figure 를 기준으로 절대배치하면 코드가 가로 스크롤돼도 라벨은 제자리에 있다. */
+
+.expressive-code figure.frame {
+	position: relative;
+}
+
+/* 헤더가 없는 프레임(hcl·yaml·python 등)에는 라벨이 앉을 줄을 만든다.
+   이걸 안 하면 라벨이 코드 첫 줄 위에 겹친다. */
+.expressive-code figure.frame:not(.has-title):not(.is-terminal) > figcaption.header {
+	display: block;
+	min-height: 1.7rem;
+}
+
+.expressive-code figure.frame > pre::before {
+	content: attr(data-language);
+	position: absolute;
+	inset-block-start: 0.45rem;
+	inset-inline-start: 0.9rem;
+	font-size: 0.7rem;
+	line-height: 1;
+	letter-spacing: 0.04em;
+	color: var(--sl-color-gray-3);
+	pointer-events: none;
+}
+
+/* 파일명이 이미 왼쪽을 쓰는 프레임은 언어를 오른쪽으로 보낸다.
+   3rem 은 복사 버튼 자리를 피하기 위한 값. */
+.expressive-code figure.frame.has-title > pre::before {
+	inset-inline-start: auto;
+	inset-inline-end: 3rem;
+}

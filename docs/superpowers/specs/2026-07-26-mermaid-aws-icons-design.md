@@ -5,7 +5,7 @@
 ## 목표
 
 문서 전체 mermaid 도식에 AWS 아이콘을 입혀 서비스 구성이 한눈에 읽히게 하고,
-그 과정에서 드러난 깨진 문법·다크모드 버그를 함께 정리한다.
+그 과정에서 드러난 깨진 문법·다크모드 버그를 함께 정리한다. 코드블록에도 언어 라벨을 붙인다.
 
 ## 현황
 
@@ -135,6 +135,15 @@ subgraph(CSS)는 `#8ab`로 고정된다. `logos`는 원본이 컬러라 양쪽 �
 
 무조건 재렌더시키는 방식은 쓰지 않는다 — 정상인 페이지에서도 mermaid 작업이 2배가 된다.
 
+**안전장치 두 가지** (둘 다 실측으로 필요성 확인):
+
+1. **`data-diagram` 확인.** astro-mermaid는 재렌더 시 `data-diagram`이 없으면 **이미 렌더된 SVG의
+   textContent**를 소스로 저장한다(`astro-mermaid-integration.js:534`). 그러면 그 도식은 새로고침
+   전까지 `No diagram type detected`로 영구히 깨진다. 재렌더를 유도하기 전에 모든 `pre.mermaid`가
+   유효한 `data-diagram`을 갖고 있는지 확인하고, 하나라도 없으면 손대지 않는다.
+2. **페이지당 1회 제한.** 재렌더된 svg는 다시 검사 대상이 되므로, 판별이 틀리면 재렌더가 무한히
+   반복된다. 모듈 수준 플래그로 한 번만 시도하고, `astro:page-load`에서 되돌린다.
+
 ### 5. 가독성 리팩토링
 
 같은 파일을 건드리는 김에 함께 정리한다.
@@ -146,7 +155,28 @@ subgraph(CSS)는 `#8ab`로 고정된다. `logos`는 원본이 컬러라 양쪽 �
 `@mermaid-js/layout-elk`는 설치만 되어 있고 어디에도 연결되지 않은 상태다. 실제로 엣지가 꼬이는
 도식이 나올 때만 켜고, 아니면 그대로 둔다.
 
-### 6. 검증
+### 6. 코드블록 언어 라벨
+
+코드블록 좌측 상단에 언어를 표시한다 (```` ```bash ```` → `bash`). 문서의 코드 펜스는 이미
+158개 전부 언어가 붙어 있으므로 표시만 하면 된다.
+
+Expressive Code는 언어를 `<pre data-language="bash">`에 담는데, 헤더인 `<figcaption>`은 `pre`의
+형제라 `attr()`로 값을 읽을 수 없다. `pre`가 `position: static`이라 `pre::before`의 기준 박스는
+`figure`가 되므로, `figure`를 기준으로 절대배치하면 코드가 가로로 스크롤돼도 라벨이 제자리에 남는다.
+
+프레임은 세 형태로 나온다. 헤더가 없는 형태에는 라벨이 앉을 줄을 만들고, 파일명이 이미 왼쪽을
+쓰는 형태는 언어를 오른쪽으로 보낸다.
+
+| 클래스 | 헤더 | 예시 |
+|---|---|---|
+| `frame` | `display: none` — 헤더 없음 | hcl, yaml, python |
+| `frame has-title` | 있음, 파일명 표시 | `variables.tf` |
+| `frame is-terminal` | 있음, 제목 비어 있음 | bash, powershell |
+
+`expressive-code-language-badge` 플러그인은 배지를 `right: 0.5rem`에 고정하고 위치 옵션이 없어
+쓰지 않는다. CSS 한 파일로 끝나는 일에 의존성을 늘리지 않는다.
+
+### 7. 검증
 
 `scripts/check-mermaid-icons.mjs` — mdx 전체에서 `logos:` / `mdi:` / `icon--logos--*` /
 `icon--mdi--*` 참조를 긁어 `src/mermaid-icons.mjs`의 `MERMAID_ICONS` 목록과 대조한다. 빠진 게
@@ -162,10 +192,13 @@ subgraph(CSS)는 `#8ab`로 고정된다. `logos`는 원본이 컬러라 양쪽 �
 
 1. `src/mermaid-icons.mjs` 작성 → `astro.config.mjs`에 `iconPacks` + `head` `<link>` 연결
 2. 다크모드 수정 (`mermaid-fullscreen.js`)
-3. 도식 적용 — 18개 파일, 파일 단위로 진행. 새 아이콘을 쓸 때마다 `MERMAID_ICONS`에 추가
-4. `scripts/check-mermaid-icons.mjs` 작성 + 통과 확인
-5. 브라우저 확인 (다크·라이트)
-6. 데모 파일 `public/mermaid-icon-demo.html` 삭제
+3. 코드블록 언어 라벨 CSS
+4. `scripts/check-mermaid-icons.mjs` 작성 — 도식 적용보다 **먼저**. 작업 중 유일한 회귀 방지 장치다
+5. 도식 적용 — 18개 파일, 파일 단위로 진행. 새 아이콘을 쓸 때마다 `MERMAID_ICONS`에 추가
+6. 전체 확인 (`npm run check:icons`, `npm run build`, 브라우저 다크·라이트)
+7. 데모 파일 `public/mermaid-icon-demo.html` 삭제
+
+구현 계획: `docs/superpowers/plans/2026-07-26-mermaid-aws-icons.md`
 
 ## 범위 밖
 

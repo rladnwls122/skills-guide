@@ -264,10 +264,31 @@ function scan() {
 	syncTheme();
 }
 
+/*
+ * 관찰 대상이 body 전체라, 도식 6개짜리 페이지 한 번 렌더에 콜백이 100번 가까이
+ * 뜬다(측정값: 도식 3개에 45회). scan() 은 매번 문서 전체를 querySelectorAll 로
+ * 세 번 훑으므로 그대로 두면 렌더 도중 훑기만 300회다 — 모바일에서 특히 아깝다.
+ * 한 태스크 안의 연속 변경을 한 번으로 묶는다.
+ *
+ * requestAnimationFrame 은 쓰지 않는다. 탭이 화면에 없으면 프레임이 돌지 않아
+ * 콜백이 영영 안 뜨고, 백그라운드 탭에서 렌더가 끝난 도식은 프레임도 확대 버튼도
+ * 없는 맨 svg 로 남는다(실제로 그렇게 깨졌다). setTimeout 은 스로틀은 걸려도 온다.
+ */
+let scanQueued = false;
+
+function queueScan() {
+	if (scanQueued) return;
+	scanQueued = true;
+	setTimeout(() => {
+		scanQueued = false;
+		scan();
+	}, 0);
+}
+
 function init() {
 	scan();
 	// mermaid 는 비동기로 SVG 를 채워 넣는다 — 삽입될 때마다 다시 훑는다.
-	const observer = new MutationObserver(scan);
+	const observer = new MutationObserver(queueScan);
 	observer.observe(document.body, { childList: true, subtree: true });
 }
 

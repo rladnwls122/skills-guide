@@ -1,5 +1,35 @@
 /* mermaid 도식 프레임 + 전체화면 뷰어 (src/scripts/mermaid-fullscreen.js 와 한 쌍) */
 
+/* 도식 안에서는 전이(transition)를 완전히 끈다.
+ *
+ * starlight-theme-exquisitus 는 reduced-motion 을 요청한 사용자에게 흔한 관용구인
+ * `*, *::before, *::after { transition-duration: 0.01ms !important }` 를 건다.
+ * transition-property 기본값이 `all` 이라, 이 한 줄은 "모든 요소의 모든 속성이
+ * 전이 대상" 이라는 뜻이 된다 — 원래 전이가 없던 것까지 포함해서.
+ *
+ * mermaid 는 노드를 붙인 직후 `transform` 을 얹어 배치하고, 그 상태에서 곧바로
+ * getBBox() 를 읽어 viewBox 를 정한다. transform 이 전이 중이면 그 측정이 배치
+ * 전 좌표를 물어, viewBox 가 실제 내용보다 8배 넘게 부풀었다(2노드 도식이
+ * 2067x2044, subgraph 가 끼면 16451x16428). svg 는 그 viewBox 대로 그려지므로
+ * 도식은 프레임 한구석의 점이 되고, 좁은 화면에서는 사실상 빈 칸으로 보인다.
+ *
+ * 모바일에서만 신고된 이유는 reduced-motion 때문이다 — iOS 손쉬운 사용의 "동작
+ * 줄이기", 안드로이드 "애니메이션 제거", 저전력 모드가 이 설정을 켠다.
+ *
+ * `@layer base` 안에 두는 것이 핵심이다. `!important` 선언끼리는 레이어 우선순위가
+ * 뒤집혀 **먼저 선언된 레이어가 이긴다** — base 는 tailwind.css 의 레이어 순서에서
+ * 맨 앞이라 exquisitus 의 !important 를 이긴다. 레이어 밖에 두면 진다.
+ *
+ * 선택자는 svg 의 id 로 잡는다. mermaid 는 최종 위치가 아니라 body 에 잠깐 붙인
+ * 임시 컨테이너 안에서 측정하므로, `pre.mermaid` 를 기준으로 잡으면 정작 측정
+ * 시점에는 규칙이 걸리지 않는다. */
+@layer base {
+	svg[id^='mermaid-'],
+	svg[id^='mermaid-'] * {
+		transition-duration: 0s !important;
+	}
+}
+
 .mfs-frame {
 	position: relative;
 	margin: 1.5rem 0;

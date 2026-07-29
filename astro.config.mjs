@@ -65,25 +65,6 @@ if(w.sidebar&&!sc)r.style.setProperty('--sl-sidebar-width',w.sidebar+'rem');
 if(w.toc&&!tc)r.style.setProperty('--sl-exquisitus-toc-width',w.toc+'rem');
 if(tc)r.dataset.toc='closed';}catch(e){}})()`;
 
-/* Starlight 의 ThemeSelect 는 헤더와 모바일 메뉴 두 곳에 렌더된다. 커스텀 요소가
-   생성될 때마다 생성자가 onThemeChange(loadTheme()) 를 부르는데, 그 값은 head 의
-   ThemeProvider 가 이미 박아둔 값과 같다 — 즉 data-theme 에 같은 값을 두 번 더 쓴다.
-
-   astro-mermaid 는 값이 실제로 바뀌었는지 보지 않고 data-theme '쓰기'마다 모든
-   도식의 data-processed 를 떼고 initMermaid() 를 다시 부른다. 그래서 페이지를 열
-   때마다 렌더가 3벌(최초 1 + 무의미한 쓰기 2) 동시에 돈다 — 도식 6개짜리 페이지면
-   18번이다. 모바일에서는 그 3배가 그대로 CPU 시간이 되어, 다 그려질 때까지 도식
-   자리가 한참 빈 칸으로 남는다.
-
-   같은 값 쓰기를 dataset 단계에서 삼킨다. setAttribute 를 가로채는 걸로는 안 된다 —
-   Starlight 도 우리 스크립트도 `dataset.theme = ...` 로 쓰고, DOMStringMap 의 네이티브
-   세터는 JS 로 덮어쓴 setAttribute 를 타지 않는다. 커스텀 요소들은 모듈 스크립트라
-   defer 되므로, head 인라인인 이 스크립트가 항상 먼저 돈다. */
-const dedupeThemeWrites = `(()=>{try{var e=document.documentElement,d=e.dataset;
-Object.defineProperty(e,'dataset',{configurable:true,value:new Proxy(d,{
-get:function(t,k){var v=t[k];return typeof v==='function'?v.bind(t):v},
-set:function(t,k,v){if(k==='theme'&&t[k]===String(v))return true;t[k]=v;return true}})})}catch(e){}})()`;
-
 export default defineConfig({
   /* Vercel 은 프로젝트를 도메인 루트에 그대로 배포한다 — base 불필요, 문서의
      `/part-1/...` 절대 링크가 손 안 대고 그대로 산다. 커스텀 도메인을 붙이면
@@ -96,7 +77,15 @@ export default defineConfig({
     gfm: false,
     remarkPlugins: [[remarkGfm, { singleTilde: false }]],
   },
+  /* autoTheme 를 끈다 — 도식 색은 src/styles/mermaid-theme.css 가 CSS 변수로 낸다.
+     켜두면 astro-mermaid 가 data-theme 를 지켜보다가 값이 바뀔 때마다 모든 도식의
+     data-processed 를 떼고 mermaid 를 통째로 다시 돌린다: 테마를 누를 때마다 도식이
+     전부 빈 칸이 됐다 수백 ms 뒤 돌아오고, 게다가 Starlight 의 ThemeSelect 가 헤더와
+     모바일 메뉴 두 곳에서 같은 값을 다시 쓰는 탓에 페이지를 열 때마다 무의미한 렌더가
+     두 벌 더 붙었다. 끄면 mermaid 는 항상 'default' 테마로 한 번만 그리고, 다크/라이트
+     차이는 브라우저의 CSS 값 재계산으로 끝난다. */
   integrations: [mermaid({
+    autoTheme: false,
     mermaidConfig: {
       themeVariables: {
         fontSize: '18px',
@@ -122,6 +111,7 @@ export default defineConfig({
       './src/styles/tailwind.css',
       './src/styles/korean-fonts.css',
       './src/styles/mermaid.css',
+      './src/styles/mermaid-theme.css',
       './src/styles/mermaid-aws-icons.css',
       './src/styles/mermaid-k8s-icons.css',
       './src/styles/mobile.css',
@@ -136,7 +126,6 @@ export default defineConfig({
     head: [
       { tag: 'link', attrs: { rel: 'stylesheet', href: iconifyUrl('logos', 'css') } },
       { tag: 'link', attrs: { rel: 'stylesheet', href: iconifyUrl('mdi', 'css', '&color=%238ab') } },
-      { tag: 'script', content: dedupeThemeWrites },
       { tag: 'script', content: splitViewRestore },
     ],
     components: { SiteTitle: './src/components/SiteTitle.astro' },

@@ -11,6 +11,8 @@
 
 const RENDERED = "data-mfs-ready";
 const SIZED = "data-mfs-sized";
+const ICONBOX = "data-mfs-iconbox";
+const SVGNS = "http://www.w3.org/2000/svg";
 
 /*
  * mermaid 는 svg 에 width="100%" 만 박아둔다(height 는 없음). viewBox 만 있고
@@ -26,6 +28,38 @@ function sizeSvg(svg) {
 		svg.style.width = `${box.width}px`;
 	}
 	svg.setAttribute(SIZED, "");
+}
+
+/*
+ * `@{ icon: ..., form: "square" }` 노드의 테두리를 <rect> 한 장으로 갈아끼운다.
+ *
+ * mermaid 는 그 사각형을 roughjs 로 그린다 — 채움용 path 와 선용 path 두 장이고,
+ * 모서리 반경은 코드에 0.1px 로 박혀 있어 사실상 각진 네모다. 색도 렌더 시점에
+ * fill/stroke '속성'으로 들어간다. 즉 CSS 로는 둥글게 만들 수도, 테마에 따라 바꿀
+ * 수도 없다(속성 자체는 CSS 로 덮이지만, 두 path 의 역할이 갈려 있어 테두리만
+ * 따로 칠할 수가 없다 — 선용 path 의 d 는 손그림용 겹선이다).
+ *
+ * 같은 자리·같은 크기의 rect 로 바꾸면 rx 와 색이 전부 CSS 몫이 된다.
+ * 색은 src/styles/mermaid-theme.css 의 `.mfs-icon-box` 가 낸다.
+ *
+ * 부모 <g> 는 그대로 두고 자식만 바꾼다 — 거기 붙은 translate 가 배치의 전부다.
+ */
+function roundIconBox(shape) {
+	if (shape.hasAttribute(ICONBOX)) return;
+	const box = shape.firstElementChild;
+	if (!box || box.tagName !== "g") return;
+	// 아직 안 그려진 도식에서는 0 이 나온다 — 표시를 남기지 말고 다음 훑기를 기다린다.
+	const b = box.getBBox();
+	if (!b.width || !b.height) return;
+	shape.setAttribute(ICONBOX, "");
+
+	const rect = document.createElementNS(SVGNS, "rect");
+	rect.setAttribute("class", "mfs-icon-box");
+	rect.setAttribute("x", b.x);
+	rect.setAttribute("y", b.y);
+	rect.setAttribute("width", b.width);
+	rect.setAttribute("height", b.height);
+	box.replaceChildren(rect);
 }
 
 function openViewer(svg, caption) {
@@ -209,59 +243,15 @@ function decorate(pre) {
 }
 
 /*
- * astro-mermaid 는 렌더 시작 시점에 data-theme 를 한 번만 읽는다. 그 1회를 놓치면
- * 다크모드인데 라이트 테마로 그려져 글자가 검은색으로 남고, 재렌더는 data-theme 가
- * '바뀔 때'만 일어나므로 사용자가 테마를 건드리기 전까지 복구되지 않는다.
- *
- * 렌더 결과의 실제 테마를 svg 루트 fill 밝기로 읽어(다크 테마는 밝은 글자색) 문서
- * 테마와 어긋날 때만 data-theme 를 동기적으로 뒤집었다 되돌린다. 두 번의 변경이
- * 한 번의 MutationObserver 콜백으로 합쳐져 최종값으로 재렌더된다.
- *
- * 무조건 재렌더시키지 않는 이유: 정상인 페이지에서도 mermaid 작업이 2배가 된다.
+ * 여기 있던 syncTheme 은 걷어냈다. astro-mermaid 가 렌더 시작 시점의 data-theme 를
+ * 한 번만 읽어 다크모드인데 라이트 색으로 굳던 버그를 보정하던 코드인데, autoTheme 를
+ * 끄면서(astro.config.mjs) 도식은 늘 같은 테마로 그려지고 색은 CSS 변수가 낸다 —
+ * 고칠 대상 자체가 사라졌다. 되살리지 않는다.
  */
-let themeRepairDone = false;
-
-function isLightFill(color) {
-	const [r, g, b] = (color.match(/\d+/g) || []).map(Number);
-	if (r === undefined) return null;
-	return 0.299 * r + 0.587 * g + 0.114 * b > 128;
-}
-
-function syncTheme() {
-	// 페이지당 한 번만 시도한다. 재렌더된 svg 에는 표시가 없어 다시 검사 대상이 되므로,
-	// 판별이 틀리면(또는 mermaid 가 예상과 다른 색을 쓰면) 재렌더가 무한히 반복된다.
-	if (themeRepairDone) return;
-
-	const html = document.documentElement;
-	if (!html.dataset.theme) return;
-	const wantDark = html.dataset.theme === "dark";
-
-	const rendered = document.querySelectorAll("pre.mermaid[data-processed]");
-	if (!rendered.length) return;
-
-	// data-diagram 이 없는 도식이 하나라도 있으면 손대지 않는다 — 재렌더가 걸리면
-	// astro-mermaid 가 렌더된 SVG 를 소스로 덮어써 그 도식이 영구히 깨진다.
-	for (const pre of rendered) {
-		if (!pre.getAttribute("data-diagram")) return;
-	}
-
-	const svg = rendered[0].querySelector("svg");
-	if (!svg) return;
-
-	const light = isLightFill(getComputedStyle(svg).fill);
-	if (light === null) return;
-	themeRepairDone = true;
-	if (light === wantDark) return; // 밝은 글자 = 다크 테마. 일치하면 할 일 없음
-
-	const current = html.dataset.theme;
-	html.dataset.theme = current === "dark" ? "light" : "dark";
-	html.dataset.theme = current;
-}
-
 function scan() {
 	document.querySelectorAll("pre.mermaid").forEach(decorate);
 	document.querySelectorAll("pre.mermaid svg").forEach(sizeSvg);
-	syncTheme();
+	document.querySelectorAll("pre.mermaid svg .icon-shape").forEach(roundIconBox);
 }
 
 /*
@@ -298,7 +288,4 @@ if (document.readyState === "loading") {
 	init();
 }
 // Starlight 의 뷰 트랜지션으로 페이지가 갈릴 때도 다시 건다.
-document.addEventListener("astro:page-load", () => {
-	themeRepairDone = false;
-	scan();
-});
+document.addEventListener("astro:page-load", scan);

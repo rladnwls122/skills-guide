@@ -73,6 +73,7 @@ export default defineConfig({
      범위 표기가 문단 안에서 짝 지어져 그 사이 전체가 취소선으로 렌더된다.
      내장 gfm 을 끄고 remark-gfm 을 singleTilde:false 로 직접 넣어 겹물결(~~)만
      취소선으로 남긴다 — 나머지 GFM 기능(표·작업 목록 등)은 그대로다. */
+  site: 'https://skills-learn.zenru.net', 
   markdown: {
     gfm: false,
     remarkPlugins: [[remarkGfm, { singleTilde: false }]],

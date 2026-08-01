@@ -43,6 +43,34 @@ description: 이의 제기로 확정된 과제지·채점지 정정 결과를 �
 "과제지 오타는 그대로 쓴다"의 대표 사례였던 `wsc2026-alaytics-ec2-role`은 **정정으로 해소됐다.** 오타는 수정되고 이 이름은 채점 대상이 아니다. 원칙 자체(이름 정확 일치 채점에서는 적힌 그대로 쓴다)는 그대로 유효하지만, **정정 공지를 확인하지 않으면 이미 고쳐진 오타를 "사양"으로 착각한다.** 이름을 확정하기 전에 이 문서를 먼저 본다.
 :::
 
+## set-07 · 배포본 개정 이력 (v2~v6, 반영 완료)
+
+배포 자료에 딸린 `CHANGELOG.txt` 기준이다. 아래는 **이미 반영된** 변경이므로, 손에 있는 과제지가 구버전이면 실제 채점과 어긋난다. 채점에 영향을 주는 것만 추렸다.
+
+| 판 | 과제 | 변경 |
+|---|---|---|
+| v2 | 2과제 | 4모듈 이름을 **Container Logging**으로 변경 |
+| v3 | 1과제 | ECR 취약점 조회 명령어 오류 수정 |
+| v3 | 2과제 | 채점 주의사항 14번 추가, 1모듈 **GSI Attribute 누락 보완** |
+| v4 | 1과제 | 채점용 **CloudShell VPC Environment(`unicorn-mark`) 위치를 Public → Private 서브넷**으로 변경 |
+| v5 | 1과제 | **Fluentd 삭제, Fluent Bit → CloudWatch Logs 흐름으로 교체** |
+| v5 | 1과제 | Internal ALB — 내부망을 포함해 **CloudFront를 거치지 않는 모든 트래픽 차단**을 명시 |
+| v5 | 1과제 | `booking_id`·`concert_name` 필드 삭제 |
+| v5 | 1과제 | HTTP Request Duration 패널은 **구현 방법 자율**(CloudWatch Metrics Exporter 등) |
+| v5 | 1과제 | **K8s Service type 채점 삭제**, TG 채점 명령을 지시하지 않은 사항까지 보지 않도록 수정 |
+| v5 | 1과제 | 로그 시간대를 **KST로 명시** |
+| v5 | 1과제 | Grafana 패널 예시 사진 확대 + **사진대로 구성해야 함**을 명시 |
+| v5 | 2과제 2모듈 | CloudFront 엣지 전파 대기를 **60초 폴링**으로 수정 |
+| v5 | 2과제 4모듈 | 범례는 **plain text**로 출력, 모든 EKS 노드 **TZ를 KST**로 |
+| v5 | 2과제 4모듈 | 로그 확인(4-5)을 **정확 일치 → 부분 일치**로 변경. "출력된 로그 중 **3분 이내로 기록된 로그가 있으면 득점**" |
+| v5 | 2과제 4모듈 | Grafana 대시보드는 이미지 참고 + **Panel type 명시** |
+| v5 | 전체 | 채점 스크립트의 `export AWS_ACCESS_KEY_ID=""` 를 **`unset`** 으로 변경(선수가 수동 지정한 키를 무력화하려는 조치이지 수동 키 채점이 아니다) |
+| v6 | 1·2과제 | Grafana 채점지에 확인 정보 부연 설명 추가 |
+
+:::caution[노드는 KST, 로그 타임스탬프는 UTC — 함께 읽으면 함정이 된다]
+v5가 "로그 시간대 KST"와 "노드 TZ KST"를 명시했지만, 1과제 채점은 로그의 `timestamp`를 `Z`(UTC) 접미사로 `date -u`와 대조한다. 노드 시간대를 따라 로컬 시간으로 포맷하면서 `Z`를 붙이면 **정확히 9시간 어긋나** 12-1-A가 오답이 된다. **표시 시간대와 기록 형식을 분리해서 본다** — 아래 1과제 질의 표의 같은 항목을 함께 읽는다.
+:::
+
 ## set-07 (제기됨 — 답변 대기)
 
 확정 답변이 아직 없는 질의다. 아래 대부분은 **채점에는 통과하지만 과제지를 그대로 읽으면 오답으로 가는** 유형이라, 답변을 기다리기보다 각 항목의 "실측 대응"대로 만들어 두는 편이 안전하다.
@@ -94,3 +122,6 @@ description: 이의 제기로 확정된 과제지·채점지 정정 결과를 �
 | `alaytics` 오타 해소 | [모듈 10 이론](/part-4/10-scaling-logging-streaming/theory/) · [모듈 15 이론](/part-6/15-mutation-drill/theory/) · [mark.sh 읽는 법](/reference/mark-script-guide/) |
 | 4-5-B 출력 형식 | [모듈 10 이론](/part-4/10-scaling-logging-streaming/theory/) |
 | set-08 채점지 ↔ 스크립트 명령 불일치 | [mark.sh 읽는 법](/reference/mark-script-guide/) |
+| set-07 스케일인 시간 요건의 출처(스크립트 루프 150초) | [모듈 10 이론](/part-4/10-scaling-logging-streaming/theory/) · [mark.sh 읽는 법](/reference/mark-script-guide/) |
+| set-07 v5 — 4모듈 로그 부분 일치·노드 TZ KST·범례 plain text | [모듈 10 이론](/part-4/10-scaling-logging-streaming/theory/) · [모듈 10 랩](/part-4/10-scaling-logging-streaming/lab/) |
+| set-07 v4 — 채점용 CloudShell이 Private 서브넷으로 이동 | [모듈 08 이론](/part-3/08-private-eks-iam/theory/) |

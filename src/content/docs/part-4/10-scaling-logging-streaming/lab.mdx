@@ -119,8 +119,9 @@ kill %1
 2. **TGB를 LBC 설치 전에 apply → CRD 없음 오류.** 순서: LBC → TGB.
 3. **ALB를 Ingress로 만들면 이름 채점 실패** — 이름 고정이 필요하므로 terraform ALB + TGB.
 4. **level은 대문자 ERROR** — LogQL `| json | level="ERROR"`. 소문자로 찍히게 가공하면 오답.
-5. **범례가 `{level="ERROR"}` 형태 → 오답.** `sum by (level)` + legendFormat `{{level}}`.
+5. **범례는 plain text**(`ERROR`)여야 한다 — `{level="ERROR"}` 형태로 뜨면 오답. `sum by (level)` + legendFormat `{{level}}`.
 6. **No Data 패널 1개라도 있으면 오답** — 채점 전 3레벨 호출.
+7. **로그 확인(4-5)은 부분 일치**로 완화됐다(배포본 v5) — "3분 이내로 기록된 로그가 있으면 득점"이라 본문을 맞출 필요 없이 **채점 직전 트래픽을 한 번 흘려 최근 로그를 만들어 두면** 된다. 모든 노드 TZ는 KST로 설정한다.
 7. OTel이 body를 가공하면 `| json` 파싱 깨짐 — container 파서 외 본문 변형 금지.
 8. mark4.sh의 `rm -rf ~/.aws`는 CloudShell(관리형 세션)에선 무해 — bastion에서 돌리지 말 것.
 

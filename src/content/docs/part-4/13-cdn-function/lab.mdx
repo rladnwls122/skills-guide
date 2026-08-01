@@ -7,7 +7,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
-정답지는 `skills-2026/set-07/task-2/module-2-cdn-function/`에 있다. 리전은 **us-east-1** — task.md·mark.md 양쪽에서 확인했다.
+정답지는 `skills-2026/set-07/task-2/module-2-cdn-function/`에 있다. 리전은 **us-east-1** — task.md·mark.md 양쪽에서 확인했다. 이 정답지는 실채점에서 `mark2.sh` 전 항목(2-1~2-6) 통과가 확인된 상태다.
 
 ## 실습 목표
 
@@ -116,6 +116,7 @@ import { Steps } from '@astrojs/starlight/components';
 | 콘솔에서 KVS 키 수동 추가 후 미apply | `keys_exclusive` 리소스가 다음 apply 때 자동 제거하지만, apply 전에 채점하면 여분 키로 mark 2-2 정확 일치 실패 |
 | "Pay-as-you-go 타입"을 어떤 인자로 설정하려 시도 | flat-rate 요금제는 콘솔 전용 opt-in이라 Terraform·API에 인자 자체가 없음 — 아무 설정도 안 하는 것이 정답(기본값) |
 | Response Headers Policy에 AWS Managed Policy 사용 | 과제지가 명시적으로 금지 — 커스텀 정책 리소스로 작성 |
+| 채점 직후 `terraform plan`에 KVS 키 drift | `mark2.sh`가 2-6에서 `weight`를 out-of-band로 바꿨다가 0.3으로 복원한 흔적 — 복원까지 끝났으면 무시 |
 
 ## 통과 기준 (mark 항목 연결)
 

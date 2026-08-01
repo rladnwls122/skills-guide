@@ -67,6 +67,10 @@ graph TD
 **set-03/07은 Pod Identity + Access Entry(authMode=API, aws-auth 미사용)** — 해당 세트엔 5-4 같은 노드 배치 검사가 없어 신형 방식을 쓴다.
 :::
 
+:::note[협의회(2026-07-31) — Access Entry는 "강제"에서 "선택"으로]
+1과제 과제지에 명시됐던 Access Entry 사용 요구는 삭제되고, kubectl 접근 방식(Access Entry·aws-auth ConfigMap 등)은 선수 자유가 됐다. 과제지에는 "CloudShell에서 kubectl 명령어를 사용할 수 있어야 한다"만 남는다. 정답지 구성(`authenticationMode: API` + Access Entry)은 그 요구를 채우는 최단 경로라 그대로 쓴다 — 바뀐 것은 방식이 채점되지 않는다는 점이지, 채점 신원이 CloudShell에서 kubectl이 돼야 한다는 사실이 아니다.
+:::
+
 **③ 원리**
 
 ```mermaid

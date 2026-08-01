@@ -15,6 +15,10 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 3과제 공식 과제지·채점지는 아직 공개되지 않았다. 이 모듈의 배점 40점·SLO 수치·비용 ratio 밴드는 전부 `skills-2026/task-3`(예상 풀이, 파일명 그대로 `task-sample.md`·`mark-sample.md`)에서 가져온 예측이며 실제 대회에서 달라질 수 있다. 40점이라는 총점은 1·2과제 각 30점·전체 100점에서 역산되므로 비교적 안정적이지만, 그 안의 구성은 예상이다. 반면 이 모듈이 훈련하는 SLO 기반 HPA 튜닝·RDS Proxy 풀링·인덱스 설계·비용을 게이트로 다루는 사고는 배점이 달라져도 그대로 쓸 수 있다.
 :::
 
+:::note[협의회(2026-07-31)에서 확인된 것 — 예상의 골격이 맞았다]
+변별력은 3과제로 판단한다. 채점 플랫폼은 **선수 트래픽 점수를 실시간 대시보드로 보여 주고**, 평가 목적은 "요청을 처리하면서 리소스는 최대한 적게"(대회 기간 **전체** 기준)이며, **악의적 트래픽이 유입되어 WAF 대응이 요구된다** — 이 모듈의 4축(비정상 요청·가용성·성능·비용)과 방향이 일치한다. 기존 문제의 전면 변경은 없고 배점 수정과 추가 문제가 가능하다(예시: CloudWatch 모니터링 로그가 적재되면 Firehose를 통해 S3로 저장). 실시간 점수가 보이므로 부하 중 "지표 확인 → 노브 조정 → 재확인" 루프를 대회장에서도 그대로 쓴다 — 비용 축이 전 기간 누적이라, 부하가 없는 시간대에 노드·리소스를 줄여 두는 운영까지 점수다.
+:::
+
 ## 목표
 
 - [ ] 정답지(`skills-2026/task-3`) 런북으로 CloudFront 스택을 **T+50분 내** 배포하고 스모크 6종 통과
@@ -78,4 +82,5 @@ EKS + NAT GW + ALB + CloudFront + RDS Multi-AZ(db.t3.micro) + 노드 최대 9대
 - [RDS Proxy](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy.html) — 커넥션 풀링·피닝 조건·인증 방식
 - [CloudFront 캐시 키 제어](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/controlling-the-cache-key.html) — 캐시 정책·TTL·무효화
 - [WAF 관리형 룰 그룹 목록](https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-list.html) — 룰별 포함 규칙과 오차단 위험
+- [CloudWatch Logs 구독 필터](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/SubscriptionFilters.html) — 협의회가 예시로 든 추가 문제(로그 적재 → Firehose → S3)의 연결 지점
 - [k6 문서](https://grafana.com/docs/k6/latest/) — options·threshold·stage 문법

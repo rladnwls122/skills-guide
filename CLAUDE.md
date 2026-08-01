@@ -6,7 +6,7 @@
 
 문서 내용의 근거는 레포 밖에 있다. 사이트 콘텐츠만 보고 판단하지 않는다.
 
-- `C:\Users\kryuk\practice\skills-2026` — 과제 구현. set-02·03·05·07·08·09 + `task-3`
+- `C:\Users\User\skills-2026` — 과제 구현. set-02·03·05·07·08·09 + `task-3`
 - `C:\Users\kryuk\Downloads\national-skills-v7` — **set-08 제출작**의 과제지·채점지·채점 스크립트
 
 **수상 후보만 근거로 쓴다** — 1과제 set-02·03·07, 2과제 set-02·07·08. set-05·09 는 후보가 아니다. `task-3` 는 3과제 **예상 풀이**지 확정이 아니다. 인용 전에 그 자료가 무엇인지부터 확인한다(`national-skills-v7/1과제/asgmt1_check.sh` 는 `set-08/task-1/mark.sh` 와 동일 파일이었다). 전체 방향은 `docs/superpowers/specs/2026-07-26-curriculum-direction.md`.

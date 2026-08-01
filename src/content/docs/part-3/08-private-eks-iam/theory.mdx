@@ -108,6 +108,10 @@ flowchart LR
 
 set-03 = VPC CloudShell, set-07 = bastion(+ fallback으로 채점용 CloudShell 겸용).
 
+:::note[협의회(2026-07-31) — 접근 경로는 제한하지 않는다]
+EKS 접근 방식을 특정하지 않는 쪽으로 정리됐다. 과제지 요구는 "CloudShell에서 kubectl 명령어를 사용할 수 있어야 한다" 하나이고, CloudShell 접근이 불가한 구성이면 **선수가 채점 전에 bastion을 사전 구축해 쓰는 것도 공식적으로 허용**된다. 위 3분할·bastion 패턴이 그대로 공인된 셈이다 — 다만 "채점 전 bastion 삭제"는 세트별 과제지의 미요구 리소스 정리 원칙에서 나온 것이므로, 당일 과제지가 bastion을 언급하면 그 지시를 우선한다.
+:::
+
 ---
 
 ## 주제 3. CoreDNS 커스텀 도메인 (wsc2026.skills.local)

@@ -7,12 +7,12 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: 개요
 
-2과제 유형 세 개를 다룬다: **유형 3 — 오토스케일링**(SQS→KEDA→Karpenter, set-07 task-2 module-3), **유형 4 — 로깅**(OTel→Loki→Grafana, set-07 task-2 module-4), **유형 5 — 스트리밍**(Kinesis/Flink Studio·MSK, set-02 task-2 module-2·4 — **정답지 대조 필수, 배포는 선택**).
+2과제 유형 세 개를 다룬다: **유형 3 — 오토스케일링**(SQS→KEDA→Karpenter, set-07 task-2 module-3 — 실채점 전 항목 통과 확정), **유형 4 — 로깅**(OTel→Loki→Grafana, set-07 task-2 module-4 — **정답지 미착수**, 과제지·`mark4.sh` 기반 설계안), **유형 5 — 스트리밍**(Kinesis/Flink Studio·MSK, set-02 task-2 module-2·4 — **정답지 대조 필수, 배포는 선택**).
 
 ## 학습 목표
 
 - [ ] SQS 큐 길이 → KEDA(Pod 1~5) → Karpenter(Node) 2단 스케일링 체인을 백지에서 그릴 수 있다
-- [ ] scaleDown `stabilizationWindowSeconds: 30` + NodePool `consolidateAfter: 60s`가 "2.5분 내 수렴" 채점과 한 쌍인 이유를 설명할 수 있다
+- [ ] scaleDown `stabilizationWindowSeconds: 15`(+ `Percent 100/15s`) + NodePool `consolidateAfter: 60s`가 "150초 내 수렴" 채점과 한 쌍인 이유를 설명할 수 있다
 - [ ] Pod requests 500m×5가 t3.medium 1대(allocatable ~1.9 vCPU)를 넘어 노드 2대가 유발되는 계산을 할 수 있다
 - [ ] Karpenter 디스커버리 태그(`karpenter.sh/discovery` 서브넷, `aws:eks:cluster-name` SG)의 역할을 안다
 - [ ] OTel Collector filelog(container 파서) → Loki OTLP → Grafana 로그 파이프라인을 구성할 수 있다
@@ -64,19 +64,14 @@ k8s 리소스(TGB, Karpenter 노드) → helm → `eksctl delete cluster` → `t
 
 - skills-2026
   - set-07/task-2
-    - module-3-eks-scaling 유형 3 정답
+    - module-3-eks-scaling 유형 3 정답 (실채점 전 항목 통과)
       - k8s
-        - **30-keda-scaledobject.yaml** pollingInterval 10 / stabilization 30
+        - **30-keda-scaledobject.yaml** scaleDown 15s/100% 오버라이드, pollingInterval 없음
         - **10-karpenter-nodepool.yaml** taint·consolidation·디스커버리 태그
         - **20-deployment.yaml** env 리터럴 3개·requests 500m
       - **README.md** / **README.linux.md** CloudShell 실측 런북
-    - module-4-container-logging 유형 4 정답
-      - k8s/logging
-        - **21-otel-configmap.yaml** filelog container 파서·otlphttp
-      - terraform
-        - **alb.tf** + `k8s/**/12-,30-*targetgroupbinding.yaml` — 이름 고정 ALB 패턴
-      - app
-        - **Dockerfile** 제공 Dockerfile 결함 대응 자체 빌드
+    - module-4/ 유형 4 — **정답지 미착수** (디렉터리 뼈대만)
+      - **task.md**·**mark.md**의 모듈 4 절 + mark/**mark4.sh** 가 유일한 근거
   - docs/src/content/docs/setlist/set-07/task-2
     - **notes.md** 실측 함정 모음
   - set-02/task-2

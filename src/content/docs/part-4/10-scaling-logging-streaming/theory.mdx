@@ -13,7 +13,7 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 ## 유형 3 — 이벤트 기반 오토스케일링 (SQS → KEDA → Karpenter)
 
-실측 근거: set-07 task-2 module-3 (ap-northeast-2, skm- 접두어)
+실측 근거: set-07 task-2 module-3 (ap-northeast-2, skm- 접두어) — 2026-07-31 실채점에서 `mark3.sh` 전 항목(3-1~3-7) 통과 확정
 
 ### ① 도식
 
@@ -27,7 +27,7 @@ flowchart LR
     NODE@{ icon: "logos:aws-ec2", form: "square", label: "앱 노드 1~2대+", pos: "b", h: 46, w: 46 }
 
     P --> SQS
-    SQS -->|"큐 길이 폴링 10s<br/>(IRSA: keda-operator)"| KEDA
+    SQS -->|"큐 길이 조회<br/>(IRSA: keda-operator)"| KEDA
     KEDA -->|"HPA로 replicas 조정"| DEP
     DEP -->|"Pending Pod 발생"| KARP
     KARP -->|"노드 프로비저닝<br/>t3.small/t3.medium"| NODE
@@ -46,8 +46,8 @@ flowchart LR
 1. **queueLength 5 → 메시지 100건이면 목표 Pod 20이지만 max 5로 캡** — 그래서 채점 기대가 "Pod ≥ 5".
 2. **Pod requests 500m × 5 = 2.5 vCPU > t3.medium allocatable ~1.9 vCPU** → 한 대에 다 못 들어가 Pending 발생 → Karpenter가 2대째를 띄운다. 채점 기대 "Node ≥ 2"는 이 계산에서 나온다. requests를 줄이면 노드가 안 늘어나 오답.
 
-:::danger[스케일인 시간 예산 2.5분 — 어느 값도 늘리지 않는다]
-ScaledObject `pollingInterval: 10`(빠른 감지) + HPA behavior `scaleDown.stabilizationWindowSeconds: 30`(기본 300 → 30) + NodePool `consolidateAfter: 60s`가 한 쌍. 기본값 300이면 Pod 축소만 5분이라 채점 시간 내 1/1 수렴에 실패한다.
+:::danger[스케일인 시간 예산 150초 — 어느 값도 늘리지 않는다]
+HPA behavior `scaleDown.stabilizationWindowSeconds: 15` + `policies: Percent 100/15s`(기본 300초 → 15초) + NodePool `consolidateAfter: 60s`가 한 쌍. purge를 HPA sync(~15초)가 감지해 ~35초에 Pod 1, consolidateAfter 60초 뒤 ~140초에 노드 1로 수렴한다(실채점 확정). 기본값 300이면 Pod 축소만 5분이라 150초 창을 구조적으로 못 맞춘다. ScaledObject에 `pollingInterval`은 두지 않는다 — `minReplicaCount ≥ 1`이면 1→N 스케일링이 전부 HPA 자체 폴링이라 무효 필드고, KEDA 2.20 webhook이 경고를 낸다(당일 변경으로 min=0이 되면 재도입).
 :::
 
 4. **`identityOwner: operator`** — SQS 조회 자격증명을 keda-operator SA의 IRSA에서 가져온다. 앱 Pod의 권한과 무관.
@@ -61,6 +61,7 @@ ScaledObject `pollingInterval: 10`(빠른 감지) + HPA behavior `scaleDown.stab
 - **Deployment env는 리터럴 정확 3개만** (`AWS_REGION`, `SQS_QUEUE_URL`, `PROCESSING_TIME`) — 채점이 name=value로 정확 비교. valueFrom·추가 env 금지.
 - 이름 정확 일치: `skm-order-queue`, `skm-eks-cluster`, `order-processor`, `order-scaler`, `skm-app-nodepool`, `skm-app-nodeclass`.
 - **addon 노드 1대(t3.medium) 용량이 빠듯** — coredns 2 + KEDA 3 + Karpenter 1. Karpenter requests를 0.5 vCPU/512Mi로 낮춰 설치한다.
+- **Karpenter는 `--set replicas=1`로 설치한다** — 차트 기본 2 + required podAntiAffinity(hostname) + 자기 NodePool 노드를 배제하는 nodeAffinity 때문에, 채점이 1/1/1로 고정한 addon 노드 1대에선 두 번째 Pod가 앉을 자리가 구조적으로 없어 `helm --wait`가 영원히 안 끝난다. 행 상태에서 중단하면 release가 `pending-upgrade`로 잠겨 재-upgrade가 막힌다 — `helm uninstall karpenter -n kube-system` 후 재설치.
 - **KEDA Pod가 Pending이면 차트 tolerations 스키마부터** — addon 노드가 taint돼 있어 toleration 필요. 차트 버전에 따라 키가 바뀌므로 `helm show values kedacore/keda | grep -A3 tolerations`로 확인.
 
 ### ⑤ 퀴즈
@@ -84,7 +85,7 @@ HPA `behavior.scaleDown.stabilizationWindowSeconds`를 명시하지 않으면 �
 
 ---
 
-기본값이면 purge 후 Pod 5→1 축소만 5분 이상 걸려, 최대 2.5분 대기인 스케일인 채점(Final Pods 1 / Final Nodes 1)에 실패한다. 스케일인 시간 예산은 세 값이 한 쌍이다: ScaledObject `pollingInterval: 10`(빠른 감지) + HPA `scaleDown.stabilizationWindowSeconds: 30`(기본 300 → 30) + NodePool `consolidateAfter: 60s`. **어느 값도 늘리지 않는다.**
+기본값이면 purge 후 Pod 5→1 축소만 5분 이상 걸려, 150초 창인 스케일인 채점(Final Pods 1 / Final Nodes 1)에 실패한다. 스케일인 시간 예산은 두 값이 한 쌍이다: HPA `scaleDown.stabilizationWindowSeconds: 15` + `Percent 100/15s`(기본 300 → 15)와 NodePool `consolidateAfter: 60s`. **어느 값도 늘리지 않는다.** 감지 하한은 ScaledObject 설정이 아니라 HPA sync 주기(~15초)다 — `pollingInterval`은 min ≥ 1이면 무효라 두지 않는다.
 </Quiz>
 
 <Quiz title="KEDA의 SQS 조회 자격증명">
@@ -134,7 +135,7 @@ Deployment `order-processor`에 configMapRef나 valueFrom으로 env를 하나 �
 
 ## 유형 4 — 컨테이너 로깅 파이프라인 (OTel → Loki → Grafana)
 
-실측 근거: set-07 task-2 module-4 (ap-northeast-1, o11y- 접두어)
+근거: set-07 task-2 module-4 (ap-northeast-1, o11y- 접두어) — **정답지 구현은 미착수**다. 아래는 과제지·채점지(`mark4.sh`) 기반 설계안이라, 이 유형만은 수치·차트 버전이 실측 전이다.
 
 ### ① 도식
 

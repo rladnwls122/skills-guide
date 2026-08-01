@@ -25,10 +25,10 @@ import { Steps } from '@astrojs/starlight/components';
 <Steps>
 
 1. **본 PC**: `module-3-eks-scaling/terraform` apply → `outputs.json` → eksctl/k8s/mark/provided+outputs.json을 zip으로 CloudShell 반입.
-2. **CloudShell**: eksctl·helm 설치 → `~/.skm-env` 환경변수 영구화 → `eksctl create cluster`(~20분, **탭 닫지 말 것**).
+2. **CloudShell**: eksctl·helm 설치 → `~/.skm-env` 환경변수 영구화 → `eksctl create cluster`(~20분, **탭 닫지 말 것**). 클러스터가 2개(모듈 3·4)가 되면 **모듈 전용 터미널에서 `KUBECONFIG`를 모듈 경로로 고정**하고 시작한다 — 터미널 1개 = 클러스터 1개. 공유 kubeconfig의 `use-context` 전환은 잊는 순간 엉뚱한 클러스터에 apply 된다.
 3. 앱 이미지 빌드/푸시 (제공 Dockerfile 그대로).
 4. **KEDA 2.20.1** 설치 — `serviceAccount.operator.create=false`(IRSA용 keda-operator 재사용) + addon taint `tolerations` 지정.
-5. **Karpenter 1.14.0** 설치(kube-system) — `controller.resources.requests.cpu=0.5, memory=512Mi`로 낮춤(addon 노드 용량).
+5. **Karpenter 1.14.0** 설치(kube-system) — `--set replicas=1`(차트 기본 2는 addon 노드 1대에서 `helm --wait` 무한 대기) + `controller.resources.requests.cpu=0.5, memory=512Mi`로 낮춤(addon 노드 용량).
 6. k8s 번호 순서 apply: namespace → **NodePool 먼저** → deployment(`<ECR_IMAGE>`/`<SQS_URL>` sed 치환) → ScaledObject.
 
 </Steps>
@@ -57,10 +57,11 @@ kubectl get nodes -l karpenter.sh/nodepool=skm-app-nodepool   # 1대로 수렴
 
 1. **KEDA Pod Pending** → 차트 tolerations 스키마 확인: `helm show values kedacore/keda --version 2.20.1 | grep -n -A3 tolerations`. 버전에 따라 키가 최상위/컴포넌트별로 바뀐다.
 2. **addon 노드 용량 초과** → Karpenter requests 0.5/512Mi 축소 설치. 그래도 Pending이면 KEDA metricServer/webhooks requests도 축소.
-3. **stabilizationWindowSeconds(30)·consolidateAfter(60s)를 늘리면** 스케일인 채점(2.5분) 실패.
+3. **scaleDown stabilizationWindowSeconds(15)·consolidateAfter(60s)를 늘리면** 스케일인 채점(150초 창) 실패. ScaledObject에 pollingInterval은 두지 않는다 — min ≥ 1이면 무효 필드라 KEDA webhook이 경고를 낸다.
 4. **deployment env는 리터럴 3개만** — valueFrom/추가 금지 (name=value 정확 비교).
 5. NodePool보다 deployment를 먼저 apply하면 앱 Pod가 스케줄될 노드가 없다 — 번호 순서 준수.
 6. 디스커버리 태그 누락(서브넷 `karpenter.sh/discovery`, SG `aws:eks:cluster-name`) → 노드가 영원히 안 뜬다.
+7. **Karpenter `helm --wait`가 안 끝나면 replicas부터** — 기본 2 + required podAntiAffinity라 addon 노드 1대에선 구조적으로 불가(`--set replicas=1`). 행 상태에서 중단했다면 release가 `pending-upgrade`로 잠긴다 → `helm uninstall karpenter -n kube-system` 후 재설치.
 
 ### A-4. 통과 기준
 
@@ -73,11 +74,15 @@ kubectl get nodes -l karpenter.sh/nodepool=skm-app-nodepool   # 1대로 수렴
 
 ## Part B — 유형 4 · 로깅 파이프라인 (ap-northeast-1, o11y-)
 
+:::caution[module-4 정답지는 미착수다]
+`set-07/task-2/module-4/`는 디렉터리 뼈대만 있다(근거는 task.md·mark.md의 모듈 4 절과 `mark/mark4.sh`). 아래 절차는 그 근거로 짠 **설계안**이라 차트 버전·파일 경로는 구현 시 달라질 수 있다 — 채점 항목과 순서 의존(LBC → TGB, Loki → OTel)을 익히는 용도로 읽고, 정답지가 구현되면 그 README를 우선한다.
+:::
+
 ### B-1. 절차 (순서 요약 — 순서 의존이 많다)
 
 <Steps>
 
-1. **본 PC**: `module-4-container-logging/terraform` apply (VPC + **이름 고정 ALB/TG** + ECR + LBC IAM) → zip 반입.
+1. **본 PC**: `module-4/terraform` apply (VPC + **이름 고정 ALB/TG** + ECR + LBC IAM) → zip 반입.
 2. **CloudShell**: `~/.o11y-env` → `eksctl create cluster`(~20분) → 노드 2대가 AZ a/c로 분산됐는지 확인.
 3. 이미지 빌드: **제공 app.py + 자체 app/Dockerfile** (제공 Dockerfile은 flask 미설치 → CrashLoop).
 4. **LBC 3.4.2 설치** ← TGB CRD가 여기서 생긴다. 이후에만 TGB apply 가능.
@@ -223,7 +228,7 @@ eksctl delete cluster --name o11y-cluster --region ap-northeast-1
 ```powershell
 # 본 PC
 cd skills-2026\set-07\task-2\module-3-eks-scaling\terraform ; terraform destroy -auto-approve
-cd ..\..\module-4-container-logging\terraform ; terraform destroy -auto-approve
+cd ..\..\module-4\terraform ; terraform destroy -auto-approve   # module-4를 배포했을 때만
 ```
 
 - destroy 후 EC2/ALB/NAT가 콘솔에 안 남았는지 눈으로 확인한다.

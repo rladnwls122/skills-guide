@@ -58,8 +58,8 @@ flowchart LR
 
 ### ④ 채점이 보는 상태
 
-:::danger[함정 — 이름이 mark에만 있다]
-**처리 Lambda 이름 `wsc2026-student-score-function`은 task.md에 없고 mark에만 있다.** mark.md/mark 스크립트를 반드시 읽고 이름을 그대로 쓴다. 임의 변경 금지.
+:::danger[이름이 mark에만 있던 함정 — 정정으로 해소됨]
+처리 Lambda 이름 `wsc2026-student-score-function`은 원래 task.md에 없고 mark에만 있었다. 이의 제기로 **과제지에 이름이 명시**됐다([정정 내역](/reference/errata/)). 이름 자체는 그대로이므로 구현은 바뀌지 않지만, "채점지에만 있는 이름"이라는 함정은 사라졌다 — 대신 **과제지에 없는 이름을 채점이 요구할 수 있다는 사실**은 유효하니 두 문서를 모두 읽는 습관은 유지한다.
 :::
 
 - **S3 폴더 마커는 `input/` 하나만 생성.** `processed/`·`error/`는 실행 후 실제 객체가 생겨 PRE가 뜬다. 마커(0바이트 객체)를 만들어두면 채점의 `aws s3 ls` 목록에 잉여 라인이 출력돼 오답.
@@ -190,8 +190,8 @@ flowchart TB
 - **CloudTrail·Config 첫 평가는 5~10분** — apply 직후 바로 채점하지 말 것. 급하면 `aws configservice start-config-rules-evaluation`으로 강제 트리거.
 - 기대 출력: stop+SSH 인바운드 추가 후 sleep 90 → `EC2 State: running`, `SG Inbound Count: 0`, required-tags NON_COMPLIANT 조회 결과 `None`.
 
-:::caution[과제지 오타는 그대로 유지]
-예: set-02의 `wsc2026-alaytics-ec2-role`(alaytics). 이름 정확 일치 채점이므로 "고쳐주면" 오답.
+:::caution[과제지에 적힌 이름은 그대로 쓴다 — 단, 정정 공지를 먼저 본다]
+이름 정확 일치 채점에서는 오타처럼 보여도 적힌 그대로 만든다. 다만 대표 사례였던 set-02의 `wsc2026-alaytics-ec2-role`(alaytics)은 **이의 제기로 오타가 수정됐고 채점 대상도 아니다** — [정정 내역](/reference/errata/)을 확인하지 않으면 이미 고쳐진 오타를 사양으로 착각한다.
 :::
 
 ### ⑤ 퀴즈
@@ -275,6 +275,114 @@ mark 스크립트가 1순위지만 task.md 항목은 수동 채점 가능성이 
 - [ ] EC2가 부팅 시 프로파일을 찾지 못해 Config required-tags 룰이 NON_COMPLIANT가 된다
 
 **인스턴스 프로파일 이름 = 역할 이름**을 유지한다. `-profile` 접미사를 붙이는 순간 role-remediation의 원복이 깨진다.
+</Quiz>
+
+<QuizResults confetti />
+
+---
+
+## 유형 2 변형 — set-08 module-3 (Cloud Event Handling, 싱가포르 ap-southeast-1)
+
+근거: set-08 task-2 과제지·채점기준표·`asgmt2_module3_check.sh`. `skills-2026`에 **정답지 구현이 없다** — 이 절이 근거 전부다.
+
+같은 "이벤트 자동복구" 패턴인데 범위가 훨씬 좁다. 감시 대상이 EC2 다섯 종류가 아니라 **보호 대상 Security Group 하나**이고, 복구 함수도 제공된 `remediate_security_group.py` 한 개다. 대신 채점이 보는 지점이 달라 그대로 옮겨 쓰면 잃는다.
+
+### ① 도식
+
+```mermaid
+flowchart LR
+    OP["누군가 인바운드 규칙 추가<br/>AuthorizeSecurityGroupIngress"]
+    SG@{ icon: "logos:aws-ec2", form: "square", label: "skills-ceh-protected-sg<br/>(skills-ceh-ec2 에 연결)<br/>제출 시점 인바운드 0개", pos: "b", h: 46, w: 46 }
+    CT@{ icon: "logos:aws-cloudtrail", form: "square", label: "CloudTrail<br/>skills-ceh-cloudtrail<br/>Logging Enabled", pos: "b", h: 46, w: 46 }
+    EB@{ icon: "logos:aws-eventbridge", form: "square", label: "EventBridge<br/>skills-ceh-sg-change-rule<br/>default 버스", pos: "b", h: 46, w: 46 }
+    FN@{ icon: "logos:aws-lambda", form: "square", label: "skills-ceh-remediate-fn<br/>Python 3.12 · 30초 이상", pos: "b", h: 46, w: 46 }
+    SNS@{ icon: "logos:aws-sns", form: "square", label: "SNS<br/>skills-ceh-alert-topic<br/>Standard", pos: "b", h: 46, w: 46 }
+    JUDGE["채점 3-5<br/>lambda invoke 직접 호출"]
+
+    OP --> SG
+    SG -->|"API 호출 기록"| CT
+    CT --> EB
+    EB -->|Invoke| FN
+    FN -->|"전 인바운드 revoke"| SG
+    FN --> SNS
+    JUDGE -.->|"EventBridge 우회"| FN
+```
+
+### ② 채점이 어디를 보나 — 배선과 동작을 따로 본다
+
+여기가 set-02 모듈 3과 갈리는 핵심이다. 채점 3-5는 EventBridge 경로를 타지 않고 **`aws lambda invoke`로 합성 페이로드를 직접 던진다**.
+
+```bash
+jq -n --arg sg "$PROTECTED_SECURITY_GROUP_ID" \
+  '{detail:{eventName:"AuthorizeSecurityGroupIngress",requestParameters:{groupId:$sg}}}'
+```
+
+- **동작(3-5)**: 직접 호출 → 180초 안에 인바운드 0개 복귀 + `/aws/lambda/skills-ceh-remediate-fn` 로그 그룹 존재.
+- **배선(3-4)**: `get-trail-status`(로깅 활성), `describe-rule`(이벤트 패턴), `list-targets-by-rule`(타깃이 Lambda), `get-policy`(Lambda 리소스 정책에 EventBridge 허용) — **정적 조회만** 한다.
+
+즉 EventBridge가 실제로 발화하는지는 아무도 확인하지 않는다. 그래서 **배선이 끊겨 있어도 3-5는 통과하고 3-4만 잃는다.** 반대로 배선만 맞추고 함수 로직이 틀리면 3-5를 잃는다. 두 항목을 따로 점검한다 — 직접 호출로 함수를 검증하고, 콘솔에서 실제 규칙 추가로 배선을 검증한다.
+
+### ③ 핵심 연결 고리
+
+1. **무한루프 차단 장치가 필요 없다.** 복구 동작은 `RevokeSecurityGroupIngress`인데 룰이 잡는 건 `AuthorizeSecurityGroupIngress`뿐이라 재발화가 구조적으로 일어나지 않는다. set-02 모듈 3이 `anything-but`과 함수 내부 비교로 2중 차단하던 것과 대비된다 — **패턴이 같아 보여도 루프 위험은 이벤트 이름이 결정한다.**
+2. **제공 코드는 groupId가 다르면 아무것도 안 한다.** `remediate_security_group.py`는 이벤트에서 뽑은 groupId와 환경변수 `PROTECTED_SECURITY_GROUP_ID`를 비교해 다르면 `IGNORED`로 즉시 반환한다. 환경변수에 SG **ID**(`sg-...`)가 아니라 이름을 넣으면 영원히 IGNORED만 나온다.
+3. **함수 파일명이 핸들러에 박혀 있다.** 핸들러가 `remediate_security_group.lambda_handler`이므로 zip 안 파일명이 `remediate_security_group.py`여야 한다. `index.py`로 바꾸면 실행 자체가 안 된다.
+4. **SNS 발행 실패는 복구를 막지 않는다.** 제공 코드는 revoke를 끝낸 뒤 publish를 `try`로 감싸 실패해도 `SNS_PUBLISH_FAILED`를 결과에 담고 정상 반환한다 — 3-5의 인바운드 0개는 통과하는데 알림만 조용히 죽는 상태가 가능하다. IAM에 `sns:Publish`를 빠뜨렸는지는 결과 JSON의 `publishStatus`로 확인한다.
+5. **제출 시점 인바운드는 0개.** 채점 3-2가 `IpPermissions`가 빈 배열인지 직접 본다. 테스트로 추가한 TCP/22는 반드시 지우고 제출한다(과제지도 "180초 이내 제거"를 명시).
+
+### ④ 고정 이름·값
+
+| 대상 | 값 |
+|---|---|
+| VPC / CIDR | `skills-ceh-vpc` / `10.73.0.0/16` |
+| EC2 / SG | `skills-ceh-ec2` / `skills-ceh-protected-sg` |
+| SNS | `skills-ceh-alert-topic` (Standard) |
+| Lambda | `skills-ceh-remediate-fn` · Python 3.12 · 핸들러 `remediate_security_group.lambda_handler` · 타임아웃 30초 이상 |
+| 환경변수 | `PROTECTED_SECURITY_GROUP_ID`(SG ID) · `SNS_TOPIC_ARN` |
+| CloudTrail / 룰 | `skills-ceh-cloudtrail`(Logging Enabled) / `skills-ceh-sg-change-rule`(default 버스) |
+| IAM 권한 | Security Group 조회·수정, SNS 발행, CloudWatch Logs 기록 |
+
+### ⑤ 퀴즈
+
+<Quiz title="배선과 동작이 따로 채점된다">
+EventBridge 룰의 이벤트 패턴을 잘못 써서 실제로는 한 번도 발화하지 않는다. 채점 결과는?
+
+- [x] 3-5는 통과하고 3-4를 잃는다 — 3-5는 `lambda invoke`로 함수를 직접 호출하므로 EventBridge를 거치지 않고, 3-4가 룰 패턴·타깃·Lambda 리소스 정책을 정적으로 조회한다
+- [ ] 3-4·3-5 모두 실패한다 — 복구가 실제로 일어나지 않으므로
+  > 3-5의 복구는 EventBridge가 아니라 채점자의 직접 호출이 일으킨다. 룰이 죽어 있어도 함수가 정상이면 인바운드는 0개가 된다.
+- [ ] 3-4는 통과하고 3-5를 잃는다
+  > 반대다. 정적 조회로 확인되는 쪽이 3-4이므로 패턴이 틀리면 3-4가 먼저 깨진다.
+- [ ] 둘 다 통과한다 — 채점이 룰의 실제 발화를 보지 않으므로
+  > 발화는 안 보지만 패턴 문자열 자체는 `describe-rule`로 본다. 잘못된 패턴은 그 자리에서 드러난다.
+
+동작(3-5)과 배선(3-4)이 서로 다른 방법으로 채점된다. 하나가 통과했다고 다른 하나가 안전하지 않다 — 직접 호출로 함수를, 실제 규칙 추가로 룰을 각각 검증한다.
+</Quiz>
+
+<Quiz title="이 모듈에 무한루프 차단이 없는 이유">
+set-02 모듈 3은 복구 Lambda의 원복 동작이 다시 이벤트를 만드는 무한루프를 `anything-but` 패턴과 함수 내부 비교로 2중 차단했다. set-08 module-3에는 그런 장치가 없어도 되는 이유는?
+
+- [x] 룰이 감지하는 이벤트는 `AuthorizeSecurityGroupIngress` 하나인데 복구 동작은 `RevokeSecurityGroupIngress`라 이름이 달라 재발화하지 않는다
+- [ ] Lambda가 자기 자신이 만든 이벤트는 CloudTrail에 기록하지 않기 때문
+  > CloudTrail은 호출 주체를 가리지 않고 기록한다. Lambda의 API 호출도 그대로 남는다.
+- [ ] EventBridge default 버스는 같은 리소스에 대한 연속 이벤트를 자동으로 합치기 때문
+  > 그런 중복 제거 기능은 없다.
+- [ ] 제공 코드가 groupId를 비교해 IGNORED로 반환하므로 루프가 끊긴다
+  > groupId 비교는 **다른** SG의 이벤트를 걸러내는 장치다. 보호 대상 SG 자신의 이벤트는 이 비교를 통과한다 — 루프를 막는 건 이벤트 이름 차이다.
+
+패턴이 같아 보여도 루프 위험은 **복구 동작이 감시 대상 이벤트를 다시 만드느냐**로 결정된다. 감지가 Authorize, 복구가 Revoke면 애초에 겹치지 않는다.
+</Quiz>
+
+<Quiz title="환경변수에 무엇을 넣나">
+`PROTECTED_SECURITY_GROUP_ID`에 `skills-ceh-protected-sg`(Name 태그 값)를 넣었다. 무슨 일이 일어나나?
+
+- [x] 제공 코드가 이벤트의 `groupId`(`sg-...`)와 문자열 비교를 하므로 절대 일치하지 않아 매번 `IGNORED`로 반환하고, 인바운드가 복구되지 않는다
+- [ ] boto3가 이름을 자동으로 ID로 변환해 정상 동작한다
+  > 코드는 boto3를 거치지 않고 문자열을 직접 비교한다. 변환 지점 자체가 없다.
+- [ ] `describe_security_groups(GroupIds=[...])`에서 예외가 나서 함수가 실패로 끝난다
+  > 그 호출까지 가지 못한다. groupId 비교에서 먼저 `IGNORED`로 반환된다.
+- [ ] Name 태그로도 조회되므로 동작에는 문제가 없고 로그만 다르게 찍힌다
+
+값은 반드시 **Security Group ID**(`sg-...`)다. 실패가 예외가 아니라 조용한 `IGNORED`로 나타나 더 늦게 발견된다 — 함수 결과 JSON의 `status`를 직접 확인한다.
 </Quiz>
 
 <QuizResults confetti />

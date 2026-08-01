@@ -15,6 +15,7 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 - [ ] scaleDown `stabilizationWindowSeconds: 15`(+ `Percent 100/15s`) + NodePool `consolidateAfter: 60s`가 "150초 내 수렴" 채점과 한 쌍인 이유를 설명할 수 있다
 - [ ] Pod requests 500m×5가 t3.medium 1대(allocatable ~1.9 vCPU)를 넘어 노드 2대가 유발되는 계산을 할 수 있다
 - [ ] Karpenter 디스커버리 태그(`karpenter.sh/discovery` 서브넷, `aws:eks:cluster-name` SG)의 역할을 안다
+- [ ] set-08 module-4(Fargate 컨트롤러 + SQS)가 set-07 module-3과 갈리는 지점 — `min 0`이면 `pollingInterval`이 유효해지는 이유, TriggerAuthentication, nodeSelector 2개 — 을 설명할 수 있다
 - [ ] OTel Collector filelog(container 파서) → Loki OTLP → Grafana 로그 파이프라인을 구성할 수 있다
 - [ ] LogQL `{k8s_namespace_name="..."} | json | level="ERROR"` 쿼리와 라벨 승격 원리를 설명할 수 있다
 - [ ] Kinesis `wsc2026-order-stream`(`ACTIVE`/`ON_DEMAND`)와 Flink `wsc2026-analytics-flink`(`READY`/`ZEPPELIN-FLINK-3_0`)가 채점하는 값을 정확히 말할 수 있다

@@ -133,6 +133,123 @@ Deployment `order-processor`에 configMapRef나 valueFrom으로 env를 하나 �
 
 ---
 
+## 유형 3 변형 — set-08 module-4 (Fargate 컨트롤러 + SQS, 오레곤 us-west-2)
+
+근거: set-08 task-2 과제지·채점기준표·`asgmt2_module4_check.sh`. `skills-2026`에 **정답지 구현이 없다**.
+
+같은 SQS → KEDA → Karpenter 체인인데 **컨트롤러가 Fargate에 뜨고 파라미터가 정반대**다. set-07 module-3을 그대로 옮기면 거의 전 항목이 어긋난다 — 두 세트를 나란히 놓고 무엇이 왜 갈리는지 보는 것이 이 절의 목적이다.
+
+### ① 도식
+
+```mermaid
+flowchart LR
+    SQS@{ icon: "logos:aws-sqs", form: "square", label: "SQS skills-sqs-queue<br/>Standard · 가시성 30초 이상", pos: "b", h: 46, w: 46 }
+    subgraph FG["<span class='icon--logos icon--logos--aws-fargate'></span> Fargate (컨트롤러 전용)"]
+        KEDA@{ icon: "k8s:keda", form: "square", label: "keda/keda-operator<br/>프로파일 skills-sqs-fp-keda", pos: "b", h: 46, w: 46 }
+        KARP@{ icon: "k8s:karpenter", form: "square", label: "karpenter/karpenter<br/>프로파일 skills-sqs-fp-karpenter", pos: "b", h: 46, w: 46 }
+    end
+    SO["ScaledObject sqs-worker-scaledobject<br/>queueLength 2 · min 0 · max 6<br/>+ TriggerAuthentication"]
+    DEP@{ icon: "k8s:deploy", form: "square", label: "skills-sqs/sqs-worker<br/>app=sqs-worker", pos: "b", h: 46, w: 46 }
+    NODE@{ icon: "logos:aws-ec2", form: "square", label: "Karpenter EC2 Worker Node<br/>skills-sqs-nodepool<br/>라벨 skills-nodepool=event-worker", pos: "b", h: 46, w: 46 }
+
+    SQS -->|"큐 길이"| KEDA
+    KEDA --> SO
+    SO -->|"replicas 0~6"| DEP
+    DEP -->|"Pending Pod"| KARP
+    KARP -->|"프로비저닝"| NODE
+    DEP -->|"nodeSelector 2개로 고정"| NODE
+```
+
+컨트롤러(KEDA·Karpenter)는 Fargate, 워커는 Karpenter EC2. **Karpenter가 앉을 노드를 Karpenter가 만들어야 하는 닭-달걀 문제를 Fargate로 푸는 구조**다. set-07은 같은 문제를 "채점이 고정한 addon 노드그룹 1대"로 풀었다 — 그래서 set-07에는 `helm --set replicas=1` 함정이 있었고, 여기서는 Fargate가 Pod마다 노드를 주므로 그 함정이 없다.
+
+### ② set-07 module-3과 무엇이 갈리나
+
+| 항목 | set-07 module-3 | **set-08 module-4** |
+|---|---|---|
+| 컨트롤러 위치 | addon 노드그룹(EC2, 1/1/1 고정) | **Fargate 프로파일 2개** — 네임스페이스 `keda`·`karpenter` |
+| Karpenter 네임스페이스 | `kube-system` | **`karpenter`** |
+| `minReplicaCount` | 1 | **0** |
+| `pollingInterval` | **두지 않는다**(min ≥ 1이면 무효, webhook 경고) | **15초 이하로 반드시 둔다** — min 0이라 0↔1 활성화를 오퍼레이터가 직접 폴링한다 |
+| `cooldownPeriod` | 미지정 | **30초 이하** |
+| `queueLength` / max | 5 / 5 | **2 / 6** |
+| SQS 인증 | `identityOwner: operator` | **`TriggerAuthentication`**(`sqs-worker-trigger-auth`) |
+| 노드 선택 | nodeSelector 1개 + toleration | **nodeSelector 2개**(`karpenter.sh/nodepool`·`skills-nodepool`) |
+| 컨테이너 이미지 | 제공 Dockerfile 그대로 | **Dockerfile 직접 작성**(제공 `worker.py` + boto3) |
+
+:::danger[pollingInterval — 세트가 바뀌면 정답이 뒤집힌다]
+set-07에서는 `pollingInterval`을 **지우는 것**이 정답이었다. `minReplicaCount ≥ 1`이면 1→N 스케일링이 전부 HPA 폴링이라 이 필드가 무효고 KEDA 2.20 webhook이 경고를 낸다. set-08은 **`min 0`**이라 정반대다 — 0↔1 활성화는 HPA가 아니라 KEDA 오퍼레이터가 트리거를 직접 폴링해 판단하므로 `pollingInterval`이 실제 감지 지연을 결정하고, 과제지가 15초 이하를 요구한다. **필드 하나의 유효 여부가 `minReplicaCount` 값에 달려 있다** — 외운 값을 옮기지 말고 min이 0인지부터 본다.
+:::
+
+### ③ 핵심 연결 고리
+
+1. **워커는 Fargate에 뜨면 안 된다.** Fargate 프로파일 셀렉터가 `keda`·`karpenter` 네임스페이스만 잡으므로 `skills-sqs` 네임스페이스는 자동으로 EC2 쪽이다. 여기에 nodeSelector 2개(`karpenter.sh/nodepool=skills-sqs-nodepool`, `skills-nodepool=event-worker`)를 걸어 Karpenter 노드로 고정한다 — 채점 4-5가 이 라벨 조합으로 노드와 Pod를 조회한다.
+2. **NodePool 라벨은 Karpenter가 노드에 붙여 주는 값이다.** `skills-nodepool=event-worker`를 NodePool의 `spec.template.metadata.labels`에 선언해야 프로비저닝된 노드에 붙고, 그래야 워커의 nodeSelector가 만족된다. 선언을 빠뜨리면 Pod가 영원히 Pending이다.
+3. **`spec.disruption.consolidationPolicy`가 필수 필드다.** 과제지가 명시적으로 요구하고, 채점 4-5가 NodePool YAML 전문을 덤프해 확인한다.
+4. **IRSA는 3개 ServiceAccount 전부.** `keda/keda-operator`, `karpenter/karpenter`, `skills-sqs/sqs-worker-sa`에 `eks.amazonaws.com/role-arn` annotation이 있어야 한다(채점 4-2가 SA YAML을 직접 본다). 워커도 SQS를 직접 호출하므로 워커 SA에도 권한이 필요하다 — set-07은 KEDA만 큐를 읽었지만 여기서는 워커가 `receive_message`·`delete_message`를 한다.
+5. **채점 스크립트가 kubectl을 설치해 주지 않는다.** 채점지 0번이 "CloudShell에 kubectl이 없으면 EKS 버전에 맞춰 직접 설치"를 채점 준비 절차로 둔다. 클러스터 엔드포인트도 CloudShell에서 접근 가능해야 한다(퍼블릭 엔드포인트 필요).
+6. **메시지 12개 → Pod 6개는 계산된 값이다.** `queueLength 2`에 12건이면 목표 6, `max 6`에서 정확히 상한. 180초 안에 Pod가 늘고 Karpenter 노드가 뜨며 큐 depth가 줄어야 한다. `PROCESSING_SECONDS`를 크게 잡으면 큐가 안 줄고, 작게 잡으면 Karpenter가 노드를 띄우기 전에 처리가 끝나 노드 증가를 못 보여 준다 — 과제지 권장값 5를 쓴다.
+
+### ④ 고정 이름·값
+
+| 대상 | 값 |
+|---|---|
+| 리전 / 클러스터 | `us-west-2` / `skills-sqs-cluster` |
+| Fargate 프로파일 | `skills-sqs-fp-keda`(ns `keda`) · `skills-sqs-fp-karpenter`(ns `karpenter`) |
+| SQS | `skills-sqs-queue` · Standard · 가시성 제한 시간 30초 이상 |
+| 워커 | ns `skills-sqs` / Deployment `sqs-worker` / SA `sqs-worker-sa` / 라벨 `app=sqs-worker` |
+| 워커 환경변수 | `SQS_QUEUE_URL` · `AWS_REGION` · `PROCESSING_SECONDS`(5 권장) |
+| KEDA | ns `keda` / Deployment `keda-operator` / `sqs-worker-scaledobject` / `sqs-worker-trigger-auth` |
+| Karpenter | ns `karpenter` / Deployment `karpenter` / NodePool `skills-sqs-nodepool` / EC2NodeClass `skills-sqs-nodeclass` |
+| 버전 | Karpenter 1.x · KEDA 2.x |
+
+### ⑤ 퀴즈
+
+<Quiz title="pollingInterval을 지워야 하나 둬야 하나">
+set-07 module-3에서는 ScaledObject의 `pollingInterval`을 삭제하는 것이 정답이었다. set-08 module-4에서 같은 판단을 적용하면?
+
+- [x] 틀린다 — set-08은 `minReplicaCount: 0`이라 0↔1 활성화를 KEDA 오퍼레이터가 트리거를 직접 폴링해 판단하므로 `pollingInterval`이 실제 감지 지연을 결정하고, 과제지가 15초 이하를 요구한다
+- [ ] 맞는다 — `pollingInterval`은 어떤 경우에도 HPA 폴링에 밀려 무효인 필드다
+  > 무효가 되는 건 `minReplicaCount ≥ 1`일 때뿐이다. min 0에서는 활성화 판단 주체가 HPA가 아니라 KEDA 오퍼레이터다.
+- [ ] 맞는다 — Fargate에서는 폴링 주기 설정이 무시되기 때문
+  > 컨트롤러가 어디에 뜨는지와 폴링 주기는 무관하다.
+- [ ] 둘 다 상관없다 — 채점은 min·max만 보므로
+  > 과제지가 `pollingInterval 15초 이하`를 명시하고, 채점 4-4가 ScaledObject YAML 전문을 덤프해 확인한다.
+
+**필드의 유효 여부가 다른 필드 값에 달려 있는 사례**다. 세트가 바뀌면 외운 값이 아니라 `minReplicaCount`가 0인지부터 본다.
+</Quiz>
+
+<Quiz title="컨트롤러를 Fargate에 올리는 이유">
+KEDA·Karpenter를 Fargate 프로파일로 띄우는 구조가 해결하는 문제는?
+
+- [x] Karpenter가 EC2 노드를 만드는 컨트롤러인데 정작 자신이 앉을 노드가 필요하다는 닭-달걀 문제 — Fargate는 Pod마다 컴퓨트를 주므로 관리형 노드그룹 없이 컨트롤러를 띄울 수 있다
+- [ ] Fargate가 EC2보다 저렴해서 컨트롤러 비용을 줄이려는 것
+  > 비용 최적화가 아니라 부트스트랩 구조의 문제다. 실제로 상시 구동 워크로드는 Fargate가 더 비싼 경우가 많다.
+- [ ] KEDA가 EC2 노드에서는 SQS를 폴링할 수 없기 때문
+  > set-07 module-3의 KEDA는 EC2 노드그룹 위에서 정상적으로 폴링한다.
+- [ ] Fargate에서만 IRSA를 쓸 수 있기 때문
+  > IRSA는 컴퓨트 종류와 무관하다. 두 세트 모두 IRSA를 쓴다.
+
+set-07은 같은 문제를 "채점이 1/1/1로 고정한 addon 노드그룹"으로 풀었고, 그 대가로 Karpenter를 `replicas=1`로 낮춰야 하는 함정이 생겼다. Fargate는 Pod마다 컴퓨트를 주므로 그 제약 자체가 없다.
+</Quiz>
+
+<Quiz title="워커 Pod가 계속 Pending이다">
+워커 Deployment에 nodeSelector `karpenter.sh/nodepool=skills-sqs-nodepool, skills-nodepool=event-worker`를 걸었는데 Karpenter가 노드를 띄운 뒤에도 Pod가 Pending이다. 가장 먼저 볼 곳은?
+
+- [x] NodePool의 `spec.template.metadata.labels`에 `skills-nodepool=event-worker`가 선언돼 있는지 — Karpenter가 노드에 붙여 주는 라벨이라 선언이 없으면 셀렉터 두 개 중 하나가 영원히 안 맞는다
+- [ ] Fargate 프로파일 셀렉터에 `skills-sqs` 네임스페이스를 추가해야 한다
+  > 반대다. 워커는 Fargate가 아니라 Karpenter EC2 노드에서 돌아야 하므로 `skills-sqs`를 프로파일에 넣으면 요구사항 위반이다.
+- [ ] `karpenter.sh/nodepool` 라벨을 노드에 수동으로 붙인다
+  > 그 라벨은 Karpenter가 자동으로 붙인다. 수동으로 붙이면 다음 노드에서 또 막힌다.
+- [ ] EC2NodeClass의 이름을 nodeSelector 값과 맞춘다
+  > nodeSelector가 참조하는 것은 NodePool 이름과 사용자 정의 라벨이지 EC2NodeClass 이름이 아니다.
+
+셀렉터가 두 개면 **양쪽 라벨이 모두 노드에 실제로 붙어야** 한다. `karpenter.sh/nodepool`은 Karpenter가 자동으로 붙이지만 `skills-nodepool=event-worker`는 NodePool 템플릿에 직접 선언해야 생긴다.
+</Quiz>
+
+<QuizResults confetti />
+
+---
+
 ## 유형 4 — 컨테이너 로깅 파이프라인 (OTel → Loki → Grafana)
 
 근거: set-07 task-2 module-4 (ap-northeast-1, o11y- 접두어) — **정답지 구현은 미착수**다. 아래는 과제지·채점지(`mark4.sh`) 기반 설계안이라, 이 유형만은 수치·차트 버전이 실측 전이다.
@@ -342,8 +459,9 @@ flowchart LR
 - 4-3 MSK `wsc2026-msk-cluster` / `ACTIVE` / `3.6.0` / `kafka.t3.small` / `Sasl.Iam.Enabled` **`True`**.
 - 4-4 두 Lambda의 이벤트 소스 매핑 상태가 **모두** `Enabled`.
 - 4-5-A DynamoDB 스캔 결과가 `temperature.S`/`status.S`로 조회(문자열 저장 확인).
-- 4-5-B `timestamp`가 `YYYY-MM-DDTHH:mm:ss±HH:mm` 형식(producer가 계속 돌고 있다는 증거).
-- 이름 오타도 원문 유지: `wsc2026-alaytics-ec2-role`(과제지 오타) — 고치면 오답.
+- 4-5-B `--output json` 으로 `SENSOR-002` 의 `sensorId`·`timestamp` **두 항목만** 조회하고, `timestamp`가 ISO 8601 KST(`2026-06-01T18:28:24+09:00`) 형식이면 정답(producer가 계속 돌고 있다는 증거). 정정 전 명령은 `--output table`·`max-items 3` 이었다 — [정정 내역](/reference/errata/) 참고.
+- 4-1 의 S3 버킷 ARN 은 **비번호 부분을 제외하고** 채점한다.
+- `wsc2026-alaytics-ec2-role` 의 오타는 정정으로 수정됐고 이 이름은 채점 대상이 아니다. "오타는 그대로" 원칙 자체는 유효하되 정정 공지를 먼저 본다.
 
 ### ⑤ 퀴즈
 
@@ -414,7 +532,7 @@ MSK 모듈에서 Lambda consumer가 `temperature`를 Number 타입으로 저장�
 
 ---
 
-한 글자 차이지만 통일하거나 "고쳐주면" 동작이 깨진다. 이름을 원문 그대로 유지하는 원칙은 과제지 오타에도 그대로 적용된다 — set-02의 `wsc2026-alaytics-ec2-role`(alaytics)을 고치면 이름 정확 일치 채점에서 오답이다.
+한 글자 차이지만 통일하거나 "고쳐주면" 동작이 깨진다. 제공 문서의 이름을 원문 그대로 유지하는 원칙은 과제지에도 그대로 적용된다 — 다만 오타의 대표 사례였던 set-02의 `wsc2026-alaytics-ec2-role`(alaytics)은 정정으로 수정됐고 채점 대상도 아니다([정정 내역](/reference/errata/)). 이름을 확정하기 전에 정정 공지를 먼저 본다.
 </Quiz>
 
 <Quiz title="bare 타임스탬프와 TIMESTAMP_LTZ">

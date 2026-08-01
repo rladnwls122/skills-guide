@@ -169,11 +169,11 @@ graph LR
 | 구성 | set-02 | set-03 | set-07 |
 |---|---|---|---|
 | WAF | 없음 | 있음 — 커스텀 SQLi/XSS 매치 규칙 + Rate(200/60s), 로깅 없음. 배점 1.5/30 | 있음 — 관리형 규칙 그룹(CommonRuleSet+KnownBadInputsRuleSet) + Rate(50/60s) + 커스텀 응답(403) + 로깅. 배점 2.5/30 |
-| 관측성 | 있음 — Prometheus·Fluent Bit 이름 미지정(도구 자유), Grafana 대시보드 5개 패널만 지정. 배점 3.5/30 | 있음 — Prometheus+Alertmanager+Node Exporter+Fluent Bit+Grafana 스택 지정, 부하 생성 후 실시간 자동 채점. 배점 5.2/30 | 있음 — Fluent Bit+Prometheus+Grafana 스택 지정, 대시보드 패널 구성·배치까지 정밀 채점. 배점 5.0/30(Observability 2.0 + Grafana 1.5 + Log Pipeline Test 1.5) |
+| 관측성 | 있음 — Prometheus 이름 미지정(도구 자유), Grafana 대시보드 5개 패널만 지정. 배점 3.5/30. **Pod 로그 CloudWatch 전송 요구는 정정으로 삭제**(채점 대상 아님 — [정정 내역](/reference/errata/)) → Fluent Bit 불필요 | 있음 — Prometheus+Alertmanager+Node Exporter+Fluent Bit+Grafana 스택 지정, 부하 생성 후 실시간 자동 채점. 배점 5.2/30 | 있음 — Fluent Bit+Prometheus+Grafana 스택 지정, 대시보드 패널 구성·배치까지 정밀 채점. 배점 5.0/30(Observability 2.0 + Grafana 1.5 + Log Pipeline Test 1.5) |
 | KMS 키 정책 | root principal 위임 허용 | **root·`kms:*` 금지**(root-less, lockout safety check 통과 필요) — [PART-1 모듈 02 이론 3절](/part-1/02-kms-s3-cloudfront/theory/) | root 위임 허용(Platform 키 1개만 WAF 로그용 us-east-1 MRK) |
 | 기타 | — | Software Stack에 EC2 명시(본문 요구사항은 EKS 노드그룹으로 충족 — 별도 EC2 자원 없음) | Audit IAM Role(External ID 필수, 최대 세션 1시간) 별도 절 |
 
-관측성은 **세 후보 전부에 있다** — "set-02만 있고 나머지는 없다"가 아니라, set-02는 도구를 자유롭게 고르고 수동 채점 위주라 부담이 적고, set-03·set-07은 Prometheus+Grafana+Fluent Bit 스택이 못박혀 있고 mark.sh가 부하를 직접 생성해 실시간으로 확인한다는 게 실제 차이다. WAF는 set-03·set-07 배점이 각각 1.5·2.5인데 관측성은 5.2·5.0이다 — WAF보다 관측성 쪽 배점이 더 크다.
+관측성은 **세 후보 전부에 있다** — "set-02만 있고 나머지는 없다"가 아니라, set-02는 도구를 자유롭게 고르고 수동 채점 위주라 부담이 적고, set-03·set-07은 Prometheus+Grafana+Fluent Bit 스택이 못박혀 있고 mark.sh가 부하를 직접 생성해 실시간으로 확인한다는 게 실제 차이다. set-02의 부담은 정정으로 한 번 더 줄었다 — "Pod 로그를 CloudWatch Logs로 전송" 문구가 최종 요구사항에서 빠진 잔여 문구로 확인되어 삭제됐고, 채점 대상이 아니다. **set-02가 선정되면 로그 파이프라인(Fluent Bit·CloudWatch)에 시간을 쓰지 않는다.** WAF는 set-03·set-07 배점이 각각 1.5·2.5인데 관측성은 5.2·5.0이다 — WAF보다 관측성 쪽 배점이 더 크다.
 
 **④ 세트가 확정되면 먼저 볼 것**:
 

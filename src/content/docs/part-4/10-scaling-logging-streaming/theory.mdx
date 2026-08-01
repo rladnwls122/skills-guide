@@ -141,7 +141,7 @@ Deployment `order-processor`에 configMapRef나 valueFrom으로 env를 하나 �
 
 ## 유형 3 변형 — set-08 module-4 (Fargate 컨트롤러 + SQS, 오레곤 us-west-2)
 
-근거: set-08 task-2 과제지·채점기준표·`asgmt2_module4_check.sh`. `skills-2026`에 **정답지 구현이 없다**.
+근거: set-08 task-2 과제지, 2026-08-01 정정본의 판정 기준, `asgmt2_module4_check.sh`. 정답 구현은 `skills-2026`의 브랜치 `set-08/task-2`, `set-08/task-2/module-4-sqs-scaling`(`k8s/`·`app/Dockerfile`·Terraform)에 있다.
 
 같은 SQS → KEDA → Karpenter 체인인데 **컨트롤러가 Fargate에 뜨고 파라미터가 정반대**다. set-07 module-3을 그대로 옮기면 거의 전 항목이 어긋난다 — 두 세트를 나란히 놓고 무엇이 왜 갈리는지 보는 것이 이 절의 목적이다.
 
@@ -190,10 +190,17 @@ set-07에서는 `pollingInterval`을 **지우는 것**이 정답이었다. `minR
 
 1. **워커는 Fargate에 뜨면 안 된다.** Fargate 프로파일 셀렉터가 `keda`·`karpenter` 네임스페이스만 잡으므로 `skills-sqs` 네임스페이스는 자동으로 EC2 쪽이다. 여기에 nodeSelector 2개(`karpenter.sh/nodepool=skills-sqs-nodepool`, `skills-nodepool=event-worker`)를 걸어 Karpenter 노드로 고정한다 — 채점 4-5가 이 라벨 조합으로 노드와 Pod를 조회한다.
 2. **NodePool 라벨은 Karpenter가 노드에 붙여 주는 값이다.** `skills-nodepool=event-worker`를 NodePool의 `spec.template.metadata.labels`에 선언해야 프로비저닝된 노드에 붙고, 그래야 워커의 nodeSelector가 만족된다. 선언을 빠뜨리면 Pod가 영원히 Pending이다.
-3. **`spec.disruption.consolidationPolicy`가 필수 필드다.** 과제지가 명시적으로 요구하고, 채점 4-5가 NodePool YAML 전문을 덤프해 확인한다.
-4. **IRSA는 3개 ServiceAccount 전부.** `keda/keda-operator`, `karpenter/karpenter`, `skills-sqs/sqs-worker-sa`에 `eks.amazonaws.com/role-arn` annotation이 있어야 한다(채점 4-2가 SA YAML을 직접 본다). 워커도 SQS를 직접 호출하므로 워커 SA에도 권한이 필요하다 — set-07은 KEDA만 큐를 읽었지만 여기서는 워커가 `receive_message`·`delete_message`를 한다.
-5. **채점 스크립트가 kubectl을 설치해 주지 않는다.** 채점지 0번이 "CloudShell에 kubectl이 없으면 EKS 버전에 맞춰 직접 설치"를 채점 준비 절차로 둔다. 클러스터 엔드포인트도 CloudShell에서 접근 가능해야 한다(퍼블릭 엔드포인트 필요).
+3. **`spec.disruption.consolidationPolicy`가 필수 필드다.** 과제지가 명시적으로 요구하고, 채점 4-5가 이 필드가 비어 있지 않은지 본다. 정정본에서 조회가 YAML 전문 덤프에서 **`jq` 필드 추출**로 바뀌어 `name`·`labels`·`nodeClassRef`·`requirements`·`consolidationPolicy` 다섯 개만 출력된다 — 그중 하나가 비면 곧바로 감점이다.
+4. **IRSA는 3개 ServiceAccount 전부.** `keda/keda-operator`, `karpenter/karpenter`, `skills-sqs/sqs-worker-sa`에 `eks.amazonaws.com/role-arn` annotation이 있어야 한다(채점 4-2가 이 annotation만 jsonpath로 뽑아 비어 있지 않은지 본다). 워커도 SQS를 직접 호출하므로 워커 SA에도 권한이 필요하다 — set-07은 KEDA만 큐를 읽었지만 여기서는 워커가 `receive_message`·`delete_message`를 한다.
+5. **채점 환경 준비는 순번 0으로 분리됐다.** 정정본의 채점 스크립트는 `aws`·`kubectl`·`jq` 등이 없으면 직접 설치한다(`sudo dnf` + `~/.local/bin`). 그래도 배점 없는 이 절이 실패하면 그 모듈 채점이 아예 돌지 않으므로, 클러스터 엔드포인트는 CloudShell에서 접근 가능해야 하고(퍼블릭 엔드포인트 필요) `aws sts get-caller-identity`가 나와야 한다.
 6. **메시지 12개 → Pod 6개는 계산된 값이다.** `queueLength 2`에 12건이면 목표 6, `max 6`에서 정확히 상한. 180초 안에 Pod가 늘고 Karpenter 노드가 뜨며 큐 depth가 줄어야 한다. `PROCESSING_SECONDS`를 크게 잡으면 큐가 안 줄고, 작게 잡으면 Karpenter가 노드를 띄우기 전에 처리가 끝나 노드 증가를 못 보여 준다 — 과제지 권장값 5를 쓴다.
+
+:::note[정정본이 지운 두 가지 걱정 — 2026-08-01]
+- **4-5 시점에 워커 Pod가 0개여도 감점되지 않는다.** `min 0`이라 큐가 비면 Pod와 노드가 없는 것이 정상 동작이고, 정정본은 "Pod의 EC2 배치는 4-6 스케일아웃 출력을 포함해 판정할 수 있다"고 명시했다. 채점 직전에 메시지를 흘려 노드를 미리 띄워 두는 것은 이제 필수가 아니라 선택이다.
+- **스케일인 시간은 채점하지 않는다.** `ApproximateNumberOfMessagesNotVisible`이 남아 있어도 실패가 아니다 — 대기 메시지가 줄고 Pod가 처리 중이면 충족이다. set-07 module-3의 150초 스케일인 압박이 여기에는 없다.
+
+대신 4-6이 큐에 메시지를 넣으므로 **4모듈의 마지막 항목으로 수행**한다.
+:::
 
 ### ④ 고정 이름·값
 

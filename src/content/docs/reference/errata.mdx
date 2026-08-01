@@ -72,18 +72,37 @@ description: 이의 제기로 확정된 과제지·채점지 정정 결과를 �
 | "Platform Key는 WAF 로그도 암호화하므로 us-east-1 다중 리전 키로 구성"이라는 문장이 **Primary를 us-east-1에 만들라는 뜻으로 읽힌다.** 그런데 채점은 서울 리전에서 Primary를 조회한다 | **Primary는 서울, Replica를 us-east-1**에 만든다. 반대로 하면 2-1-A·6-1-A가 함께 깨진다 |
 | `client-id-created-at-index` GSI의 파티션 키가 `client_id`인데 Lambda API 입력에 `client_id`가 없어 **이 GSI를 쓸 경로가 없다.** 채점은 GSI 구성만 확인한다 | 구성만 요구대로 만들어 둔다 |
 
-## set-08 · 2과제 (제기됨 — 수정 예정)
+## set-08 · 2과제 (확정 — 2026-08-01 정정본 배포)
 
-아직 확정 공지가 아니라 **출제자가 고치겠다고 답한 단계**다. 배포본 그대로 연습하되 채점 방식이 바뀔 수 있다는 전제로 본다.
+제기했던 두 건이 **정정본 배포로 해소됐다.** 출제자가 원본 채점지를 고치는 대신 별도 파일 `008_chall_2nd_patched_0801.md`를 배포했고, 여기에 항목별 채점 명령어·판정 기준 전문과 채점 스크립트 4개의 수정 diff가 들어 있다. 로컬 사본은 `skills-2026`(브랜치 `set-08/task-2`)의 `set-08/task-2/provided/008_chall_2nd_patched_0801.md`다.
 
-| 항목 | 제기된 문제 | 상태 |
-|---|---|---|
-| 전 모듈 | 채점지가 "요구사항이 충족하는지 확인합니다"로만 적혀 있어 **판정 기준이 모호하다.** 실제 채점은 채점지에 적힌 결과만 근거로 하므로, 명령 결과값을 채점지에 표시하고 정확 일치·부분 일치로 구분해 표기해야 한다 | 수정 예정 |
-| 전 모듈 | **채점지의 명령과 채점 스크립트의 명령이 다르다.** 예로 4-1은 채점지가 `aws eks describe-cluster ... --output table`인데 스크립트는 `--query 'cluster.{Name:name,Status:status,...}'`로 특정 필드만 파싱한다 — 두 소스의 출력이 애초에 다르다 | 수정 예정 (출제자가 통일하겠다고 답변) |
+| 제기된 문제 | 확정된 정정 |
+|---|---|
+| 채점지가 "요구사항이 충족하는지 확인합니다"로만 적혀 있어 **판정 기준이 모호하다** | 전 항목에 판정 기준이 명문화됐다. **항목별 판정은 정정본이 채점지 원본보다 우선한다** |
+| **채점지의 명령과 채점 스크립트의 명령이 다르다**(4-1의 `--output table` 대 `--query`) | 정정본의 채점 명령어로 통일되고, `mark2-1.sh`~`mark2-4.sh`에 적용할 diff가 함께 왔다 |
 
-:::caution[출력형 채점에서 두 소스가 갈리면 기대 출력도 갈린다]
-출력형 스크립트는 **무엇을 출력하는가**가 곧 사양이다([mark.sh 읽는 법](/reference/mark-script-guide/)). 채점지와 스크립트의 명령이 다르면 어느 쪽 출력을 기준으로 채점될지 알 수 없다 — 통일되기 전까지는 **양쪽 명령을 모두 돌려 보고 둘 다 기대 형태로 나오는지** 확인한다. 특히 `--query`로 필드를 좁히는 쪽이 더 엄격하므로 그쪽을 기준으로 맞춰 두면 안전하다.
-:::
+정정본도 최종본은 아니다 — 대회 기간 중 검토로 또 바뀔 수 있다([대회 운영 규칙](/reference/competition-rules/)).
+
+### 새로 확정된 판정 기준 — 만드는 것이 달라지는 항목
+
+| 항목 | 확정된 판정 |
+|---|---|
+| 순번 0 | **채점 환경 사전 준비 절이 신설됐다.** `aws`·`curl`·`jq`·`grep`·`unzip`·`kubectl`이 실행 가능하고 `aws sts get-caller-identity`가 나와야 한다. 배점은 없지만 도구가 없거나 인증이 실패하면 그 모듈 채점 스크립트가 아예 돌지 않는다 |
+| 1-2 | Secret의 `host`는 DocumentDB 클러스터 엔드포인트 **호스트명만** — 스킴이나 포트가 붙으면 미충족 |
+| 1-3 | `/v1/admin/summary`의 `counts.orders >= 8`, `products >= 6`, `sessions >= 3`. `dateFieldTypes`의 5개 필드가 날짜 타입으로 표시돼야 한다 |
+| 1-4 | 인덱스 구성은 보되 **인덱스 이름은 채점하지 않는다** |
+| 2-4 | Service EC2 보안 그룹의 TCP/8080 인바운드는 VPC Lattice 관리형 프리픽스 리스트로 제한한다. **`0.0.0.0/0` 허용이면 미충족** |
+| 3-5 | Lambda를 직접 호출해 180초 안에 `IpPermissions`가 빈 배열이면 득점. **CloudTrail 전달 지연은 채점하지 않는다** |
+| 4-4 | `minReplicaCount 0` · `maxReplicaCount 6` · `pollingInterval <= 15` · `cooldownPeriod <= 30` · 트리거 `aws-sqs-queue`의 `queueLength=2` |
+| 4-5 | **`min 0`이라 채점 시점에 워커 Pod가 없어도 감점되지 않는다** — Pod의 EC2 배치는 4-6 스케일아웃 출력까지 포함해 판정한다 |
+| 4-6 | 메시지 12건 발송 후 180초 안에 Pod 증가와 Karpenter 노드 1대 이상 Ready. `ApproximateNumberOfMessagesNotVisible`이 남아 있어도 실패가 아니고, **스케일인 시간은 채점하지 않는다.** 큐를 오염시키므로 **4모듈의 마지막 항목으로 수행**한다 |
+
+### 채점 스크립트 수정 요지
+
+- 네 스크립트 모두 앞부분이 "도구 없으면 종료"에서 **자동 설치**로 바뀌었다 — `sudo dnf install`로 `curl`·`jq`·`grep`·`unzip`을 깔고 AWS CLI와 `kubectl` v1.35.0을 `~/.local/bin`에 내려받는다. 채점 환경이 `dnf`를 쓰는 Amazon Linux 계열(CloudShell)임을 전제한다.
+- `mark2-4.sh` 4-1의 `Vpc:vpcConfig`는 존재하지 않는 필드였다 — `resourcesVpcConfig.vpcId`와 `Subnets`로 교체됐다.
+- 4-2·4-4·4-5의 조회가 **YAML 전문 덤프에서 `jq` 필드 추출로 바뀌었다.** 판정에 쓰는 필드만 출력되므로 그 필드가 비어 있으면 곧바로 감점이다.
+- 4-6의 메시지 본문이 실행마다 달라지던 `skills-scale-out-<타임스탬프>-N`에서 **`judge-N` 고정**으로 바뀌었다.
 
 ## 반영 상태
 
@@ -99,4 +118,6 @@ description: 이의 제기로 확정된 과제지·채점지 정정 결과를 �
 | `alaytics` 오타 해소 | [모듈 10 이론](/part-4/10-scaling-logging-streaming/theory/) · [모듈 15 이론](/part-6/15-mutation-drill/theory/) · [mark.sh 읽는 법](/reference/mark-script-guide/) |
 | 4-5-B 출력 형식 | [모듈 10 이론](/part-4/10-scaling-logging-streaming/theory/) |
 | set-08 채점지 ↔ 스크립트 명령 불일치 | [mark.sh 읽는 법](/reference/mark-script-guide/) |
+| set-08 2과제 정정본(2026-08-01) 판정 기준 | [모듈 11 개요](/part-4/11-documentdb/) · [모듈 12 개요](/part-4/12-vpc-lattice/) · [모듈 09 이론](/part-4/09-serverless-event/theory/) · [모듈 10 이론](/part-4/10-scaling-logging-streaming/theory/) |
+| set-08 2과제 정답 구현 확보 | [모듈 ↔ skills-2026 경로 매핑](/reference/links/) — 4모듈 모두 `정답지 O`로 갱신 |
 | set-07 스케일인 시간 요건의 출처(스크립트 루프 150초) | [모듈 10 이론](/part-4/10-scaling-logging-streaming/theory/) · [mark.sh 읽는 법](/reference/mark-script-guide/) |

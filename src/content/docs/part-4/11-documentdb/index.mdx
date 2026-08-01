@@ -1,6 +1,6 @@
 ---
 title: 11. DocumentDB NoSQL (서울 ap-northeast-2, Day 12)
-description: 2과제 후보 set-08 task-2 module-1 개요 — Amazon DocumentDB(MongoDB 호환)에 주문·상품·세션 데이터를 저장하고 조회하는 NoSQL 모듈. 정답 구현이 없어 이 문서가 유일한 학습 경로다.
+description: 2과제 후보 set-08 task-2 module-1 개요 — Amazon DocumentDB(MongoDB 호환)에 주문·상품·세션 데이터를 저장하고 조회하는 NoSQL 모듈.
 ---
 
 import { LinkButton } from '@astrojs/starlight/components';
@@ -9,7 +9,7 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 2과제 후보 **set-08 task-2 module-1**을 다룬다. Amazon DocumentDB(MongoDB 호환)에 소매 주문·상품·세션 데이터를 저장하고, 지급된 Python 클라이언트(`docdb_client.py`)로 조회 API를 서비스한다. 본 모듈은 **ap-northeast-2(서울)** 리전에 리소스를 생성한다 — 2과제는 모듈마다 리전이 다르고, 틀리면 그 모듈은 0점이다.
 
-이 주제는 `skills-2026` 정답지에 구현이 없다 — set-08은 2과제 후보에 포함되지만 저장소에 커밋된 코드가 없다. 문제지·채점지·지급 코드가 유일한 근거이고, 이 문서가 유일한 학습 경로다.
+정답 구현은 2026-08-01에 들어왔다 — `skills-2026`의 브랜치 `set-08/task-2`에 `set-08/task-2/module-1-nosql`(Terraform)과 `mark/mark2-1.sh`가 있다. 같은 날 배포된 정정본이 항목별 판정 기준의 정본이다([정정 내역](/reference/errata/)).
 
 ## 학습 목표
 
@@ -51,16 +51,19 @@ DocumentDB 인스턴스는 RDS와 달리 **중지(stop) 기능이 없다.** 삭�
 
 - PART-1 전체 (VPC·IAM·KMS 기초). 특히 `03-container-lambda-dynamodb`의 DynamoDB 설계 — 이론에서 DocumentDB와 정면으로 비교한다
 
-## 근거 자료 — 정답지 없음
+## 근거 자료
 
-:::note[이 모듈은 저장소에 정답 구현이 없다]
-`skills-2026` 실습 저장소에는 set-08 task-2 구현이 없다. 아래 네 파일이 유일한 근거다.
-:::
-
+- `set-08/task-2/module-1-nosql` — 정답 Terraform. 브랜치 `set-08/task-2`에 있다
+- `set-08/task-2/provided/008_chall_2nd_patched_0801.md` — **2026-08-01 정정본. 항목별 판정 기준은 이 파일이 채점지 원본보다 우선한다**
 - `2과제_문제지.pdf` 3장 "DocumentDB based NoSQL Application" — 요구사항 원문
-- `2과제_채점지.pdf` 채점기준표 1번 항목 — 배점·채점 명령
-- `asgmt2_module1_check.sh` — 채점 스크립트 (채점지의 채점 명령과 동일)
+- `asgmt2_module1_check.sh`(로컬 `mark/mark2-1.sh`) — 채점 스크립트. 정정본 diff가 적용된 판이 실제로 돌아간다
 - `모듈1_지급파일/docdb_client.py`·`retail_dataset.json` — 수정 금지 클라이언트 코드와 적재 데이터
+
+:::note[정정본이 확정한 것]
+- Secret의 `host`는 **호스트명만** — 스킴이나 포트가 붙으면 1-2가 미충족이다.
+- 1-4는 인덱스 구성만 보고 **인덱스 이름은 채점하지 않는다.**
+- 1-3의 임계는 `counts.orders >= 8` · `products >= 6` · `sessions >= 3`이고, `dateFieldTypes`의 5개 필드가 날짜 타입이어야 한다.
+:::
 
 ## 공식 문서
 

@@ -13,9 +13,11 @@ description: 각 모듈이 참조하는 skills-2026 정답지 경로와 대회�
 |---|---|---|---|---|
 | **set-02** | 서버리스 워크플로<br/>[모듈 09](/part-4/09-serverless-event/) · 정답지 O | Kinesis + Flink Studio<br/>[모듈 10](/part-4/10-scaling-logging-streaming/) · 정답지 O | 이벤트 자동복구<br/>[모듈 09](/part-4/09-serverless-event/) · 정답지 O | MSK<br/>[모듈 10](/part-4/10-scaling-logging-streaming/) · 정답지 O |
 | **set-07** | DynamoDB NoSQL<br/>[모듈 03](/part-1/03-container-lambda-dynamodb/) · 정답지 O | CDN Function<br/>[모듈 13](/part-4/13-cdn-function/) · 정답지 O | KEDA + Karpenter<br/>[모듈 10](/part-4/10-scaling-logging-streaming/) · 정답지 O | OTel + Loki 로깅<br/>[모듈 10](/part-4/10-scaling-logging-streaming/) · **정답지 X** |
-| **set-08** | DocumentDB<br/>[모듈 11](/part-4/11-documentdb/) · **정답지 X** | VPC Lattice<br/>[모듈 12](/part-4/12-vpc-lattice/) · **정답지 X** | Cloud Event Handling<br/>[모듈 09](/part-4/09-serverless-event/) · **정답지 X** | Fargate + SQS 스케일링<br/>[모듈 10](/part-4/10-scaling-logging-streaming/) · **정답지 X** |
+| **set-08** | DocumentDB<br/>[모듈 11](/part-4/11-documentdb/) · 정답지 O | VPC Lattice<br/>[모듈 12](/part-4/12-vpc-lattice/) · 정답지 O | Cloud Event Handling<br/>[모듈 09](/part-4/09-serverless-event/) · 정답지 O | Fargate + SQS 스케일링<br/>[모듈 10](/part-4/10-scaling-logging-streaming/) · 정답지 O |
 
 "정답지 X"는 `skills-2026`에 구현이 없다는 뜻이고, 그 모듈의 근거는 과제지·채점지·채점 스크립트뿐이다. 리전이 모듈마다 다르고 **틀리면 그 모듈은 0점**이다.
+
+set-08 2과제 4모듈은 2026-08-01에 구현이 들어와 근거가 코드로 바뀌었다. 단 **브랜치 `set-08/task-2`에 있고 `main`에 병합돼 있지 않다** — 클론만 해서는 보이지 않으니 브랜치를 먼저 체크아웃한다. 항목별 판정 기준은 같은 날 배포된 정정본이 정본이다([정정 내역](/reference/errata/)).
 
 같은 번호라고 같은 주제가 아니다 — 3모듈만 봐도 set-02는 EC2 정책 위반 자동복구, set-07은 KEDA/Karpenter 스케일링, set-08은 Security Group 자동복구다. 세트가 확정되면 번호가 아니라 **주제로** 해당 문서를 연다.
 
@@ -41,10 +43,14 @@ description: 각 모듈이 참조하는 skills-2026 정답지 경로와 대회�
 | 08 | `set-03/task-1/terraform/kms.tf`, `set-07/task-1/terraform/iam.tf` | root-less KMS, audit role(9-1/9-2) |
 | 08 | `set-07/task-1/README.md` | 머신 3분할, S3 릴레이, VPC Origin |
 | 09 | `set-02/task-2/module-1-*`, `module-3-*` | Step Functions, EventBridge/Config |
+| 09 | `set-08/task-2/module-3-event-handling` | SG 자동복구 정답(CloudTrail·EventBridge·Lambda), `mark/mark2-3.sh` |
 | 10 | `set-07/task-2/module-3-eks-scaling` | KEDA/Karpenter 정답, `mark3.sh` (module-4 로깅은 미착수 — `mark4.sh`·task.md 모듈 4 절만) |
 | 10 | `set-02/task-2/module-2-*`, `module-4-*` | Flink Studio, MSK (개념 위주) |
-| 11 | `national-skills-v7/2과제` (set-08 module-1) | DocumentDB 과제지·채점지 — 정답 구현 없음 |
-| 12 | `national-skills-v7/2과제` (set-08 module-2, `asgmt2_module2_check.sh`) | VPC Lattice 과제지·채점지 — 정답 구현 없음 |
+| 10 | `set-08/task-2/module-4-sqs-scaling` | Fargate 컨트롤러 + KEDA/Karpenter 정답(`k8s/`·`app/Dockerfile`), `mark/mark2-4.sh` |
+| 11 | `set-08/task-2/module-1-nosql` | DocumentDB 정답(클러스터·Secret·클라이언트 EC2·인덱스 부트스트랩), `mark/mark2-1.sh` |
+| 12 | `set-08/task-2/module-2-lattice` | VPC Lattice 정답(2 VPC·서비스 네트워크·프리픽스 리스트 SG), `mark/mark2-2.sh` |
+| 09–12 | `set-08/task-2/provided/008_chall_2nd_patched_0801.md` | 2026-08-01 정정본 — 항목별 판정 기준 정본 |
+| 09–12 | `set-08/task-2/NOTES.md`, `HANDOFF.md` | 함정·결정 로그 |
 | 13 | `set-07/task-2/module-2-cdn-function` | KVS + CloudFront Functions 정답, `mark2.sh` |
 | 14 | `task-3/README.md`, `ARCHITECTURE.md` | 3과제 런북·설계 근거(튜닝 표·당일 변경 시나리오) |
 | 14 | `task-3/k8s/{01-nodepool,10-user}.yaml` | NodePool 상한·consolidation, HPA behavior·CPU limit 부재 |

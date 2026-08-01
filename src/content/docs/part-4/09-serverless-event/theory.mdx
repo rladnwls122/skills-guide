@@ -283,7 +283,9 @@ mark 스크립트가 1순위지만 task.md 항목은 수동 채점 가능성이 
 
 ## 유형 2 변형 — set-08 module-3 (Cloud Event Handling, 싱가포르 ap-southeast-1)
 
-근거: set-08 task-2 과제지·채점기준표·`asgmt2_module3_check.sh`. `skills-2026`에 **정답지 구현이 없다** — 이 절이 근거 전부다.
+근거: set-08 task-2 과제지, 2026-08-01 정정본의 판정 기준, `asgmt2_module3_check.sh`. 정답 구현은 `skills-2026`의 브랜치 `set-08/task-2`, `set-08/task-2/module-3-event-handling`에 있다.
+
+정정본 3-5가 **CloudTrail 전달 지연은 채점하지 않는다**고 못 박았다 — 판정은 Lambda 직접 호출 뒤 180초 안에 `IpPermissions`가 빈 배열이 되는지와 로그 그룹 존재로 끝난다. 배선(3-4)과 동작(3-5)이 따로 채점되는 구조가 공식 문구로 확인된 셈이다.
 
 같은 "이벤트 자동복구" 패턴인데 범위가 훨씬 좁다. 감시 대상이 EC2 다섯 종류가 아니라 **보호 대상 Security Group 하나**이고, 복구 함수도 제공된 `remediate_security_group.py` 한 개다. 대신 채점이 보는 지점이 달라 그대로 옮겨 쓰면 잃는다.
 

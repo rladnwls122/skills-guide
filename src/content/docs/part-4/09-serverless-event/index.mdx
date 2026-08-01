@@ -44,6 +44,12 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 ## 선행 지식
 
+:::tip[개념이 낯설면 여기부터]
+이 모듈의 이론은 **1장 요약**이라 서비스 개념을 설명하지 않고 채점 함정부터 다룬다. EventBridge의 이벤트 버스·룰·이벤트 패턴, Lambda의 동기·비동기·이벤트 소스 매핑 구분, CloudTrail을 경유하는 이유, Step Functions의 `Task` 하나 = API 하나 제약, SQS 가시성 제한 시간 — 이 중 하나라도 흐릿하면 [serverless-basics](/start/serverless-basics/)를 먼저 읽는다(약 1.5시간).
+:::
+
+- Lambda 호출 방식 3종과 EventBridge 룰·패턴·타깃 — [serverless-basics](/start/serverless-basics/)
+- 네이티브 이벤트와 CloudTrail 경유 경로의 지연 차이 — [serverless-basics](/start/serverless-basics/)
 - 역할(Role)과 신뢰 정책 — Lambda·Step Functions·EventBridge가 각각 다른 역할을 Assume한다 — [iam-basics](/start/iam-basics/)
 - 명시적 Deny 우선, Condition으로 범위를 좁히는 법 — [iam-basics](/start/iam-basics/)
 - `aws ... --query`로 실행 이력·항목을 확인하는 조회 명령 — [awscli-basics](/start/awscli-basics/)

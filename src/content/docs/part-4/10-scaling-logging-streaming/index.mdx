@@ -46,6 +46,12 @@ k8s 리소스(TGB, Karpenter 노드) → helm → `eksctl delete cluster` → `t
 
 ## 선행 지식
 
+:::tip[개념이 낯설면 여기부터]
+이 모듈의 이론은 **1장 요약**이라 서비스 개념을 설명하지 않고 시간 예산과 채점 함정부터 다룬다. HPA의 이용률 계산과 안정화 창, KEDA의 ScaledObject가 HPA를 만들어 준다는 구조, Karpenter가 Cluster Autoscaler와 다른 점, Fargate 프로파일 — 이 중 하나라도 흐릿하면 [autoscaling-basics](/start/autoscaling-basics/)를 먼저 읽는다(약 1.5시간). SQS 자체가 처음이면 [serverless-basics](/start/serverless-basics/)의 SQS 절도 함께 본다.
+:::
+
+- HPA·KEDA·Karpenter·Fargate가 각각 무엇을 조정하는지 — [autoscaling-basics](/start/autoscaling-basics/)
+- SQS 큐 길이 지표와 가시성 제한 시간 — [serverless-basics](/start/serverless-basics/)
 - Deployment의 `replicas`를 바깥에서 조종하는 것이 오토스케일러(KEDA/HPA)다 — [k8s-basics](/start/k8s-basics/)
 - 파드 `requests`가 스케줄링 단위 — 노드 수 계산의 입력값 — [k8s-basics](/start/k8s-basics/)
 - ConfigMap 주입과 라벨 셀렉터 (OTel Collector·Loki 설정에서 반복) — [k8s-basics](/start/k8s-basics/)

@@ -81,6 +81,10 @@ git clone https://github.com/ishs-cloud-computing/skills-2026.git
 | 6 | Git clone/branch/diff를 쓸 수 있다 | 생략 가능 |
 | 7 | Pod/Deployment/Service 차이를 설명할 수 있다 | [k8s-basics](/start/k8s-basics/)로 보충 |
 | 8 | 키 정책과 IAM 정책이 왜 둘 다 필요한지 설명할 수 있다 | [kms-basics](/start/kms-basics/)로 보충 |
+| 9 | EventBridge의 이벤트 버스·룰·이벤트 패턴이 각각 무엇인지 설명할 수 있다 | [serverless-basics](/start/serverless-basics/)로 보충 |
+| 10 | HPA가 목표 Pod 수를 어떻게 계산하고, 노드는 무엇을 보고 늘어나는지 설명할 수 있다 | [autoscaling-basics](/start/autoscaling-basics/)로 보충 |
+
+9·10번은 **2과제 전용**이다. PART-4에 들어가기 전까지는 몰라도 진도가 막히지 않으므로, 자가진단 "아니오" 개수에는 넣되 보충은 PART-4 직전에 해도 된다.
 
 Kubernetes·eksctl은 선수 지식 아님 — PART 1~2에서 배운다.
 
@@ -140,6 +144,14 @@ Terraform 은 다르다. **채점 대상이 아니다** — 과제지·채점지
   <Card title="HCL 기초" icon="seti:config">
     채점 대상은 아니지만 정답지를 읽으려면 필요 — PART-1 전체
     [읽기](/start/hcl-basics/)
+  </Card>
+  <Card title="서버리스·이벤트 기초" icon="random">
+    자가진단 9 — Lambda 호출 방식·EventBridge 룰·CloudTrail 경유·SQS, PART-4 모듈 09
+    [읽기](/start/serverless-basics/)
+  </Card>
+  <Card title="오토스케일링 기초" icon="up-caret">
+    자가진단 10 — HPA·KEDA·Karpenter·Fargate, PART-4 모듈 10
+    [읽기](/start/autoscaling-basics/)
   </Card>
 </CardGrid>
 

@@ -24,6 +24,12 @@ import { Steps } from '@astrojs/starlight/components';
 
 판정형이 편해 보이지만 반대다. 출력형은 값이 조금 달라도 채점자가 맥락을 볼 여지가 있고, 판정형은 문자열 하나 어긋나면 그냥 FAIL 이다.
 
+:::caution[출력형은 채점지와 스크립트가 어긋날 수 있다]
+출력형에서는 **무엇을 출력하는가**가 곧 사양인데, 그 명령이 채점지와 스크립트 두 곳에 따로 적혀 있다. set-08 2과제에서 실제로 갈렸다 — 채점지는 `aws eks describe-cluster ... --output table`(전체 덤프)인데 스크립트는 `--query 'cluster.{Name:name,Status:status,...}'`로 필드를 좁힌다. 출력 자체가 다르니 기대 형태도 다르다.
+
+통일 요청이 접수되어 수정 예정이지만([정정 내역](/reference/errata/)), 그전까지는 **양쪽 명령을 모두 돌려 보고 둘 다 기대 형태로 나오는지** 확인한다. 좁히는 쪽(`--query`)이 더 엄격하므로 그쪽을 기준으로 맞춰 두면 양쪽을 함께 만족한다.
+:::
+
 set-03 의 `check_kms()` 가 전형이다 — 네 갈래로 FAIL 을 낸다.
 
 ```bash title="set-03/task-1/mark.sh"

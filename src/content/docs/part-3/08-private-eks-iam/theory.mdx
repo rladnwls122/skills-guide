@@ -103,7 +103,7 @@ flowchart LR
 - **VPC CloudShell은 비영속 + 업로드 UI 없음**: 홈이 세션 종료 시 삭제되고 파일을 올릴 방법이 없다 → S3 `_transfer/` 릴레이로 받고, 도구 설치·자격증명·kubeconfig·환경변수를 **하나의 멱등 셋업 블록**으로 만들어 재접속 시 통째로 재실행한다(약 1~2분). 환경변수는 `~/.wsc2026-env` 같은 파일로 `source`.
 - tfstate·`.terraform/`은 절대 릴레이에 올리지 않는다 — `terraform output -json > outputs.json`만 넘겨 jq로 읽는다.
 - set-07 변형: CloudShell 대신 **SSM bastion**(private 서브넷 EC2, 인바운드 0, 프로파일은 SSM 전용) — 30분 타임아웃·비영속을 피한다. 단 bastion은 **채점 전 삭제**(인스턴스+프로파일+role까지).
-- set-07 배포본 v4부터 **채점용 VPC CloudShell 환경(`unicorn-mark`)이 Public 서브넷에서 Private 서브넷으로 옮겨졌다**([정정 내역](/reference/errata/)). 채점 트래픽이 private 서브넷에서 출발하므로 컨트롤 플레인 추가 SG의 443 허용 소스와 라우팅을 그 기준으로 잡는다.
+- set-07 배포본 v4부터 **채점용 VPC CloudShell 환경(`unicorn-mark`)이 Public 서브넷에서 Private 서브넷으로 옮겨졌다.** 채점 트래픽이 private 서브넷에서 출발하므로 컨트롤 플레인 추가 SG의 443 허용 소스와 라우팅을 그 기준으로 잡는다.
 
 ### ④ 세트별 차이
 

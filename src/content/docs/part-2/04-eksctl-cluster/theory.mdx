@@ -69,6 +69,8 @@ graph TD
 
 :::note[협의회(2026-07-31) — Access Entry는 "강제"에서 "선택"으로]
 1과제 과제지에 명시됐던 Access Entry 사용 요구는 삭제되고, kubectl 접근 방식(Access Entry·aws-auth ConfigMap 등)은 선수 자유가 됐다. 과제지에는 "CloudShell에서 kubectl 명령어를 사용할 수 있어야 한다"만 남는다. 정답지 구성(`authenticationMode: API` + Access Entry)은 그 요구를 채우는 최단 경로라 그대로 쓴다 — 바뀐 것은 방식이 채점되지 않는다는 점이지, 채점 신원이 CloudShell에서 kubectl이 돼야 한다는 사실이 아니다.
+
+회의록이 채점 절차까지 못 박았다. **쿠버네티스 채점은 선수의 CloudShell에서 진행하고**, 접근이 안 될 때만 `aws eks update-kubeconfig --name <클러스터명> --region <리전>` 을 **1회** 실행할 수 있다. 그 외에 자격 증명을 입력하거나 다른 명령을 실행하는 것은 허용되지 않는다 — 채점 시작 시점의 kubeconfig가 곧 결과다([대회 운영 규칙](/reference/competition-rules/)).
 :::
 
 **③ 원리**

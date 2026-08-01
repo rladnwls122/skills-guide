@@ -65,11 +65,11 @@ sequenceDiagram
 대회 유형의 KMS 키 정책은 **root-less** — root를 Principal에서 뺀다. root로 리소스를 만들면 이후 KMS 사용이 전부 거부되어 복구 불가에 가깝다.
 :::
 
-:::note[대회 계정 지급 방식 — 지도교사 협의회(2026-07-31)]
-대회장에서는 **PowerUser 이상 권한의 IAM 계정**이 지급되고 root 계정은 주지 않는다. 두 가지를 대비한다.
+:::note[대회 계정 지급 방식 — 지도교사 협의회 회의록]
+대회장에서는 **`PowerUserAccess` 수준 권한의 IAM 사용자**가 지급되고 root 계정은 주지 않는다([대회 운영 규칙](/reference/competition-rules/)). 두 가지를 대비한다.
 
-- 관리형 정책 `PowerUserAccess`는 `iam:CreateRole` 같은 IAM 쓰기를 막는다. 과제는 Lambda 실행 역할·IRSA 역할 등 IAM 역할 생성을 요구하므로 실제 지급 권한은 그보다 넓어야 한다 — 시작 직후 `aws sts get-caller-identity`로 신원을 확인하고, 첫 terraform apply가 IAM 역할 생성 단계에서 AccessDenied를 내는지 가장 먼저 본다.
-- **기존에 생성돼 있던 리소스를 삭제하지 못하게 하는 정책이 걸릴 수 있다.** 지급 리소스 삭제가 필요한 과제는 없다 — 삭제 계열 AccessDenied가 나면 내가 만든 리소스인지부터 확인하고, 지급 리소스면 그대로 둔다.
+- 관리형 정책 `PowerUserAccess`는 `iam:CreateRole` 같은 IAM 쓰기를 막는다. 과제는 Lambda 실행 역할·IRSA 역할 등 IAM 역할 생성을 요구하므로 실제 지급 권한은 그보다 넓어야 앞뒤가 맞는다 — 시작 직후 `aws sts get-caller-identity`로 신원을 확인하고, 첫 terraform apply가 IAM 역할 생성 단계에서 AccessDenied를 내는지 가장 먼저 본다.
+- **사용자 정책에 명시적 Deny가 들어갈 수 있다.** 사전 제공 리소스의 삭제와 대회 운영 방해를 막는 목적이고, 특정 EC2 인스턴스 삭제 권한처럼 PowerUserAccess 범위의 일부가 막힐 수 있다. 지급 리소스 삭제가 필요한 과제는 없다 — 삭제 계열 AccessDenied가 나면 내가 만든 리소스인지부터 확인하고, 지급 리소스면 그대로 둔다.
 :::
 
 - **생성자 = 채점자 신원**: EKS 클러스터를 만든 IAM 신원만 기본 kubectl 접근을 가진다. 채점 스크립트(mark.sh)가 도는 신원과 생성 신원이 다르면 채점 자체가 실패한다. 처음부터 IAM 사용자 하나로 통일하는 습관이 곧 점수다.

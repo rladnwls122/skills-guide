@@ -97,6 +97,13 @@ flowchart LR
     POD -->|"user·product만"| PRX --> RDS
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+요청이 갈라지는 지점을 순서대로 그렸다. WAF 가 먼저 비정상 요청을 403 으로 끊고, 그다음 경로가 `/images/*` 면 S3 로 가 캐시된다. 나머지는 ALB 로 가는데 정의되지 않은 경로는 리스너 기본 액션의 404 로 끝난다. 실제 API 만 파드에 닿고, 그중 사용자·상품 조회만 RDS Proxy 를 거쳐 DB 로 간다. 어느 계층이 어떤 응답을 내는지가 곧 채점의 응답 코드 항목이다.
+
+</details>
+
 0.2초 예산은 이 경로 전체에 걸린다 — CloudFront에서 RDS까지 홉마다 지연이 쌓인다. 같은 진입점 위에서 403은 WAF가, 404는 ALB 리스너 기본 액션이 낸다.
 
 ## 스케일 리드타임이 초반 가용성을 결정한다
@@ -129,6 +136,13 @@ flowchart TD
     ROOM -->|아니오| PEND --> KARP --> NODE --> TGB
     NODE -.->|"consolidateAfter 30s<br/>유휴·저활용 시 회수"| KARP
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+트래픽이 늘 때 걸리는 시간을 단계별로 분해했다. 이미 떠 있는 파드는 즉시 받지만, 새 파드는 메트릭 수집과 HPA 평가에 최대 30초, 스케줄될 자리가 없으면 노드 부팅에 2분 남짓, 그다음 타깃 등록과 헬스체크 2회 통과가 더 걸린다. 그래서 미리 떠 있는 최소 replicas 와 노드 워밍업이 응답 시간을 좌우한다. 점선은 반대 방향으로, 유휴 노드는 30초 뒤 회수된다.
+
+</details>
 
 낙관적으로 40초, 노드가 새로 필요하면 2~3분이다. **그 시간의 트래픽은 이미 떠 있는 파드로 받는다.** 그래서 `minReplicas`를 2로 두고, HPA `scaleUp.stabilizationWindowSeconds: 0`에 15초당 100%·4파드 정책을 건다. 반대로 `scaleDown`은 120초 안정창을 둔다 — 스파이크 사이 골짜기마다 파드를 버리면 다음 파도에서 같은 사슬을 다시 탄다.
 
@@ -169,6 +183,13 @@ spec:
           periodSeconds: 30
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+HPA 한 장이다. CPU 이용률 75% 를 목표로 2에서 9 사이를 오간다. `behavior.scaleUp` 은 기본값과 같은 값을 일부러 적어 둔 것이다 — 안정화 창 0초에 15초마다 100% 또는 4파드 중 큰 쪽으로 늘린다. 이용률의 분모가 `requests` 이므로 그 값을 크게 잡으면 같은 부하에서도 스케일이 늦게 걸린다.
+
+</details>
+
 이 매니페스트에서 기본값과 다른 것은 `scaleDown` 쪽뿐이다 — 안정화 창 300→120초, 축소 정책 `Percent 100/15s`→`Percent 50/30s`. `scaleUp` 블록은 쿠버네티스 기본값과 같은 값이라 생략해도 동작이 같다. 스케일아웃을 "더 공격적으로" 만들 여지는 애초에 없다는 뜻이다.
 
 노드를 미리 확보하는 사전 워밍은 비용 ratio를 올리므로 무료가 아니다. 채점 트래픽 개시 직전에만 워밍하고, 개시 후에는 오토스케일에 맡기는 것이 밴드 안에 머무는 방법이다.
@@ -197,6 +218,13 @@ CREATE TABLE user (
 ALTER TABLE user ADD INDEX idx_email (email);
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+지급 스키마에는 `email` 인덱스가 없다. 이메일로 조회하는 API 가 있으므로 그대로 두면 매 요청이 전체 테이블을 훑어 응답 시간 예산을 먹는다. 아래 `ALTER` 를 **덤프 적재 뒤에** 실행하는 것이 순서의 요점이다 — 덤프가 테이블을 다시 만들면 먼저 건 인덱스가 사라진다.
+
+</details>
+
 db.t3.micro의 진짜 병목은 스토리지가 아니라 **커넥션 수와 CPU**다. user 테이블 수십 MB는 InnoDB 버퍼풀에 상주해 디스크 IOPS(초당 읽기·쓰기 횟수)를 거의 쓰지 않는다. 반면 파드가 9개로 늘면 각 파드의 커넥션 풀이 곱해져 `max_connections`에 먼저 닿는다. RDS Proxy가 클라이언트 커넥션을 백엔드 커넥션에 멀티플렉싱해 이 곱셈을 끊는다.
 
 ```hcl
@@ -209,6 +237,13 @@ resource "aws_db_proxy_default_target_group" "this" {
   }
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+RDS Proxy 의 커넥션 풀 설정이다. 파드가 늘면 클라이언트 커넥션은 함께 늘지만 백엔드 커넥션은 이 풀 안에서 재사용되므로 DB 의 `max_connections` 에 먼저 닿지 않는다. 유휴 커넥션 상한을 절반으로 둔 것은 부하가 빠진 뒤 커넥션을 붙들고 있지 않게 하려는 것이다.
+
+</details>
 
 :::danger[RDS Proxy 의 두 가지 함정]
 - **피닝(pinning)**: 세션 상태를 만드는 문장(대형 트랜잭션 — `BEGIN` 부터 `COMMIT` 까지 한 덩어리로 묶이는 작업 단위 — 임시 테이블, 큰 구문)은 클라이언트를 백엔드 커넥션에 고정시켜 멀티플렉싱을 무효화한다. `load_user.dump` 적재는 프록시가 아니라 **인스턴스 직결**로 넣는다.
@@ -262,6 +297,13 @@ spec:
     budgets:
       - nodes: "1"                     # 자발적 중단은 한 번에 1대까지 — 가용성 보호
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+Karpenter NodePool 의 네 가지 결정이다. 인스턴스 타입을 하나로 고정해 비용 계산을 예측 가능하게 하고, `limits.cpu` 로 폭주 시 상한을 건다. `consolidateAfter: 30s` 는 빈 노드를 빨리 회수해 비용 비율을 낮추고, `budgets` 의 `nodes: "1"` 은 자발적 중단을 한 번에 한 대로 제한해 회수 도중 가용성이 흔들리지 않게 한다.
+
+</details>
 
 ## 연구 자료를 그대로 믿지 않는다 — :badge[실측]{variant=note} 대조
 

@@ -34,6 +34,13 @@ flowchart LR
     NODE -.->|"유휴 60s 후 반환<br/>WhenEmptyOrUnderutilized"| KARP
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+큐 길이 하나가 파드와 노드를 차례로 늘리는 경로다. KEDA 는 IRSA 로 SQS 길이를 읽어 HPA 를 통해 replicas 를 올리고, 늘어난 파드가 스케줄될 자리를 못 찾으면 그 Pending 을 보고 Karpenter 가 노드를 만든다. 점선이 축소 경로다 — 노드는 비거나 저활용 상태로 60초가 지나야 반환된다. 파드 축소와 노드 축소가 시차를 두는 이유다.
+
+</details>
+
 2단 스케일링: 큐 길이가 Pod 수를 늘리고(KEDA), Pod가 노드에 안 들어가면 노드가 늘어난다(Karpenter). 축소도 2단: 큐가 비면 Pod 1로, 노드가 비면 1대로.
 
 ### ② 언제 이 패턴이 나오나
@@ -154,7 +161,7 @@ flowchart LR
         KEDA@{ icon: "k8s:keda", form: "square", label: "keda/keda-operator<br/>프로파일 skills-sqs-fp-keda", pos: "b", h: 46, w: 46 }
         KARP@{ icon: "k8s:karpenter", form: "square", label: "karpenter/karpenter<br/>프로파일 skills-sqs-fp-karpenter", pos: "b", h: 46, w: 46 }
     end
-    SO["ScaledObject sqs-worker-scaledobject<br/>queueLength 2 · min 0 · max 6<br/>+ TriggerAuthentication"]
+    SO["ScaledObject<br/>sqs-worker-scaledobject<br/>queueLength 2 · min 0 · max 6<br/>+ TriggerAuthentication"]
     DEP@{ icon: "k8s:deploy", form: "square", label: "skills-sqs/sqs-worker<br/>app=sqs-worker", pos: "b", h: 46, w: 46 }
     NODE@{ icon: "logos:aws-ec2", form: "square", label: "Karpenter EC2 Worker Node<br/>skills-sqs-nodepool<br/>라벨 skills-nodepool=event-worker", pos: "b", h: 46, w: 46 }
 
@@ -165,6 +172,13 @@ flowchart LR
     KARP -->|"프로비저닝"| NODE
     DEP -->|"nodeSelector 2개로 고정"| NODE
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+set-08 변형은 컨트롤러를 Fargate 에 올린다. KEDA·Karpenter 자신은 Fargate 프로파일로 뜨고, 워커 파드만 Karpenter 가 만든 EC2 노드에 간다 — 노드를 만드는 주체가 노드에 의존하면 0 에서 시작할 수 없기 때문이다. `min 0` 이라 큐가 비면 파드가 사라지고, 그때부터는 오퍼레이터가 큐를 직접 폴링해 0 에서 1 로 깨운다. 워커는 nodeSelector 두 개로 자기 노드풀에 고정된다.
+
+</details>
 
 컨트롤러(KEDA·Karpenter)는 Fargate, 워커는 Karpenter EC2. **Karpenter가 앉을 노드를 Karpenter가 만들어야 하는 닭-달걀 문제를 Fargate로 푸는 구조**다. set-07은 같은 문제를 "채점이 고정한 addon 노드그룹 1대"로 풀었다 — 그래서 set-07에는 `helm --set replicas=1` 함정이 있었고, 여기서는 Fargate가 Pod마다 노드를 주므로 그 함정이 없다.
 
@@ -289,6 +303,13 @@ flowchart LR
     ALB2 -->|TargetGroupBinding| GRAF
     U --> ALB1 & ALB2
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+유형 4 로그 파이프라인이다. 앱이 stdout 에 JSON 한 줄을 찍으면 노드의 로그 파일에 남고, OTel Collector DaemonSet 이 그 파일을 읽어 OTLP 로 Loki 에 넣는다. Grafana 는 Loki 를 데이터소스로 읽는다. 바깥의 ALB 둘은 Terraform 이 이름을 고정해 만들고 TargetGroupBinding 으로 각각 앱과 Grafana 에 연결된다 — 채점자가 그 두 주소로 들어온다.
+
+</details>
 
 ### ② 언제 이 패턴이 나오나
 
@@ -427,11 +448,18 @@ flowchart LR
         PROD -->|"토픽 wsc2026-sensor-raw"| MSKC
         MSKC -->|"ESM (LATEST)"| LC1
         LC1 -->|"정상: 전 속성 String"| DDB
-        LC1 -->|"이상치: 토픽 wsc2026-sensor-alert 로 재발행"| MSKC
+        LC1 -->|"이상치: 토픽<br/>wsc2026-sensor-alert 로 재발행"| MSKC
         MSKC -->|"ESM (LATEST)"| LC2
         LC2 --> SNS2 & S3A
     end
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+유형 5 두 갈래를 나란히 놓았다. 위쪽은 Flask 앱이 Kinesis 로 주문을 흘리고 Flink Studio 노트북이 SQL 두 개를 돌리는 구성이라, 결과는 노트북 화면에만 남고 별도 저장소가 없다. 아래쪽 MSK 는 토픽이 둘이다 — 원본 토픽을 읽은 함수가 정상 데이터는 DynamoDB 에 넣고 이상치는 경보 토픽으로 되쏜다. 그 경보 토픽을 두 번째 함수가 다시 읽어 SNS 와 S3 로 보낸다. 같은 클러스터를 두 번 지나는 구조가 이 아키텍처의 특징이다.
+
+</details>
 
 ### ② 언제 이 패턴이 나오나
 

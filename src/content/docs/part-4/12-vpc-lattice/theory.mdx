@@ -35,6 +35,13 @@ flowchart LR
     SSG --> SEC2
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+두 VPC 가 IP 경로 없이 통신하는 구조다. 대역이 겹치든 말든 상관없고 피어링도 없다 — 클라이언트는 Lattice 가 발급한 DNS 이름을 부르고, Service Network 에 묶인 양쪽이 그 이름을 통해 만난다. 서비스 EC2 의 보안 그룹은 Lattice 관리형 프리픽스 리스트만 허용하므로, 트래픽이 실제로 Lattice 를 거쳐 들어온다는 것이 방화벽 수준에서 강제된다.
+
+</details>
+
 Client EC2는 Client VPC 안에서 Lattice가 생성한 도메인 이름을 호출한다. 그 요청은 Client VPC에 붙은 **VPC Association**을 거쳐 Service Network로 들어가고, Service → Listener → Target Group을 거쳐 Service VPC 안의 EC2로 전달된다. 이 경로 어디에도 두 VPC 사이의 IP 라우팅은 없다 — Target Group이 Service VPC를 `vpcIdentifier`로 지정할 뿐, Service VPC 자체는 Service Network에 Association 되지 않는다.
 
 ## Lattice가 대체하는 것

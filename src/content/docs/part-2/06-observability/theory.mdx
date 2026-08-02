@@ -53,6 +53,13 @@ flowchart LR
     J --> L
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+로그 한 줄이 두 갈래 산출물이 되기까지의 전 경로다. 앱이 stdout 으로 찍으면 kubelet 이 노드의 파일로 남기고, Fluent Bit 이 그 파일을 tail 해 cri 파서로 읽는다. 파서 필터가 method·path·status·duration 을 뽑고 Lua 필터가 `/health` 같은 라인을 버린다. 정제된 레코드는 오른쪽으로 CloudWatch Logs 에 저장되고, 아래쪽으로 log_to_metrics 를 거쳐 Prometheus 메트릭이 된다 — 같은 로그가 저장과 메트릭 두 목적지로 갈라지는 것이 이 파이프라인의 뼈대다.
+
+</details>
+
 핵심: **한 번 파싱한 레코드를 태그 분기(`app.access` / `app.metrics`)로 두 OUTPUT에 나눠 보낸다.** CloudWatch 갈래는 형식 재조립(format.lua), 메트릭 갈래는 log_to_metrics를 거친다.
 
 ### ④ 세트별 차이
@@ -89,6 +96,13 @@ flowchart TD
     CM[ConfigMap fluent-bit-config<br/>fluent-bit.conf / parsers.conf / *.lua] -->|/fluent-bit/etc/| FB
     SA[SA fluent-bit + Pod Identity<br/>→ fluentbit-role: logs:PutLogEvents] --> FB
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+Fluent Bit 파드 한 개가 노드에서 무엇을 붙들고 있는지다. 노드의 `/var/log` 를 읽기 전용으로 마운트해 로그 파일에 닿고, 설정 3종(본체·파서·Lua)은 ConfigMap 에서 `/fluent-bit/etc/` 로 들어온다. AWS 권한은 서비스 계정에 붙은 Pod Identity 로 받는다 — `logs:PutLogEvents` 가 없으면 수집은 되고 전송만 실패한다.
+
+</details>
 
 - **INPUT tail**: `Path /var/log/containers/*_wsc2026_*.log` — 파일명 패턴이 `<pod>_<namespace>_<container>-<id>.log`라 네임스페이스로 필터 가능.
 - **cri 파서**: containerd 로그 라인은 `타임스탬프 stdout F 실제로그` 형태 — cri 파서가 `log` 키로 벗겨낸다.
@@ -127,6 +141,13 @@ flowchart LR
     P -->|PodMonitor port metrics /metrics 15s| PR
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+로그를 메트릭으로 바꾸는 세 필터다. 요청 수는 method·path·status 를 라벨로 갖는 카운터, 오류 수는 status 가 4·5 로 시작할 때만 세는 카운터, 응답 시간은 `duration_seconds` 값을 담는 히스토그램이다. 셋 다 같은 태그로 묶여 2021 포트의 exporter 로 나가고, PodMonitor 가 그 포트를 15초마다 긁어 Prometheus 로 넣는다.
+
+</details>
+
 :::note[실측 — 메트릭명 접두어]
 실제 노출되는 이름에는 **`log_metric_counter_` / `log_metric_histogram_` 접두어가 자동으로 붙는다**:
 `log_metric_counter_wsc2026_requests_total`, `log_metric_histogram_wsc2026_request_duration_seconds_{bucket,sum,count}`.
@@ -162,7 +183,7 @@ Prometheus Operator + Prometheus + Alertmanager + node-exporter + kube-state-met
 flowchart TD
     V[kps values.yaml] -->|additionalDataSources| DS[Grafana datasource 3종<br/>prometheus/alertmanager/cloudwatch]
     SC@{ icon: "logos:grafana", form: "square", label: "Grafana dashboard sidecar", pos: "b", h: 46, w: 46 }
-    CM["ConfigMap wsc2026-grafana-dashboard<br/>(dashboard.json) + label grafana_dashboard=1"] -->|sidecar가 라벨 watch| SC
+    CM["ConfigMap wsc2026-grafana-dashboard<br/>(dashboard.json)<br/>+ label grafana_dashboard=1"] -->|sidecar가 라벨 watch| SC
     G@{ icon: "logos:grafana", form: "square", label: "Grafana", pos: "b", h: 46, w: 46 }
     SC -->|자동 import| G
     PRul[PrometheusRule wsc2026-alerts<br/>알람 6종]
@@ -170,6 +191,13 @@ flowchart TD
     PRul -->|ruleSelectorNilUsesHelmValues=false| P
     PM[PodMonitor fluent-bit] -->|podMonitorSelectorNilUsesHelmValues=false| P
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+Grafana 와 Prometheus 에 설정이 들어가는 세 경로다. 데이터소스 3종은 values 파일이 직접 넣고, 대시보드는 ConfigMap 에 `grafana_dashboard=1` 라벨을 붙이면 사이드카가 그 라벨을 감시하다 자동으로 import 한다. PrometheusRule 과 PodMonitor 는 셀렉터 설정 두 개(`...NilUsesHelmValues=false`)를 꺼야 릴리스 라벨이 없는 리소스까지 잡힌다 — 이 값을 안 바꾸면 알람과 메트릭이 조용히 누락된다.
+
+</details>
 
 - 대시보드 import는 **configmap 생성 → `grafana_dashboard=1` 라벨** 두 단계. 라벨을 빼먹으면 sidecar가 무시한다.
 - cloudwatch datasource는 `authType: default` — Grafana SA에 Pod Identity(grafana-role)를 연결해 인증한다.

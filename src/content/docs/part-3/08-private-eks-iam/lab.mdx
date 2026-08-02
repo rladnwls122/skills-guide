@@ -68,6 +68,13 @@ import { Steps } from '@astrojs/starlight/components';
    ROLE_ARN="arn:aws:iam::$ACCOUNT_ID:role/lab-audit-role"
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   감사용 역할을 CLI 로 만든다. 신뢰 정책의 Principal 이 계정 root 라 계정 안 누구나 후보가 되지만, `sts:ExternalId` 조건이 그 값을 아는 호출만 통과시킨다. 권한 정책은 두 구문으로 나뉜다 — `eks:DescribeCluster` 는 리소스를 클러스터 ARN 으로 좁혔고, `ec2:DescribeVpcs` 는 리소스 수준 권한을 지원하지 않아 `"*"` 가 불가피하다. 좁힐 수 있는 것만 좁힌 형태가 최소권한 판정을 통과한다.
+
+   </details>
+
 2. **A-2) 실패 케이스 1 — 호출자 identity policy 부재** (이중 평가)
 
    ```bash
@@ -80,6 +87,13 @@ import { Steps } from '@astrojs/starlight/components';
    AWS_ACCESS_KEY_ID=$AK AWS_SECRET_ACCESS_KEY=$SK AWS_SESSION_TOKEN= \
      aws sts assume-role --role-arn "$ROLE_ARN" --role-session-name lab --external-id "$EXT_ID"
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   첫 번째 실패 케이스를 만든다. 정책이 하나도 없는 사용자를 만들고 그 자격 증명으로 assume 을 시도한다. 신뢰 정책이 root 라 "후보"이긴 하지만 호출자 쪽에 `sts:AssumeRole` 권한이 없어 거부된다 — root 신뢰가 권한 부여가 아니라는 증거다.
+
+   </details>
 
    **기대 출력**: `AccessDenied ... not authorized to perform: sts:AssumeRole`
    → **trust policy AND 호출자 identity-based sts:AssumeRole 둘 다 필요**. `:root` trust는 권한 부여가 아니다.
@@ -94,6 +108,13 @@ import { Steps } from '@astrojs/starlight/components';
      --query 'AssumedRoleUser.Arn'
    # 기대: "arn:aws:sts::<acct>:assumed-role/lab-audit-role/lab"  ← 성공
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   같은 사용자에게 `sts:AssumeRole` 만 붙이면 통과하는지 확인한다. `sleep 10` 이 필요한 이유는 IAM 변경이 즉시 전파되지 않기 때문이다. 성공하면 `assumed-role/lab-audit-role/lab` 형태의 ARN 이 나온다 — 앞의 실패와 이 성공의 차이가 정확히 호출자 정책 한 줄이다.
+
+   </details>
 
 3. **A-3) 실패 케이스 2 — ExternalId 누락/불일치** (admin 호출자여도 실패)
 
@@ -122,6 +143,13 @@ import { Steps } from '@astrojs/starlight/components';
    unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   발급받은 임시 자격 증명으로 권한 경계를 확인한다. 세 값을 환경 변수로 내보내면 이후 호출이 그 세션 신원으로 나간다. `describe-vpcs` 는 허용돼 있어 성공하고 `describe-instances` 는 없어서 `UnauthorizedOperation` 이 난다. 마지막 `unset` 을 빠뜨리면 이후 명령이 계속 이 제한된 세션으로 나가므로 반드시 되돌린다.
+
+   </details>
+
 </Steps>
 
 ---
@@ -140,6 +168,13 @@ import { Steps } from '@astrojs/starlight/components';
    # 전환에 수 분 소요, status ACTIVE 복귀 후 재확인
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   퍼블릭 엔드포인트가 열린 채 남았는지 확인하고 닫는다. 기대값은 `[false, true]` — 퍼블릭은 꺼지고 프라이빗만 켜진 상태다. `update-cluster-config` 는 즉시 반영되지 않고 클러스터가 `ACTIVE` 로 돌아온 뒤에 다시 확인해야 한다.
+
+   </details>
+
 2. **B-2) VPC CloudShell 멱등 셋업 왕복**
 
    콘솔 CloudShell → Actions → Create VPC environment → 과제 VPC/프라이빗 서브넷/mark-sg 선택.
@@ -156,6 +191,13 @@ import { Steps } from '@astrojs/starlight/components';
    kubectl get nodes   # 기대: 노드 목록 (private API 접근 성공)
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   VPC CloudShell 을 매번 다시 세우는 멱등 블록이다. 홈 디렉터리가 세션마다 사라지므로 자격증명 설정·도구 설치·파일 수신을 한 덩어리로 만들어 둔다. 파일은 업로드 UI 가 없어 S3 `_transfer/` 를 릴레이로 쓴다. 마지막 `kubectl get nodes` 가 성공하면 프라이빗 API 에 붙은 것이다.
+
+   </details>
+
 3. **B-3) CoreDNS 커스텀 도메인 양쪽 확인**
 
    ```bash
@@ -171,6 +213,13 @@ import { Steps } from '@astrojs/starlight/components';
      -- nslookup kubernetes.default.svc.wsc2026.skills.local
    # 기대: 해석 성공. 한쪽만 적용돼 있으면 여기서 실패한다.
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   커스텀 DNS 도메인이 양쪽에 적용됐는지 세 지점에서 본다. 첫째는 노드 kubelet 의 `clusterDomain`, 둘째는 CoreDNS 의 Corefile, 셋째는 실제 이름 해석이다. 한쪽만 적용돼 있으면 앞의 두 조회는 통과해도 마지막 `nslookup` 에서 실패한다 — 그래서 세 번째가 진짜 확인이다.
+
+   </details>
 
 </Steps>
 
@@ -207,4 +256,11 @@ aws iam delete-role --role-name lab-audit-role
 # 클러스터를 더 안 쓰면: eksctl delete cluster -f cluster.rendered.yaml (방치 ≈ $7.4/일)
 # Interface Endpoint를 만들었다면 반드시 삭제 (개당 과금)
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+실습에서 만든 IAM 자원을 만든 역순으로 지운다. 정책이 붙어 있으면 사용자·역할이 지워지지 않으므로 정책 → 액세스 키 → 사용자·역할 순이다. 실습 B 쪽 주석은 과금이 계속 도는 항목을 짚는다 — 클러스터, VPC CloudShell 환경, 인터페이스 엔드포인트다.
+
+</details>
 

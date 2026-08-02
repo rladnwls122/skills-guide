@@ -34,6 +34,13 @@ flowchart TD
     AL --> A3["apk add tzdata + TZ 로<br/>KST 저장 가능"]
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+베이스 이미지 선택이 만드는 결과를 갈라 놓았다. `scratch` 는 가볍지만 ECR Basic 스캔이 안 되고, CA 번들이 없어 DynamoDB TLS 연결이 실패하며, zoneinfo 가 없어 시각이 UTC 로 저장된다 — 세 가지가 모두 채점 항목과 직접 부딪힌다. 고정 버전 alpine 은 셋을 각각 해결한다.
+
+</details>
+
 set-02 실측 Dockerfile 전문:
 
 ```dockerfile title="Dockerfile"
@@ -50,6 +57,13 @@ USER book
 EXPOSE 8080
 ENTRYPOINT ["/book"]
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+위 판단을 그대로 반영한 Dockerfile 이다. `tzdata` 설치와 `TZ=Asia/Seoul` 이 짝이라 둘 중 하나만 있으면 시각이 KST 로 저장되지 않는다. `adduser` 와 `USER book` 은 루트로 실행하지 않기 위한 것이고, `COPY --chmod=755` 는 복사와 실행 권한 부여를 한 줄로 끝낸다. 베이스 태그를 `3.24.1` 로 고정한 이유는 스캔 결과가 빌드 시점마다 달라지지 않게 하려는 것이다.
+
+</details>
 
 각 줄의 채점 근거:
 - `alpine:3.24.1` **고정 버전** — latest 금지 규칙 + 스캔 재현성.
@@ -89,6 +103,13 @@ resource "aws_ecr_repository" "book" {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+ECR 리포지토리의 세 설정이다. `scan_on_push` 가 켜져 있어야 push 직후 취약점 스캔이 돌고, `encryption_type = "KMS"` 는 키를 지정하지 않아 관리형 `aws/ecr` 키를 쓴다. `force_delete` 는 이미지가 남아 있어도 destroy 가 리포지토리를 지우게 한다 — 없으면 정리 단계에서 막힌다.
+
+</details>
+
 push·스캔 확인 흐름 (CloudShell 실측):
 
 ```bash
@@ -101,6 +122,13 @@ aws ecr describe-image-scan-findings --repository-name wskorea26-book-repo --ima
   --query 'imageScanFindings.findingSeverityCounts'
 # 기대: CRITICAL/HIGH 키가 없어야 함
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+빌드부터 스캔 확인까지의 표준 흐름이다. 로그인 대상은 리포지토리가 아니라 레지스트리 주소이고, push 뒤에는 `wait` 로 스캔 완료를 기다린 다음 심각도 집계를 본다. `CRITICAL`·`HIGH` 키가 아예 없어야 통과라, 키가 나오면 베이스 패키지를 갱신해 다시 빌드한다.
+
+</details>
 
 **④ 세트별 차이** — set-02 는 ECR 용 CMK 이름이 없어 관리형 aws/ecr, set-03 은 `wsc2026-ecr-kms` CMK 를 만들어 지정. 태그 이름(stable vs v1.0.0)도 과제지 따라간다.
 
@@ -116,12 +144,12 @@ aws ecr describe-image-scan-findings --repository-name wskorea26-book-repo --ima
 
 ```mermaid
 graph LR
-    subgraph TABLE["<span class='icon--logos icon--logos--aws-dynamodb'></span> wskorea26-data-table (PK: client_id)"]
+    subgraph TABLE["<span class='icon--logos icon--logos--aws-dynamodb'></span> wskorea26-data-table<br/>(PK: client_id)"]
         I1["client_id=c1<br/>concert_name=A, created_at=t3"]
         I2["client_id=c2<br/>concert_name=A, created_at=t1"]
         I3["client_id=c3<br/>concert_name=B, created_at=t2"]
     end
-    subgraph GSI["<span class='icon--mdi icon--mdi--layers-outline'></span> GSI concert_name-created_at-index<br/>(HASH concert_name + RANGE created_at)"]
+    subgraph GSI["<span class='icon--mdi icon--mdi--layers-outline'></span> GSI concert_name-created_at-index<br/>(HASH concert_name<br/>+ RANGE created_at)"]
         G1["A: &#91;t1, t3&#93; 정렬 저장"]
         G2["B: &#91;t2&#93;"]
     end
@@ -129,6 +157,13 @@ graph LR
     Q["Query(concert_name=A,<br/>ScanIndexForward=False)"] --> GSI
     GSI --> R["t3, t1 (최신순)"]
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+GSI 가 왜 필요한지 데이터로 보여 준다. 테이블은 `client_id` 로만 항목을 찾을 수 있어 "공연별 최신순"을 물을 방법이 없다. GSI 는 같은 항목들을 `concert_name` 으로 묶고 `created_at` 순으로 정렬해 따로 저장하므로, `ScanIndexForward=False` 를 준 Query 하나로 최신순 결과가 나온다. 애플리케이션에서 정렬하는 방식과 달리 정렬이 DB 안에서 끝난다.
+
+</details>
 
 set-02 실측:
 
@@ -176,6 +211,13 @@ resource "aws_dynamodb_table" "data" {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+테이블 정의 한 벌이다. `attribute` 블록에는 키로 쓰는 속성 셋만 적는다 — 나머지 필드는 스키마리스라 선언하지 않는다. GSI 는 `concert_name` 을 HASH, `created_at` 을 RANGE 로 두어 정렬 축을 만들고 `projection_type = "ALL"` 로 모든 필드를 함께 복제한다. 삭제방지·SSE·PITR 셋이 각각 별도 채점 항목이다.
+
+</details>
+
 - `attribute` 는 **키로 쓰는 속성만** 정의한다. 비키 속성을 정의하면 오히려 validate 에러.
 - `deletion_protection_enabled = true` 는 채점 항목이자 destroy 함정 — 삭제 전 false 로 바꿔 apply 해야 한다.
 
@@ -220,6 +262,13 @@ sequenceDiagram
     end
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+요청 하나가 함수 안에서 갈라지는 두 갈래다. `concert_name` 이 없으면 조회하지 않고 400 을 낸다. 있으면 먼저 `unquote_plus` 로 디코딩하는데, ALB 가 값을 인코딩된 채로 넘기기 때문이다 — 이 단계를 빠뜨리면 `2ND%20TINY_CON` 이라는 이름을 찾게 돼 결과가 늘 비어 나온다. 조회 결과가 없을 때도 오류가 아니라 빈 배열과 200 이다.
+
+</details>
+
 set-02 실측 핸들러의 채점 포인트별 코드:
 
 ```python title="lambda/index.py"
@@ -258,6 +307,13 @@ def handler(event, context):
     return _response(200, [{k: item.get(k) for k in _KEYS} for item in items])
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+핸들러가 채점 항목을 어떻게 만족시키는지가 다 들어 있다. 테이블·인덱스 이름은 환경 변수로 받아 하드코딩을 피하고, `_KEYS` 순서대로 딕셔너리를 만들어 응답 필드 순서를 기대 출력과 맞춘다. `ensure_ascii=False` 라야 한글·일본어가 이스케이프되지 않고, `ScanIndexForward=False` 가 최신순 정렬을 DB 쪽에서 끝낸다. 응답은 ALB 규격 네 필드를 갖춘다.
+
+</details>
+
 사실 단위 정리:
 - **ScanIndexForward=False** — 애플리케이션 sort() 가 아니라 인덱스 정렬로 최신순 ("데이터베이스 레벨" 요구 충족).
 - **키 순서** — `{k: item.get(k) for k in _KEYS}` 로 재조립. DynamoDB 반환 순서는 보장되지 않는다.
@@ -283,6 +339,13 @@ environment {
   }
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+함수에 이름을 주입하는 부분이다. 테이블 이름을 코드에 박지 않고 Terraform 참조로 넘기므로, 당일 이름이 바뀌어도 함수 코드는 그대로 둔다. 인덱스 이름도 같은 이유로 변수다.
+
+</details>
 
 **④ 세트별 차이** — 통합 대상(ALB vs API Gateway — 응답 포맷이 다르다: ALB 는 `isBase64Encoded` 가 필수), 런타임 버전, 조회 축이 바뀐다. "env 주입 + Query + 정렬 + 응답 포맷 정확 일치" 원칙은 공통.
 

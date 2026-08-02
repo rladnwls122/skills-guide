@@ -48,6 +48,13 @@ import { Steps } from '@astrojs/starlight/components';
    # 기대: 둘 다   DEPLOYED    cloudfront-js-2.0
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   배포 결과를 세 가지로 확인한다. 리전이 us-east-1 인 것이 전제고, S3 에 두 버전의 페이지가 각각 있는지, 함수 두 개가 `DEPLOYED` 상태에 런타임이 `cloudfront-js-2.0` 인지 본다. 런타임 2.0 이어야 KVS 조회와 `async` 를 쓸 수 있다.
+
+   </details>
+
 3. **HTTP → HTTPS 리다이렉트 (헤더·상태 코드만)**
 
    ```powershell
@@ -92,6 +99,13 @@ import { Steps } from '@astrojs/starlight/components';
 
    $ETAG = aws cloudfront-keyvaluestore put-key --kvs-arn $KVS --if-match $ETAG --key weight --value "0.3" --query ETag --output text
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   KVS 값을 바꿔 배정 비율이 실제로 반영되는지 본다. `put-key` 는 낙관적 잠금이라 매번 최신 `ETag` 를 함께 넘겨야 하고, 그래서 반환된 값을 다시 변수에 받는다. `weight` 를 1.0 으로 두면 모든 새 요청이 B 로 가야 한다 — 쿠키가 이미 있으면 기존 배정이 유지되므로 쿠키 없는 요청으로 확인한다.
+
+   </details>
 
    원래 값(`0.3`)으로 복원해 둔다. KVS 값은 엣지 로케이션까지 전파에 시간이 걸린다 — README.md 실측 기준 최대 ~2분이므로, 바로 옛 버전이 나와도 실패가 아니라 몇 초~몇 분 뒤 다시 확인한다. (`mark2.sh`는 이 전파를 `aws cloudfront test-function`으로 최대 60회·1초 간격 폴링해 흡수한다.)
 

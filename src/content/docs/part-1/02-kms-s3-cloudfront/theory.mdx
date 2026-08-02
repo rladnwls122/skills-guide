@@ -176,7 +176,7 @@ flowchart TD
     B -- "예" --> C["mark grep 실격"]
     B -- "아니오" --> D{"호출 신원에게<br/>kms:PutKeyPolicy 허용?"}
     D -- "아니오" --> E["KMS lockout safety check 거부<br/>→ apply 실패"]
-    D -- "예" --> F["통과: 배포자 admin + 사용자별 use statement"]
+    D -- "예" --> F["통과: 배포자 admin<br/>+ 사용자별 use statement"]
 ```
 
 <details class="diagram-note">

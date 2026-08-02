@@ -47,6 +47,13 @@ import { Steps } from '@astrojs/starlight/components';
    aws stepfunctions describe-state-machine --state-machine-arn $SM_ARN --query "[name,type]" --output text
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   배포된 리소스 셋을 각각 확인한다. DynamoDB 는 테이블 이름과 키 구성, Lambda 는 런타임과 환경 변수, Step Functions 는 이름과 유형(Standard)이다. 상태 머신은 이름으로 바로 조회가 안 돼 목록에서 ARN 을 먼저 찾는다.
+
+   </details>
+
    기대 출력:
 
    - 테이블: `wsc2026-student-score`, KeySchema `studentId` HASH + `examDate` RANGE
@@ -74,6 +81,13 @@ import { Steps } from '@astrojs/starlight/components';
    aws stepfunctions list-executions --state-machine-arn $SM_ARN --query "executions[].[status,startDate]" --output text
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   채점 직전 리셋 절차다. 순서가 중요하다 — 앞선 실행이 남긴 `processed/`·`error/` 객체와 DynamoDB 항목을 먼저 비우고, 그다음 `test.csv` 를 **정확히 한 번** 올린다. 두 번 올리면 오류 JSON 이 8개가 되어 기대값과 어긋난다. 마지막 조회로 실행이 한 건만 SUCCEEDED 인지 확인한다.
+
+   </details>
+
 4. **A-4. 결과 검증 + 기대 출력**
 
    ```powershell
@@ -89,6 +103,13 @@ import { Steps } from '@astrojs/starlight/components';
    aws s3 ls s3://$B/error/
    # 기대: error_*_STU2001 / STU2002 / STU2004 / unknown .json — 정확히 4개
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   결과를 네 지점에서 대조한다. 특정 학생의 평균·등급이 기대값과 같은지, 버킷 최상위에 접두어가 정확히 셋인지, `processed/` 에 파일이 하나인지, `error/` 에 오류 JSON 이 넷인지다. 첫 조회에서 항목이 아예 없다면 평균을 float 로 저장하려다 함수가 죽은 경우다.
+
+   </details>
 
 </Steps>
 
@@ -143,6 +164,13 @@ import { Steps } from '@astrojs/starlight/components';
    aws configservice describe-config-rules --config-rule-names wsc2026-sg-ssh-rule wsc2026-required-tags-rule --query "ConfigRules[*].[ConfigRuleName,ConfigRuleState]" --output text
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   유형 2 스택의 배선을 확인한다. 인스턴스와 보안 그룹 ID 를 태그·이름으로 역조회해 변수에 담고, 함수 6개의 런타임을 한 번에 훑고, EventBridge 룰에 타깃이 붙어 있는지 보고, Config 룰이 `ACTIVE` 인지 본다. 이 네 가지가 갖춰져야 복구 시연이 성립한다.
+
+   </details>
+
 3. **B-3. 복구 시연 + 기대 출력**
 
    ```powershell
@@ -159,6 +187,13 @@ import { Steps } from '@astrojs/starlight/components';
    # 기대: None
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   위반을 일부러 만들고 자동 복구를 확인한다. 인스턴스를 중지하고 SSH 인바운드를 열어 둔 뒤 90초를 기다린다 — CloudTrail 경유 경로라 즉시 반응하지 않기 때문이다. 기대값은 인스턴스가 다시 `running`, 인바운드 규칙 수가 0, 태그 규칙 위반 리소스가 없음이다.
+
+   </details>
+
 4. **B-4. 타입 원복 시연** (task 전용, 수동 채점 대비)
 
    ```powershell
@@ -172,6 +207,13 @@ import { Steps } from '@astrojs/starlight/components';
    # 기대: t3.micro    running   (자동 원복)
    aws events enable-rule --name wsc2026-ec2-stop-rule
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   인스턴스 타입 원복을 시연한다. 첫 줄의 룰 비활성화가 필수다 — 켜 둔 채로 인스턴스를 멈추면 중지 복구 함수가 인스턴스를 다시 켜 버려 타입 변경이 `IncorrectInstanceState` 로 실패한다. 타입을 바꾸고 시작한 뒤 3분을 기다리면 복구 함수가 원래 타입으로 되돌린다. 마지막에 룰을 반드시 다시 켠다.
+
+   </details>
 
 </Steps>
 

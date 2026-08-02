@@ -86,6 +86,13 @@ container_definitions = jsonencode([
 ])
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+ECS 태스크 정의의 컨테이너 부분이다. HCL 객체를 `jsonencode` 로 JSON 문자열로 바꿔 넣는 형태이고, 이미지·포트·환경 변수·로그 설정 넷이 들어간다. `awslogs` 드라이버는 로그 그룹을 자동으로 만들지 않으므로 그 그룹이 먼저 있어야 태스크가 뜬다.
+
+</details>
+
 k8s 매니페스트(YAML)에 익숙하면 낯선 지점이다. 이 필드 하나에 컨테이너 스펙 전체가 들어간다는 점만 기억하면 나머지는 set-08·set-09 의 `ecs.tf` 파일을 그대로 따라 쓸 수 있다.
 
 ## ALB 오리진 검증 헤더 패턴은 EKS·ECS 공통

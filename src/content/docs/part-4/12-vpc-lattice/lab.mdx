@@ -75,6 +75,13 @@ import { Steps } from '@astrojs/starlight/components';
        server.serve_forever()
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   클라이언트 쪽 앱이다. 표준 라이브러리만 쓰고 80 포트에서 받는다. `/health` 는 자기 상태만 답하고, `/v1/client/orders` 는 환경 변수 `SERVICE_URL` 이 가리키는 주소로 요청을 보내 그 응답을 감싸 돌려준다. 그 주소가 Lattice 가 만들어 준 DNS 이름이라, 이 앱은 상대 VPC 의 IP 를 전혀 모른 채 호출한다.
+
+   </details>
+
    ```python title="service_app.py"
    import json
    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -109,6 +116,13 @@ import { Steps } from '@astrojs/starlight/components';
        server.serve_forever()
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   서비스 쪽 앱이다. 8080 에서 받고 `/health` 와 `/v1/orders` 두 경로를 답한다. 헬스 경로가 따로 있는 이유는 Lattice 타깃 그룹의 헬스 체크가 그 경로를 때리기 때문이고, 응답의 `via` 필드는 요청이 Lattice 를 거쳐 왔는지 눈으로 확인하는 표식이다.
+
+   </details>
+
 2. **VPC 2개 + 서브넷 + 라우팅**
 
    서브넷 CIDR·AZ는 채점 대상이 아니다 — VPC CIDR만 고정값이다.
@@ -127,6 +141,13 @@ import { Steps } from '@astrojs/starlight/components';
    $CLIENT_RTB_ID = aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$CLIENT_VPC_ID" "Name=association.main,Values=true" --query "RouteTables[0].RouteTableId" --output text
    aws ec2 create-route --route-table-id $CLIENT_RTB_ID --destination-cidr-block 0.0.0.0/0 --gateway-id $IGW_ID
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   VPC 두 개를 서로 다른 대역으로 만든다. 클라이언트 쪽에만 IGW 와 기본 경로를 붙이고 퍼블릭 IP 자동 할당을 켠다 — 채점자가 들어올 입구가 그쪽이기 때문이다. 서비스 VPC 에는 IGW 도 NAT 도 만들지 않는다. 두 VPC 사이에 피어링이나 라우팅이 전혀 없다는 것이 이 실습의 전제다.
+
+   </details>
 
    검증:
 
@@ -152,6 +173,13 @@ import { Steps } from '@astrojs/starlight/components';
    $ASSOC_SG_ID = aws ec2 create-security-group --group-name skills-lattice-assoc-sg --description "service network vpc association inbound 80 from client vpc" --vpc-id $CLIENT_VPC_ID --query "GroupId" --output text
    aws ec2 authorize-security-group-ingress --group-id $ASSOC_SG_ID --protocol tcp --port 80 --cidr 10.61.0.0/16
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   보안 그룹 셋을 만든다. 클라이언트는 80 을 열어 두고, 서비스 EC2 는 8080 을 **Lattice 관리형 프리픽스 리스트에서 오는 트래픽만** 허용한다. 그 리스트 ID 는 계정·리전마다 다르므로 조회해서 쓰고, `--cidr` 로는 지정할 수 없어 `--ip-permissions` 구조를 쓴다. 세 번째는 VPC 연결에 붙일 보안 그룹으로, 클라이언트 VPC 대역에서 오는 80 만 받는다.
+
+   </details>
 
 4. **Service EC2 배포**
 
@@ -188,6 +216,13 @@ import { Steps } from '@astrojs/starlight/components';
    aws ec2 wait instance-running --instance-ids $SERVICE_INSTANCE_ID
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   서비스 EC2 를 띄운다. here-string 안에 앱 소스를 통째로 넣어 user-data 를 만드는 형태라, 파일을 따로 올리지 않고 인스턴스가 부팅하면서 앱과 systemd 유닛이 만들어진다. 인스턴스는 퍼블릭 IP 없이 뜬다 — 인터넷에서 닿을 방법이 없어야 Lattice 경로만 남는다.
+
+   </details>
+
    Service EC2는 **Public IP를 받지 않는다** — VPC Peering·TGW를 안 쓰는 것과 같은 이유로, Lattice를 거치지 않는 경로 자체를 열어두지 않는다. 채점([2-2])은 Client EC2의 Public IP만 curl한다.
 
 5. **Service Network + Service 생성**
@@ -201,6 +236,13 @@ import { Steps } from '@astrojs/starlight/components';
    "SERVICE_DNS=$SERVICE_DNS"
    # 기대: 값이 비어 있지 않아야 한다 (None이면 아직 전파 전 — 잠시 후 재조회)
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   Lattice 의 상위 두 리소스를 만든다. Service Network 는 VPC·서비스를 묶는 울타리이고, Service 는 호출 대상 하나다. 서비스를 만들면 Lattice 가 DNS 이름을 발급하는데, 이 값이 클라이언트가 쓸 주소가 된다. 조회 결과가 비어 있으면 아직 전파 전이므로 잠시 후 다시 부른다.
+
+   </details>
 
 6. **Target Group + Target 등록 + Listener**
 
@@ -217,6 +259,13 @@ import { Steps } from '@astrojs/starlight/components';
    $listenerAction = '{"forward":{"targetGroups":[{"targetGroupIdentifier":"__TG_ID__","weight":100}]}}' -replace '__TG_ID__', $TARGET_GROUP_ID
    $LISTENER_ID = aws vpc-lattice create-listener --service-identifier $SERVICE_ID --name skills-lattice-http-listener --protocol HTTP --port 80 --default-action $listenerAction --query "id" --output text
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   타깃 그룹과 리스너를 만들어 서비스에 붙인다. 타깃 그룹은 `INSTANCE` 유형이라 EC2 를 직접 등록하고, 헬스 체크 경로가 앱의 `/health` 다. 리스너는 80 으로 받아 그 타깃 그룹으로 전달하므로, 클라이언트는 80 으로 부르고 서비스는 8080 에서 받는 포트 변환이 여기서 일어난다.
+
+   </details>
 
    Target이 `HEALTHY`가 되기까지 헬스 체크 몇 차례가 필요하다 — 3단계에서 이미 `skills-lattice-service-sg`를 프리픽스 리스트로 열어뒀으므로 자동으로 진행된다.
 
@@ -274,6 +323,13 @@ import { Steps } from '@astrojs/starlight/components';
    "CLIENT_PUBLIC_IP=$CLIENT_PUBLIC_IP"
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   클라이언트 EC2 를 띄운다. 서비스 쪽과 같은 방식이지만 `Environment=SERVICE_URL=http://$SERVICE_DNS` 한 줄이 더 있다 — 앞 단계에서 받은 Lattice DNS 이름이 여기 박힌다. 이 인스턴스만 퍼블릭 IP 를 갖고, 그 주소가 채점 대상이다.
+
+   </details>
+
    :::caution[포트 80 바인딩은 root 권한이 필요하다]
    `client_app.py`는 `0.0.0.0:80`에 직접 바인딩한다. systemd 유닛에 `User=`를 넣으면(기본값은 root) `PermissionError`로 죽는다 — 위 유닛 파일처럼 `User=`를 아예 넣지 않는다.
    :::
@@ -307,6 +363,13 @@ import { Steps } from '@astrojs/starlight/components';
    curl.exe -s -w "`nhttp_code=%{http_code}`n" "http://$CLIENT_PUBLIC_IP/v1/client/orders?id=1001"
    # 기대: {"client": "ok", "service": {"order_id": "1001", "via": "vpc-lattice"}}  http_code=200
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   채점 항목을 순서대로 확인한다. 클라이언트 헬스가 200 인지, Service Network·Service·VPC 연결·서비스 연결이 모두 `ACTIVE` 인지, 타깃 그룹과 리스너가 기대대로인지다. 연결 두 종류를 각각 확인하는 이유는 서로 다른 리소스이기 때문이다 — VPC 연결은 어느 VPC 가 이 네트워크에 붙었는지, 서비스 연결은 어느 서비스가 붙었는지를 뜻한다.
+
+   </details>
 
 </Steps>
 
@@ -384,6 +447,13 @@ aws ec2 delete-internet-gateway --internet-gateway-id $IGW_ID
 aws ec2 delete-vpc --vpc-id $CLIENT_VPC_ID
 aws ec2 delete-vpc --vpc-id $SERVICE_VPC_ID
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+정리는 참조 관계의 역순이다. Lattice 쪽부터 리스너 → 타깃 해제 → 타깃 그룹 → 서비스 연결 → 서비스 → VPC 연결 → Service Network 순으로 지운다. 중간의 `Start-Sleep` 은 해제가 반영되기 전에 다음 삭제를 시도하면 거부되기 때문이다. 그다음 EC2 를 종료해야 보안 그룹이 지워지고, 마지막으로 서브넷·IGW·VPC 를 지운다.
+
+</details>
 
 ## 오답 노트 양식
 

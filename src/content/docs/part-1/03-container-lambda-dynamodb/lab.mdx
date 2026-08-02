@@ -82,6 +82,13 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
    # 기대: [["stable"]] — 태그 1개뿐
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   이미지를 올리고 스캔 결과까지 확인한다. `${ECR%%/*}` 는 리포지토리 경로를 잘라 레지스트리 주소만 남기는 셸 문법이라 로그인 대상이 된다. `wait image-scan-complete` 로 스캔이 끝나기를 기다린 뒤 심각도 집계를 보고, 마지막 `describe-images` 로 태그가 `stable` 하나뿐인지 확인한다 — `latest` 가 함께 붙으면 감점이다.
+
+   </details>
+
 5. **Lambda 작성 (index.py + lambda.tf)**
 
    index.py 스펙 (정답지 금지, theory §4 의 사실 목록만 보고):
@@ -119,6 +126,13 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
    Get-Content out.json
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   조회할 항목 두 건을 넣고 Lambda 를 ALB 없이 호출한다. CLI 의 `put-item` 은 값을 타입 표기(`{"S": ...}`)로 주므로 숫자를 문자열로 다루고, 그래서 boto3 의 float 제한을 밟지 않는다. 호출은 ALB 이벤트 모양의 JSON 을 파일로 만들어 `--payload fileb://` 로 넘기는 방식이다 — `concert_name` 값이 `%20` 으로 인코딩돼 있는 것이 ALB 가 넘겨주는 형태를 그대로 흉내 낸 것이다.
+
+   </details>
+
    기대 출력 검증 포인트:
 
    - `"statusCode": 200`, `"statusDescription": "200 OK"`
@@ -146,6 +160,13 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
    # 기대: "ENABLED"
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   실패 경로와 테이블 속성을 확인한다. (2)는 파라미터가 없을 때 400 과 정해진 메시지가 나오는지, (3)은 결과가 없을 때 404 가 아니라 `[]` 와 200 이 나오는지를 본다. (4)는 삭제방지·SSE 종류·GSI 이름을 한 번에 뽑고, 이어서 PITR 상태를 따로 조회한다 — PITR 은 `describe-table` 이 아니라 `describe-continuous-backups` 에 있다.
+
+   </details>
+
 7. **정답과 diff**
 
    ```powershell
@@ -155,6 +176,13 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
    git diff --no-index .\lambda.tf    C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\lambda.tf
    git diff --no-index .\lambda\index.py C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\lambda\index.py
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   직접 쓴 파일 다섯 개를 정답지와 나란히 비교한다. Dockerfile·tf 3종·핸들러 코드 순이라 컨테이너부터 애플리케이션까지 한 바퀴가 된다. 차이가 나면 어느 쪽이 채점 항목을 만족하는지 기준으로 판단한다 — 정답지와 다르다고 전부 틀린 것은 아니다.
+
+   </details>
 
    확인 관점: 비키 attribute 를 정의하지 않았는가, 실행역할이 3-statement 최소권한인가, 페이지네이션 루프가 있는가, `_KEYS` 재조립 방식인가.
 
@@ -206,6 +234,13 @@ terraform destroy
 aws dynamodb describe-table --table-name wskorea26-data-table 2>&1        # ResourceNotFoundException
 aws ecr describe-repositories --repository-names wskorea26-book-repo 2>&1 # RepositoryNotFoundException
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+삭제방지가 걸린 스택을 지우는 순서다. `deletion_protection_enabled` 를 false 로 바꿔 apply 를 한 번 더 돌려야 destroy 가 테이블을 지울 수 있다. ECR 은 `force_delete` 덕분에 이미지가 남아 있어도 지워진다. 마지막 두 조회가 각각 `ResourceNotFoundException`·`RepositoryNotFoundException` 을 내면 정리가 끝난 것이다.
+
+</details>
 
 CMK 는 PendingDeletion 7일 대기 — 정상. CloudShell 홈의 이미지/파일은 과금 대상이 아니므로 방치해도 되지만, 대회 습관상 `docker image prune -af` 로 정리한다.
 

@@ -51,6 +51,13 @@ kubectl describe node <node>                      # taint, Allocated resources
 kubectl top pods -A --sort-by=memory              # metrics-server 필요
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+상태를 읽는 조회 명령들이다. 배치가 맞는지는 `-o wide` 와 `--show-labels`, 실패 원인은 `describe pod` 의 Events, 크래시 원인은 `logs --previous` 로 본다. `describe node` 는 taint 와 할당된 자원을 함께 보여 줘 스케줄 실패를 가른다.
+
+</details>
+
 ### 리소스 다루기
 
 ```bash
@@ -66,6 +73,13 @@ kubectl port-forward svc/<svc> 8080:80            # Grafana/Prometheus 로컬 �
 kubectl run dbg --rm -it --image=alpine -- sh     # 임시 디버그 Pod (쓰고 지워짐)
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+리소스를 바꾸는 명령들이다. `rollout status` 는 배포 완료를 기다리고, `rollout restart` 는 ConfigMap 변경을 순차 교체로 반영하며, `rollout undo` 는 되돌린다. 마지막 두 줄은 임시 확인용이다 — port-forward 로 대시보드를 로컬에서 열고, 디버그 파드는 쓰고 나면 자동으로 사라진다.
+
+</details>
+
 ### 출력 추출 (mark.sh 스타일)
 
 ```bash
@@ -76,6 +90,13 @@ kubectl get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints
 kubectl config current-context                    # 엉뚱한 클러스터 방지
 kubectl auth can-i list pods                      # 신원/RBAC 빠른 점검
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+출력에서 필요한 값만 뽑는 형태들이다. `jsonpath` 로 파드와 노드의 짝, 이미지 태그, IRSA 애노테이션을 각각 꺼낸다. 마지막 두 줄은 사고 예방용이다 — 지금 어느 클러스터에 붙어 있는지, 지금 신원으로 그 동작이 되는지를 미리 확인한다.
+
+</details>
 
 ## eksctl
 
@@ -89,6 +110,13 @@ eksctl get iamserviceaccount --cluster <name>     # IRSA 확인
 eksctl utils describe-stacks --cluster <name>     # 생성 실패 시 CFN 스택 진단
 eksctl delete cluster -f cluster.rendered.yaml    # destroy는 만든 파일로
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+eksctl 명령들이다. 생성은 20분이 걸리므로 먼저 던져 두고 다른 작업을 한다. 조회 계열로 노드그룹·애드온·IRSA 를 확인하고, 생성이 실패하면 `utils describe-stacks` 로 CloudFormation 쪽 오류를 본다. 삭제는 만들 때 쓴 파일을 그대로 넘긴다.
+
+</details>
 
 kubeconfig 등록(채점 신원과 동일 신원으로):
 
@@ -108,6 +136,13 @@ helm status <release> -n <ns>
 helm template <release> <repo>/<chart> -f values.yaml > rendered.yaml   # 렌더만 (검토용)
 helm uninstall <release> -n <ns>
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+helm 명령들이다. `show values` 로 기본값을 뽑아 고친 뒤 `-f` 로 넘기는 흐름이 기본이고, `upgrade --install` 은 처음이든 두 번째든 같은 명령으로 끝난다. `template` 은 클러스터에 적용하지 않고 렌더 결과만 파일로 내므로 무엇이 바뀌는지 먼저 볼 때 쓴다.
+
+</details>
 
 ## aws cli
 
@@ -131,6 +166,13 @@ aws ecr describe-image-scan-findings --repository-name <repo> --image-id imageTa
   --query 'imageScanFindings.findingSeverityCounts'           # Critical/High 확인
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+ECR 로그인과 이미지 확인이다. 계정 ID 를 조회해 레지스트리 주소를 만들고, 토큰을 표준 입력으로 넘겨 로그인한다. 뒤의 두 명령은 태그가 제대로 올라갔는지와 취약점 스캔에 Critical·High 가 없는지를 본다.
+
+</details>
+
 ### ALB·TG (mark가 가장 자주 치는 곳)
 
 ```bash
@@ -141,6 +183,13 @@ aws elbv2 describe-rules --listener-arn <listener-arn> | jq '.Rules[].Conditions
 aws elbv2 describe-target-health --target-group-arn <tg-arn> \
   --query 'TargetHealthDescriptions[].TargetHealth.State'     # healthy 대기 2~3분
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+ALB 를 계층 순서대로 조회한다. 로드밸런서 이름·주소·스킴 → 리스너 기본 액션 → 규칙 조건 → 타깃 상태다. 타깃이 healthy 가 되기까지 2~3분 걸리므로 마지막 조회는 시간을 두고 다시 친다.
+
+</details>
 
 ### CloudFront·데이터
 
@@ -161,6 +210,13 @@ aws ec2 describe-instances \
 aws iam get-role --role-name <role> --query 'Role.AssumeRolePolicyDocument'   # trust 정책 확인
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+네트워크·신원 조회 셋이다. 서브넷은 AZ·CIDR·Name 태그를 한 표로 보고, 인스턴스는 실행 중인 것만 추린다. 마지막 줄은 역할의 신뢰 정책을 그대로 내므로 assume 이 거부될 때 먼저 볼 자리다.
+
+</details>
+
 ## terraform
 
 ```bash
@@ -175,6 +231,13 @@ terraform state list                              # 뭐가 만들어졌나
 terraform state show <addr>                       # 특정 리소스 실제 속성
 terraform destroy                                 # 삭제방지 해제 후 (deletion_protection)
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+Terraform 흐름이다. `plan -out` 으로 계획을 파일에 담아 그대로 apply 하면 계획과 실행 사이에 상태가 바뀌어도 의도한 것만 적용된다. `output -json` 은 다음 단계 치환의 입력이고, `state list`·`state show` 는 실제로 무엇이 만들어졌는지 확인한다. destroy 는 삭제방지를 먼저 해제해야 통과한다.
+
+</details>
 
 ## alias (연습 기간에만 — 대회장은 풀 명령으로도 손에 붙게)
 

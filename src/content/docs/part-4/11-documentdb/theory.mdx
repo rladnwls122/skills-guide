@@ -53,6 +53,13 @@ flowchart LR
     KMS -.->|"저장 암호화"| DOCDB
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+구성 전체가 한 장이다. 채점자는 EC2 의 8080 으로만 들어오고, DocumentDB 는 VPC 안에서 클라이언트 보안 그룹으로만 열려 있어 밖에서 직접 닿을 수 없다. 비밀번호는 EC2 에 저장되지 않고 요청마다 Secrets Manager 에서 읽는다 — 코드나 user-data 에 자격 증명이 남지 않는 구조다. KMS 는 트래픽 경로가 아니라 저장 암호화 쪽에 붙는다.
+
+</details>
+
 DocumentDB 클러스터는 VPC 밖으로 나가는 퍼블릭 엔드포인트 자체가 없다. 문제지 3-1의 "DocumentDB Cluster: 외부 직접 노출 금지"는 별도 설정이 아니라 **기본 동작**이다 — DocumentDB에 퍼블릭 액세스 옵션 자체가 없으므로, 아무 설정도 켜지 않으면 이미 만족된다. 진짜로 통제해야 할 대상은 보안 그룹이다: `27017` 포트를 Client EC2의 보안 그룹에서 오는 트래픽만 허용하고, 그 외에는 열지 않는다.
 
 반대로 Client EC2는 채점기가 접근해야 하므로 Public IP와 `TCP/8080` 인바운드가 필요하다. "공개 앱 계층 + 비공개 데이터 계층"이라는 동일한 패턴은 [vpc-basics](/start/vpc-basics/)에서 이미 다뤘다.

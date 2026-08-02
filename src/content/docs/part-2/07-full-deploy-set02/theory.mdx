@@ -22,26 +22,33 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 ```mermaid
 graph TD
     U@{ icon: "mdi:web", form: "square", label: "User (브라우저/curl)", pos: "b", h: 46, w: 46 }
-    CF@{ icon: "logos:aws-cloudfront", form: "square", label: "CloudFront wskorea26-concert-cf<br/>(+WAF 부착 지점)<br/>CF Function: POST /book → /v1/book 재작성", pos: "b", h: 46, w: 46 }
+    CF@{ icon: "logos:aws-cloudfront", form: "square", label: "CloudFront wskorea26-concert-cf<br/>(+WAF 부착 지점)<br/>CF Function:<br/>POST /book → /v1/book 재작성", pos: "b", h: 46, w: 46 }
     U -->|"HTTPS (HTTP는 301 리다이렉트)"| CF
     S3@{ icon: "logos:aws-s3", form: "square", label: "S3 wskorea26-concert-bucket-비번호<br/>origin_path /web/main<br/>SSE-KMS, 퍼블릭 차단", pos: "b", h: 46, w: 46 }
-    CF -->|"기본 동작(정적)<br/>인증: OAC(sigv4) + 헤더 wskorea26-s3-access"| S3
+    CF -->|"기본 동작(정적)<br/>인증: OAC(sigv4)<br/>+ 헤더 wskorea26-s3-access"| S3
     ALB@{ icon: "logos:aws-elb", form: "square", label: "wskorea26-book-alb :80<br/>기본 403 / 헤더 규칙 2개", pos: "b", h: 46, w: 46 }
-    CF -->|"/book* (무캐싱)<br/>인증: 커스텀 헤더 X-Origin-Verify=wskorea26-cf"| ALB
+    CF -->|"/book* (무캐싱)<br/>인증: 커스텀 헤더<br/>X-Origin-Verify=wskorea26-cf"| ALB
     ALB -->|"POST (규칙 p10)<br/>인증: SG(ALB→노드 8080)"| POD["book Pod x2 (EKS app 노드)<br/>/v1/book, /health:8080"]
     LMB@{ icon: "logos:aws-lambda", form: "square", label: "wskorea26-book-lambda<br/>python3.14, TABLE_NAME", pos: "b", h: 46, w: 46 }
     ALB -->|"그 외 GET 등 (규칙 p20)"| LMB
-    DDB@{ icon: "logos:aws-dynamodb", form: "square", label: "DynamoDB wskorea26-data-table<br/>PK client_id, GSI concert_name+created_at<br/>KMS, 삭제방지", pos: "b", h: 46, w: 46 }
-    POD -->|"PutItem — 인증: IRSA(wskorea26-book-sa)"| DDB
-    LMB -->|"Query — 인증: Lambda 실행 역할(최소권한)"| DDB
-    subgraph EKS["<span class='icon--logos icon--logos--aws-eks'></span> EKS wskorea26-cluster (priv-subnet-c/d)"]
+    DDB@{ icon: "logos:aws-dynamodb", form: "square", label: "DynamoDB wskorea26-data-table<br/>PK client_id<br/>GSI concert_name+created_at<br/>KMS, 삭제방지", pos: "b", h: 46, w: 46 }
+    POD -->|"PutItem<br/>인증: IRSA(wskorea26-book-sa)"| DDB
+    LMB -->|"Query<br/>인증: Lambda 실행 역할(최소권한)"| DDB
+    subgraph EKS["<span class='icon--logos icon--logos--aws-eks'></span> EKS wskorea26-cluster<br/>(priv-subnet-c/d)"]
         POD
         GRAF@{ icon: "logos:grafana", form: "square", label: "Grafana/Prometheus (addon 노드)", pos: "b", h: 46, w: 46 }
-        FB@{ icon: "simple-icons:fluentbit", form: "square", label: "Fluent Bit DaemonSet(전 노드) → CloudWatch Logs", pos: "b", h: 46, w: 46 }
+        FB@{ icon: "simple-icons:fluentbit", form: "square", label: "Fluent Bit DaemonSet(전 노드)<br/>→ CloudWatch Logs", pos: "b", h: 46, w: 46 }
     end
     GALB@{ icon: "logos:aws-elb", form: "square", label: "wskorea26-grafana-alb", pos: "b", h: 46, w: 46 }
     GALB --> GRAF
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+set-02 1과제 전체가 한 장에 있다. 요청은 CloudFront 한 곳으로 들어와 두 갈래로 갈린다 — 정적 파일은 OAC 서명으로 S3 에, `/book*` 는 커스텀 헤더를 달고 ALB 로 간다. ALB 는 그 헤더와 메서드를 보고 POST 는 파드로, 나머지는 Lambda 로 보낸다. 화살표에 적힌 것이 각 구간의 인증 수단이다 — OAC, 커스텀 헤더, 보안 그룹, IRSA, 실행 역할이 구간마다 다르다. 데이터는 결국 DynamoDB 한 곳에서 만나고, 클러스터 안에는 관측 스택이 별도 ALB 로 노출된다.
+
+</details>
 
 암기 포인트(화살표별 인증):
 | 구간 | 인증/보호 |
@@ -87,6 +94,13 @@ sequenceDiagram
     A->>A: 규칙 p20 (헤더만) → lambda-tg
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+CloudFront Function 이 URI 를 고쳐도 오리진이 바뀌지 않는 이유다. viewer-request 단계에서 POST `/book` 을 `/v1/book` 으로 바꾸지만, 그 시점에는 이미 `/book*` 동작이 선택된 뒤라 캐시 동작을 다시 고르지 않는다. 그래서 재작성된 요청도 ALB 로 간다. GET 은 조건에 걸리지 않아 원래 경로 그대로 가고, ALB 에서 규칙 우선순위에 따라 Lambda 로 넘어간다.
+
+</details>
+
 실측 함수 전문 (이 이상 절대 복잡하게 만들지 말 것):
 
 ```javascript title="terraform/cloudfront/book-rewrite.js"
@@ -98,6 +112,13 @@ function handler(event) {
     return request;
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+그 재작성 함수 전문이다. CloudFront Functions 는 요청 객체를 받아 고쳐서 돌려주는 형태이고, 조건은 메서드와 URI 완전 일치 두 가지다. 반환값이 요청 객체라 응답을 만들지는 못한다 — 리다이렉트나 차단이 필요하면 응답 객체를 반환하는 다른 형태로 쓴다.
+
+</details>
 
 배포 설정 실측 요점 (cloudfront.tf):
 - Comment = `wskorea26-concert-cf` — **mark가 Comment로 배포를 식별**한다 (8-1의 CF_ID 조회).
@@ -141,6 +162,13 @@ graph LR
     S8 --> S9
     S9 --> S10["10 정리(역순 destroy)"]
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+10단계 배포의 의존 관계다. 화살표가 곧 "먼저 끝나야 하는 것"이라, 갈래가 둘로 벌어지는 구간(2 이미지 빌드와 3 클러스터 생성)은 동시에 진행할 수 있다. 5단계 앱 배포는 이미지와 LBC 둘 다를 기다린다. 20분 걸리는 클러스터 생성을 먼저 걸어 두고 그동안 이미지를 만드는 것이 시간 예산의 핵심이다.
+
+</details>
 
 단계별 왜(암기):
 | 단계 | 왜 이 위치인가 |
@@ -220,6 +248,13 @@ function handler(event) {
     return request;
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+위 함수를 채점 관점에서 다시 놓았다. 확인할 것은 조건 두 개(메서드가 POST, URI 가 정확히 `/book`)와 결과 경로(`/v1/book`)다. 파드의 애플리케이션이 `/v1/book` 을 받으므로 이 값이 어긋나면 POST 만 404 가 된다.
+
+</details>
 
 이 이상 절대 복잡하게 만들지 말 것.
 </Quiz>

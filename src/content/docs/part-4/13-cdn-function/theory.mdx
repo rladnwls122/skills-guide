@@ -38,6 +38,13 @@ flowchart LR
     VRS -->|"x-sp-ab-assigned 있으면<br/>Set-Cookie 응답"| U
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+CloudFront 의 훅 네 자리와 이 모듈이 쓰는 두 자리를 구분한다. ①viewer-request 와 ④viewer-response 는 CloudFront Functions 가 붙을 수 있는 자리고, 가운데 origin-request·origin-response 는 Lambda@Edge 전용이라 여기서는 쓰지 않는다. 배정은 ①에서 하고 쿠키 발급은 ④에서 한다 — 요청 단계에서 정한 값을 헤더로 남겨 응답 단계가 읽는 형태다.
+
+</details>
+
 ②③(origin-request/origin-response)은 **캐시 히트일 때는 아예 실행되지 않는다** — CloudFront가 오리진에 요청을 보낼 필요가 없기 때문이다. 반면 ①④(viewer-request/viewer-response)는 캐시 히트·미스와 무관하게 **모든 요청에서 실행**된다. 이 모듈의 A/B 배정 로직이 ①④에 있는 이유이기도 하다 — 캐시된 응답이라도 쿠키 확인·Set-Cookie 판단은 매번 필요하다.
 
 ### 런타임·비용 비교
@@ -98,6 +105,13 @@ async function handler(event) {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+요청 단계 함수다. 쿠키가 이미 a 나 b 면 그 배정을 그대로 쓰고 헤더를 세우지 않는다 — 그래야 응답 단계가 `Set-Cookie` 를 다시 내보내지 않는다. 쿠키가 없을 때만 KVS 의 `weight` 를 읽어 난수와 비교해 배정하고, 그 사실을 헤더로 남긴다. 마지막에 배정에 맞는 경로를 KVS 에서 읽어 URI 를 바꾼다. `try` 로 감싼 이유는 KVS 키가 없을 때 오류로 죽지 않고 원본 요청을 그대로 통과시키기 위해서다.
+
+</details>
+
 **viewer-response** (`skillsphone-cdn-ab-res-fn`) — `x-sp-ab-assigned` 요청 헤더가 있을 때만 `Set-Cookie`를 추가한다. 즉 방금 새로 배정된 방문자에게만 쿠키를 발급하고, 이미 쿠키가 있던 재방문자에게는 다시 발급하지 않는다(mark 2-4/2-5가 검사하는 지점).
 
 ```js title="terraform/cloudfront/res-fn.js"
@@ -115,6 +129,13 @@ function handler(event) {
   return response;
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+응답 단계 함수다. 요청 단계가 남긴 헤더가 있을 때만 쿠키를 굽는다. `Max-Age=86400` 이라 하루 동안 같은 방문자는 같은 버전을 본다. 헤더가 없으면 아무것도 하지 않으므로, 이미 배정된 방문자의 쿠키 만료 시간이 매 요청마다 갱신되지 않는다.
+
+</details>
 
 구현체 주석은 KVS 조회 두 번(weight, version_*)을 `Promise.all`이 아니라 순차 `await`로 처리한 이유를 "함수 메모리 한도(2 MB) 초과 위험"이라 적어 두었다. 이번 조사에서 AWS 공식 문서에서 그 메모리 근거 문구를 별도로 재확인하지는 못했지만, 2 MB라는 한도 자체는 위 비교표에서 확인된다.
 

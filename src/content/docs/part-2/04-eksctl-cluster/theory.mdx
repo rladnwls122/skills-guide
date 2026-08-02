@@ -37,6 +37,13 @@ graph TD
     CC --> AD
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+ClusterConfig 한 장에 들어가는 최상위 블록들이다. `vpc` 는 기존 VPC 와 프라이빗 서브넷만 등록하고, `secretsEncryption` 은 Secret 을 KMS 로 봉투 암호화하며, `cloudWatch.clusterLogging` 은 로그 5종을 켠다. `iam` 은 IRSA(withOIDC)나 Pod Identity 중 하나를 고르는 자리고, `managedNodeGroups` 와 `addons` 가 나머지를 채운다. 채점 항목이 이 블록들에 하나씩 대응한다.
+
+</details>
+
 핵심 필드 요약 (set-02 실측):
 
 | 블록 | 핵심 값 | 채점 항목 |
@@ -91,6 +98,13 @@ graph LR
     end
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+파드·사용자에게 AWS 권한을 주는 세 방식이 나란히 있다. IRSA 는 서비스 계정 토큰을 STS 가 OIDC 로 검증해 역할을 내주고, Pod Identity 는 노드의 에이전트 DaemonSet 이 대신 받아 주며 역할의 신뢰 대상이 `pods.eks.amazonaws.com` 이다. Access Entry 는 성격이 다르다 — AWS 신원을 클러스터 RBAC 에 매핑하는 것이라 `kubectl` 을 쓰는 사람 쪽 문제다.
+
+</details>
+
 YAML 작성법 비교 (실측):
 
 <Tabs syncKey="tool">
@@ -102,6 +116,13 @@ YAML 작성법 비교 (실측):
       - metadata: { name: wskorea26-book-sa, namespace: wskorea26 }
         attachPolicyARNs: ["${BOOK_APP_POLICY_ARN}"]   # 정책은 Terraform이 먼저 생성
   ```
+
+  <details class="diagram-note">
+  <summary>이 블록이 하는 일</summary>
+
+  IRSA 방식의 선언이다. `withOIDC: true` 가 클러스터에 OIDC 발급자를 붙이고, `serviceAccounts` 항목이 서비스 계정과 IAM 역할을 한 번에 만든다. 정책 ARN 은 Terraform 이 먼저 만들어 둔 것을 변수로 받는다 — eksctl 이 정책까지 만들지 않기 때문에 순서가 Terraform → eksctl 로 고정된다.
+
+  </details>
   </TabItem>
   <TabItem label="set-03 (Pod Identity)">
   ```yaml title="cluster.yaml"
@@ -113,6 +134,13 @@ YAML 작성법 비교 (실측):
   addons:
     - name: eks-pod-identity-agent                     # Pod Identity 필수 애드온
   ```
+
+  <details class="diagram-note">
+  <summary>이 블록이 하는 일</summary>
+
+  같은 일을 Pod Identity 로 하면 이렇게 된다. 서비스 계정과 역할을 연결(`podIdentityAssociations`)만 하고 OIDC 는 필요 없다. 대신 `eks-pod-identity-agent` 애드온이 필수다 — 이것이 없으면 연결을 걸어도 파드가 자격 증명을 못 받는다.
+
+  </details>
   </TabItem>
 </Tabs>
 
@@ -140,18 +168,25 @@ YAML 작성법 비교 (실측):
 
 ```mermaid
 graph TD
-    subgraph addonNG["<span class='icon--logos icon--logos--aws-ec2'></span> wskorea26-addon-ng (label node-type=addon)"]
+    subgraph addonNG["<span class='icon--logos icon--logos--aws-ec2'></span> wskorea26-addon-ng<br/>(label node-type=addon)"]
         core@{ icon: "k8s:deploy", form: "square", label: "coredns", pos: "b", h: 46, w: 46 }
         lbc@{ icon: "logos:aws-elb", form: "square", label: "aws-load-balancer-controller", pos: "b", h: 46, w: 46 }
         mon@{ icon: "logos:prometheus", form: "square", label: "Prometheus/Grafana", pos: "b", h: 46, w: 46 }
         core ~~~ lbc ~~~ mon
     end
-    subgraph appNG["<span class='icon--logos icon--logos--aws-ec2'></span> wskorea26-app-ng (label node-type=app)"]
+    subgraph appNG["<span class='icon--logos icon--logos--aws-ec2'></span> wskorea26-app-ng<br/>(label node-type=app)"]
         book["book Pod x2"]
     end
-    ds["DaemonSet(aws-node, kube-proxy, fluent-bit)"] -.->|전 노드 - 채점 예외| addonNG
+    ds["DaemonSet<br/>(aws-node, kube-proxy, fluent-bit)"] -.->|전 노드 - 채점 예외| addonNG
     ds -.-> appNG
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+노드그룹 둘로 나누는 이유를 배치로 보여 준다. coredns·LBC·모니터링 같은 시스템 구성요소는 addon 노드그룹에, 앱 파드는 app 노드그룹에 라벨로 고정된다. 점선인 DaemonSet 은 성격이 다르다 — 전 노드에 하나씩 뜨는 것이 정상이라 이 배치 규칙의 예외로 본다.
+
+</details>
 
 - **label**: `node-type: addon|app` → 워크로드는 `nodeSelector`로 지정.
 - **taint**: set-02는 taint 없음(nodeSelector만으로 5-4 충족). set-03은 workload NG에 `NoSchedule` taint를 걸어 앱 외 스케줄을 강제 차단 — 앱 Deployment에 toleration 필요.
@@ -173,6 +208,13 @@ addons:
     configurationValues: |
       {"nodeSelector": {"node-type": "addon"}}
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+애드온 세 개를 선언하고 coredns 만 배치를 지정한다. `configurationValues` 는 애드온에 넘기는 설정을 JSON 문자열로 받는 자리라, 여기 `nodeSelector` 를 넣어야 coredns 가 addon 노드로 간다. vpc-cni·kube-proxy 는 DaemonSet 이라 배치 지정이 의미가 없다.
+
+</details>
 
 애드온 버전은 **지정하지 않는다**(작업규칙 2: EKS Addon 미고정 — eksctl이 클러스터 버전 default 사용).
 
@@ -204,6 +246,13 @@ graph LR
     Y --> E
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+값이 Terraform 에서 eksctl 까지 넘어가는 경로다. `terraform output` → 환경 변수 파일 → 치환 → 렌더된 YAML → `eksctl create cluster -f` 순이다. 중간에 사람이 값을 옮겨 적는 단계가 없어야 오타가 사라진다.
+
+</details>
+
 <Tabs syncKey="shell">
   <TabItem label="PowerShell">
   ```powershell
@@ -215,6 +264,13 @@ graph LR
   }
   $c | Set-Content cluster.rendered.yaml
   ```
+
+  <details class="diagram-note">
+  <summary>이 블록이 하는 일</summary>
+
+  대회 PC 기준 치환 구현이다. 변수 이름 목록을 돌며 `${이름}` 을 환경 변수 값으로 바꾼다. 치환 후에는 `${` 가 남았는지 검사해야 한다 — 값이 빈 변수는 조용히 빈 문자열로 치환돼 YAML 은 멀쩡해 보이고 클러스터 생성이 엉뚱한 지점에서 실패한다.
+
+  </details>
   </TabItem>
   <TabItem label="Bash (Linux/CloudShell)">
   ```bash
@@ -319,6 +375,13 @@ addons:
     configurationValues: |
       {"nodeSelector": {"node-type": "addon"}}
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+애드온 선언을 다시 한 번 놓았다. 요점은 `coredns` 의 `configurationValues` 로 `nodeSelector` 를 넘기는 형태다 — 이 한 조각이 addon 노드그룹 배치 채점과 직접 이어진다.
+
+</details>
 
 애드온 **버전은 지정하지 않는다**(작업규칙 2: EKS Addon 미고정 — eksctl 이 클러스터 버전 default 를 쓴다).
 </Quiz>

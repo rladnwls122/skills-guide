@@ -35,6 +35,13 @@ PART-2 클러스터(앱 배포 완료 상태) 위에서 진행한다. 명령은 
    kubectl get pods -n observability
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   관측 스택을 helm 한 번으로 세운다. 릴리스 이름이 `monitoring` 인 것이 중요하다 — 파드 이름이 릴리스 이름을 접두어로 갖고 채점이 그 이름으로 파드 수를 세기 때문이다. `--create-namespace` 로 `observability` 네임스페이스를 함께 만들고, 세부 설정은 values 파일이 담는다.
+
+   </details>
+
    values 파일 필수 확인 포인트:
 
    - `podMonitorSelectorNilUsesHelmValues: false`
@@ -106,6 +113,13 @@ curl -s -u admin:'Skills$#$@!' "http://$GRAFANA_LB/api/search?query=wsc2026" | j
 # 브라우저로 대시보드 열어 전 패널 데이터 표시 확인 — No Data 패널 0개
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+파이프라인을 다섯 지점에서 실측한다. (a) 파드가 모두 Running 인지, (b) Fluent Bit 이 실제로 노출하는 메트릭 이름을 컨테이너 안에서 직접 뽑아 룰·대시보드에 적힌 이름과 글자 단위로 맞추는지 — 여기서 어긋나면 그래프가 빈다. (c) CloudWatch 로그 형식과 `/health` 가 0건인지, (d) Prometheus 가 알람 룰 6종을 로드했는지, (e) Grafana 데이터소스 3종과 대시보드가 보이는지다. 순서가 곧 데이터가 흐르는 순서다.
+
+</details>
+
 ## 관측성 파이프라인 :badge[함정]{variant=danger}
 
 - **메트릭명 불일치**: `Metric_name wsc2026_requests_total`로 정의해도 실제 이름은 `log_metric_counter_` 접두어가 붙는다. 검증 (b) 없이 rules/dashboard를 짜면 알람·패널이 조용히 죽는다.
@@ -134,4 +148,11 @@ helm uninstall monitoring -n observability   # Grafana NLB도 함께 삭제됨 �
 aws logs delete-log-group --log-group-name /wsc2026/eks/book-app   # Terraform 관리면 destroy로
 # 08을 이어서 하면 클러스터는 유지, 하루 이상 쉬면 eksctl delete cluster
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+관측 스택만 걷어내는 정리다. 직접 만든 리소스를 먼저 지우고 helm 릴리스를 마지막에 지운다 — Grafana 앞의 NLB 가 릴리스에 딸려 있어 함께 사라지지만, 콘솔에서 잔존 로드밸런서를 한 번 더 확인한다. 로그 그룹은 Terraform 이 만들었다면 destroy 쪽에서 지운다.
+
+</details>
 

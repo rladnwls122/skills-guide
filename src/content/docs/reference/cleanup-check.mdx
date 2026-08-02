@@ -41,6 +41,13 @@ echo "=== MSK ===" && aws kafka list-clusters-v2 \
   --query 'ClusterInfoList[].[ClusterName,State]' --output text
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+시간당 과금이 도는 리소스를 한 번에 훑는 블록이다. 실행 중 EC2, EKS, 로드밸런서, NAT 게이트웨이에 더해 잊기 쉬운 셋을 함께 본다 — 연결 안 된 탄력적 IP, 붙지 않은 EBS 볼륨, 살아 있는 MSK 다. 출력이 전부 비어야 그날이 끝난 것이다.
+
+</details>
+
 :::tip[판정 기준]
 전부 빈 출력(또는 의도적으로 유지 중인 것만)이면 통과. D4→D6처럼 모듈 인덱스에 명시된
 유지 예외만 남긴다.

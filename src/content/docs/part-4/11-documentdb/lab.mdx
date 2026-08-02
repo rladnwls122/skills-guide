@@ -45,6 +45,13 @@ import { Steps } from '@astrojs/starlight/components';
    aws ec2 authorize-security-group-ingress --group-id $CLIENT_SG --protocol tcp --port 22 --cidr 0.0.0.0/0
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   기본 VPC 의 서브넷 두 개를 골라 두고 보안 그룹 둘을 만든다. 요점은 DB 쪽 규칙이다 — 27017 을 CIDR 이 아니라 `--source-group` 으로 클라이언트 보안 그룹에만 연다. 클라이언트 IP 가 바뀌어도 규칙이 그대로 살고, 채점이 요구하는 "클라이언트만 접근"을 만족한다. 클라이언트 쪽 8080·22 는 밖에서 들어와야 해서 CIDR 로 연다.
+
+   </details>
+
    SSH(22)는 채점 대상이 아니다. 본인 IP만 허용하도록 `--cidr`를 좁힐 수 있으면 좁힌다.
 
 2. **KMS 키 생성**
@@ -73,6 +80,13 @@ import { Steps } from '@astrojs/starlight/components';
    aws docdb create-db-instance --db-instance-identifier skills-nosql-docdb-instance-1 --db-instance-class db.t3.medium --engine docdb --db-cluster-identifier skills-nosql-docdb-cluster
    aws docdb wait db-instance-available --db-instance-identifier skills-nosql-docdb-instance-1
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   DocumentDB 클러스터와 인스턴스를 만든다. 서브넷 그룹이 먼저 있어야 하고, 클러스터에 `--storage-encrypted` 와 KMS 별칭, 백업 보존 기간을 함께 준다 — 세 가지가 각각 채점 항목이다. 클러스터는 껍데기라 실제로 쿼리를 받는 것은 인스턴스이고, `wait db-instance-available` 이 끝나야 접속이 된다.
+
+   </details>
 
    `username`/`password` 값 자체는 채점 대상이 아니다(Secret에 값이 채워져 있는지만 본다) — 대신 비밀번호를 잊지 않게 적어 둔다.
 
@@ -119,6 +133,13 @@ import { Steps } from '@astrojs/starlight/components';
    aws ec2 create-key-pair --key-name skills-nosql-key --query "KeyMaterial" --output text | Out-File -Encoding ascii skills-nosql-key.pem
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   EC2 가 비밀번호를 코드 없이 읽게 하는 준비다. 역할에 그 시크릿 하나만 읽는 정책을 붙이고, 인스턴스 프로파일로 감싸 EC2 에 붙일 수 있게 만든다. `Start-Sleep 15` 가 필요한 이유는 프로파일 전파가 즉시가 아니어서 바로 `run-instances` 를 하면 실패하기 때문이다. 마지막 줄은 SSH 키를 만들어 파일로 저장한다.
+
+   </details>
+
    다음 내용을 `user-data.sh`로 저장한다 — 부팅 시 의존성 설치와 CA 번들 다운로드, systemd 유닛 등록까지 한다(앱 파일은 아직 없으므로 서비스는 등록만 하고 시작하지 않는다):
 
    ```bash title="user-data.sh"
@@ -145,6 +166,13 @@ import { Steps } from '@astrojs/starlight/components';
    systemctl enable skills-nosql
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   인스턴스가 처음 뜰 때 한 번 도는 초기화 스크립트다. 파이썬 드라이버를 깔고, DocumentDB TLS 검증에 쓸 CA 번들을 받고, 클라이언트를 systemd 서비스로 등록한다. `Restart=always` 라 프로세스가 죽어도 되살아나고, `enable` 이라 재부팅 후에도 자동으로 뜬다 — 채점 시점에 서비스가 살아 있어야 하므로 둘 다 필요하다.
+
+   </details>
+
    인스턴스를 생성한다:
 
    ```powershell
@@ -155,6 +183,13 @@ import { Steps } from '@astrojs/starlight/components';
    aws ec2 wait instance-running --instance-ids $INSTANCE_ID
    $CLIENT_IP = aws ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   클라이언트 EC2 를 띄운다. AMI ID 는 리전마다 다르므로 SSM 파라미터에서 최신 Amazon Linux 값을 조회해 쓴다. 프로파일·보안 그룹·user-data·Name 태그를 한 번에 주고, `wait instance-running` 뒤에 퍼블릭 IP 를 받아 다음 단계에서 접속에 쓴다.
+
+   </details>
 
    검증 (mark 1-2 EC2 부분):
 
@@ -212,6 +247,13 @@ import { Steps } from '@astrojs/starlight/components';
    }
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   적재 검증 응답의 기대 형태다. 컬렉션별 문서 수와 함께 날짜 필드의 타입이 전부 `datetime` 으로 나와야 한다 — 문자열로 들어가면 범위 조회와 TTL 인덱스가 동작하지 않기 때문에 채점이 이 타입을 따로 본다.
+
+   </details>
+
    `dateFieldTypes`에 `"str"`이 하나라도 보이면 seed 엔드포인트가 아닌 다른 경로로 데이터를 넣은 것이다 — 컬렉션을 비우고 `/v1/admin/seed`를 다시 호출한다.
 
 9. **인덱스 생성**
@@ -251,6 +293,13 @@ import { Steps } from '@astrojs/starlight/components';
 
    print("indexes created")
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   인덱스를 만드는 스크립트다. 접속 정보는 Secrets Manager 에서 받아 URI 를 조립하는데, 비밀번호에 특수문자가 있어도 깨지지 않게 `quote_plus` 로 감싼다. `replicaSet=rs0` 와 CA 번들 TLS 는 DocumentDB 접속의 필수 조건이고, `retryWrites=false` 는 DocumentDB 가 지원하지 않는 옵션을 끄는 것이다. 인덱스는 세 종류다 — 고유 인덱스, 조회 축에 맞춘 복합 인덱스, 그리고 `expireAfterSeconds=0` 인 TTL 인덱스로 세션을 만료 시각에 자동 삭제한다.
+
+   </details>
 
    Client EC2는 이미 pymongo·CA 번들·Secrets Manager 권한을 전부 갖고 있으므로 그 위에서 실행한다:
 
@@ -334,6 +383,13 @@ aws iam delete-instance-profile --instance-profile-name skills-nosql-client-ec2-
 aws iam delete-role-policy --role-name skills-nosql-client-ec2-role --policy-name secret-read
 aws iam delete-role --role-name skills-nosql-client-ec2-role
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+만든 것을 전부 되돌린다. 순서가 있다 — 인스턴스를 먼저 지워야 클러스터가 지워지고, EC2 가 사라져야 보안 그룹이 지워진다. KMS 키는 즉시 삭제가 안 되므로 비활성화 후 7일 예약 삭제로 둔다. IAM 은 프로파일에서 역할을 뺀 뒤 프로파일·정책·역할 순으로 지운다.
+
+</details>
 
 :::caution[과금 주의]
 DocumentDB 인스턴스는 stop이 없다 — **삭제만이 과금을 멈춘다.** KMS 키는 삭제 예약 후에도 대기 기간(이 실습 예시는 7일) 동안 잔존 리소스로 남는다 — alias만 지우고 끝냈다고 착각하지 않는다.

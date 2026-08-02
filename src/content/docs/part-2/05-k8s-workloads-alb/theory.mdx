@@ -21,14 +21,21 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 ```mermaid
 graph TD
-    D["wskorea26-book-deploy (replicas 2)"] --> P1["probe 3종 축<br/>readiness: /health:8080 (트래픽 수신 게이트)<br/>liveness: /health:8080 (재시작 트리거)<br/>(startup: 부팅 느린 앱만 — set-02 미사용)"]
+    D["wskorea26-book-deploy<br/>(replicas 2)"] --> P1["probe 3종 축<br/>readiness: /health:8080<br/>(트래픽 수신 게이트)<br/>liveness: /health:8080<br/>(재시작 트리거)<br/>(startup: 부팅 느린 앱만<br/>— set-02 미사용)"]
     D --> P2["배치: nodeSelector node-type=app<br/>(taint 세트면 + toleration)"]
     D --> P3["AZ 분산: topologySpreadConstraints<br/>topology.kubernetes.io/zone<br/>maxSkew 1, DoNotSchedule"]
     D --> P4["자원: requests=limits 아님<br/>req 100m/128Mi, lim 500m/256Mi"]
     D --> P5["무중단: preStop sleep 15 +<br/>terminationGracePeriodSeconds 45"]
-    P6@{ icon: "logos:aws-iam", form: "square", label: "IAM: serviceAccountName<br/>wskorea26-book-sa (IRSA, eksctl이 생성)", pos: "b", h: 46, w: 46 }
+    P6@{ icon: "logos:aws-iam", form: "square", label: "IAM: serviceAccountName<br/>wskorea26-book-sa<br/>(IRSA, eksctl이 생성)", pos: "b", h: 46, w: 46 }
     D --> P6
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+Deployment 하나에 채점이 요구하는 축이 여섯 개 걸린다. 프로브는 역할이 갈린다 — readiness 는 트래픽을 받을지 정하고 liveness 는 재시작을 건다. 배치는 nodeSelector 로, AZ 분산은 topologySpread 로, 자원은 requests 와 limits 를 다르게 두어 버스트를 허용한다. 무중단 종료는 preStop 대기와 유예 시간의 조합이고, 신원은 IRSA 로 만든 서비스 계정이다.
+
+</details>
 
 각 요소의 이유:
 
@@ -99,6 +106,13 @@ graph LR
     TG --> Pod["book Pod IP:8080"]
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+ALB 를 Terraform 이 만들고 파드 연결만 클러스터가 맡는 구조다. Terraform 이 이름 고정으로 ALB 와 타깃그룹을 만들어 ARN 을 내주면, TargetGroupBinding 이 "이 Service 를 저 타깃그룹에"를 선언한다. 실제 등록·해제를 수행하는 것은 LBC 이고, 그래서 LBC 가 앱보다 먼저 떠 있어야 한다. Service 는 트래픽 경로가 아니라 파드 목록의 출처다 — `targetType: ip` 라 타깃그룹에는 파드 IP 가 직접 들어간다.
+
+</details>
+
 LBC 설치 (실측 — SA는 eksctl IRSA가 이미 생성했으므로 create=false):
 
 ```powershell
@@ -111,6 +125,13 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
   --set nodeSelector.node-type=addon        # addon 노드 고정 (mark 5-4)
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+설치 명령을 옵션별로 뜯어 놓았다. 클러스터 이름·리전·VPC 는 컨트롤러가 AWS 리소스를 찾는 데 쓰고, 서비스 계정은 만들지 않고 이름만 지정한다. 마지막 `nodeSelector` 한 줄이 addon 노드 배치 채점에 대응한다.
+
+</details>
+
 TGB manifest (실측):
 
 ```yaml title="k8s/app/targetgroupbinding.yaml"
@@ -122,6 +143,13 @@ spec:
   targetGroupARN: "<APP_TARGET_GROUP_ARN>"   # terraform output으로 치환 (targetGroupName 으로 이름 지정도 된다)
   targetType: ip
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+TargetGroupBinding 한 장이다. `serviceRef` 로 대상 Service 와 포트를, `targetGroupARN` 으로 대상 타깃그룹을 지목한다. ARN 대신 `targetGroupName` 을 써도 되고, `targetType: ip` 는 타깃그룹 쪽 설정과 일치해야 한다.
+
+</details>
 
 **④ 세트별 차이** — 패턴 자체는 전 세트 동일. 차이는 LBC 자격증명(set-02 IRSA / set-03·07 Pod Identity)과 nodeSelector label 키뿐.
 
@@ -150,6 +178,13 @@ graph TD
     R2 --> TG2
     L --> DEF["default: fixed-response 403<br/>(CloudFront 미경유 차단)"]
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+리스너 하나가 요청을 세 갈래로 나눈다. priority 10 은 헤더와 메서드를 함께 보고 POST 를 파드 타깃그룹으로 보내고, priority 20 은 나머지 헤더 일치 요청을 Lambda 타깃그룹으로 보낸다. 어느 규칙에도 안 걸리면 기본 액션이 403 을 고정 응답한다 — CloudFront 를 거치지 않은 직접 접근이 여기로 떨어진다. 규칙은 번호가 작은 것부터 평가되므로 두 규칙의 순서를 바꾸면 POST 도 Lambda 로 간다.
+
+</details>
 
 - 규칙 평가는 priority 순 — POST는 10에서 잡히고, 헤더만 있는 GET 등은 20으로 떨어진다.
 - **Lambda 타깃 3종 세트**: `aws_lb_target_group`(target_type="lambda") + `aws_lambda_permission`(principal=elasticloadbalancing.amazonaws.com, source_arn=TG ARN) + `aws_lb_target_group_attachment`(depends_on=permission). permission 없이 attach하면 실패한다.
@@ -217,6 +252,13 @@ spec:
   targetGroupARN: "<APP_TARGET_GROUP_ARN>"   # terraform output으로 치환
   targetType: ip
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+앞의 TargetGroupBinding 을 채점 관점에서 다시 놓았다. 확인할 것은 셋이다 — Service 이름과 포트가 실제 Service 와 같은지, ARN 이 Terraform 이 만든 그 타깃그룹인지, `targetType` 이 타깃그룹 설정과 맞는지.
+
+</details>
 
 패턴 자체는 전 세트 동일하고, 차이는 LBC 자격증명(set-02 IRSA / set-03·07 Pod Identity)과 nodeSelector label 키뿐이다.
 </Quiz>

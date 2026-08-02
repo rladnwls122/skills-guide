@@ -32,6 +32,13 @@ foreach ($v in 'VPC_ID','PRIV_SUBNET_C','PRIV_SUBNET_D','CLUSTER_EXTRA_SG_ID','N
 $c | Set-Content cluster.rendered.yaml
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+`cluster.yaml` 의 `${VAR}` 자리 아홉 개를 실제 값으로 바꿔 `cluster.rendered.yaml` 을 만든다. 값의 출처는 앞 모듈이 남긴 `.env.ps1` 이라 점 하나로 먼저 불러온다. PowerShell 의 `.Replace()` 는 정규식이 아니라 문자열 그대로 치환하므로 `${...}` 의 특수문자를 신경 쓰지 않아도 된다. 치환한 파일을 따로 만드는 이유는 원본을 그대로 두어 다시 렌더할 수 있게 하려는 것이다.
+
+</details>
+
 **검증 — 치환 누락 grep:**
 
 ```powershell
@@ -88,6 +95,13 @@ foreach ($ng in 'wskorea26-addon-ng','wskorea26-app-ng') {
     --query "nodegroup.[nodegroupName,instanceTypes[0],tags.Name]" --output text
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+노드그룹 두 개의 이름·인스턴스 타입·Name 태그를 차례로 뽑는다. 채점이 보는 세 값을 한 줄씩 출력하므로 기대값과 눈으로 대조할 수 있다 — 태그가 빠지면 이 자리에 `None` 이 찍힌다.
+
+</details>
 
 기대:
 

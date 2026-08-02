@@ -36,6 +36,13 @@ flowchart LR
     SFN -->|"DeleteInputProcessed (Delete)"| IN
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+유형 1 워크플로 전체다. `input/` 에 CSV 가 올라오면 이벤트 알림이 트리거 함수를 부르고, 그 함수가 상태 머신을 시작한다. 처리 함수는 행마다 갈라 정상 행은 DynamoDB 로, 오류 행은 `error/` 로 보낸다. 마지막 두 화살표가 S3 에 move API 가 없다는 사실의 결과다 — 원본을 `processed/` 로 복사하는 상태와 `input/` 에서 지우는 상태가 따로 있다. 지우지 않으면 그 파일이 다시 트리거를 부른다.
+
+</details>
+
 - 흐름: `input/`에 CSV 업로드 → S3 이벤트가 트리거 Lambda 호출 → 트리거가 Step Functions 실행 시작 → 처리 Lambda가 행별 검증 후 정상행은 평균(483/5=96.6)·등급 계산해 DynamoDB 저장, 오류행은 `error/`에 JSON 저장 → 상태 머신이 원본 파일을 `processed/`로 이동(Copy+Delete).
 
 ### ② 언제 이 패턴이 나오나
@@ -167,6 +174,13 @@ flowchart TB
     end
     CFG -.->|NON_COMPLIANT 평가| EC2
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+유형 2 는 감지 경로가 둘이라는 것이 요점이다. 인스턴스 중지·종료는 네이티브 상태 변경 이벤트라 수 초 만에 룰에 닿고, 보안 그룹·역할·타입 변경은 네이티브 이벤트가 없어 CloudTrail 기록을 거쳐 수십 초에서 1분이 걸린다. 복구 함수는 각 룰의 타깃이고, 종료는 되돌릴 수 없어 SNS 알림만 간다. 아래 Config 는 이벤트가 아니라 주기 평가로 규정 위반을 표시하는 별도 축이다.
+
+</details>
 
 - 흐름: EC2에 대한 정책 위반(SG 인바운드 추가, 인스턴스 프로파일 교체, 중지, 종료, 타입 변경)을 EventBridge가 감지 → Lambda가 원상 복구하거나(복구 불가한 terminate는) SNS 알림. AWS Config가 SSH 인바운드·필수 태그를 상시 감시.
 
@@ -311,6 +325,13 @@ flowchart LR
     FN --> SNS
     JUDGE -.->|"EventBridge 우회"| FN
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+set-08 변형의 배선이다. 보안 그룹에 인바운드가 추가되면 CloudTrail 이 그 API 호출을 기록하고, EventBridge 룰이 복구 함수를 부르며, 함수가 모든 인바운드를 회수한 뒤 SNS 로 알린다. 점선이 채점 방식이라 중요하다 — 채점은 EventBridge 를 거치지 않고 함수를 직접 호출한다. 그래서 배선(룰·타깃·권한)과 함수 로직이 따로 채점되고, 함수는 이벤트 없이 불려도 동작해야 한다.
+
+</details>
 
 ### ② 채점이 어디를 보나 — 배선과 동작을 따로 본다
 

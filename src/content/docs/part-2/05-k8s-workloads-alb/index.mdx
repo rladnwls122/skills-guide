@@ -35,6 +35,8 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 ## 선행 지식
 
+- ALB 는 리스너·규칙·타깃그룹·타깃 4계층이다. 규칙은 priority 오름차순으로 평가하고 처음 맞는 것에서 끝난다 — [loadbalancer-basics](/start/loadbalancer-basics/)
+- 타깃그룹 이름을 정해야 하면 Ingress 가 아니라 TargetGroupBinding 을 쓴다 — [loadbalancer-basics](/start/loadbalancer-basics/)
 - Deployment → ReplicaSet → Pod 관계. 직접 만지는 것은 Deployment뿐 — [k8s-basics](/start/k8s-basics/)
 - Service(ClusterIP)가 라벨 셀렉터로 파드에 분배한다. 대회는 LoadBalancer 타입을 쓰지 않는다 — [k8s-basics](/start/k8s-basics/)
 - Helm의 repo/chart/release/values 개념 — [k8s-basics](/start/k8s-basics/)

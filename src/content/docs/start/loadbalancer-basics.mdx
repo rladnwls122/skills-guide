@@ -150,3 +150,172 @@ AWS 로드밸런서는 두 종류를 주로 쓴다. 이 절은 AWS 공식 문서
 | 타깃 유형 | `instance` · `ip` · `lambda` | `instance` · `ip` · `alb` |
 
 HTTP 요청 내용을 보고 나눠야 하면 ALB 다. 고정 IP 가 필요하거나 HTTP 가 아닌 프로토콜이면 NLB 다. 후보 세트 1과제는 전부 ALB 다.
+
+## ③ 대회에서 어떻게 쓰이나
+
+여기부터는 채점 문맥이다. 서브넷·보안 그룹을 전제한다.
+
+### 3-1. CloudFront 를 거친 요청만 받는다
+
+ALB 를 인터넷에 열어 두면 CloudFront 를 건너뛰고 직접 때릴 수 있다. 그러면 WAF 도 캐시도 무의미해진다. 막는 방법은 리스너 기본 액션이다.
+
+```mermaid
+flowchart LR
+    U(("사용자"))
+    CF@{ icon: "logos:aws-cloudfront", form: "square", label: "CloudFront<br/>커스텀 헤더를 심는다", pos: "b", h: 46, w: 46 }
+    ALB@{ icon: "logos:aws-elb", form: "square", label: "ALB<br/>기본 액션 403", pos: "b", h: 46, w: 46 }
+    BAD(("직접 접근"))
+
+    U --> CF
+    CF -- "X-Origin-Verify 헤더 포함" --> ALB
+    BAD -- "헤더 없음 → 403" --> ALB
+```
+
+CloudFront 가 오리진으로 보낼 때 커스텀 헤더를 심고, ALB 규칙이 그 헤더 값을 조건으로 검사한다. 헤더가 없으면 어떤 규칙에도 안 걸려 기본 액션 `fixed-response 403` 으로 떨어진다.
+
+set-02 실측은 규칙이 **정확히 2개**다. 채점(mark 7-2)이 `describe-rules` 출력의 `HttpHeaderConfig.Values[]` 줄 수를 세므로 규칙을 더하거나 빼면 그 항목이 어긋난다. 상세는 [k8s 워크로드·ALB 이론](/part-2/05-k8s-workloads-alb/theory/) 에 있다.
+
+### 3-2. 이름이 채점 대상이다
+
+채점 스크립트는 `wskorea26-book-alb`·`wskorea26-book-tg` 같은 이름으로 리소스를 역조회한다. 이름이 한 글자만 달라도 그 항목을 못 찾는다. ALB 와 타깃그룹 이름은 과제지에 적힌 그대로 쓴다.
+
+### 3-3. Lambda 타깃은 세 리소스가 한 세트다
+
+Lambda 를 ALB 타깃으로 붙이려면 Terraform 리소스 세 개가 다 있어야 한다.
+
+| 리소스 | 역할 |
+|---|---|
+| `aws_lb_target_group` | `target_type = "lambda"` 로 타깃그룹을 만든다 |
+| `aws_lambda_permission` | ALB 가 함수를 호출하도록 허용한다. principal 은 `elasticloadbalancing.amazonaws.com`, source_arn 은 타깃그룹 ARN |
+| `aws_lb_target_group_attachment` | 함수를 타깃그룹에 등록한다. `depends_on` 으로 permission 뒤에 온다 |
+
+permission 없이 attach 하면 등록이 실패한다.
+
+## ④ 미니 실습 — 콘솔 30분
+
+:::caution[과금 주의]
+ALB 는 시간당 과금이다. 서울 리전 기준 시간당 약 $0.025 에 처리량(LCU)이 더해진다. 30분이면 센트 단위지만 **삭제하지 않으면 계속 붙는다.** 7단계까지 반드시 끝낸다.
+:::
+
+EC2 없이 Lambda 하나를 타깃으로 써서 ALB 를 만들어 본다. 만든 다음 CLI 로 읽고, 일부러 고장 내 보고, 지운다.
+
+<Steps>
+
+1. **Lambda 함수를 만든다**
+
+   콘솔에서 Python 런타임으로 함수 하나를 만들고 코드를 넣는다. 함수 이름은 `lb-lab-fn` 으로 한다.
+
+   ```python
+   def lambda_handler(event, context):
+       return {
+           "statusCode": 200,
+           "statusDescription": "200 OK",
+           "isBase64Encoded": False,
+           "headers": {"Content-Type": "text/plain"},
+           "body": "ok",
+       }
+   ```
+
+2. **타깃그룹과 ALB 를 만든다**
+
+   - 타깃그룹: 타깃 유형 **Lambda function**, 이름 `lb-lab-tg`, 함수는 `lb-lab-fn`
+   - ALB: 이름 `lb-lab-alb`, 인터넷 경계(internet-facing), 서브넷은 서로 다른 AZ 의 퍼블릭 서브넷 2개, 보안 그룹은 인바운드 TCP 80 을 `0.0.0.0/0` 으로 여는 것 하나
+   - 리스너: `:80/HTTP`, 기본 액션은 `lb-lab-tg` 로 전달
+
+   ALB 는 서브넷이 **두 개 이상**이어야 만들어진다. AZ 하나만 고르면 생성 단계에서 막힌다.
+
+3. **응답을 확인한다**
+
+   ALB 상태가 `active` 가 될 때까지 2~3분 걸린다.
+
+   ```bash
+   ALB_DNS=$(aws elbv2 describe-load-balancers --names lb-lab-alb \
+     --query 'LoadBalancers[0].DNSName' --output text)
+   curl -s -o /dev/null -w "%{http_code}\n" "http://$ALB_DNS/"
+   ```
+
+   기대: `200`
+
+4. **규칙을 추가해 평가 순서를 본다**
+
+   리스너에 규칙 하나를 더한다. priority `10`, 조건은 경로 `/admin`, 액션은 `fixed-response` 403.
+
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}\n" "http://$ALB_DNS/"        # 200 — 규칙 10 에 안 걸려 기본 액션
+   curl -s -o /dev/null -w "%{http_code}\n" "http://$ALB_DNS/admin"   # 403 — 규칙 10 에 걸림
+   ```
+
+   규칙을 하나 더 만들어 priority `5` 에 같은 `/admin` 경로를 `lb-lab-tg` 로 전달하도록 두면 `/admin` 이 다시 200 이 된다. 숫자가 작은 쪽이 먼저 평가되고 거기서 끝나기 때문이다. 확인했으면 priority 5 규칙은 지운다.
+
+5. **CLI 로 읽는다**
+
+   채점 스크립트가 실제로 뽑는 필드다.
+
+   ```bash
+   # ALB — 이름으로 역조회하고 상태·스킴을 본다
+   aws elbv2 describe-load-balancers --names lb-lab-alb \
+     --query 'LoadBalancers[0].[LoadBalancerName,State.Code,Scheme,Type]'
+
+   # 타깃그룹 — 타깃 유형과 헬스체크 설정
+   aws elbv2 describe-target-groups --names lb-lab-tg \
+     --query 'TargetGroups[0].[TargetGroupName,TargetType,HealthCheckEnabled,HealthCheckPath]'
+
+   # 규칙 — priority 와 조건. 채점은 이 출력의 줄 수를 세기도 한다
+   LISTENER_ARN=$(aws elbv2 describe-listeners \
+     --load-balancer-arn $(aws elbv2 describe-load-balancers --names lb-lab-alb \
+       --query 'LoadBalancers[0].LoadBalancerArn' --output text) \
+     --query 'Listeners[0].ListenerArn' --output text)
+   aws elbv2 describe-rules --listener-arn "$LISTENER_ARN" \
+     --query 'Rules[].[Priority,Conditions[0].Field,Actions[0].Type]' --output table
+
+   # 타깃 상태
+   TG_ARN=$(aws elbv2 describe-target-groups --names lb-lab-tg \
+     --query 'TargetGroups[0].TargetGroupArn' --output text)
+   aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
+     --query 'TargetHealthDescriptions[].TargetHealth'
+   ```
+
+   Lambda 타깃그룹은 헬스체크가 꺼져 있는 것이 기본이라 상태가 `unavailable` 로 나온다. 6단계에서 켠다.
+
+6. **unhealthy 를 재현한다**
+
+   헬스체크를 켜고, 함수가 500 을 돌려주게 바꿔 상태가 넘어가는 것을 본다.
+
+   ```bash
+   aws elbv2 modify-target-group --target-group-arn "$TG_ARN" \
+     --health-check-enabled --health-check-path / --matcher HttpCode=200 \
+     --health-check-interval-seconds 10 --healthy-threshold-count 2 \
+     --unhealthy-threshold-count 2
+   ```
+
+   20~30초 뒤 `describe-target-health` 가 `healthy` 로 바뀐다. 그다음 콘솔에서 함수의 `statusCode` 를 `500`, `statusDescription` 을 `"500 Internal Server Error"` 로 바꿔 배포한다.
+
+   ```bash
+   aws elbv2 describe-target-health --target-group-arn "$TG_ARN" \
+     --query 'TargetHealthDescriptions[0].TargetHealth'
+   ```
+
+   기대: 20초 안에 `State` 가 `unhealthy` 로, `Reason` 이 `Target.ResponseCodeMismatch` 로 바뀐다. 상태 코드를 200 으로 되돌리면 다시 `healthy` 가 된다.
+
+   이것이 대회에서 가장 자주 겪는 고장 형태다. 애플리케이션의 헬스 경로를 바꿔 놓고 타깃그룹 헬스체크 경로를 안 고치면 같은 결과가 나온다.
+
+7. **지운다**
+
+   ALB → 타깃그룹 → Lambda 순이다. ALB 가 타깃그룹을 참조하고 있어 역순으로는 지워지지 않는다.
+
+   ```bash
+   ALB_ARN=$(aws elbv2 describe-load-balancers --names lb-lab-alb \
+     --query 'LoadBalancers[0].LoadBalancerArn' --output text)
+   aws elbv2 delete-load-balancer --load-balancer-arn "$ALB_ARN"
+   aws elbv2 delete-target-group --target-group-arn "$TG_ARN"
+   aws lambda delete-function --function-name lb-lab-fn
+
+   # 확인 — 셋 다 없다고 나와야 한다
+   aws elbv2 describe-load-balancers --names lb-lab-alb 2>&1 | tail -1
+   aws elbv2 describe-target-groups --names lb-lab-tg 2>&1 | tail -1
+   aws lambda get-function --function-name lb-lab-fn 2>&1 | tail -1
+   ```
+
+   ALB 를 지우면 보안 그룹은 남는다. 실습용으로 새로 만들었으면 함께 지운다.
+
+</Steps>

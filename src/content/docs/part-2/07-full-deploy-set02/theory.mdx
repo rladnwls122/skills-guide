@@ -34,7 +34,7 @@ graph TD
     DDB@{ icon: "logos:aws-dynamodb", form: "square", label: "DynamoDB wskorea26-data-table<br/>PK client_id<br/>GSI concert_name+created_at<br/>KMS, 삭제방지", pos: "b", h: 46, w: 46 }
     POD -->|"PutItem<br/>인증: IRSA(wskorea26-book-sa)"| DDB
     LMB -->|"Query<br/>인증: Lambda 실행 역할(최소권한)"| DDB
-    subgraph EKS["<span class='icon--logos icon--logos--aws-eks'></span> EKS wskorea26-cluster<br/>(priv-subnet-c/d)"]
+    subgraph EKS["<span class='icon--logos icon--logos--aws-eks'></span> EKS wskorea26-cluster (priv-subnet-c/d)"]
         POD
         GRAF@{ icon: "logos:grafana", form: "square", label: "Grafana/Prometheus (addon 노드)", pos: "b", h: 46, w: 46 }
         FB@{ icon: "simple-icons:fluentbit", form: "square", label: "Fluent Bit DaemonSet(전 노드)<br/>→ CloudWatch Logs", pos: "b", h: 46, w: 46 }

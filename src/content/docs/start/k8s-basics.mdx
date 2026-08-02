@@ -108,7 +108,7 @@ flowchart TB
     ALB -->|"포워드"| TG["ALB TargetGroup<br/>(타깃 타입: IP)"]
 
     subgraph CLUSTER["<span class='icon--logos icon--logos--aws-eks'></span> EKS 클러스터"]
-        subgraph NGADDON["<span class='icon--logos icon--logos--aws-ec2'></span> addon 노드그룹<br/>(taint/label: node-type=addon)"]
+        subgraph NGADDON["<span class='icon--logos icon--logos--aws-ec2'></span> addon 노드그룹 (taint/label: node-type=addon)"]
             LBC@{ icon: "logos:helm", form: "square", label: "Helm 릴리스: LBC<br/>(AWS Load Balancer Controller)", pos: "b", h: 46, w: 46 }
             KPS@{ icon: "logos:prometheus", form: "square", label: "Helm 릴리스:<br/>kube-prometheus-stack", pos: "b", h: 46, w: 46 }
             FB1@{ icon: "simple-icons:fluentbit", form: "square", label: "DaemonSet: Fluent Bit", pos: "b", h: 46, w: 46 }

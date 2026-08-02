@@ -115,6 +115,7 @@ export default defineConfig({
       './src/styles/mermaid-theme.css',
       './src/styles/mermaid-aws-icons.css',
       './src/styles/mermaid-k8s-icons.css',
+      './src/styles/diagram-note.css',
       './src/styles/mobile.css',
       './src/styles/sidebar-toggle.css',
       './src/styles/layout.css',

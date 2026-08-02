@@ -34,6 +34,13 @@ ENV PORT=8080                # 환경 변수
 ENTRYPOINT ["python", "/app/app.py"]  # 컨테이너 시작 시 실행할 명령
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+이미지 한 장을 만드는 최소 구성이다. `FROM` 이 바탕 이미지를 정하고, `COPY`·`RUN` 이 각각 레이어를 하나씩 쌓는다. `ENV` 는 컨테이너 실행 시점의 환경 변수를 박아 두고, `ENTRYPOINT` 는 컨테이너가 뜰 때 실행할 명령을 고정한다. `RUN` 은 빌드 시점에, `ENTRYPOINT` 는 실행 시점에 도는 것이 갈리는 지점이다.
+
+</details>
+
 - `RUN`은 **빌드할 때**, `ENTRYPOINT`/`CMD`는 **실행할 때** 동작 — 가장 흔한 혼동.
 - 베이스 이미지는 작을수록 좋다: `slim`/`alpine` 계열 우선.
 
@@ -48,6 +55,13 @@ flowchart LR
     TAG -- "docker push" --> ECR
     ECR -- "pull" --> EKS
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+Dockerfile 한 장이 EKS 노드에서 도는 컨테이너가 되기까지의 네 단계다. `docker build` 가 로컬 이미지 `app:v1` 을 만들고, `docker tag` 가 그 이미지에 ECR 주소를 붙인 이름을 하나 더 달아 준다. 이름을 바꾸는 것이 아니라 같은 이미지에 이름을 추가하는 것이라 push 할 대상이 생긴다. `docker push` 로 ECR 에 올리면 노드가 그 주소에서 pull 해 실행한다.
+
+</details>
 
 push 3단계 암기: **build → tag(레지스트리 주소 포함) → push**. tag 없이 push하면 Docker Hub로 가려다 실패한다.
 
@@ -80,6 +94,13 @@ ECR은 저장 용량 과금(소액). 실습 끝나면 레포까지 삭제한다.
    docker run --rm hello:v1     # "hello skills" 출력 확인
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   heredoc 으로 Dockerfile 을 만들고 바로 빌드·실행해 보는 왕복이다. `<<'EOF'` 처럼 구분자에 따옴표를 붙이면 셸이 안쪽 `$` 를 건드리지 않는다. `docker run --rm` 은 컨테이너가 끝나면 바로 지우므로 `hello skills` 출력만 확인하고 흔적이 남지 않는다.
+
+   </details>
+
 2. **ECR push** (리전 `ap-northeast-2`, `<ACCOUNT_ID>`는 본인 계정)
 
    ```bash
@@ -89,6 +110,13 @@ ECR은 저장 용량 과금(소액). 실습 끝나면 레포까지 삭제한다.
    docker tag hello:v1 <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/hello:v1
    docker push <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/hello:v1
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   만든 이미지를 ECR 로 올리는 4단계다. `get-login-password` 가 임시 토큰을 내고 그것을 `docker login` 의 표준 입력으로 넘긴다 — 비밀번호가 명령 이력에 남지 않는 방식이다. 로그인 대상은 레지스트리 주소까지고, `docker tag` 로 리포지토리 경로를 붙인 뒤에야 push 가 된다.
+
+   </details>
 
 3. **콘솔에서 ECR 레포에 이미지가 보이는지 확인**
 

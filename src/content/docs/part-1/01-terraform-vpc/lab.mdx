@@ -62,6 +62,13 @@ mkdir my-vpc-lab; cd my-vpc-lab
    terraform apply
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   apply 전 4단계 점검이다. `fmt -check -diff` 는 서식이 어긋난 곳을 보여 주고, `validate` 는 문법과 참조를 검사하며, `plan` 은 실제로 만들 리소스 수를 낸다. 20개라는 수를 미리 세어 두면 plan 출력만 보고 빠뜨린 리소스를 찾을 수 있다.
+
+   </details>
+
    기대: `Apply complete! Resources: 20 added` (NAT 생성으로 2~3분 소요).
 
 3. **검증 — mark.sh가 보는 방식으로**
@@ -78,6 +85,13 @@ mkdir my-vpc-lab; cd my-vpc-lab
      --query 'RouteTables[].{Name:Tags[?Key==`Name`]|[0].Value, Subnets:Associations[].SubnetId, Routes:Routes[?DestinationCidrBlock==`0.0.0.0/0`].[GatewayId,NatGatewayId]}' `
      --output json
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   채점이 보는 두 항목을 같은 방식으로 확인한다. (1)은 VPC CIDR 이 `172.16.0.0/16` 인지, (2)는 각 RTB 의 이름·연결된 서브넷·기본 경로 대상을 한 번에 뽑는다. `--query` 안의 역따옴표는 JMESPath 의 리터럴 표기이고, PowerShell 에서는 백틱이 줄 이음 문자라 두 문법이 한 줄에 섞인다.
+
+   </details>
 
    기대 출력 (요지):
 
@@ -103,6 +117,13 @@ mkdir my-vpc-lab; cd my-vpc-lab
    "@ | Set-Content ..\.env.ps1
    . ..\.env.ps1   # 새 터미널에서도 이 한 줄로 복원
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   출력값을 파일 두 개로 남긴다. `outputs.json` 은 원본 보관용이고, `.env.ps1` 은 다음 터미널에서 바로 불러 쓰는 환경 변수 스크립트다. here-string 안의 백틱 `` `$ `` 이 핵심이다 — 지금 확장하지 말고 `$env:VPC_ID` 라는 글자 그대로 파일에 쓰라는 표시다.
+
+   </details>
 
 5. **정답과 diff**
 

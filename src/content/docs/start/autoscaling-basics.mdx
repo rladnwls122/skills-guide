@@ -37,6 +37,13 @@ flowchart LR
     L2 --> NODE
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+오토스케일링이 2층 구조라는 것을 보여 준다. 1층은 메트릭을 보고 Pod 수를 바꾸는 HPA·KEDA 이고, 2층은 그 결과 갈 곳이 없어진 Pending Pod 을 보고 노드를 늘리는 Karpenter·Cluster Autoscaler 다. 노드는 메트릭이 아니라 **스케줄되지 못한 Pod** 을 보고 늘어난다 — CPU 가 아무리 높아도 Pod 이 늘지 않으면 노드도 늘지 않는다.
+
+</details>
+
 **2층은 1층의 결과를 보고 움직인다.** 노드 오토스케일러는 메트릭을 보지 않는다 — 오직 "스케줄되지 못한 Pod가 있는가"만 본다. 그래서 Pod가 늘어도 기존 노드에 다 들어가면 노드는 한 대도 안 늘어난다. 채점이 "노드 2대 이상"을 기대한다면 그건 **리소스 요청량으로 설계된 결과**이지 Pod 개수로 정해지는 게 아니다.
 
 ### 1. HPA — 이용률의 분모는 `requests`다
@@ -86,6 +93,13 @@ flowchart LR
     SQS -.->|"0 ↔ 1 활성화 판단만<br/>오퍼레이터가 직접 폴링"| OP
     OP -.-> DEP
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+KEDA 가 SQS 큐 길이로 Pod 수를 바꾸는 경로다. ScaledObject 를 선언하면 KEDA 오퍼레이터가 그것을 읽어 HPA(`keda-hpa-<이름>`)를 대신 만들고, 그 HPA 가 큐 길이를 메트릭으로 받아 replicas 를 조정한다. 점선이 다른 일을 한다 — 0 에서 1 로 깨우는 활성화 판단만은 HPA 가 아니라 오퍼레이터가 큐를 직접 폴링해서 한다. `minReplicaCount: 0` 일 때 `pollingInterval` 이 의미를 갖는 이유다.
+
+</details>
 
 #### `minReplicaCount`가 0인지 아닌지가 모든 것을 가른다
 
@@ -196,6 +210,13 @@ kubectl logs -n <karpenter ns> deploy/karpenter --tail=50
 # 노드에 실제로 붙은 라벨 확인 (nodeSelector와 대조)
 kubectl get nodes --show-labels
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+안 늘어날 때 원인을 좁히는 순서다. ScaledObject 만 보면 안 된다 — KEDA 가 HPA 를 실제로 만들었는지 `get hpa` 로 확인하고, `describe hpa` 의 Metrics 절에서 메트릭을 읽고는 있는지 본다. Pod 이 Pending 이면 `describe pod` 의 `FailedScheduling` 사유가 노드 부족인지 셀렉터 불일치인지 갈라 준다. 마지막 두 명령은 Karpenter 가 노드를 만들려고 시도는 했는지, 만든 노드에 기대한 라벨이 붙었는지를 본다.
+
+</details>
 
 ---
 

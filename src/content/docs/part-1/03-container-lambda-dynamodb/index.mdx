@@ -12,7 +12,7 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 - [ ] Dockerfile 베이스 선택(scratch/alpine/distroless)이 ECR 스캔·TLS·타임존에 미치는 영향을 설명할 수 있다
 - [ ] tzdata + `TZ=Asia/Seoul` 미설정 시 Go 바이너리 `created_at` 이 UTC 로 저장돼 채점에 실패하는 이유를 안다
 - [ ] scanOnPush + KMS 암호화 ECR 리포지토리를 만들고, 요구된 태그만 push 할 수 있다 (latest 추가 = 감점)
-- [ ] PK + GSI(HASH+RANGE) + PITR + 삭제방지 DynamoDB 테이블을 설계하고, boto3 Decimal 함정을 피할 수 있다
+- [ ] PK + GSI(HASH+RANGE) + PITR(지정 시점 복구 — 최근 35일 중 원하는 초 단위 시점으로 되돌린다) + 삭제방지 DynamoDB 테이블을 설계하고, boto3 Decimal 함정을 피할 수 있다
 - [ ] ALB 통합 Lambda(boto3 Query, ScanIndexForward=False, 환경변수 주입, 응답 포맷)를 작성할 수 있다
 
 ## 소요 시간 / 일차

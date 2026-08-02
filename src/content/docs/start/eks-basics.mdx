@@ -45,6 +45,13 @@ flowchart LR
     NODE -- "③ 상태 보고" --> API
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+EKS 가 어디까지 관리하고 사용자 VPC 에 무엇이 남는지를 가른다. API 서버·etcd·스케줄러는 AWS 관리 영역에 있어 사용자가 접속할 수는 있어도 손댈 수 없다. 워커 노드는 사용자 VPC 의 프라이빗 서브넷에 뜨는 EC2 이고, 노드의 kubelet 이 API 서버 지시를 받아 파드를 띄운 뒤 상태를 되보고한다. 파드가 받는 IP 는 가상 대역이 아니라 그 서브넷의 VPC IP 다 — 서브넷 CIDR 이 좁으면 파드 수가 먼저 막힌다.
+
+</details>
+
 ## ③ 대회에서 어떻게 쓰이나
 
 :::danger[생성자 신원이 곧 접근 권한]
@@ -74,6 +81,13 @@ kubectl get nodes -o wide
 kubectl get pods -A -o wide
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+클러스터에 붙기 전 상태를 확인하는 순서다. `describe-cluster` 로 `ACTIVE` 인지와 퍼블릭 엔드포인트가 열려 있는지를 보고, `update-kubeconfig` 로 지금 CLI 신원 기준의 접속 정보를 다시 쓴다. 그다음 노드가 `Ready` 인지, 파드가 IP 를 받았는지를 `-o wide` 로 확인한다. 순서가 중요하다 — kubeconfig 를 갱신하지 않으면 `kubectl` 이 예전 신원으로 붙어 권한 오류가 난다.
+
+</details>
+
 파드에 IAM 권한을 붙이는 서비스 계정(IRSA 방식):
 
 ```yaml
@@ -85,6 +99,13 @@ metadata:
   annotations:
     eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/wskorea26-s3-reader
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+IRSA 를 쓰는 서비스 계정이다. 실제 연결은 `eks.amazonaws.com/role-arn` 애노테이션 한 줄이 만든다 — 이 값이 있으면 파드에 프로젝티드 토큰이 마운트되고, SDK 가 그 토큰으로 해당 역할을 맡는다. 애노테이션 값의 역할 ARN 과 IAM 쪽 신뢰 정책이 서로를 가리켜야 하며, 한쪽만 맞으면 호출 시점에 `AccessDenied` 가 난다.
+
+</details>
 
 ## ⑤ 심화 개념 (응용력 기르기)
 
@@ -108,6 +129,13 @@ sequenceDiagram
     STS-->>Pod: 임시 자격 증명
     Pod->>S3: 임시 자격 증명으로 API 호출
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+IRSA 로 파드가 AWS 자격 증명을 얻는 순서다. 파일로 마운트된 프로젝티드 토큰을 읽어 `AssumeRoleWithWebIdentity` 를 부르면, STS 가 역할의 신뢰 정책을 보고 OIDC 발급자와 `sub`(네임스페이스·서비스 계정 이름)가 일치하는지 확인한다. 통과하면 임시 자격 증명이 나오고 그것으로 AWS API 를 부른다. 액세스 키를 파드에 넣지 않는 이유가 이 흐름이다.
+
+</details>
 
 역할의 신뢰 정책은 OIDC 공급자를 `Principal` 로 두고, `Condition` 에서 `system:serviceaccount:<네임스페이스>:<서비스계정>` 을 `sub` 로 못 박는다. 이 조건을 빠뜨리면 **클러스터의 모든 서비스 계정**이 그 역할을 맡을 수 있다.
 
@@ -165,6 +193,13 @@ flowchart LR
     ALB -- "② 타깃그룹" --> SVC
     SVC -- "③ 엔드포인트" --> POD
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+Ingress 가 ALB 로 이어지는 경로다. Ingress 는 규칙을 선언할 뿐이고 ALB 를 실제로 만드는 것은 ALB Controller 다. 사용자 요청은 ALB → 타깃그룹 → Service → 파드 순으로 내려간다. 점선이 실선과 다른 이유가 여기 있다 — Ingress 는 트래픽 경로가 아니라 설정 경로다.
+
+</details>
 
 | 타입 | 노출 범위 | 실제로 하는 일 |
 |---|---|---|

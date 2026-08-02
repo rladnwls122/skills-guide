@@ -49,6 +49,13 @@ flowchart TB
     SVC --> P3
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+클러스터의 두 층이다. 위층 컨트롤 플레인에서 `kubectl` 요청은 kube-apiserver 로만 들어가고, scheduler 가 Pod 을 어느 노드에 놓을지 정하며, etcd 가 그 결과 상태를 보관한다. 아래층 노드에는 실제 컨테이너가 든 Pod 이 뜬다. Service 는 노드와 무관하게 Pod 을 라벨로 골라 하나의 가상 IP 뒤에 묶는다 — Pod 이 죽고 새로 떠 IP 가 바뀌어도 호출하는 쪽 주소가 그대로인 이유다.
+
+</details>
+
 ### 2-2. 워크로드 4총사 (core-concepts)
 
 | 용어 | 한 줄 정의 |
@@ -139,6 +146,13 @@ flowchart TB
     KPS -.-> NSMON
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+대회 스택 한 벌이 클러스터 안에서 어떻게 이어지는지 전부 그린 그림이다. 트래픽은 CloudFront → ALB → 타깃그룹 → Pod 으로 내려가고, 그 마지막 연결을 TargetGroupBinding 이 만든다 — LBC 가 그 리소스를 읽어 Pod IP 를 타깃그룹에 등록한다. 클러스터 안은 노드그룹 둘로 갈린다. addon 노드그룹에는 LBC·kube-prometheus-stack 같은 시스템 릴리스가, app 노드그룹에는 앱 Deployment 가 nodeSelector·toleration 으로 배치된다. 점선은 트래픽이 아니라 설정·제어 관계다 — PDB 는 동시 중단 수를 제한하고, ServiceAccount 는 IRSA 로 IAM 역할과 이어진다.
+
+</details>
+
 | 리소스 | 한 줄 역할 |
 |---|---|
 | Namespace (app / monitoring) | 앱과 모니터링을 분리하는 폴더 — 채점이 ns 단위로 Pod 배치를 검사 |
@@ -175,6 +189,13 @@ kubectl logs <pod> --previous   # 재시작 전(죽기 직전) 로그
 kubectl rollout restart deploy/<name>  # ConfigMap 변경 후 재기동
 kubectl exec -it <pod> -- sh    # 컨테이너 안에서 curl 등 확인
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+막혔을 때 치는 여섯 명령이다. `apply -f k8s/` 는 디렉터리 안 파일을 이름 순으로 적용하므로 번호 접두어가 곧 적용 순서다. 원인 추적은 `describe pod` 의 Events 부터 본다 — 이미지 pull 실패·스케줄 불가·프로브 실패가 전부 거기 찍힌다. `logs --previous` 는 재시작하기 직전 컨테이너의 로그라 크래시 원인을 볼 때 쓴다. ConfigMap 만 바꾸면 Pod 은 그대로이므로 `rollout restart` 로 순차 교체한다.
+
+</details>
 
 ## ⑤ 미니 실습 (클러스터 없이 / 로컬)
 

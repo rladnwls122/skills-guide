@@ -71,6 +71,13 @@ resource "aws_subnet" "a" {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+argument 와 attribute 를 가르는 예다. `cidr_block` 은 내가 넣는 값이라 apply 전에도 알 수 있고, `aws_vpc.this.id` 는 AWS 가 VPC 를 만든 뒤에야 정해지는 값이다. 두 번째 리소스가 첫 번째의 attribute 를 참조하는 순간 의존 관계가 생겨 Terraform 이 VPC → 서브넷 순으로 만든다 — 순서를 따로 적지 않는 이유다.
+
+</details>
+
 `id`·`arn`·`dns_name` 처럼 **만들어봐야 정해지는 값**이 attribute 다. `terraform plan` 이 `(known after apply)` 라고 찍는 것이 이것이고, 아직 몰라도 정상이다.
 
 ### 실행 순서는 참조가 정한다
@@ -140,6 +147,13 @@ resource "aws_subnet" "a" {
    > regex("[^.]+$", "index.html")
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   `terraform console` 에서 함수 다섯 개를 눈으로 확인한다. `merge` 는 뒤 인자가 이기고, `lookup` 은 키가 없으면 세 번째 인자를 낸다(두 번째 줄과 세 번째 줄의 차이). `jsonencode` 는 HCL 객체를 IAM 정책 JSON 으로 바꾸고, `regex` 는 파일명에서 확장자만 뽑는다 — 콘텐츠 타입 매핑에 쓰는 조합이다.
+
+   </details>
+
    `lookup` 의 셋째 인자가 기본값이다. 키가 없을 때 실패하지 않고 그 값을 돌려준다.
 
 5. 조건 표현식과 문자열 보간을 확인한다.
@@ -196,6 +210,13 @@ variable "subnets" {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+서브넷 4개를 리소스 블록 4개 대신 map 변수 하나로 선언했다. 키가 곧 서브넷 이름이고 값이 CIDR·AZ·구분이다. `type` 에 구조를 적어 두면 오타나 빠진 필드를 apply 전에 잡는다. 당일 이름·대역이 바뀌는 변동 과제에서 고칠 곳이 이 블록 하나로 모인다.
+
+</details>
+
 키가 곧 `Name` 태그다. 그래서 사용부가 이렇게 짧아진다.
 
 ```hcl title="set-02/task-1/terraform/vpc.tf"
@@ -210,6 +231,13 @@ resource "aws_subnet" "this" {
   tags = { Name = each.key }
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+위 map 을 `for_each` 로 펼쳐 서브넷 4개를 만든다. `each.key` 가 이름 태그가 되고 `each.value.*` 가 각 속성이 된다. `map_public_ip_on_launch` 는 `tier == "public"` 비교 결과를 그대로 받는다 — 조건 분기를 리소스 밖 데이터로 옮긴 형태다. `for_each` 는 set 이나 map 만 받으므로 리스트를 주려면 `toset()` 이 필요하다.
+
+</details>
 
 `map_public_ip_on_launch` 우변이 `true`/`false` 가 아니라 **비교식**이라는 데 주목한다. HCL 에서 `==` 는 bool 을 돌려주므로 그대로 인자에 넣을 수 있다.
 

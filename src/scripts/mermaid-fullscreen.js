@@ -240,6 +240,14 @@ function decorate(pre) {
 	frame.className = "mfs-frame";
 	pre.replaceWith(frame);
 	frame.append(pre, btn);
+
+	// 도식 바로 뒤의 접이식 설명은 프레임 안으로 들인다 — 테두리 하나로 묶여야
+	// 어느 도식의 설명인지가 눈으로 붙는다. 접는 대상은 설명 쪽이다. 도식을 접힌
+	// <details> 안에 두면 렌더 시점 폭이 0 이라 viewBox 가 깨진다.
+	const note = frame.nextElementSibling;
+	if (note?.tagName === "DETAILS" && note.classList.contains("diagram-note")) {
+		frame.append(note);
+	}
 }
 
 /*

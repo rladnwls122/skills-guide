@@ -11,7 +11,7 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 - [ ] fully-private EKS의 생성 메커니즘(생성 중 퍼블릭 엔드포인트 임시 on → 완료 시 off)과 중단 시 잔존 위험을 설명할 수 있다
 - [ ] 이미지 pull 경로 2가지(NAT vs VPC Endpoint s3/ecr.api/ecr.dkr)와 **eks/eks-auth Endpoint가 Pod Identity를 깨는 함정**을 안다
-- [ ] 머신 3분할(본 PC / 일반 CloudShell / VPC CloudShell·SSM bastion)과 S3 `_transfer/` 릴레이 + 멱등 셋업을 운용할 수 있다
+- [ ] 머신 3분할(본 PC / 일반 CloudShell / VPC CloudShell·SSM bastion)과 S3 `_transfer/` 릴레이 + 멱등(여러 번 실행해도 결과가 같은 성질) 셋업을 운용할 수 있다
 - [ ] "생성자 신원 = 채점 신원" 원칙을 설명하고 access entry로 예외 처리할 수 있다
 - [ ] CoreDNS 커스텀 도메인(kubelet clusterDomain + Corefile 패치 양쪽)을 구성할 수 있다
 - [ ] `:root` trust + `sts:ExternalId` audit role을 만들고 **assume 성공/실패를 양쪽 다 재현**할 수 있다 (이중 평가 원리)

@@ -57,6 +57,13 @@ flowchart TB
     ALLOW -- "아니오" --> NO
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+S3 요청 하나가 허용되기까지의 관문 순서다. 퍼블릭 액세스 차단(BPA)이 가장 앞이라, 버킷 정책이 아무리 열려 있어도 퍼블릭으로 판정되면 그 자리에서 끝난다. 그다음이 명시적 Deny, 마지막이 IAM 정책 또는 버킷 정책의 Allow 다. BPA 를 켠 채 정적 웹을 서비스하려면 퍼블릭이 아닌 경로 — CloudFront 와 OAC — 가 필요한 이유가 이 순서다.
+
+</details>
+
 위 도식은 **요청 시점**의 판정이다. BPA는 그보다 앞선 **쓰기 시점**에도 작동한다. `BlockPublicPolicy` 가 켜져 있으면 퍼블릭을 허용하는 버킷 정책은 `PutBucketPolicy` 호출 자체가 거부된다 — 조건 없는 `"Principal": "*"` 가 AWS가 드는 대표 예다. 즉 BPA를 켠 채로 퍼블릭 정책을 넣으면 저장 단계에서 `AccessDenied` 로 막히고, 정책을 먼저 붙인 뒤 BPA를 켜면 정책은 그대로 남은 채 `RestrictPublicBuckets` 가 요청 시점에 판정을 무효화한다. 증상이 다르므로 어느 순서로 켰는지부터 확인한다.
 
 ### 객체 소유권과 ACL
@@ -95,6 +102,13 @@ flowchart TB
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+OAC 를 쓰는 버킷 정책이다. `Principal` 이 사용자나 계정이 아니라 CloudFront 서비스이고, `Condition` 의 `AWS:SourceArn` 이 그 배포 하나로 범위를 좁힌다. 이 조건이 없으면 다른 사람의 CloudFront 배포도 이 버킷을 오리진으로 삼을 수 있다.
+
+</details>
+
 `Condition` 의 `AWS:SourceArn` 이 없으면 **모든 CloudFront 배포판**이 이 버킷을 읽는다. 서비스 주체를 쓸 때는 소스 ARN을 함께 건다.
 
 상태 자가 검증:
@@ -109,6 +123,13 @@ aws s3api get-public-access-block --bucket wskorea26-site
 # 버킷 정책 원문 확인
 aws s3api get-bucket-policy --bucket wskorea26-site --query Policy --output text
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+채점이 보는 버킷 속성 셋을 각각 조회한다. `get-bucket-encryption` 은 기본 암호화가 SSE-KMS 인지와 어느 키인지, `get-public-access-block` 은 차단 4개 항목이 모두 `true` 인지, `get-bucket-policy` 는 정책 원문을 낸다. 세 가지가 서로 다른 API 라 하나만 맞춰 두고 넘어가면 나머지에서 감점된다.
+
+</details>
 
 ## ⑤ 심화 개념 (응용력 기르기)
 
@@ -129,6 +150,13 @@ flowchart LR
     POLICY --> S3
     S3 -- "③ Decrypt" --> KMS
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+BPA 를 켠 비공개 버킷을 CloudFront 로 공개하는 경로다. CloudFront 가 OAC 로 SigV4 서명을 붙여 `GetObject` 를 보내고, 버킷 정책이 그 서비스 주체와 배포 ARN 을 확인해 통과시킨다. 객체가 SSE-KMS 로 암호화돼 있으면 S3 가 이어서 KMS 에 복호화를 요청하므로, 키 정책에도 CloudFront 경로가 허용돼야 200 이 나온다.
+
+</details>
 
 선행 방식인 OAI(Origin Access Identity)와의 차이는 세 가지다.
 

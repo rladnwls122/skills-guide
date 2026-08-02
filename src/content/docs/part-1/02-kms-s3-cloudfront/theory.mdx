@@ -33,6 +33,13 @@ graph LR
     CMK -- "암호화된 DEK 를 Decrypt" --> DEK
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+봉투 암호화의 구조다. CMK 는 데이터를 직접 암호화하지 않고 `GenerateDataKey` 로 데이터 키(DEK)를 내주며, 서비스가 그 DEK 로 실제 데이터를 암호화한다. 암호화된 DEK 는 데이터 옆에 저장되고, 읽을 때 CMK 로 `Decrypt` 해 되살린다. 그래서 키 정책이 막히면 데이터는 그 자리에 있어도 열 수 없다.
+
+</details>
+
 - 읽기 경로: 암호화된 DEK → `kms:Decrypt` → 평문 DEK → 데이터 복호화. 그래서 소비자에게 필요한 권한은 보통 `kms:Decrypt`(+ 쓰기 시 `kms:GenerateDataKey`).
 - Terraform 기본형 (set-02 실측):
 
@@ -48,6 +55,13 @@ resource "aws_kms_alias" "s3" {
   target_key_id = aws_kms_key.s3.key_id
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+CMK 와 별칭을 만드는 두 리소스다. 키 자체에는 이름이 없고 채점은 `alias/wskorea26-s3-key` 로 역조회하므로 별칭이 사실상 이름 노릇을 한다. `enable_key_rotation` 은 연 1회 자동 교체를, `deletion_window_in_days` 는 삭제 예약 후 되돌릴 수 있는 유예 기간을 정한다.
+
+</details>
 
 **④ 세트별 차이** — set-02 는 CMK 3개(s3/dynamodb/eks), set-03 은 5개(db/ecr/eks/bucket/function). "과제지가 이름을 준 서비스에만 CMK" 가 원칙.
 
@@ -101,6 +115,13 @@ data "aws_iam_policy_document" "kms_s3" {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+키 정책을 두 조각으로 나눠 합친다. 위쪽은 계정 root 에 전권을 주는 기본 구문이고, 아래쪽이 CloudFront 서비스에 복호화만 허용하는 구문이다. `source_policy_documents` 가 둘을 한 문서로 합성한다. 키 정책의 `resources` 가 항상 `"*"` 인 이유는 그 정책이 붙은 키 자신을 뜻하기 때문이고, `aws:SourceAccount` 조건이 다른 계정의 CloudFront 가 이 키를 쓰지 못하게 막는다.
+
+</details>
+
 root principal 은 "계정의 IAM 정책에 권한 위임"을 의미 — 이게 있어야 배포자 IAM 정책만으로 키 관리가 된다.
 
 **④ 세트별 차이** — set-02 는 root 위임 허용. set-03 은 root·`kms:*` 금지(3절).
@@ -141,6 +162,13 @@ data "aws_iam_policy_document" "kms_admin" {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+root 없이 키를 관리하는 set-03 방식이다. `kms:*` 라는 문자열을 쓰지 않고 접두어를 나열해 사실상 같은 권한을 만든다 — 채점이 정책 본문에서 `kms:*` 와 root principal 을 문자열로 찾기 때문이다. principal 은 배포를 실행한 신원이고, 그 신원에 `kms:PutKeyPolicy` 가 없으면 KMS 가 잠김 방지 검사에서 apply 자체를 거부한다.
+
+</details>
+
 ```mermaid
 flowchart TD
     A@{ icon: "logos:aws-kms", form: "square", label: "키 정책 작성", pos: "b", h: 46, w: 46 }
@@ -150,6 +178,13 @@ flowchart TD
     D -- "아니오" --> E["KMS lockout safety check 거부<br/>→ apply 실패"]
     D -- "예" --> F["통과: 배포자 admin + 사용자별 use statement"]
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+root-less 키 정책이 통과하는 조건을 판정 순서로 그렸다. 첫 관문은 채점 쪽이다 — root principal 이나 `kms:*` 가 정책에 있으면 그 자리에서 실격이다. 둘째 관문은 KMS 쪽이다 — 정책을 넣는 신원에게 `kms:PutKeyPolicy` 가 없으면 키를 아무도 못 다루게 되는 상태를 막으려고 apply 를 거부한다. 둘 다 피하는 형태가 배포자에게 관리 권한을, 서비스에는 사용 권한만 주는 구성이다.
+
+</details>
 
 :::danger[치명 함정]
 배포자 신원이 admin 이므로, **root(또는 다른 신원)로 apply 하면 이후 그 키에 대한 모든 작업이 거부**된다. eksctl·docker push·kubectl 도 terraform 과 **같은 자격증명**으로 실행해야 한다. 또 root 위임이 없으니 키 소비자(EKS Pod 역할, Lambda 실행 역할, 서비스 principal)를 키 정책에 **직접** 나열해야 한다 — set-03 은 db 키에 `book_pod`/`book_function` 역할, function 키에 lambda 서비스 principal(EncryptionContext 조건)까지 명시한다.
@@ -214,6 +249,13 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "web" {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+버킷 두 속성을 각각 별도 리소스로 건다. 퍼블릭 차단은 네 항목을 모두 true 로 두어야 채점을 통과하고, 기본 암호화는 알고리즘을 `aws:kms` 로 두고 어느 키인지까지 지정한다. `bucket_key_enabled` 는 객체마다 KMS 를 부르는 대신 버킷 수준에서 DEK 를 재사용하게 해 호출 수와 비용을 줄인다.
+
+</details>
+
 객체 업로드도 Terraform 으로 (mark 2-1 이 키 경로 `web/main/index.html` 등을 정확히 검사):
 
 ```hcl
@@ -228,6 +270,13 @@ resource "aws_s3_object" "static" {
   kms_key_id             = aws_kms_key.s3.arn
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+정적 파일 두 개를 객체로 올린다. `for_each` 의 각 값이 파일명이 되고 키는 `web/main/` 접두어가 붙는다. `source_hash` 는 파일 내용이 바뀌었을 때만 다시 올리게 하고, `content_type` 은 확장자를 `regex` 로 뽑아 매핑에서 찾되 없으면 기본값으로 떨어진다 — 이 값이 틀리면 브라우저가 HTML 을 파일로 내려받는다.
+
+</details>
 
 :::caution
 `content_type` 을 안 주면 브라우저가 html 을 다운로드해 버린다.
@@ -262,6 +311,13 @@ sequenceDiagram
     CF-->>U: 200
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+요청 한 건이 통과하는 관문 둘이다. CloudFront 가 OAC 로 SigV4 서명을 붙여 S3 를 부르면 버킷 정책이 서비스 주체와 `AWS:SourceArn`(배포 ARN)을 확인하고, 객체가 SSE-KMS 라 S3 가 이어서 KMS 에 복호화를 요청하면 키 정책이 `aws:SourceAccount` 를 확인한다. 둘 중 하나만 막혀도 사용자는 403 을 본다 — 버킷 정책만 고쳐 두고 키 정책을 빠뜨리는 실수가 여기서 드러난다.
+
+</details>
+
 버킷 정책 (set-02 실측 — 여기는 배포 ARN 직접 참조가 맞다):
 
 ```hcl
@@ -283,6 +339,13 @@ data "aws_iam_policy_document" "web_bucket" {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+OAC 를 받는 버킷 정책이다. `principals` 가 사람이 아니라 CloudFront 서비스이고, `AWS:SourceArn` 조건이 그 배포 하나로 범위를 좁힌다. 키 정책과 달리 여기서는 배포 ARN 을 직접 참조해도 순환이 생기지 않는다 — 버킷 정책은 배포가 만들어진 뒤에 붙기 때문이다.
+
+</details>
+
 **순환 참조 함정** — 같은 방식으로 **KMS 키 정책**에도 배포 ARN 을 넣으면:
 
 ```mermaid
@@ -294,6 +357,13 @@ graph LR
     D --> B
     B --> K
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+apply 가 거부되는 순환 참조의 모양이다. 키 정책이 배포 ARN 을, 배포가 버킷을, 버킷의 암호화 설정이 다시 키를 참조해 화살표가 한 바퀴 돈다. Terraform 은 참조 관계로 생성 순서를 정하므로 시작점이 없는 이 고리를 만들 수 없다. 고리를 끊는 자리는 키 정책이다 — 배포 ARN 대신 계정 조건으로 바꾼다.
+
+</details>
 
 :::danger[순환 참조]
 `key → distribution → bucket → key` 순환으로 plan 이 실패한다. **우회: 키 정책은 배포 ARN 대신 `aws:SourceAccount = 계정ID` 조건**을 쓴다 (버킷 정책은 bucket→distribution 단방향이라 ARN 직접 참조 가능).
@@ -316,6 +386,13 @@ origin {
   origin_path              = "/web/main"   # 루트(/) → web/main/index.html
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+OAC 를 만들고 오리진에 붙이는 부분이다. `signing_behavior = "always"` 는 CloudFront 가 모든 요청에 SigV4 서명을 붙인다는 뜻이라 버킷을 비공개로 둘 수 있다. `domain_name` 은 웹사이트 엔드포인트가 아니라 리전 도메인이어야 하고, `origin_path` 가 `/web/main` 이라 사용자의 `/` 요청이 `web/main/index.html` 로 이어진다.
+
+</details>
 
 배포 식별: mark 는 `comment` 값(`wskorea26-concert-cf`)으로 배포를 찾는다 — comment 도 채점 대상.
 
@@ -380,6 +457,13 @@ resource "aws_wafv2_web_acl" "unicorn" {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+set-07 방식의 Web ACL 이다. CloudFront 에 붙이는 ACL 은 반드시 us-east-1 에 만들어야 해서 별칭 프로바이더를 쓴다. 기본 액션이 `allow` 라 규칙에 걸린 요청만 막히고, 규칙은 priority 오름차순으로 평가된다. `override_action.none` 은 관리형 그룹 안 각 규칙이 자기 동작을 그대로 수행하라는 뜻이다 — `count` 로 바꾸면 차단 대신 집계만 한다.
+
+</details>
+
 - **priority**: 숫자가 작을수록 먼저 평가한다. 먼저 매치되고 **terminating action**(Block·Allow — Count 는 non-terminating)을 낸 규칙에서 평가가 즉시 끝난다.
 - **action 자리는 두 종류**: 직접 짠 매치 조건(리프 규칙)엔 `action { block{} / allow{} / count{} }`, 관리형 규칙 그룹·규칙 그룹 참조엔 `override_action { none{} / count{} }` — 그룹 전체를 통으로 Count 전환할 때만 쓴다.
 - **RuleActionOverrides**: 그룹 안의 특정 하위 규칙 하나만 Count 로 바꾸는 세 번째 계층. `managed_rule_group_statement` 안에 이름을 지정해 넣는다(`rule_action_override { name = "SizeRestrictions_BODY"; action_to_use { count {} } }`). 그룹 전체가 아니라 오탐을 낸 그 규칙 하나만 죽이므로 나머지 보호는 유지된다.
@@ -425,6 +509,13 @@ rule {
 # priority 2: xss_match_statement (구조 동일, text_transformation 2단: URL_DECODE → HTML_ENTITY_DECODE)
 # priority 3: rate_based_statement(limit=200, IP, 60초) → block
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+set-03 방식은 관리형 그룹 대신 매치 구문을 직접 쓴다. 검사 대상이 `query_string` 이고 동작이 `block` 이며, `text_transformation` 이 검사 전에 값을 정규화한다 — URL 인코딩으로 우회하는 페이로드를 잡기 위해서다. XSS 규칙은 같은 구조에 변환을 2단(`URL_DECODE` 다음 `HTML_ENTITY_DECODE`)으로 쓴다.
+
+</details>
 
 이 경우는 규칙을 직접 소유하므로 오탐이 나면 `action`을 바로 `count{}`로 바꿔 검증하면 된다 — 관리형 그룹처럼 RuleActionOverrides 가 따로 필요 없다.
 

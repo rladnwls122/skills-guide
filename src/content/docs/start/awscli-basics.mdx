@@ -39,6 +39,13 @@ flowchart LR
     J --> V
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+같은 `aws ec2 describe-vpcs` 응답에서 VPC ID 하나를 뽑는 두 갈래다. 위쪽은 CLI 가 응답을 받은 뒤 자체 JMESPath 엔진으로 거르는 `--query` 이고, 아래쪽은 응답 JSON 전체를 표준 출력으로 흘려 `jq` 에 넘기는 파이프다. 결과값 `vpc-0abc123` 은 같지만 문법이 서로 다르므로 한쪽 표현을 다른 쪽에 그대로 옮겨 쓸 수 없다.
+
+</details>
+
 - `--query`는 JMESPath 문법 (`Vpcs[0].VpcId`), jq는 jq 문법 (`.Vpcs[0].VpcId` — 맨 앞에 점).
 - 채점 스크립트(mark.sh)는 주로 **jq**를 쓰므로 둘 다 읽을 수 있어야 한다.
 

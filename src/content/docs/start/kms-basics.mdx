@@ -55,6 +55,13 @@ flowchart LR
     CMK -->|암호화된 DEK 를 Decrypt| DEK
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+봉투 암호화의 구조다. 실제 데이터를 암호화하는 것은 CMK 가 아니라 `GenerateDataKey` 로 받은 데이터 키(DEK)다. 서비스는 평문 DEK 로 데이터를 암호화한 뒤 그 DEK 를 CMK 로 암호화한 형태로 데이터 옆에 함께 저장한다. 읽을 때는 암호화된 DEK 를 CMK 로 `Decrypt` 해 되살린다. 그래서 큰 데이터가 KMS 를 오갈 일이 없고, CMK 접근을 막으면 데이터 전체가 함께 잠긴다.
+
+</details>
+
 ##### B. 데이터를 읽어올 때 (Decrypt 과정)
 
 사용자가 S3 버킷에 저장된 `main.jpeg` 파일을 다시 다운로드할 때 발생하는 동작은 다음과 같다.
@@ -78,6 +85,13 @@ sequenceDiagram
     Note over S3: 평문 DEK로 main.jpeg 복호화<br/>메모리 내 평문 DEK 즉시 파기
     S3-->>User: 복호화된 main.jpeg 전달
 ```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+SSE-KMS 로 암호화된 객체를 내려받을 때 실제로 일어나는 순서다. S3 는 암호화된 객체와 함께 저장해 둔 암호화된 DEK 를 꺼내 KMS 에 `kms:Decrypt` 를 요청하고, 돌려받은 평문 DEK 로 객체를 풀어 사용자에게 준다. 사용자가 KMS 를 직접 부르지 않지만 **호출자의 권한으로** 그 Decrypt 가 평가된다 — 버킷 정책이 허용해도 키 정책이 막으면 다운로드가 실패하는 이유다.
+
+</details>
 
 ---
 
@@ -140,6 +154,13 @@ locals {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+키 정책의 관리자 구문에 넣을 액션 목록이다. `kms:*` 를 쓰지 않고 필요한 접두어만 나열한 것이 요점이다 — 와일드카드 하나로 뭉뚱그리면 최소권한 판정에 걸리고, 반대로 너무 좁히면 키를 다룰 수 없게 잠긴다(lockout). `ScheduleKeyDeletion`·`CancelKeyDeletion` 처럼 되돌릴 수단이 함께 들어 있어야 실수해도 복구가 된다.
+
+</details>
+
 ### 2. CLI를 이용한 KMS 키 상태 자가 검증
 
 키를 만든 직후에는 CLI로 상태를 바로 확인한다.
@@ -151,6 +172,13 @@ aws kms describe-key --key-id alias/wskorea26-s3-key --query 'KeyMetadata.[KeySt
 # 2. KMS 키의 default 키 정책 내용 확인
 aws kms get-key-policy --key-id alias/wskorea26-s3-key --policy-name default --output text
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+키 상태를 두 갈래로 확인한다. `describe-key` 는 `KeyState` 가 `Enabled` 인지와 `KeyManager` 가 `CUSTOMER`(직접 만든 CMK)인지 `AWS`(관리형 키)인지를 알려 준다. `get-key-policy` 는 접근 통제의 실체인 키 정책 본문을 그대로 낸다 — 별칭으로 조회하므로 키 ID 를 몰라도 된다.
+
+</details>
 
 ---
 
@@ -211,6 +239,13 @@ base64 -d cipher.b64 > cipher.bin
 aws kms decrypt --ciphertext-blob fileb://cipher.bin \
   --encryption-context project=wskorea26,env=prod
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+암호화 컨텍스트를 붙여 한 바퀴 돌린다. 암호화할 때 준 키·값 쌍이 복호화 때 **하나라도 다르면** `InvalidCiphertextException` 이 난다 — 컨텍스트가 암호문에 묶이기 때문이다. 중간의 `base64 -d` 가 필요한 이유는 CLI 가 암호문을 base64 텍스트로 내주는데 `fileb://` 는 바이너리를 기대하기 때문이다.
+
+</details>
 
 - 컨텍스트는 **암호화되지 않는다** — 평문으로 로그에 남는다. 비밀 값을 넣지 않는다
 - 값이 CloudTrail에 남으므로 "어느 리소스를 위한 복호화였는지" 추적할 수 있다

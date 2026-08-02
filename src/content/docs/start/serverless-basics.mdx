@@ -31,7 +31,7 @@ Lambda 함수는 **핸들러**(`파일명.함수명`)를 진입점으로 실행�
 | 방식 | 누가 부르나 | 실패하면 | 이벤트 모양 |
 |---|---|---|---|
 | **동기 호출**(RequestResponse) | ALB, API Gateway, `aws lambda invoke` | 호출자에게 오류가 그대로 반환된다 | 호출자 규격(ALB면 ALB 이벤트 포맷) |
-| **비동기 호출**(Event) | S3 이벤트 알림, SNS, **EventBridge** | Lambda가 **자동으로 2회 재시도**, 그래도 실패하면 DLQ로 보내거나 버린다 | 서비스가 만든 이벤트 JSON |
+| **비동기 호출**(Event) | S3 이벤트 알림, SNS, **EventBridge** | Lambda가 **자동으로 2회 재시도**, 그래도 실패하면 DLQ(처리에 실패한 메시지를 따로 모아 두는 큐)로 보내거나 버린다 | 서비스가 만든 이벤트 JSON |
 | **이벤트 소스 매핑**(ESM) | Lambda 서비스가 **직접 폴링**한다 — SQS, DynamoDB Streams, Kinesis, MSK | 배치가 큐로 되돌아가 재처리된다 | 폴링해 모은 **레코드 배열**(`Records`) |
 
 ESM만 방향이 반대라는 점이 핵심이다. SQS·Streams는 "이벤트를 밀어 주는" 것이 아니라 **Lambda가 대신 가서 꺼내 온다**. 그래서 SQS 트리거를 붙였다면 큐에 권한을 주는 것이 아니라 **함수 실행 역할에 `sqs:ReceiveMessage`·`DeleteMessage`가 필요**하다.
@@ -60,6 +60,13 @@ flowchart LR
     R1 --> T2
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+EventBridge 의 세 부품이 어떻게 이어지는지다. AWS 서비스 활동이 default 버스로 들어오면 버스에 붙은 룰들이 각자 이벤트 패턴을 맞춰 본다. 맞은 룰만 자기 타깃(Lambda·SNS 등)을 부르고, 어느 룰도 맞지 않은 이벤트는 조용히 버려진다 — 저장되지 않으므로 패턴이 틀리면 아무 흔적도 남지 않는다. 룰 하나에 타깃을 여럿 붙일 수 있다.
+
+</details>
+
 이벤트 하나가 **여러 룰에 동시에 매칭**될 수 있고, 어느 룰에도 안 맞으면 그냥 사라진다. 큐가 아니라 방송에 가깝다.
 
 #### 이벤트 패턴이 매칭되는 규칙
@@ -75,6 +82,13 @@ flowchart LR
   }
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+이벤트 패턴 한 장이다. 값이 전부 배열인 것이 문법이고, 나열한 값 중 하나와 같으면 통과한다. `source` 와 `detail-type` 으로 큰 갈래를 잡고 `detail` 안에서 특정 API 이름까지 좁혔다 — CloudTrail 을 거쳐 오는 이벤트라 `detail-type` 이 `AWS API Call via CloudTrail` 이다. 중첩 구조가 실제 이벤트와 한 칸이라도 어긋나면 룰이 발화하지 않는다.
+
+</details>
 
 1. **명시한 필드만 검사한다.** 패턴에 없는 필드는 이벤트에 무엇이 들어 있든 무시된다. 그래서 패턴은 좁힐수록 안전하다.
 2. **배열 안의 값은 OR다.** `["a", "b"]`는 a 또는 b.
@@ -168,6 +182,13 @@ aws cloudtrail get-trail-status --name <트레일> --query IsLogging
 aws sqs get-queue-attributes --queue-url <URL> \
   --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible VisibilityTimeout
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+이벤트가 함수까지 닿지 않을 때 끊긴 지점을 찾는 순서다. 룰의 패턴 → 타깃 등록 → Lambda 리소스 정책 → CloudTrail 기록 여부 순으로 좁힌다. 세 번째가 특히 자주 빠진다 — 룰에 타깃을 걸어도 함수 쪽에 EventBridge 호출 허용이 없으면 룰은 발화하고 함수는 안 불린다. 마지막 SQS 조회는 대기 중(`ApproximateNumberOfMessages`)과 처리 중(`...NotVisible`)을 나눠 보여 준다.
+
+</details>
 
 ---
 

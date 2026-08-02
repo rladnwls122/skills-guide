@@ -39,6 +39,13 @@ provider "aws" {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+모든 tf 코드가 시작하는 두 블록이다. `terraform` 블록은 CLI 와 프로바이더 버전을 고정해 같은 코드가 다른 결과를 내지 않게 하고, `provider` 블록은 리전과 공통 태그를 정한다. `default_tags` 는 이후 만드는 모든 리소스에 그 태그를 자동으로 붙인다 — 리소스마다 태그를 적을 필요가 없어진다.
+
+</details>
+
 `~> 6.54` 는 6.54 이상 7.0 미만. `default_tags` 는 모든 리소스에 공통 태그를 붙여준다(리소스별 `tags` 와 병합됨).
 
 **④ 세트별 차이** — 세트마다 이름 prefix(`wskorea26`/`wsc2026` 등)와 리전이 다를 수 있으므로 provider 자체는 동일하되 region·prefix 를 변수로 뺀다. set-03 은 파일명이 `providers.tf`, set-02 는 `versions.tf` — 파일명은 자유, 내용이 채점 대상.
@@ -76,6 +83,13 @@ variable "subnets" {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+당일 바뀔 값을 한곳에 모은 변수 파일이다. 비번호는 문자열 변수 하나이고, 서브넷 4개는 이름을 키로 갖는 map 이다. 값 안의 `tier` 가 퍼블릭·프라이빗을 가르는 표시라 리소스 쪽 조건 분기가 이 데이터만 보고 결정된다. 변동 과제에서 이름·대역·AZ 가 바뀌면 고칠 곳이 이 블록 하나다.
+
+</details>
+
 ```hcl title="terraform.tfvars"
 # 대회 당일 바뀌는 값만 명시 주입
 player_number = "103"
@@ -91,6 +105,13 @@ locals {
   private_subnet_keys = [for k, v in var.subnets : k if v.tier == "private"]
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+`locals` 로 파생값을 미리 계산한다. 버킷 이름은 접두어와 비번호를 이어 붙인 것이고, 나머지 둘은 `for` 표현식으로 map 을 훑어 조건에 맞는 키만 골라낸 리스트다. 리소스 블록마다 같은 필터를 되풀이하지 않고 여기서 한 번만 정의한다.
+
+</details>
 
 핵심: **서브넷 이름을 map 의 key 로** 쓰면 이름·CIDR·AZ·tier 가 한 곳에 모이고, `for` + `if` 로 public/private 을 파생시킨다.
 
@@ -126,6 +147,13 @@ resource "aws_iam_role" "book_lambda" {
 }
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+data 소스 두 종류의 쓰임이다. `aws_caller_identity` 는 지금 자격 증명의 계정 ID 를 조회해 하드코딩을 없애고, `aws_iam_policy_document` 는 JSON 을 문자열로 쓰는 대신 HCL 로 조립해 `.json` 속성으로 내준다. 역할 블록은 그 결과를 신뢰 정책으로 받는다 — 오타가 나면 apply 가 아니라 plan 단계에서 걸린다.
+
+</details>
+
 `source_policy_documents = [다른문서.json]` 로 정책 문서를 상속·합성할 수 있다 (Day 2 KMS 에서 핵심).
 
 **④ 세트별 차이** — set-03 은 `aws_iam_session_context` 로 "지금 apply 하는 신원"까지 조회해 KMS 관리자로 박는다(root-less 키 정책). Day 2 에서 다룬다.
@@ -158,6 +186,13 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+`for_each` 의 두 가지 입력 형태다. 위쪽은 map 을 그대로 받아 `each.key`(이름)와 `each.value.*`(속성)를 쓰고, 아래쪽은 리스트를 `toset()` 으로 감싸 받는다 — `for_each` 는 리스트를 거부하기 때문이다. `aws_subnet.this[each.key]` 처럼 키로 인스턴스를 지목하는 참조도 여기서 나온다.
+
+</details>
 
 - map 이면 `each.key` / `each.value`, set 이면 둘 다 같은 값.
 - 참조는 `aws_subnet.this["wskorea26-priv-subnet-c"].id` 식.
@@ -204,6 +239,13 @@ graph TB
     NATD -.-> RTBPUB
 ```
 
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+set-02 VPC 의 완성 형태다. AZ 두 곳에 퍼블릭·프라이빗 서브넷이 하나씩이고, NAT 는 각 AZ 의 **퍼블릭** 서브넷 안에 배치된다. 퍼블릭 RTB 는 하나를 두 서브넷이 공유하지만 프라이빗 RTB 는 AZ 마다 따로다 — 각자 같은 AZ 의 NAT 를 가리켜야 AZ 하나가 죽어도 다른 AZ 가 살기 때문이다. 점선은 NAT 가 나가는 경로가 결국 퍼블릭 RTB 를 거쳐 IGW 로 간다는 뜻이다. 채점은 이 RTB↔서브넷 연결을 이름이 아니라 실제 매핑으로 확인한다.
+
+</details>
+
 RTB 는 총 **3개**: public 공용 1 + private AZ별 2. NAT 는 **같은 AZ 의 public 서브넷에** 배치한다 (AZ 장애 격리). 실측 코드의 매핑 로직:
 
 ```hcl
@@ -222,6 +264,13 @@ resource "aws_nat_gateway" "this" {
   depends_on    = [aws_internet_gateway.this]
 }
 ```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+NAT 를 AZ 별로 짝지어 만드는 부분이다. `private_az_suffix` 는 AZ 이름의 마지막 글자(c·d)를 뽑아 리소스 이름에 쓰고, `public_by_az` 는 AZ 를 키로 퍼블릭 서브넷을 찾는 역방향 map 이다. 그래서 `subnet_id` 한 줄이 "이 프라이빗 서브넷과 같은 AZ 의 퍼블릭 서브넷"을 가리킬 수 있다. `depends_on` 이 필요한 이유는 IGW 가 붙기 전에 NAT 를 만들면 실패하기 때문이다.
+
+</details>
 
 `aws_route` 를 `aws_route_table` 의 인라인 route 블록 대신 별도 리소스로 쓰는 이유: 라우트를 나중에 추가/변경해도 RTB 자체(=연결)가 흔들리지 않는다.
 
@@ -247,6 +296,13 @@ resource "aws_nat_gateway" "this" {
   $env:PRIV_SUBNET_C = (terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-c'
   # ... 을 .env.ps1 로 저장 → 새 터미널에서 `. .\.env.ps1` 만 재실행
   ```
+
+  <details class="diagram-note">
+  <summary>이 블록이 하는 일</summary>
+
+  apply 결과를 다음 단계로 넘기는 방법이다. `terraform output -raw` 는 따옴표 없는 값을 내므로 환경 변수에 바로 넣을 수 있고, map 출력은 `-json` 으로 받아 `ConvertFrom-Json` 으로 키를 지목한다. 이 값들을 `.env.ps1` 로 저장해 두면 새 터미널에서 점 하나로 복원된다 — 04 이후 모든 모듈이 이 변수들을 전제한다.
+
+  </details>
   </TabItem>
   <TabItem label="Bash (Linux/CloudShell)">
   ```bash

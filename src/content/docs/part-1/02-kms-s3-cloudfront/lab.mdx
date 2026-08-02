@@ -28,6 +28,13 @@ mkdir provided
 # 아무 jpeg 하나를 provided\main.jpeg 로 복사 (없으면 index.html 만으로 진행해도 됨)
 ```
 
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+실습용 작업 폴더와 업로드할 정적 파일을 만든다. 정답지의 `provided/` 를 흉내 낸 자리라 파일 이름이 `index.html`·`main.jpeg` 로 고정된다 — 뒤에서 S3 객체 키가 `web/main/<파일명>` 으로 만들어지고 채점이 그 키를 조회하기 때문이다.
+
+</details>
+
 ## 단계별 절차
 
 <Steps>
@@ -61,6 +68,13 @@ mkdir provided
      values   = [aws_cloudfront_distribution.cdn.arn]   # 순환!
    }
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   일부러 순환 참조를 만드는 조각이다. 키 정책이 CloudFront 배포 ARN 을 참조하고, 그 배포는 다시 이 키로 암호화된 버킷을 오리진으로 삼는다. Terraform 은 이 고리를 풀 수 없어 apply 를 거부한다 — 그래서 키 정책 쪽 조건은 배포 ARN 대신 `aws:SourceAccount` 로 느슨하게 잡는다.
+
+   </details>
 
    기대: `Error: Cycle: aws_kms_key.s3, aws_cloudfront_distribution.cdn, aws_s3_bucket..., ...` — key→distribution→bucket→key 순환을 확인 후 `aws:SourceAccount = local.account_id` 로 되돌린다.
 
@@ -98,6 +112,13 @@ mkdir provided
    curl.exe -s -o NUL -w "%{http_code}`n" "http://$CF/" -L        # http → 301 후 200 (redirect-to-https)
    ```
 
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   배포 후 채점 항목을 다섯 갈래로 확인한다. (1) 별칭으로 키를 역조회해 `Enabled`·`CUSTOMER` 인지, (2) 퍼블릭 차단 4개가 모두 true 이고 버킷 정책이 퍼블릭으로 판정되지 않는지, (3) 기본 암호화가 SSE-KMS 이고 BucketKey 가 켜졌는지, (4) 객체 키가 `web/main/...` 인지, (5) CloudFront 로는 200 이고 S3 직접 주소로는 403 인지다. 마지막의 `-L` 은 리다이렉트를 따라가 http 가 https 로 넘어가는지 확인한다.
+
+   </details>
+
    배포 완료 대기가 필요하면: `aws cloudfront wait distribution-deployed --id <배포ID>`.
 
 4. **(심화) root-less 키 정책으로 재작성**
@@ -124,6 +145,13 @@ mkdir provided
    # 심화 diff
    git diff --no-index .\kms.tf C:\Users\kryuk\practice\skills-2026\set-03\task-1\terraform\kms.tf
    ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   직접 쓴 코드를 정답지와 대조한다. `git diff --no-index` 는 저장소 밖 두 파일을 비교하는 형태라 클론한 정답지와 실습 폴더를 그대로 견줄 수 있다. 마지막 줄은 set-03 의 root-less 키 정책과 비교해 set-02 와 무엇이 다른지 보는 심화 단계다.
+
+   </details>
 
    확인 관점: `source_policy_documents` 합성 여부, `bucket_key_enabled`, `content_type` 처리, comment 로 배포 식별, 버킷 정책 SourceArn vs 키 정책 SourceAccount 구분.
 

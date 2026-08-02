@@ -60,7 +60,7 @@ flowchart LR
   - 경로 B(Endpoint): "인터넷 미경유" 요구 시 이미지 pull 용 `s3`(Gateway)/`ecr.api`/`ecr.dkr` 만으로는 부족하다. 인증에 `sts`(IRSA 의 `AssumeRoleWithWebIdentity`)·`oidc-eks`(OIDC 디스커버리)·`eks-auth`(Pod Identity), 노드 부트스트랩에 `ec2` 가 더 필요하고, 워크로드에 따라 `logs`·`elasticloadbalancing`·`kms` 를 추가한다 (set-07은 ECR·CloudWatch를 Endpoint로).
 
 :::danger[함정 — eks Endpoint 가 OIDC 해석을 가린다]
-set-03 실측(endpoints.tf 주석): `eks` Interface Endpoint를 `private_dns_enabled`로 만들면 그 PHZ가 `eks.<region>.amazonaws.com` 을 가져가면서 `oidc.eks.<region>.amazonaws.com` 해석까지 가려 **IRSA가 깨진다**. NAT가 있으면 이 호출은 NAT 경유로 충분하므로 set-03은 이 엔드포인트를 만들지 않는다.
+set-03 실측(endpoints.tf 주석): `eks` Interface Endpoint를 `private_dns_enabled`로 만들면 그 PHZ(프라이빗 호스팅 영역 — VPC 안에서만 유효한 DNS 영역)가 `eks.<region>.amazonaws.com` 을 가져가면서 `oidc.eks.<region>.amazonaws.com` 해석까지 가려 **IRSA가 깨진다**. NAT가 있으면 이 호출은 NAT 경유로 충분하므로 set-03은 이 엔드포인트를 만들지 않는다.
 
 **`eks-auth` 는 반대다.** AWS는 아웃바운드 인터넷이 없는 클러스터에서 Pod Identity에 `com.amazonaws.<region>.eks-auth` 를 **필수**로 문서화한다. 프라이빗 DNS 이름이 `eks-auth.<region>.api.aws` 라 OIDC 도메인과 겹치지 않아 위 문제를 일으키지 않는다 — 만들지 않으면 오히려 Pod Identity가 죽는다.
 

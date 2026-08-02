@@ -54,6 +54,7 @@ flowchart TD
     TG1@{ icon: "logos:aws-elb", form: "square", label: "타깃그룹 api-tg", pos: "b", h: 46, w: 46 }
     TG2@{ icon: "logos:aws-elb", form: "square", label: "타깃그룹 web-tg", pos: "b", h: 46, w: 46 }
     T1@{ icon: "logos:aws-ec2", form: "square", label: "타깃<br/>서버 · IP · Lambda", pos: "b", h: 46, w: 46 }
+    T2@{ icon: "logos:aws-ec2", form: "square", label: "타깃<br/>서버 · IP · Lambda", pos: "b", h: 46, w: 46 }
 
     ALB --> L
     L --> R1
@@ -62,7 +63,7 @@ flowchart TD
     R1 --> TG1
     R2 --> TG2
     TG1 --> T1
-    TG2 --> T1
+    TG2 --> T2
 ```
 
 | 계층 | 하는 일 | 정하는 것 |
@@ -94,7 +95,9 @@ flowchart TD
 | `UnhealthyThresholdCount` | 몇 번 연속 실패해야 죽었다고 보나 | 2 |
 | `Matcher` | 어떤 상태 코드를 성공으로 보나 | `200` |
 
-**등록 직후 바로 트래픽이 가지 않는다.** 기본값이면 `30초 × 5회` = 최소 150초를 기다려야 `healthy` 가 된다. 대회처럼 시간이 점수인 상황에서는 간격과 임계를 줄인다.
+기본값은 `instance`·`ip` 타깃 기준이다. `lambda` 타깃그룹은 간격 35초, 타임아웃 30초다.
+
+**등록 직후 바로 트래픽이 가지 않는다.** 새로 등록된 타깃은 헬스체크를 1회 통과해야 `healthy` 가 되므로 기본 간격 30초만큼 기다린다. `unhealthy` 로 떨어진 타깃이 되돌아올 때는 `HealthyThresholdCount` 만큼 연속으로 성공해야 하므로 기본값이면 150초다. 대회처럼 시간이 점수인 상황에서는 간격과 임계를 줄인다.
 
 `aws elbv2 describe-target-health` 출력의 상태값은 여섯 가지다.
 
@@ -120,6 +123,8 @@ NLB 에서 연결 종료와 드레이닝 간격을 설정하면 `unhealthy.drain
 | `instance` | EC2 인스턴스 ID | ALB → 인스턴스의 지정 포트 |
 | `ip` | IP 주소 | ALB → 그 IP 의 지정 포트 |
 | `lambda` | Lambda 함수 ARN | ALB 가 함수를 직접 호출한다 |
+
+쿠버네티스에서 `instance` 를 쓰면 그 "지정 포트"가 Service 의 NodePort 다.
 
 `instance` 와 `ip` 의 차이는 홉 수다. `instance` 는 인스턴스를 한 번 거쳐 실제 처리 주체로 간다. `ip` 는 처리 주체에 바로 간다.
 
@@ -194,7 +199,7 @@ permission 없이 attach 하면 등록이 실패한다.
 ## ④ 미니 실습 — 콘솔 30분
 
 :::caution[과금 주의]
-ALB 는 시간당 과금이다. 서울 리전 기준 시간당 약 $0.025 에 처리량(LCU)이 더해진다. 30분이면 센트 단위지만 **삭제하지 않으면 계속 붙는다.** 7단계까지 반드시 끝낸다.
+ALB 는 시간당 과금이다. 서울 리전 기준 시간당 약 $0.0225 에 처리량(LCU)이 더해진다. 30분이면 센트 단위지만 **삭제하지 않으면 계속 붙는다.** 7단계까지 반드시 끝낸다.
 :::
 
 EC2 없이 Lambda 하나를 타깃으로 써서 ALB 를 만들어 본다. 만든 다음 CLI 로 읽고, 일부러 고장 내 보고, 지운다.
@@ -295,7 +300,7 @@ EC2 없이 Lambda 하나를 타깃으로 써서 ALB 를 만들어 본다. 만든
      --query 'TargetHealthDescriptions[0].TargetHealth'
    ```
 
-   기대: 20초 안에 `State` 가 `unhealthy` 로, `Reason` 이 `Target.ResponseCodeMismatch` 로 바뀐다. 상태 코드를 200 으로 되돌리면 다시 `healthy` 가 된다.
+   기대: 약 20초 뒤 `State` 가 `unhealthy` 로, `Reason` 이 `Target.ResponseCodeMismatch` 로 바뀐다. 상태 코드를 200 으로 되돌리면 다시 `healthy` 가 된다.
 
    이것이 대회에서 가장 자주 겪는 고장 형태다. 애플리케이션의 헬스 경로를 바꿔 놓고 타깃그룹 헬스체크 경로를 안 고치면 같은 결과가 나온다.
 
@@ -316,7 +321,9 @@ EC2 없이 Lambda 하나를 타깃으로 써서 ALB 를 만들어 본다. 만든
    aws lambda get-function --function-name lb-lab-fn 2>&1 | tail -1
    ```
 
-   ALB 를 지우면 보안 그룹은 남는다. 실습용으로 새로 만들었으면 함께 지운다.
+   `delete-target-group` 이 `ResourceInUse` 로 실패하면 리스너 삭제가 아직 전파되지 않은 것이다. 30초쯤 뒤 다시 실행한다.
+
+   ALB 를 지워도 남는 것이 있다. 실습용으로 새로 만든 보안 그룹, 콘솔이 Lambda 함수와 함께 만든 실행 역할, 로그 그룹 `/aws/lambda/lb-lab-fn` 셋을 확인해 지운다.
 
 </Steps>
 

@@ -162,7 +162,7 @@ flowchart LR
 
     USER -- "① HTTPS" --> ALB
     ING -. "규칙 반영" .-> ALB
-    ALB -- "② 대상 그룹" --> SVC
+    ALB -- "② 타깃그룹" --> SVC
     SVC -- "③ 엔드포인트" --> POD
 ```
 
@@ -262,7 +262,7 @@ Ingress 를 만들었는데 `kubectl get ingress` 의 `ADDRESS` 가 계속 비�
 - [x] 컨트롤러의 IRSA 역할에 ELB 를 만들 권한이 있는지
 - [x] 퍼블릭 서브넷에 `kubernetes.io/role/elb` 태그가 붙어 있는지
 - [ ] 파드가 VPC IP 를 받았는지
-  > 파드 IP 는 대상 그룹을 채우는 단계에서 필요하다. ALB 자체가 만들어지지 않아 주소가 비는 것과는 층위가 다르다.
+  > 파드 IP 는 타깃그룹을 채우는 단계에서 필요하다. ALB 자체가 만들어지지 않아 주소가 비는 것과는 층위가 다르다.
 - [ ] Service 타입을 `LoadBalancer` 로 바꿨는지
   > Ingress + ALB 경로에서 뒤의 Service 는 ClusterIP 로 둔다. 타입을 바꾸면 NLB 가 따로 생길 뿐 Ingress 의 주소와는 상관이 없다.
 
@@ -284,4 +284,4 @@ Ingress 를 만들었는데 `kubectl get ingress` 의 `ADDRESS` 가 계속 비�
 - [서비스 계정용 IAM 역할](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) — IRSA 신뢰 정책 작성법
 - [EKS Pod Identity](https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html) — 연결 생성과 에이전트 설치
 - [VPC CNI](https://docs.aws.amazon.com/eks/latest/userguide/managing-vpc-cni.html) — IP 할당·접두사 위임·커스텀 네트워킹
-- [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/) — Ingress 애노테이션과 대상 그룹 모드
+- [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/) — Ingress 애노테이션과 TargetGroupBinding

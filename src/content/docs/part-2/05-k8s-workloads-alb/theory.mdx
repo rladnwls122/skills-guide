@@ -43,7 +43,7 @@ graph TD
 | resources | requests+limits 명시 | QoS 확보. requests=limits로 맞추면 Guaranteed 클래스 |
 | preStop + grace | `sleep 15` / 45s | 아래 graceful shutdown 참조 |
 
-**graceful shutdown 흐름**: Pod 삭제 시작 → (동시에) 엔드포인트 제거 전파 & preStop 실행. `sleep 15` 동안 ALB/TGB가 타깃 등록 해제를 끝내므로 in-flight 요청 유실이 없다. 이후 SIGTERM, 최대 45초(terminationGracePeriodSeconds) 내 종료.
+**graceful shutdown 흐름**: Pod 삭제 시작 → (동시에) 엔드포인트 제거 전파 & preStop 실행. `sleep 15` 동안 ALB/TGB가 타깃 등록 해제를 끝내므로 in-flight 요청 유실이 없다. 이후 SIGTERM. `terminationGracePeriodSeconds` 45초는 **preStop 시작 시점부터** 세므로 SIGTERM 이후 남는 시간은 약 30초다.
 
 **④ 세트별 차이** — set-03은 workload NG에 NoSchedule taint가 있어 Deployment에 toleration 필수, label 키도 `wsc2026/node`. set-02는 nodeSelector만.
 
@@ -256,9 +256,9 @@ graceful shutdown 흐름:
 2. 엔드포인트 제거 전파와 preStop 실행이 동시에 일어난다.
 3. `sleep 15` 동안 ALB/TGB 가 타깃 등록 해제를 끝낸다.
 4. SIGTERM 이 간다.
-5. 최대 45초(`terminationGracePeriodSeconds`) 안에 종료한다.
+5. 종료를 마친다.
 
-두 값은 항상 `preStop sleep < terminationGracePeriodSeconds` 여야 한다.
+`terminationGracePeriodSeconds` 카운트다운은 **preStop 훅보다 먼저 시작**해 preStop 실행과 컨테이너 종료를 통틀어 잰다. 45초 유예에 `sleep 15` 면 SIGTERM 이후 몫은 약 30초이지 45초가 아니다. 그래서 두 값은 항상 `preStop sleep < terminationGracePeriodSeconds` 여야 하고, 여유도 그 차이만큼만 있다.
 </Quiz>
 
 <QuizResults confetti />

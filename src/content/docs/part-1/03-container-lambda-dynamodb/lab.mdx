@@ -89,7 +89,7 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
    - `unquote_plus` 디코딩 (ALB 는 `2ND%20TINY_CON` 그대로 전달)
    - GSI Query + `ScanIndexForward=False` + LastEvaluatedKey 페이지네이션
    - 결과 없으면 `[]` + 200
-   - 응답: statusCode / statusDescription("200 OK") / isBase64Encoded / headers / body
+   - 응답: statusCode / headers / isBase64Encoded 는 필수, body 는 선택. statusDescription("200 OK")은 필수가 아니지만 함께 넣는다
    - body 는 `json.dumps(..., ensure_ascii=False, default=str)`, 키 순서 `username, created_at, email, booking_id, client_id, concert_name`
 
    `lambda.tf` 파일 스펙:
@@ -170,12 +170,12 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
 | 비키 속성을 attribute 로 정의 | `all attributes must be indexed` 에러 |
 | 삭제방지 켠 채 destroy | 테이블 삭제 실패 — 먼저 해제 apply |
 | 파이썬으로 float 저장 | boto3 가 거부 (`Float types are not supported`) — Decimal(str(x)) |
-| float 평균 | 96.60000000000001 ≠ 기대 96.6 — Decimal 나눗셈 |
+| float 평균 | `sum/count` 결과를 그대로 넘기면 위와 같은 `TypeError` — Decimal 나눗셈 |
 | TABLE_NAME 하드코딩 | env 주입 채점(mark 6-1) 실패 |
 | ensure_ascii 기본값 | `akaね` → `aka\u306d` 문자열 비교 실패 |
 | 키 순서 미정렬 | 기대 출력과 diff 발생 |
 | ScanIndexForward 미지정 | 기본 True = 오래된 순 — 정렬 채점 실패 |
-| statusDescription 누락 | ALB 통합 응답 불완전 — 502/포맷 채점 실패 |
+| statusCode·headers·isBase64Encoded 누락 | ALB 통합 응답 필수 항목 위반 — 502 |
 | SSE-KMS 테이블인데 실행역할에 kms:Decrypt 없음 | Query 가 AccessDenied |
 
 ## 통과 기준 (mark 항목 연결)

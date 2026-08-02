@@ -111,7 +111,7 @@ root principal 은 "계정의 IAM 정책에 권한 위임"을 의미 — 이게 
 
 **① 한 줄 정의** — 유의사항이 "키 정책에 root principal 과 `kms:*` 액션 금지"를 걸면, 배포자 IAM 신원을 admin principal 로 명시하고 액션을 전부 나열해야 한다.
 
-**② 왜 필요한가 (채점 관점)** — set-03 mark 의 check_kms 가 **정책 텍스트를 grep** 해서 `:root` 나 `kms:*` 가 있으면 실격 처리한다. 동시에 KMS 의 lockout safety check(키를 관리 불능으로 만드는 정책 거부)를 통과해야 하므로 `kms:Create*`/`kms:Put*` 등을 개별 나열한다.
+**② 왜 필요한가 (채점 관점)** — set-03 mark 의 check_kms 가 **정책 텍스트를 grep** 해서 `:root` 나 `kms:*` 가 있으면 실격 처리한다. 동시에 KMS 의 lockout safety check 를 통과해야 하는데, 이 검사가 보는 것은 **호출한 신원 본인에게 `kms:PutKeyPolicy` 가 허용되는가** 하나다. 그래서 배포자 신원의 statement 에 `kms:Put*` 를 반드시 포함시키고, 나머지 관리·운영 액션도 개별 나열한다.
 
 **③ 핵심 원리** — set-03 kms.tf 실측:
 
@@ -146,7 +146,7 @@ flowchart TD
     A@{ icon: "logos:aws-kms", form: "square", label: "키 정책 작성", pos: "b", h: 46, w: 46 }
     A --> B{"root principal<br/>또는 kms:* 포함?"}
     B -- "예" --> C["mark grep 실격"]
-    B -- "아니오" --> D{"kms:Create*/Put* 등<br/>관리 액션 포함?"}
+    B -- "아니오" --> D{"호출 신원에게<br/>kms:PutKeyPolicy 허용?"}
     D -- "아니오" --> E["KMS lockout safety check 거부<br/>→ apply 실패"]
     D -- "예" --> F["통과: 배포자 admin + 사용자별 use statement"]
 ```
@@ -490,7 +490,7 @@ set-02 에서 CMK 를 만드는 대상은 과제지에 이름이 있는 셋뿐�
 <Quiz title="set-03 root-less 키 정책">
 set-03 유형(키 정책에 root principal·`kms:*` 금지)에 대해 옳은 것을 모두 고르라.
 
-- [x] `kms:*` 를 못 쓰므로 `kms:Create*`/`kms:Put*` 등 관리 액션을 개별 나열해야 KMS lockout safety check(관리 불능 정책 거부)를 통과한다
+- [x] `kms:*` 를 못 쓰므로 관리 액션을 개별 나열하되, 배포자 신원 statement 에 `kms:Put*` 가 있어야 KMS lockout safety check(호출 신원의 후속 `PutKeyPolicy` 가능 여부 검사)를 통과한다
 - [x] 배포자 신원만 admin 이므로, root 로 apply 하면 이후 그 키에 대한 모든 작업이 거부된다
 - [ ] root principal 을 넣되 Condition 으로 제한하면 mark 의 grep 을 피할 수 있다
   > set-03 mark 의 check_kms 는 정책 **텍스트를 grep** 한다. Condition 이 붙어 있든 말든 `:root` 문자열이 남으면 실격이다.

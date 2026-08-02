@@ -57,7 +57,9 @@ sequenceDiagram
     S3->>R: 역할의 권한 정책 확인
 ```
 
-**두 정책 다 통과해야 AssumeRole이 성립한다**: 신뢰 정책(문지기) + 호출자의 `sts:AssumeRole` 권한.
+**교차 계정이면 두 정책이 다 통과해야 AssumeRole이 성립한다**: 신뢰 정책(문지기) + 호출자의 `sts:AssumeRole` 권한.
+
+같은 계정 안에서는 조건이 하나 느슨해진다. 신뢰 정책은 리소스 기반 정책이므로, 그것이 호출자의 IAM 사용자 ARN 을 **직접** 지정했다면 호출자 신원 정책에 `sts:AssumeRole` 이 없어도 성립한다. 신뢰 정책이 계정 주체(`arn:aws:iam::<acct>:root`)만 지정한 경우에만 신원 정책 쪽 허용이 따로 필요하다.
 
 ## ③ 대회에서 어떻게 쓰이나
 
@@ -202,7 +204,7 @@ aws sts assume-role \
 |---|---|---|
 | `AdministratorAccess` 인데 특정 액션이 거부된다 | SCP 또는 권한 경계의 상한 | 조직 SCP와 신원의 권한 경계를 확인 |
 | `AccessDenied` 인데 정책에는 Allow가 있다 | 다른 정책의 명시적 Deny | 신원·리소스·세션 정책 전부에서 `"Effect": "Deny"` 검색 |
-| `AssumeRole` 이 실패한다 | 신뢰 정책의 `Principal` 불일치, 또는 호출자에게 `sts:AssumeRole` 없음 | 두 조건을 각각 확인 — 한쪽만으로는 성립하지 않는다 |
+| `AssumeRole` 이 실패한다 | 신뢰 정책의 `Principal` 불일치, 또는 호출자에게 `sts:AssumeRole` 없음 | 두 조건을 각각 확인 (교차 계정은 양쪽 필수, 같은 계정은 신뢰 정책이 호출자 ARN 을 직접 지정하면 그것만으로 성립) |
 | 교차 계정 S3 접근이 거부된다 | 한쪽 정책만 열려 있다 | 호출자 계정의 신원 정책과 대상 계정의 버킷 정책 양쪽 확인 |
 | EC2에서 `Unable to locate credentials` | 인스턴스 프로파일 미연결 | `aws sts get-caller-identity` 로 확인 후 프로파일 연결 |
 | 컨테이너에서만 자격 증명을 못 찾는다 | IMDS 홉 제한이 1이라 컨테이너에서 닿지 않는다 | IRSA로 전환하거나 홉 제한 조정 |
@@ -214,7 +216,7 @@ aws sts assume-role \
 
 ---
 
-신뢰 정책은 역할의 문지기다. 권한 정책이 "이 신원이 **무엇을** 할 수 있나"(Action/Resource)를 정한다면, 신뢰 정책은 "이 역할을 **누가** 쓸 수 있나"를 `Principal`로 정한다. AssumeRole이 성립하려면 두 조건이 동시에 만족돼야 한다 — ① 역할의 신뢰 정책이 호출자를 `Principal`로 인정하고, ② 호출자에게 `sts:AssumeRole` 권한이 있어야 한다. 한쪽만 있으면 실패한다.
+신뢰 정책은 역할의 문지기다. 권한 정책이 "이 신원이 **무엇을** 할 수 있나"(Action/Resource)를 정한다면, 신뢰 정책은 "이 역할을 **누가** 쓸 수 있나"를 `Principal`로 정한다. 교차 계정 AssumeRole은 두 조건이 동시에 만족돼야 한다 — ① 역할의 신뢰 정책이 호출자를 `Principal`로 인정하고, ② 호출자에게 `sts:AssumeRole` 권한이 있어야 한다. 같은 계정에서는 신뢰 정책이 호출자 ARN 을 직접 지정했다면 ①만으로 성립한다.
 </Quiz>
 
 <Quiz title="정책 평가 — 충돌 시 결과">
@@ -238,7 +240,7 @@ EKS 클러스터를 root 사용자로 생성하면 대회에서 어떤 문제가
 - [ ] root 사용자에게는 EKS 클러스터 생성 권한이 없어 생성 단계에서 바로 실패한다
   > root는 모든 권한을 가지므로 생성 자체는 **성공한다**. 그래서 더 위험하다 — 문제가 채점 단계에 가서야 드러난다.
 - [ ] root로 만든 클러스터는 `aws-auth` ConfigMap이 아예 생성되지 않는다
-  > ConfigMap은 정상 생성된다. 문제는 그 안에 root 신원만 매핑되어, 이후 IAM 사용자로는 접근 경로가 없다는 점이다.
+  > 생성자 신원은 애초에 `aws-auth` 에 기록되지 않는다. EKS가 클러스터를 만든 주체에게 컨트롤 플레인에서 `system:masters` 를 암묵적으로 부여한다(현재 기본 인증 모드에서는 부트스트랩 액세스 엔트리로 잡힌다). 문제는 그 신원이 root 라서 채점 신원과 어긋난다는 점이다.
 
 **① root-less KMS**: 대회 유형의 KMS 키 정책은 Principal에서 root를 뺀다. root로 만든 리소스는 이후 KMS 사용이 전부 거부된다. **② 생성자 = 채점자 신원**: EKS 클러스터를 만든 IAM 신원만 기본 kubectl 접근을 가진다. 처음부터 IAM 사용자 하나(`skills-admin`)로 통일하는 습관이 곧 점수다. `aws sts get-caller-identity`의 `Arn`에 `root`가 보이면 즉시 멈춘다.
 </Quiz>

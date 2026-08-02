@@ -60,16 +60,16 @@ description: 수상 과제에서 실측한 증상별 원인 순위와 1순위 �
 ## 컴퓨트·데이터
 
 ### Lambda가 ALB에서 502
-- 원인: ALB 통합 응답 포맷 위반 — `statusCode`/`statusDescription`/`body` 필수
+- 원인: ALB 통합 응답 포맷 위반 — `statusCode`/`headers`/`isBase64Encoded` 필수 (`body` 는 선택, `statusDescription` 은 필수 아님)
 - 확인: CloudWatch Logs 해당 함수 로그
 
 ### DynamoDB 시간이 UTC로 저장
 - 원인: 컨테이너에 tzdata/`TZ=Asia/Seoul` 누락 (Go 바이너리는 tzdata 미내장)
 - 확인: 아이템 실측 `aws dynamodb scan --max-items 1`
 
-### DynamoDB 숫자가 96.60000000000001
-- 원인: float 연산 — boto3는 float 저장 자체를 거부하기도 함
-- 조치: `Decimal("483")/Decimal("5")` 패턴
+### DynamoDB 저장이 `TypeError: Float types are not supported`
+- 원인: 평균 등을 float로 계산해 넘김 — boto3는 float 저장 자체를 거부한다
+- 조치: `Decimal("483")/Decimal("5")` 패턴 (`483/5` 값 자체는 float로도 `96.6` 이 맞다)
 
 ### ECR 스캔 High/Critical
 - 원인: 당일 베이스 이미지 패치 상태

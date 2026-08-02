@@ -103,7 +103,7 @@ flowchart LR
 
 트래픽은 T+60분에 **스텝으로** 들어온다. 그 순간부터 새 파드가 트래픽을 받기까지의 사슬은 이렇다.
 
-1. metrics-server 스크레이프 + HPA 평가 주기 — 최대 15초
+1. metrics-server 스크레이프 + HPA 평가 주기 — 두 주기가 직렬로 쌓인다. metrics-server `--metric-resolution` 은 기본 60초이고 흔히 15초로 낮춰 쓰는데, 15초로 낮춰도 메트릭 노후 + HPA 싱크(15초)로 **최악 약 30초**다
 2. 파드 스케줄·기동 — 약 10초 (이미지가 노드에 캐시된 경우)
 3. 노드가 부족하면 Karpenter 노드 프로비저닝 — 부팅 약 20초, 등록·Ready까지 약 2분
 4. TargetGroupBinding 등록 + 헬스체크 통과 — `interval 10s × healthy_threshold 2` ≈ 20~30초
@@ -112,7 +112,7 @@ flowchart LR
 flowchart TD
     T["T+60분 스텝 트래픽"]
     LIVE@{ icon: "k8s:pod", form: "square", label: "이미 떠 있는 파드<br/>minReplicas 2", pos: "b", h: 46, w: 46 }
-    MS["metrics-server 스크레이프<br/>+ HPA 평가 (최대 15s)"]
+    MS["metrics-server 스크레이프<br/>+ HPA 평가 (최대 ~30s)"]
     HPACHECK{"이용률 > 목표 75%?"}
     SCALE@{ icon: "k8s:deploy", form: "square", label: "신규 파드<br/>scaleUp 창 0 · 15s당 100%/4파드", pos: "b", h: 46, w: 46 }
     ROOM{"노드에 스케줄 자리<br/>있음?"}
@@ -149,7 +149,7 @@ spec:
           type: Utilization
           averageUtilization: 75
   behavior:
-    # T+60분에 트래픽이 스텝으로 들어오므로 스케일아웃은 즉시·공격적으로
+    # 스케일아웃은 기본값 그대로가 이미 가장 빠르다 — 의도를 드러내려고 명시만 한다
     scaleUp:
       stabilizationWindowSeconds: 0
       policies:
@@ -168,6 +168,8 @@ spec:
           value: 50
           periodSeconds: 30
 ```
+
+이 매니페스트에서 기본값과 다른 것은 `scaleDown` 쪽뿐이다 — 안정화 창 300→120초, 축소 정책 `Percent 100/15s`→`Percent 50/30s`. `scaleUp` 블록은 쿠버네티스 기본값과 같은 값이라 생략해도 동작이 같다. 스케일아웃을 "더 공격적으로" 만들 여지는 애초에 없다는 뜻이다.
 
 노드를 미리 확보하는 사전 워밍은 비용 ratio를 올리므로 무료가 아니다. 채점 트래픽 개시 직전에만 워밍하고, 개시 후에는 오토스케일에 맡기는 것이 밴드 안에 머무는 방법이다.
 

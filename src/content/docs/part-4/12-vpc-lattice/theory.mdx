@@ -42,7 +42,7 @@ Client EC2는 Client VPC 안에서 Lattice가 생성한 도메인 이름을 호�
 | 방식 | 연결 단위 | CIDR 겹침 | 전이성 | 계층 |
 |---|---|---|---|---|
 | VPC 피어링 | VPC 1:1 | 불가 | 없음 (A↔B, B↔C 있어도 A↔C 불가) | L3 라우팅 |
-| Transit Gateway | 허브·스포크 | 불가 | 있음 (TGW RTB로 스포크 간 선택 허용) | L3 라우팅 |
+| Transit Gateway | 허브·스포크 | 불가 (어태치먼트는 되지만 경로가 전파되지 않는다) | 있음 (TGW RTB로 스포크 간 선택 허용) | L3 라우팅 |
 | 내부 ALB/NLB + PrivateLink | 서비스 단위(Endpoint Service) | 무방 | 없음 — 서비스마다 개별 NLB·엔드포인트 구성 | L4/L7 프록시 |
 | VPC Lattice | 서비스 네트워크(다대다) | 무방 | 있음 — 같은 Service Network에 묶인 VPC·서비스는 서로 접근 가능 | L7(HTTP/gRPC 인식) |
 

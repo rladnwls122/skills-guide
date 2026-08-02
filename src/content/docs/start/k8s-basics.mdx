@@ -148,7 +148,7 @@ flowchart TB
 | ServiceAccount | Pod의 신원 — IRSA/Pod Identity로 AWS IAM Role과 연결 |
 | Service (ClusterIP) | 라벨 셀렉터로 Pod들을 묶는 클러스터 내부 고정 접점 |
 | TargetGroupBinding | Service 뒤 Pod IP들을 ALB TargetGroup에 직접 등록 (Ingress 대체) |
-| ALB → CloudFront | Terraform으로 생성 — ALB 이름 채점 때문에 Ingress를 안 씀 |
+| ALB → CloudFront | Terraform으로 생성 — 타깃그룹 이름 채점 때문에 Ingress를 안 씀 |
 | DaemonSet (Fluent Bit) | **전 노드에 1개씩** 배치되어 로그 수집 |
 | Helm 릴리스 (LBC / kube-prometheus-stack) | addon 노드에 설치, 차트 버전 고정 원칙 |
 | 노드그룹 2분할 (addon / app) | taint/label로 애드온과 앱 워크로드를 서로 다른 노드에 격리 |
@@ -156,7 +156,7 @@ flowchart TB
 ## ④ 대회에서 어떻게 쓰이나
 
 - **Deployment가 채점의 중심**: replicas, liveness/readiness/startup probe, nodeSelector·toleration(전용 노드그룹 배치), topologySpreadConstraints(AZ 분산), PDB, preStop 훅까지 요구된다 — 전부 **PART-2 모듈 05**에서 심화.
-- **Service는 ClusterIP만**: 외부 노출은 Ingress가 아니라 **Terraform으로 만든 ALB + TargetGroupBinding**(Pod IP를 타깃그룹에 직접 등록). Ingress로 만든 ALB는 이름을 지정할 수 없어서 "ALB 이름 채점"을 통과 못 한다.
+- **Service는 ClusterIP만**: 외부 노출은 Ingress가 아니라 **Terraform으로 만든 ALB + TargetGroupBinding**(Pod IP를 타깃그룹에 직접 등록). Ingress로 만들면 ALB 이름은 애노테이션으로 맞출 수 있어도 **타깃그룹 이름을 지정할 수 없어서** "타깃그룹 이름 채점"을 통과 못 한다.
 - **ConfigMap**으로 앱 설정(DB 호스트 등)을 주입하고, **Secret**은 KMS envelope 암호화(모듈 08)의 대상이 된다.
 - **ServiceAccount**는 IRSA/Pod Identity로 AWS IAM 권한과 연결된다 — "Pod이 S3에 접근하는 방법". 개념만 잡고 PART-2 모듈 04에서 심화.
 - **Helm**은 AWS Load Balancer Controller, kube-prometheus-stack 설치에 쓴다. **차트 버전 고정**이 원칙(버전 미고정 = 대회 당일 다른 버전이 설치되는 사고).
@@ -270,14 +270,14 @@ ConfigMap을 수정했는데 Pod의 환경변수가 예전 값 그대로다. 무
 <Quiz title="대회에서 Ingress를 쓰지 않는 이유">
 대회에서 앱을 외부에 노출할 때 Ingress를 쓰지 않는 이유는?
 
-- [x] Ingress가 만드는 ALB는 이름을 지정할 수 없어 "ALB 이름 채점"을 통과할 수 없다. 대신 Terraform으로 ALB를 만들고 TargetGroupBinding으로 Pod IP를 타깃그룹에 직접 등록한다
+- [x] Ingress가 만드는 타깃그룹은 이름을 지정할 수 없어 "타깃그룹 이름 채점"을 통과할 수 없다. 대신 Terraform으로 ALB와 타깃그룹을 만들고 TargetGroupBinding으로 Pod IP를 직접 등록한다
 - [ ] Ingress를 쓰면 AWS Load Balancer Controller를 추가로 설치해야 하는데 그 시간이 아깝기 때문
-  > LBC는 **어느 쪽이든 필요하다**. TargetGroupBinding을 읽어 Pod IP를 타깃그룹에 등록해 주는 것도 LBC다. 설치 여부가 아니라 **ALB 이름을 누가 정하느냐**가 갈림길이다.
+  > LBC는 **어느 쪽이든 필요하다**. TargetGroupBinding을 읽어 Pod IP를 타깃그룹에 등록해 주는 것도 LBC다. 설치 여부가 아니라 **타깃그룹 이름을 누가 정하느냐**가 갈림길이다.
 - [ ] Ingress는 ClusterIP Service를 백엔드로 쓸 수 없어 NodePort로 바꿔야 하기 때문
   > 타깃 타입 `ip` 모드에서는 ClusterIP Service를 그대로 쓴다. NodePort가 필수였던 것은 `instance` 모드 이야기다.
-- [ ] EKS는 Ingress 리소스를 지원하지 않는다
+- [ ] Ingress로는 ALB 이름도 타깃그룹 이름도 지정할 수 없기 때문
 
-채점이 **ALB의 이름**을 보기 때문이다. Ingress가 생성하는 ALB는 이름이 자동 생성되어 지정할 수 없다. 그래서 ALB는 **Terraform으로 이름까지 정해서** 만들고, 그 타깃그룹에 `TargetGroupBinding`으로 Service 뒤의 Pod IP를 직접 등록한다. 흐름: CloudFront → ALB(Terraform) → TargetGroup ← TargetGroupBinding ← Service(ClusterIP) → Pod.
+채점이 **타깃그룹의 이름**을 보기 때문이다. ALB 이름은 `alb.ingress.kubernetes.io/load-balancer-name` 애노테이션으로 맞출 수 있지만, 타깃그룹 이름을 정하는 애노테이션은 없다 — 컨트롤러가 `k8s-` 로 시작하는 이름을 자동으로 짓는다. 그래서 ALB와 타깃그룹은 **Terraform으로 이름까지 정해서** 만들고, 그 타깃그룹에 `TargetGroupBinding`으로 Service 뒤의 Pod IP를 직접 등록한다. 흐름: CloudFront → ALB(Terraform) → TargetGroup ← TargetGroupBinding ← Service(ClusterIP) → Pod.
 </Quiz>
 
 <Quiz title="CrashLoopBackOff 1차 진단">

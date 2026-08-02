@@ -28,7 +28,7 @@ description: set-02 스택을 12가지 방식으로 고의로 망가뜨리고 �
 | ⑥ | nodeSelector 라벨 값 오타(`app`→`ap`) 후 apply | Pending | 10분 | describe Events로 특정 → 원복 → Running |
 | ⑦ | 다른 IAM 신원(임시 프로필/역할)로 `aws eks update-kubeconfig` 후 kubectl | Unauthorized | 15분 | `sts get-caller-identity` 대조 → 원 신원 kubeconfig 복원 → get nodes 성공 |
 | ⑧ | ServiceAccount의 IRSA annotation(`eks.amazonaws.com/role-arn`) 제거 + Pod 재시작 | 앱 AWS 호출 AccessDenied | 15분 | `kubectl describe sa` → annotation 복원 + Pod 재시작 → 호출 성공 |
-| ⑨ | Lambda 응답 dict에서 `statusDescription` 제거 후 배포 | ALB 경유 502 | 15분 | CloudWatch Logs 확인 → 필드 복원 → 200 |
+| ⑨ | Lambda 응답 dict에서 `statusCode` 제거 후 배포 | ALB 경유 502 | 15분 | CloudWatch Logs 확인 → 필드 복원 → 200 |
 | ⑩ | 컨테이너에서 `TZ` env 제거 후 재빌드·재배포, POST 1건 | DynamoDB에 UTC 시각 저장 | 20분 | `dynamodb scan --max-items 1` 실측 → TZ 복원·재배포 → KST 저장 |
 | ⑪ | CloudFront의 OAC(또는 Lambda) 오리진 ORP를 `AllViewer`로 변경 | 해당 오리진 403 (SigV4/Authorization 충돌) | 20분(전파 대기 포함) | ORP 원복 + `wait distribution-deployed` → 200 |
 | ⑫ | terraform 사본에서 LBC가 만들 ALB 의존 리소스(CF 오리진 등)를 1차 apply에 포함시키고 plan/apply | 순환·참조 오류 체험 | 15분 | 2회 apply 패턴으로 재구성(1차 CDN 제외 → 2차 `-var enable_cdn=true`)한 plan 통과 |
@@ -37,7 +37,7 @@ description: set-02 스택을 12가지 방식으로 고의로 망가뜨리고 �
 
 - [ ] ① probe 경로  - [ ] ② SG 차단  - [ ] ③ 커스텀 헤더  - [ ] ④ 이미지 태그
 - [ ] ⑤ env 삭제  - [ ] ⑥ nodeSelector  - [ ] ⑦ 신원 불일치  - [ ] ⑧ IRSA annotation
-- [ ] ⑨ statusDescription  - [ ] ⑩ TZ/UTC  - [ ] ⑪ ORP AllViewer  - [ ] ⑫ 순환 체험
+- [ ] ⑨ statusCode 누락  - [ ] ⑩ TZ/UTC  - [ ] ⑪ ORP AllViewer  - [ ] ⑫ 순환 체험
 
 ## 팁
 

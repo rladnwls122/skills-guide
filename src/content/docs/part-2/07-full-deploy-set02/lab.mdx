@@ -57,7 +57,7 @@ aws ecr describe-image-scan-findings --repository-name wskorea26-book-repo --ima
 **검증**: 출력에 `CRITICAL`/`HIGH` 키가 **없어야** 함. High가 나오면 Dockerfile에 `RUN apk upgrade --no-cache` 추가 후 재빌드/재푸시.
 
 :::danger[빌드 위치]
-VPC CloudShell은 인터넷이 없어 alpine을 pull하지 못한다. 이미지 빌드는 반드시 **기본 CloudShell**에서.
+VPC CloudShell은 홈 디렉터리가 비영속이고 업로드/다운로드 메뉴를 쓸 수 없다. 이미지 빌드는 **기본 CloudShell**에서.
 :::
 
 ## ③ eksctl 클러스터 (~20분, ②와 병행 가능)

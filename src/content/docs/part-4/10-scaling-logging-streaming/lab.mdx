@@ -57,7 +57,7 @@ kubectl get nodes -l karpenter.sh/nodepool=skm-app-nodepool   # 1대로 수렴
 
 1. **KEDA Pod Pending** → 차트 tolerations 스키마 확인: `helm show values kedacore/keda --version 2.20.1 | grep -n -A3 tolerations`. 버전에 따라 키가 최상위/컴포넌트별로 바뀐다.
 2. **addon 노드 용량 초과** → Karpenter requests 0.5/512Mi 축소 설치. 그래도 Pending이면 KEDA metricServer/webhooks requests도 축소.
-3. **scaleDown stabilizationWindowSeconds(15)·consolidateAfter(60s)를 늘리면** 스케일인 채점(150초 창) 실패. ScaledObject에 pollingInterval은 두지 않는다 — min ≥ 1이면 무효 필드라 KEDA webhook이 경고를 낸다.
+3. **scaleDown stabilizationWindowSeconds(15)·consolidateAfter(60s)를 늘리면** 스케일인 채점(150초 창) 실패. ScaledObject에 pollingInterval은 두지 않는다 — min ≥ 1이면 스케일링이 HPA sync 주기를 따라 이 값이 감지 속도를 바꾸지 못한다.
 4. **deployment env는 리터럴 3개만** — valueFrom/추가 금지 (name=value 정확 비교).
 5. NodePool보다 deployment를 먼저 apply하면 앱 Pod가 스케줄될 노드가 없다 — 번호 순서 준수.
 6. 디스커버리 태그 누락(서브넷 `karpenter.sh/discovery`, SG `aws:eks:cluster-name`) → 노드가 영원히 안 뜬다.

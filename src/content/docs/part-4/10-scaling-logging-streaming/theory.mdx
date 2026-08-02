@@ -47,7 +47,7 @@ flowchart LR
 2. **Pod requests 500m × 5 = 2.5 vCPU > t3.medium allocatable ~1.9 vCPU** → 한 대에 다 못 들어가 Pending 발생 → Karpenter가 2대째를 띄운다. 채점 기대 "Node ≥ 2"는 이 계산에서 나온다. requests를 줄이면 노드가 안 늘어나 오답.
 
 :::danger[스케일인 시간 예산 150초 — 어느 값도 늘리지 않는다]
-HPA behavior `scaleDown.stabilizationWindowSeconds`(기본 300초 → **15초**) + `policies: Percent 100/15s`(이건 이미 기본값이라 명시만 하는 것) + NodePool `consolidateAfter: 60s`가 한 쌍. purge를 HPA sync(~15초)가 감지해 ~35초에 Pod 1, consolidateAfter 60초 뒤 ~140초에 노드 1로 수렴한다(실채점 확정). 기본값 300이면 Pod 축소만 5분이라 150초 창을 구조적으로 못 맞춘다. ScaledObject에 `pollingInterval`은 두지 않는다 — `minReplicaCount ≥ 1`이면 1→N 스케일링이 전부 HPA 자체 폴링이라 무효 필드고, KEDA 2.20 webhook이 경고를 낸다(당일 변경으로 min=0이 되면 재도입).
+HPA behavior `scaleDown.stabilizationWindowSeconds`(기본 300초 → **15초**) + `policies: Percent 100/15s`(이건 이미 기본값이라 명시만 하는 것) + NodePool `consolidateAfter: 60s`가 한 쌍. purge를 HPA sync(~15초)가 감지해 ~35초에 Pod 1, consolidateAfter 60초 뒤 ~140초에 노드 1로 수렴한다(실채점 확정). 기본값 300이면 Pod 축소만 5분이라 150초 창을 구조적으로 못 맞춘다. ScaledObject에 `pollingInterval`은 두지 않는다 — `minReplicaCount ≥ 1`이면 1→N 스케일링을 HPA가 자기 sync 주기로 돌리므로 이 값이 감지 속도를 바꾸지 못한다(당일 변경으로 min=0이 되면 재도입).
 :::
 
 :::caution[이 시간 요건은 과제지에 없다 — 채점 스크립트에만 있다]
@@ -91,7 +91,7 @@ HPA `behavior.scaleDown.stabilizationWindowSeconds`를 명시하지 않으면 �
 
 ---
 
-기본값이면 purge 후 Pod 5→1 축소만 5분 이상 걸려, 150초 창인 스케일인 채점(Final Pods 1 / Final Nodes 1)에 실패한다. 스케일인 시간 예산은 두 값이 한 쌍이다: HPA `scaleDown.stabilizationWindowSeconds`(기본 300 → 15)와 NodePool `consolidateAfter: 60s`. 같이 적는 `Percent 100/15s` 는 `scaleDown.policies` 의 기본값이라 바뀌는 값이 아니다. **어느 값도 늘리지 않는다.** 감지 하한은 ScaledObject 설정이 아니라 HPA sync 주기(~15초)다 — `pollingInterval`은 min ≥ 1이면 무효라 두지 않는다.
+기본값이면 purge 후 Pod 5→1 축소만 5분 이상 걸려, 150초 창인 스케일인 채점(Final Pods 1 / Final Nodes 1)에 실패한다. 스케일인 시간 예산은 두 값이 한 쌍이다: HPA `scaleDown.stabilizationWindowSeconds`(기본 300 → 15)와 NodePool `consolidateAfter: 60s`. 같이 적는 `Percent 100/15s` 는 `scaleDown.policies` 의 기본값이라 바뀌는 값이 아니다. **어느 값도 늘리지 않는다.** 감지 하한은 ScaledObject 설정이 아니라 HPA sync 주기(~15초)다 — `pollingInterval`은 min ≥ 1이면 감지 속도를 바꾸지 못하므로 두지 않는다.
 </Quiz>
 
 <Quiz title="KEDA의 SQS 조회 자격증명">
@@ -175,7 +175,7 @@ flowchart LR
 | 컨트롤러 위치 | addon 노드그룹(EC2, 1/1/1 고정) | **Fargate 프로파일 2개** — 네임스페이스 `keda`·`karpenter` |
 | Karpenter 네임스페이스 | `kube-system` | **`karpenter`** |
 | `minReplicaCount` | 1 | **0** |
-| `pollingInterval` | **두지 않는다**(min ≥ 1이면 무효, webhook 경고) | **15초 이하로 반드시 둔다** — min 0이라 0↔1 활성화를 오퍼레이터가 직접 폴링한다 |
+| `pollingInterval` | **두지 않는다**(min ≥ 1이면 스케일링이 HPA sync 주기를 따라 이 값이 실질적으로 무의미하다) | **15초 이하로 반드시 둔다** — min 0이라 0↔1 활성화를 오퍼레이터가 직접 폴링한다 |
 | `cooldownPeriod` | 미지정 | **30초 이하** |
 | `queueLength` / max | 5 / 5 | **2 / 6** |
 | SQS 인증 | `identityOwner: operator` | **`TriggerAuthentication`**(`sqs-worker-trigger-auth`) |
@@ -183,7 +183,7 @@ flowchart LR
 | 컨테이너 이미지 | 제공 Dockerfile 그대로 | **Dockerfile 직접 작성**(제공 `worker.py` + boto3) |
 
 :::danger[pollingInterval — 세트가 바뀌면 정답이 뒤집힌다]
-set-07에서는 `pollingInterval`을 **지우는 것**이 정답이었다. `minReplicaCount ≥ 1`이면 1→N 스케일링이 전부 HPA 폴링이라 이 필드가 무효고 KEDA 2.20 webhook이 경고를 낸다. set-08은 **`min 0`**이라 정반대다 — 0↔1 활성화는 HPA가 아니라 KEDA 오퍼레이터가 트리거를 직접 폴링해 판단하므로 `pollingInterval`이 실제 감지 지연을 결정하고, 과제지가 15초 이하를 요구한다. **필드 하나의 유효 여부가 `minReplicaCount` 값에 달려 있다** — 외운 값을 옮기지 말고 min이 0인지부터 본다.
+set-07에서는 `pollingInterval`을 **지우는 것**이 정답이었다. `minReplicaCount ≥ 1`이면 1→N 스케일링을 HPA가 자기 sync 주기로 돌리므로 `pollingInterval`은 실질적인 영향이 없다 — 이 값의 효과는 주로 scale-to-zero(0↔1) 시나리오에서 나타난다. set-08은 **`min 0`**이라 정반대다 — 0↔1 활성화는 HPA가 아니라 KEDA 오퍼레이터가 트리거를 직접 폴링해 판단하므로 `pollingInterval`이 실제 감지 지연을 결정하고, 과제지가 15초 이하를 요구한다. **필드 하나의 유효 여부가 `minReplicaCount` 값에 달려 있다** — 외운 값을 옮기지 말고 min이 0인지부터 본다.
 :::
 
 ### ③ 핵심 연결 고리

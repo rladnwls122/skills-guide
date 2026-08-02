@@ -270,7 +270,7 @@ spec:
 | 흔한 주장 | 실제 | 근거 |
 |---|---|---|
 | CPU limit을 생략하면 request가 사실상 상한으로 동작한다 | 아니다. limit이 없으면 노드의 유휴 CPU까지 버스트한다. 그게 limit을 빼는 이유다 | cgroup CFS 동작 |
-| db.t3.micro의 `max_connections`는 약 60 | 약 85 (MySQL 기본식은 메모리에서 파생). 어느 쪽이든 파드 수 × 풀 크기로 쉽게 넘긴다 — 프록시로 끊는 것이 답 | RDS 파라미터 기본식 |
+| db.t3.micro의 `max_connections`는 약 85 (`{DBInstanceClassMemory/12582880}` 에 1 GiB 대입) | 그 식은 맞지만 `DBInstanceClassMemory` 는 **OS·RDS 예약분을 뺀 값**이라 1 GiB 를 그대로 넣으면 안 된다. 실측은 60~66 보고가 많다 — 값은 `SELECT @@max_connections;` 로 직접 확인한다. 어느 쪽이든 파드 수 × 풀 크기로 쉽게 넘기므로 프록시로 끊는 것이 답 | RDS 파라미터 기본식 + 실측 |
 | NodePool에 `replicas`를 주면 노드를 고정 확보한다 | EKS Auto Mode NodePool에서 지원 여부를 당일 `kubectl explain nodepool.spec`으로 확인한다. 확실한 방법은 낮은 우선순위 placeholder 파드로 노드를 미리 띄우는 것 | Auto Mode 스키마 검증 필요 |
 | deregistration delay를 300초에서 60초로 줄여라 | 3과제 실측값은 15초 + 파드 `preStop: sleep 15`. 스케일다운이 잦아 60초도 길다 | `terraform/alb.tf` |
 | 경기 시간은 60분 | 경기는 3시간, **트래픽이 T+60분에 시작**한다. 배포 데드라인이 60분이라는 뜻 | 과제지 1·7절 |

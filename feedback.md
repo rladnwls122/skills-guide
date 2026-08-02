@@ -1,6 +1,6 @@
 # 이론 문서 사실 검증 리포트
 
-> **반영 완료(2026-08-02)** — 아래 36건 중 **미결 2건(§6)을 제외한 34건을 모두 수정**했다. 반영 내역과 함께 손댄 추가 파일은 §8 에 정리했다. `npm run build` 통과, 내부 링크 검증 통과.
+> **반영 완료(2026-08-02)** — 36건 전부 수정했다. 보류했던 §6 의 2건도 재검토 후 반영했다. 내역과 함께 손댄 추가 파일은 §8 에 정리했다. `npm run build` 통과, 내부 링크 검증 통과.
 
 
 작성일 2026-08-02. 6개 에이전트가 도메인별로 분담해 `theory.mdx` 17개와 `start/` 기초 문서를 읽고, 각 주장을 AWS·Kubernetes·Terraform·Karpenter·KEDA 공식 문서와 대조했다.
@@ -323,9 +323,14 @@ AWS 문서는 이 토폴로지에 대해 정반대로 말한다: *"VPC environme
 
 ---
 
-## 6. 미결 2건 — 오류로 보고하지 않음
+## 6. 미결이었던 2건 — 이후 해소, 반영 완료
 
-판정이 갈렸다. 고치기 전에 실측이 필요하다.
+처음에는 판정이 갈려 보류했으나, 재검토 결과 **양쪽 다 현재 서술이 근거가 부족한 쪽**으로 결론이 났다. 둘 다 수정했다.
+
+- **`max_connections`** — 계산식은 소개하되 `DBInstanceClassMemory` 가 예약 메모리를 뺀 값이라는 점을 명시하고, "85가 맞다"는 단정을 제거했다. 실제 값은 `SELECT @@max_connections;` 로 확인하도록 안내한다. 결론(소형 인스턴스는 연결 수가 빠듯하니 프록시로 끊는다)은 유지.
+- **KEDA webhook** — 근거를 찾지 못한 "admission webhook 이 경고를 낸다" 문장만 걷어냈다. `minReplicaCount ≥ 1` 에서 1→N 을 HPA sync 주기가 담당하고 `pollingInterval` 의 효과는 주로 scale-to-zero 에서 나타난다는 핵심 동작 설명은 그대로 둔다. 같은 문장이 복사돼 있던 `part-4/10 lab.mdx:60` 과 본문 2곳도 함께 고쳤다.
+
+아래는 보류 당시의 판단 근거다.
 
 **`part-5/14-task3-load-ops/theory.mdx:271`** — `| db.t3.micro의 max_connections는 약 60 | 약 85 (MySQL 기본식은 메모리에서 파생) |`. `85` 는 `{DBInstanceClassMemory/12582880}` 을 1 GiB 전체에 그대로 대입한 값이고 서드파티 표 다수가 이 값을 싣는다. 그러나 AWS 는 `DBInstanceClassMemory` 가 작은 클래스에서 OS/RDS 예약분을 **차감**한다고 명시하고, db.t3.micro MySQL 실측 보고는 60~66 이 많다. 표가 정정하려는 "흔한 주장" 쪽이 오히려 맞을 수 있다. db.t3.micro 에서 `SHOW VARIABLES LIKE 'max_connections'` 로 확인이 필요하다. 결론("프록시로 끊는 것이 답")은 어느 쪽이든 유지된다.
 
@@ -384,9 +389,16 @@ AWS 문서는 이 토폴로지에 대해 정반대로 말한다: *"VPC environme
 | `part-4/09-serverless-event/lab.mdx` | 기대 출력 주석과 함정 목록의 float 서술 |
 | `part-6/16-break-fix/lab.mdx` | 드릴 ⑨ 의 주입 결함을 `statusDescription` 제거 → **`statusCode` 제거**로 변경. 기존 결함으로는 502 가 재현되지 않는다 |
 
+### 2차 반영 (§6 해소분 + 구조 정리)
+
+| 파일 | 반영 |
+|---|---|
+| `part-5/14-task3-load-ops/theory.mdx` | `max_connections` 행을 뒤집었다 — "85" 를 흔한 주장 쪽으로 옮기고, `DBInstanceClassMemory` 가 예약분을 뺀 값이라는 점과 실측 60~66, `SELECT @@max_connections;` 확인법을 실제 쪽에 넣었다 |
+| `part-4/10-scaling-logging-streaming/theory.mdx` · `lab.mdx` | "KEDA webhook 경고" 서술 3곳 제거. `minReplicaCount ≥ 1` 에서는 HPA sync 주기가 감지 속도를 정하고 `pollingInterval` 은 scale-to-zero 에서 의미를 갖는다는 서술로 대체 |
+| `start/s3-basics.mdx` | ⑤ 심화 중 퀴즈에 없던 주제 4문항 추가(스토리지 클래스 최소 보관·128KB, 버전 관리 버킷 수명 주기, 이벤트 알림 at-least-once, 복제 규칙 이후 객체만). OAC 를 정의 없이 정책부터 보여주던 순서를 고쳐 ③ 정의 → ④ 정책 → ⑤ 구조·OAI 비교로 이었다 |
+
 ### 손대지 않은 것
 
-- §6 미결 2건 — `db.t3.micro` 의 `max_connections`, KEDA webhook 경고. 실측 전까지 현행 유지
 - `skills-2026/set-02/task-1/README.md:103` — 레포 밖 원본. VPC CloudShell 오류의 출처지만 이번 작업 범위 밖이다
 
 ### 확인

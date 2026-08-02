@@ -32,7 +32,13 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
 
 1. **Dockerfile 직접 작성 (정답지 금지)**
 
-   스펙: 최신 안정 **고정 버전** alpine, tzdata 설치 + `TZ=Asia/Seoul`, uid 10001 비루트 유저 생성·전환, 바이너리 `book` 을 `/book` 으로 755 복사, EXPOSE 8080, ENTRYPOINT.
+   스펙:
+
+   - 베이스: 최신 안정 **고정 버전** alpine
+   - 타임존: tzdata 설치 + `TZ=Asia/Seoul`
+   - 사용자: uid 10001 비루트 유저 생성·전환
+   - 바이너리: `book` 을 `/book` 으로 755 복사
+   - 포트·진입점: EXPOSE 8080, ENTRYPOINT
 
    실제 book 바이너리가 없으므로 로컬 검증용 더미:
 
@@ -86,7 +92,13 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
    - 응답: statusCode / statusDescription("200 OK") / isBase64Encoded / headers / body
    - body 는 `json.dumps(..., ensure_ascii=False, default=str)`, 키 순서 `username, created_at, email, booking_id, client_id, concert_name`
 
-   lambda.tf 스펙: `archive_file` zip, 로그그룹 `/aws/lambda/wskorea26-book-lambda`(30일), 실행역할 3-statement(dynamodb:Query 테이블+`/index/*` / logs 2액션 / CMK kms:Decrypt), runtime python3.14(불가하면 python3.13), timeout 10, env 주입.
+   `lambda.tf` 파일 스펙:
+
+   - 패키징: `archive_file` zip
+   - 로그그룹: `/aws/lambda/wskorea26-book-lambda`, 보존 30일
+   - 실행역할: 3-statement (`dynamodb:Query` 테이블+`/index/*` / logs 2액션 / CMK `kms:Decrypt`)
+   - 런타임: python3.14, 불가하면 python3.13
+   - 기타: timeout 10, env 주입
 
 6. **데이터 주입 & 검증**
 

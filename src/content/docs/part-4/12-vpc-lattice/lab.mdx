@@ -9,7 +9,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 채점 스크립트(`asgmt2_module2_check.sh`, 로컬 사본 `mark/mark2-2.sh`)가 조회하는 명령과 대조하며 진행한다. Terraform 정답은 `skills-2026`의 브랜치 `set-08/task-2`, `set-08/task-2/module-2-lattice`에 있다 — 여기서는 CLI로 만들어 손에 익힌 뒤 대조한다.
 
-아래 순서는 문제지의 절 번호(4-1~4-4)가 아니라 **배포 의존성 순서**를 따른다. 보안 그룹은 인스턴스를 만드는 시점에 이미 있어야 하고, Client EC2에 넣을 `SERVICE_URL`은 Service를 만들어 도메인 이름을 받은 뒤에야 값이 생긴다 — 그래서 Service EC2를 먼저, Client EC2를 마지막에 띄운다.
+이 실습의 순서는 문제지의 절 번호(4-1~4-4)가 아니라 **배포 의존성 순서**를 따른다. 보안 그룹은 인스턴스를 만드는 시점에 이미 있어야 하고, Client EC2에 넣을 `SERVICE_URL`은 Service를 만들어 도메인 이름을 받은 뒤에야 값이 생긴다 — 그래서 Service EC2를 먼저, Client EC2를 마지막에 띄운다.
 
 ## 실습 목표
 
@@ -137,7 +137,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 3. **보안 그룹 3개**
 
-   Client EC2용·Service EC2용·VPC Association용 — 이름은 채점 대상이 아니지만 이 lab에서는 아래 셋으로 고정한다.
+   Client EC2용·Service EC2용·VPC Association용 — 이름은 채점 대상이 아니지만 이 실습에서는 다음 셋으로 고정한다.
 
    ```powershell
    $CLIENT_SG_ID = aws ec2 create-security-group --group-name skills-lattice-client-sg --description "client EC2 inbound 80" --vpc-id $CLIENT_VPC_ID --query "GroupId" --output text
@@ -330,7 +330,7 @@ import { Steps } from '@astrojs/starlight/components';
 ## 정리 (당일 필수)
 
 :::caution[과금 주의]
-VPC Lattice는 **Service Network VPC Association 시간당 + Service 처리량(GB)** 과금이 겹친다. 실습 종료 즉시 아래 순서(의존 역순)로 정리한다. 셸을 새로 열었다면 변수는 이름으로 다시 조회한다.
+VPC Lattice는 **Service Network VPC Association 시간당 + Service 처리량(GB)** 과금이 겹친다. 실습 종료 즉시 이어지는 순서(의존 역순)로 정리한다. 셸을 새로 열었다면 변수는 이름으로 다시 조회한다.
 :::
 
 ```powershell

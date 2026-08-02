@@ -14,7 +14,9 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 - [ ] set-03 root-less 키 정책(root·`kms:*` 금지, 배포자 신원 admin, lockout safety check)을 직접 작성할 수 있다
 - [ ] 퍼블릭 차단 4종 + SSE-KMS + BucketKey 버킷과 CloudFront OAC 연동(SourceArn 버킷 정책)을 구성할 수 있다
 - [ ] key→distribution→bucket→key 순환 참조를 `aws:SourceAccount` 조건으로 우회하는 이유를 안다
-- [ ] WAF Web ACL을 CloudFront(CLOUDFRONT scope, us-east-1 고정)에 연결하고, 관리형 규칙 그룹과 커스텀 매치 규칙의 구조 차이·RuleActionOverrides로 오탐 규칙만 Count 전환하는 절차를 설명할 수 있다
+- [ ] WAF Web ACL을 CloudFront(CLOUDFRONT scope, us-east-1 고정)에 연결할 수 있다
+- [ ] 관리형 규칙 그룹과 커스텀 매치 규칙의 구조 차이를 설명할 수 있다
+- [ ] RuleActionOverrides로 오탐 규칙 하나만 Count 전환하는 절차를 설명할 수 있다
 
 ## 소요 시간 / 일차
 
@@ -29,7 +31,7 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 | CloudFront | 요청/전송량 과금, 배포 자체는 무료 | destroy 시 disable→삭제로 5~10분 소요 |
 
 :::caution[과금 주의]
-이 모듈은 NAT 같은 시간당 폭탄은 없지만 **KMS 키가 세트마다 쌓이면 월 과금이 늘어난다** — 실습 종료 시 반드시 destroy.
+이 모듈에는 NAT 처럼 시간당 과금이 큰 리소스가 없다. 다만 **KMS 키가 세트마다 쌓이면 키당 월 $1 이 계속 붙는다** — 실습 종료 시 반드시 destroy 한다.
 :::
 
 ## 선행 지식
@@ -43,7 +45,7 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 - OAC 와 OAI 의 차이 — SSE-KMS 버킷은 OAI 로 못 읽는다 — [s3-basics](/start/s3-basics/)
 - `aws ... --query`로 배포·버킷 속성만 뽑아 확인하는 법 — [awscli-basics](/start/awscli-basics/)
 
-막히면 위 링크, 아니면 바로 다음 파일로.
+막히는 항목이 있으면 그 링크를 먼저 읽는다. 아니면 바로 다음 파일로 간다.
 
 ## 선행 모듈
 

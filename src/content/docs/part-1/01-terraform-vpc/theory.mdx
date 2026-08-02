@@ -102,7 +102,7 @@ locals {
 
 **① 한 줄 정의** — data source 는 "만들지 않고 조회만" 하는 블록이고, `aws_iam_policy_document` 는 IAM/KMS/버킷 정책 JSON 을 HCL 로 조립해 주는 data source 다.
 
-**② 왜 필요한가 (채점 관점)** — 계정 ID 하드코딩은 계정이 지급되는 대회에서 즉사 코드다. `aws_caller_identity` 로 조회한다. 정책을 heredoc JSON 으로 쓰면 따옴표·콤마 실수로 apply 가 깨지기 쉽다 — policy_document 는 validate 단계에서 잡아준다.
+**② 왜 필요한가 (채점 관점)** — 계정 ID 를 하드코딩하면 지급 계정이 바뀌는 순간 정책이 전부 어긋난다. `aws_caller_identity` 로 조회한다. 정책을 heredoc JSON 으로 쓰면 따옴표·콤마 실수로 apply 가 깨지기 쉽다 — `aws_iam_policy_document` 는 `terraform validate` 단계에서 잡아준다.
 
 **③ 핵심 원리**:
 
@@ -233,7 +233,7 @@ resource "aws_nat_gateway" "this" {
 
 **① 한 줄 정의** — `output` 은 apply 결과값(ID·ARN·DNS)을 외부로 내보내는 통로이며, 대회에서는 이를 `.env` 파일로 박아 터미널이 끊겨도 재사용한다.
 
-**② 왜 필요한가 (채점 관점)** — 대회 환경은 재시동 시 파일이 초기화되고 CloudShell 세션이 끊긴다. eksctl YAML 렌더링·kubectl 치환·채점 확인 명령이 전부 output 값을 쓰므로, 매번 콘솔에서 복사하면 시간이 녹는다. bastion 에는 Terraform 을 안 올리고 `outputs.json` 만 올려 jq 로 읽는 것이 저장소 규칙이다.
+**② 왜 필요한가 (채점 관점)** — 대회 환경은 재시동 시 파일이 초기화되고 CloudShell 세션이 끊긴다. eksctl YAML 렌더링·kubectl 치환·채점 확인 명령이 전부 output 값을 쓴다. 매번 콘솔에서 복사하면 그만큼 작성 시간을 잃는다. bastion 에는 Terraform 을 안 올리고 `outputs.json` 만 올려 jq 로 읽는 것이 저장소 규칙이다.
 
 **③ 핵심 원리** — set-02 README 실측:
 
@@ -308,7 +308,7 @@ NAT Gateway 는 어디에 배치해야 하며, 그 이유는?
 </Quiz>
 
 <Quiz title="계정 ID 조회">
-계정 ID 하드코딩은 계정이 지급되는 대회에서 즉사 코드다. 하드코딩 대신 선언하는 data source 의 타입 이름은 [[aws_caller_identity]] 이고, `data.<타입>.current.account_id` 로 참조한다.
+계정 ID 를 하드코딩하면 지급 계정이 바뀌는 순간 정책이 전부 어긋난다. 하드코딩 대신 선언하는 data source 의 타입 이름은 [[aws_caller_identity]] 이고, `data.<타입>.current.account_id` 로 참조한다.
 
 ---
 
@@ -330,7 +330,9 @@ set-03 은 여기서 한 발 더 나가 `aws_iam_session_context` 로 "지금 ap
 
 `terraform output -json private_subnet_ids | jq -r '.["wskorea26-priv-subnet-c"]'`.
 
-`outputs.json` 을 경유하는 저장소 규칙(`terraform output -json > outputs.json`)에서는 전체 덤프라 `.value` 래퍼가 붙는다 — `jq -r '.private_subnet_ids.value["wskorea26-priv-subnet-c"]' outputs.json`. 정리하면 **map output 은 `-json` + jq/ConvertFrom-Json, 단일 문자열은 `-raw`**.
+`outputs.json` 파일을 경유하는 저장소 규칙(`terraform output -json > outputs.json`)에서는 전체 덤프라 `.value` 래퍼가 붙는다 — `jq -r '.private_subnet_ids.value["wskorea26-priv-subnet-c"]' outputs.json`.
+
+**map output 은 `-json` + jq/ConvertFrom-Json, 단일 문자열은 `-raw`.**
 </Quiz>
 
 <QuizResults confetti />

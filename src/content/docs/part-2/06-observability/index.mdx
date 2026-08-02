@@ -7,7 +7,11 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: 개요
 
-관측성은 별도 심화 주제가 아니라 **1과제 안에 들어 있다.** 후보 세 편(set-02·set-03·set-07)이 모두 Prometheus·Grafana·Fluent Bit 을 요구하고, 배점은 30점 중 3.5~5.2점이다 — set-02 만 도구 선택이 자유롭고 수동 채점이며, set-03·set-07 은 스택이 고정되고 실시간 채점이다. 그래서 이 모듈은 [1과제 완주](/part-2/07-full-deploy-set02/) 앞에 온다. 완주 런북의 "모니터링·로깅" 단계가 여기서 배운 것을 그대로 쓴다.
+관측성은 별도 심화 주제가 아니라 **1과제 안에 들어 있다.** 후보 세 편(set-02·set-03·set-07)이 모두 Prometheus·Grafana·Fluent Bit 을 요구하고, 배점은 30점 중 3.5~5.2점이다.
+
+set-02 만 도구 선택이 자유롭고 수동 채점이다. set-03·set-07 은 스택이 고정되고 실시간 채점이다.
+
+그래서 이 모듈은 [1과제 완주](/part-2/07-full-deploy-set02/) 앞에 온다. 완주 런북의 "모니터링·로깅" 단계가 여기서 배운 것을 그대로 쓴다.
 
 ## 학습 목표
 
@@ -44,7 +48,7 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 - 라벨 셀렉터 — sidecar가 `grafana_dashboard=1` 라벨로 대시보드를 찾는다 — [k8s-basics](/start/k8s-basics/)
 - 파이프·`grep`·`jq`로 로그에서 필요한 줄만 뽑는 원라이너 — [shell-basics](/start/shell-basics/)
 
-막히면 위 링크, 아니면 바로 다음 파일로.
+막히는 항목이 있으면 그 링크를 먼저 읽는다. 아니면 바로 다음 파일로 간다.
 
 ## 선행 모듈
 

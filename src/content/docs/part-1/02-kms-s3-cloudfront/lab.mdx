@@ -149,7 +149,13 @@ mkdir provided
    curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/"                                 # 정상 요청 → 200 기대
    ```
 
-   **오탐 대응 훈련(Count → 검증 → Block 복구)**: SQLi 규칙의 `action`을 `block{}`에서 `count{}`로 바꿔 `apply`한 뒤, 같은 SQLi 페이로드 요청이 200으로 통과하는지 확인한다(차단은 안 되지만 CloudWatch 메트릭·sampled requests엔 여전히 잡힌다). 확인했으면 `action`을 다시 `block{}`으로 되돌려 `apply`한다 — 관리형 규칙 그룹(set-07 방식)이었다면 이 자리에 `rule_action_override`가 들어간다.
+   **오탐 대응 훈련(Count → 검증 → Block 복구)**:
+
+   1. SQLi 규칙의 `action`을 `block{}`에서 `count{}`로 바꿔 `apply`한다.
+   2. 같은 SQLi 페이로드 요청이 200으로 통과하는지 확인한다. 차단은 안 되지만 CloudWatch 메트릭·sampled requests엔 여전히 잡힌다.
+   3. `action`을 다시 `block{}`으로 되돌려 `apply`한다.
+
+   관리형 규칙 그룹(set-07 방식)이었다면 2번 자리에 `rule_action_override`가 들어간다.
 
    정답 대조:
 

@@ -177,7 +177,11 @@ AWS Load Balancer Controller는 클러스터 안에서 Ingress·Service 리소�
 - **instance 모드**: 대상이 노드의 NodePort다. 트래픽이 노드를 한 번 거쳐 파드로 간다
 - **ip 모드**: 대상이 **파드 IP 자체**다. VPC CNI가 파드에 VPC IP를 주기 때문에 가능하다. 홉이 하나 줄고 Fargate에서는 이 모드만 쓴다
 
-Ingress가 `ADDRESS` 를 받지 못하고 비어 있으면 순서대로 본다 — ① 컨트롤러 파드가 `Running` 인가, ② 컨트롤러의 IRSA 역할에 ELB 권한이 있는가, ③ 서브넷 태그(`kubernetes.io/role/elb`)가 붙어 있는가.
+Ingress가 `ADDRESS` 를 받지 못하고 비어 있으면 순서대로 본다.
+
+1. 컨트롤러 파드가 `Running` 인가.
+2. 컨트롤러의 IRSA 역할에 ELB 권한이 있는가.
+3. 서브넷 태그(`kubernetes.io/role/elb`)가 붙어 있는가.
 
 ### 트러블슈팅 사례
 

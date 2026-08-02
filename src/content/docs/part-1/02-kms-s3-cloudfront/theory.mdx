@@ -103,7 +103,7 @@ data "aws_iam_policy_document" "kms_s3" {
 
 root principal 은 "계정의 IAM 정책에 권한 위임"을 의미 — 이게 있어야 배포자 IAM 정책만으로 키 관리가 된다.
 
-**④ 세트별 차이** — set-02 는 root 위임 허용. set-03 은 root·`kms:*` 금지(다음 절).
+**④ 세트별 차이** — set-02 는 root 위임 허용. set-03 은 root·`kms:*` 금지(3절).
 
 ---
 
@@ -327,7 +327,13 @@ origin {
 
 **① 한 줄 정의** — WAF Web ACL은 priority(우선순위)가 매겨진 규칙(rule) 목록이다. 각 규칙은 매치 조건(statement)과 처리(action)를 갖고, CloudFront에 붙이면 scope는 `CLOUDFRONT`(항상 us-east-1), ALB에 직접 붙이면 `REGIONAL`(보호 대상과 같은 리전)이다.
 
-**② 왜 필요한가 (채점 관점)** — 후보 세트 중 set-03·set-07 은 WAF를 채점하고 set-02 는 아예 없다. 그런데 확인 방식이 다르다. set-03 mark 10-1 은 `aws wafv2 list-web-acls`로 리소스 자체를 조회한 뒤 SQLi/XSS payload(`booking_id=1' OR 1=1--`, `<script>alert(1)</script>`)를 실제로 던져 403을 확인하고, rate 규칙의 `Limit` 값을 API로 읽어 200 이하인지 본다. set-07 은 `aws wafv2` 호출이 전혀 없이 순수 curl 블랙박스 테스트(XSS 프로브 상태 코드, 연속 요청 후 상태 확인)로만 판정한다. 이름만 맞고 실제로 안 막으면 두 세트 모두 감점이라는 뜻이다.
+**② 왜 필요한가 (채점 관점)** — 후보 세트 중 set-03·set-07 은 WAF를 채점하고 set-02 는 아예 없다. 그런데 확인 방식이 다르다.
+
+set-03 mark 10-1 은 세 가지를 본다. `aws wafv2 list-web-acls`로 리소스 자체를 조회하고, SQLi/XSS payload(`booking_id=1' OR 1=1--`, `<script>alert(1)</script>`)를 실제로 던져 403을 확인하고, rate 규칙의 `Limit` 값을 API로 읽어 200 이하인지 본다.
+
+set-07 은 `aws wafv2` 호출이 전혀 없다. XSS 프로브 상태 코드와 연속 요청 후 상태만 보는 curl 블랙박스 테스트다.
+
+두 세트 모두 이름만 맞고 실제로 안 막으면 감점이다.
 
 **③ 핵심 원리**
 
@@ -379,7 +385,14 @@ resource "aws_wafv2_web_acl" "unicorn" {
 - **RuleActionOverrides**: 그룹 안의 특정 하위 규칙 하나만 Count 로 바꾸는 세 번째 계층. `managed_rule_group_statement` 안에 이름을 지정해 넣는다(`rule_action_override { name = "SizeRestrictions_BODY"; action_to_use { count {} } }`). 그룹 전체가 아니라 오탐을 낸 그 규칙 하나만 죽이므로 나머지 보호는 유지된다.
 
 :::note[정상 요청이 403 이 나올 때]
-관리형 규칙 그룹이 정상 요청을 오차단하면: ① CloudWatch sampled requests 로 원인 규칙을 특정 → ② 그 규칙만 RuleActionOverrides 로 Count 전환 → ③ 정상 요청이 통과하는지 검증 → ④ 문제가 해결됐으면 다시 Block. 명령어 수준 절차는 [트러블슈팅](/reference/troubleshooting/)의 "정상 요청이 403" 항목에 있다.
+관리형 규칙 그룹이 정상 요청을 오차단하면 이 순서로 좁힌다.
+
+1. CloudWatch sampled requests 로 원인 규칙을 특정한다.
+2. 그 규칙만 RuleActionOverrides 로 Count 전환한다.
+3. 정상 요청이 통과하는지 검증한다.
+4. 문제가 해결됐으면 다시 Block 으로 되돌린다.
+
+명령어 수준 절차는 [트러블슈팅](/reference/troubleshooting/)의 "정상 요청이 403" 항목에 있다.
 :::
 
 set-03 은 관리형 규칙 그룹을 아예 쓰지 않는다 — SQLi/XSS 를 리프 규칙(`sqli_match_statement`/`xss_match_statement`)으로 직접 짜고 action 도 자기 것이다:
@@ -415,7 +428,11 @@ rule {
 
 이 경우는 규칙을 직접 소유하므로 오탐이 나면 `action`을 바로 `count{}`로 바꿔 검증하면 된다 — 관리형 그룹처럼 RuleActionOverrides 가 따로 필요 없다.
 
-**로깅**: set-07 은 `aws_wafv2_web_acl_logging_configuration`으로 평가 로그를 CloudWatch Logs(이름은 반드시 `aws-waf-logs-`로 시작, us-east-1, Platform CMK 암호화)에 남긴다. 로그 배달 주체(`delivery.logs.amazonaws.com`)가 로그 그룹에 쓸 수 있도록 리소스 정책을 별도로 붙여야 로깅 설정 자체가 성공한다. set-03 은 과제지에 로깅 요구가 없어 로깅 설정을 만들지 않는다 — **과제지에 없으면 안 만드는 원칙(4절)은 여기도 동일**하다.
+**로깅**: set-07 은 `aws_wafv2_web_acl_logging_configuration` 리소스로 평가 로그를 CloudWatch Logs 에 남긴다. 로그 그룹 이름은 반드시 `aws-waf-logs-` 로 시작하고, us-east-1 에 Platform CMK 암호화로 만든다.
+
+로그 배달 주체(`delivery.logs.amazonaws.com`)가 그 로그 그룹에 쓸 수 있도록 리소스 정책을 별도로 붙여야 로깅 설정 자체가 성공한다.
+
+set-03 은 과제지에 로깅 요구가 없어 로깅 설정을 만들지 않는다 — **과제지에 없으면 안 만드는 원칙(4절)은 여기도 동일**하다.
 
 **④ 세트별 차이**:
 
@@ -541,7 +558,17 @@ set-07 스타일로 `AWSManagedRulesCommonRuleSet`을 붙였는데, 정상적인
 - [ ] rate_based_statement의 limit 값을 올린다
   > rate 규칙은 요청 빈도를 다루는 별개 규칙이다. `SizeRestrictions_BODY`는 요청 본문 크기를 보는 `CommonRuleSet` 안의 규칙이라 rate 규칙과 무관하다.
 
-관리형 규칙 그룹은 세 층으로 오버라이드한다. 그룹 전체를 켜고 끄는 `override_action`(그룹 단위), 그리고 그 안의 이름 있는 규칙 하나만 바꾸는 `rule_action_override`(규칙 단위, API 이름은 `RuleActionOverrides`). 오탐이 난 규칙 하나만 Count로 돌리고 나머지는 그대로 Block을 유지하는 것이 표준 절차다 — 문제 규칙을 CloudWatch sampled requests로 먼저 특정하고, Count 전환 후 정상 요청이 통과하는지 검증한 뒤 다시 Block으로 되돌린다. set-03처럼 직접 짠 리프 규칙(`sqli_match_statement` 등)은 애초에 규칙을 자기가 소유하므로 `action`을 바로 `count`로 바꾸면 된다 — 이 계층 구분이 필요 없다.
+WAF 의 action 은 세 층이다.
+
+| 층 | 필드 | 범위 |
+|---|---|---|
+| 리프 규칙 | `action { block{} / count{} }` | 직접 짠 규칙 하나 |
+| 그룹 | `override_action { none{} / count{} }` | 관리형 규칙 그룹 전체 |
+| 그룹 안 규칙 | `rule_action_override`(API 이름 `RuleActionOverrides`) | 그룹 안 이름 있는 규칙 하나 |
+
+오탐이 난 규칙 하나만 Count 로 돌리고 나머지는 Block 을 유지하는 것이 표준 절차다. 문제 규칙을 CloudWatch sampled requests 로 특정하고, Count 로 바꾼 뒤 정상 요청이 통과하는지 검증하고, 다시 Block 으로 되돌린다.
+
+set-03처럼 직접 짠 리프 규칙(`sqli_match_statement` 등)은 규칙을 자기가 소유하므로 `action` 을 바로 `count` 로 바꾸면 된다. 이 계층 구분이 필요 없다.
 </Quiz>
 
 <QuizResults confetti />

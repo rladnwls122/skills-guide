@@ -87,7 +87,9 @@ TLS도 선택이 아니라 기본이다. DocumentDB는 TLS 연결을 요구하�
 TTL 인덱스의 `expireAfterSeconds: 0`은 "삽입 후 0초"가 아니다. `expiresAt` 필드에 저장된 값 자체를 만료 시각으로 쓰겠다는 뜻이다 — 그 시각이 지난 뒤 백그라운드 작업이 주기적으로 문서를 지운다. 반대로 흔한 TTL 패턴(생성 시각 필드에 `expireAfterSeconds: 3600` 같은 큰 값)은 "삽입 후 N초"를 뜻하는 다른 방식이다. `retail_dataset.json`의 `sessions.expiresAt`은 전부 미래 시각(`2026-12-0*`)이므로 지금 당장은 삭제되지 않는다.
 
 :::caution[함정 — 날짜를 문자열로 적재하면 인덱스가 있어도 조회가 빈다]
-`retail_dataset.json`의 날짜는 ISO 8601 문자열이다. `seed_data()`가 호출하는 `convert_dataset()`이 이 문자열을 `datetime` 객체로 바꾼 뒤 `insert_many()`에 넘겨야 BSON Date로 저장된다. 데이터 적재는 반드시 지급 코드의 `POST /v1/admin/seed`(또는 CLI `seed`)로 한다 — 파일을 직접 `mongoimport`하면 날짜가 문자열로 들어가 `/v1/admin/summary`의 `dateFieldTypes`가 `"str"`로 나오고, `status`+`dueAt` 범위 비교가 전부 빈 배열이 된다.
+`retail_dataset.json`의 날짜는 ISO 8601 문자열이다. `seed_data()`가 호출하는 `convert_dataset()`이 이 문자열을 `datetime` 객체로 바꾼 뒤 `insert_many()`에 넘겨야 BSON Date로 저장된다. 데이터 적재는 반드시 지급 코드의 `POST /v1/admin/seed`(또는 CLI `seed`)로 한다.
+
+파일을 직접 `mongoimport`하면 날짜가 문자열로 들어간다. `/v1/admin/summary`의 `dateFieldTypes`가 `"str"`로 나오고, `status`+`dueAt` 범위 비교가 전부 빈 배열이 된다.
 :::
 
 ## 자기 점검 퀴즈

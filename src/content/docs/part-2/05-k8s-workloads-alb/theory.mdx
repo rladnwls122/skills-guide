@@ -222,7 +222,7 @@ spec:
 </Quiz>
 
 <Quiz title="mark 7-2 의 기대 출력">
-ALB 리스너 규칙 2개가 검증하는 CloudFront 커스텀 헤더 `X-Origin-Verify` 의 값은 [[wskorea26-cf]] 이고, mark 7-2 는 `describe-rules` 의 `HttpHeaderConfig.Values[]` 출력이 정확히 [[2]] 줄일 것과 `curl http://<ALB>/book` 이 403 을 반환할 것을 검사한다.
+ALB 리스너 규칙 2개가 검증하는 CloudFront 커스텀 헤더 `X-Origin-Verify` 의 값은 [[wskorea26-cf]] 다. mark 7-2 는 `describe-rules` 의 `HttpHeaderConfig.Values[]` 출력이 정확히 [[2]] 줄인지, 그리고 `curl http://<ALB>/book` 이 403 을 반환하는지 검사한다.
 
 ---
 
@@ -250,7 +250,15 @@ Deployment 의 preStop `sleep 15` 는 무엇을 기다리는 시간인가?
 
 타깃 등록 해제가 ALB 까지 전파되는 시간이다.
 
-graceful shutdown 흐름: Pod 삭제 시작 → (동시에) 엔드포인트 제거 전파 & preStop 실행 → `sleep 15` 동안 ALB/TGB 가 타깃 등록 해제를 끝냄 → SIGTERM → 최대 45초(`terminationGracePeriodSeconds`) 내 종료. 두 값은 항상 `preStop sleep < terminationGracePeriodSeconds` 여야 한다.
+graceful shutdown 흐름:
+
+1. Pod 삭제가 시작된다.
+2. 엔드포인트 제거 전파와 preStop 실행이 동시에 일어난다.
+3. `sleep 15` 동안 ALB/TGB 가 타깃 등록 해제를 끝낸다.
+4. SIGTERM 이 간다.
+5. 최대 45초(`terminationGracePeriodSeconds`) 안에 종료한다.
+
+두 값은 항상 `preStop sleep < terminationGracePeriodSeconds` 여야 한다.
 </Quiz>
 
 <QuizResults confetti />

@@ -277,11 +277,14 @@ mark 5-2 는 클러스터 서브넷의 무엇을 검사하고, cluster.yaml 은 
 
 등록된 서브넷의 **Name 태그**를 정확 비교한다(`wskorea26-priv-subnet-c` / `wskorea26-priv-subnet-d`). cluster.yaml 의 `vpc.subnets.private` 에 priv 서브넷 2개만 이름 키와 함께 등록한다.
 
-같은 `vpc` 블록에서 함께 챙길 것: `securityGroup`(CP ENI 추가 SG — 채점 CloudShell → private API 443 허용, 유의 13), `clusterEndpoints`(set-02 는 public+private, set-03 은 fully private).
+같은 `vpc` 블록에서 두 필드를 함께 챙긴다.
+
+- `securityGroup` — CP ENI 추가 SG. 채점 CloudShell 에서 private API 443 으로 닿아야 한다(유의 13).
+- `clusterEndpoints` — set-02 는 public+private, set-03 은 fully private.
 </Quiz>
 
 <Quiz title="instanceName vs tags.Name">
-managed 노드그룹의 `tags` 는 EC2 인스턴스로 전파되지 않고, `tags.Name` 은 Launch Template 의 TagSpecifications 에 eksctl 기본 Name 과 중복 등록되는 함정까지 있다. EC2 **인스턴스**의 Name 태그를 실제로 지정하는 필드 이름은 [[instanceName]] 이다.
+managed 노드그룹의 `tags` 는 EC2 인스턴스로 전파되지 않는다. 게다가 `tags.Name` 은 Launch Template 의 TagSpecifications 에 eksctl 기본 Name 과 중복 등록된다. EC2 **인스턴스**의 Name 태그를 실제로 지정하는 필드 이름은 [[instanceName]] 이다.
 
 ---
 
@@ -331,7 +334,9 @@ addons:
 - [ ] `terraform validate` 로 output 값이 전부 채워졌는지 확인
   > validate 는 HCL 문법만 본다. 렌더링된 YAML 은 Terraform 의 관심사가 아니다.
 
-`${VAR}` 치환 누락 검사다. 하나라도 남으면 eksctl 이 이상한 에러로 죽는데, **생성에 약 20분**(CloudFormation 스택: 클러스터 → OIDC/SA → 노드그룹 순)이 걸리므로 되돌리는 비용이 가장 비싼 실수다.
+`${VAR}` 치환 누락 검사다. 하나라도 남으면 eksctl 이 그 문자열을 리소스 이름으로 그대로 받아 원인을 짚기 어려운 에러를 낸다.
+
+**클러스터 생성에 약 20분**이 걸린다(CloudFormation 스택: 클러스터 → OIDC/SA → 노드그룹 순). 되돌리는 비용이 가장 비싼 실수다.
 
 ```powershell
 Select-String '\$\{' cluster.rendered.yaml    # 출력이 없어야 정상

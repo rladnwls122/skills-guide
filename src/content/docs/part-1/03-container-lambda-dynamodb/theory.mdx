@@ -265,7 +265,15 @@ def handler(event, context):
 - **queryStringParameters 없으면 400 / 결과 없으면 [] + 200** — 예외가 아니라 명세.
 - **env 주입** — Terraform 에서 `TABLE_NAME = aws_dynamodb_table.data.name` (mark 6-1 이 env 검사).
 
-Terraform 측 (set-02 lambda.tf 실측 요지): `archive_file` 로 zip, 실행역할은 최소권한 3-statement — `dynamodb:Query`(테이블+`/index/*`), 자체 로그그룹 `logs:CreateLogStream/PutLogEvents`, 테이블 CMK `kms:Decrypt`. SSE-KMS 테이블은 **Query 만 해도 kms:Decrypt 가 필요**하다.
+Terraform 측 (set-02 `lambda.tf` 파일 실측 요지) — `archive_file` 로 zip 을 만들고, 실행역할은 최소권한 3-statement 로 짠다.
+
+| statement | 액션 | 리소스 |
+|---|---|---|
+| 테이블 조회 | `dynamodb:Query` | 테이블 + `/index/*` |
+| 로그 | `logs:CreateLogStream`, `logs:PutLogEvents` | 자체 로그그룹 |
+| 복호화 | `kms:Decrypt` | 테이블 CMK |
+
+SSE-KMS 테이블은 **Query 만 해도 `kms:Decrypt` 가 필요**하다.
 
 ```hcl
 environment {
@@ -293,7 +301,11 @@ scratch 베이스가 mark 3-1 과 런타임에서 문제가 되는 이유를 모
 - [ ] 이미지 크기가 커져 ECR 저장 비용과 push 시간이 늘어난다
   > scratch 는 오히려 최소 크기다. 크기가 아니라 "스캔 불가 + 런타임 의존물(CA·zoneinfo) 부재"가 감점 원인이다.
 
-ECR Basic 스캔(Clair)이 scratch 를 스캔하지 못해 스캔 결과 검증이 불가하고, CA 번들이 없어 DynamoDB TLS 연결이 실패하며, zoneinfo 부재로 created_at 이 UTC 로 저장된다.
+scratch 는 세 곳에서 동시에 깨진다.
+
+- ECR Basic 스캔(Clair)이 scratch 를 스캔하지 못해 스캔 결과 검증이 불가하다.
+- CA 번들이 없어 DynamoDB TLS 연결이 실패한다.
+- zoneinfo 가 없어 created_at 이 UTC 로 저장된다.
 
 그래서 set-02 실측은 **고정 버전 alpine**(`alpine:3.24.1`)을 쓴다 — 스캔 가능, `ca-certificates-bundle` 기본 포함, `apk add tzdata` 로 KST 저장 가능.
 </Quiz>
@@ -334,7 +346,7 @@ aws ecr describe-image-scan-findings --repository-name wskorea26-book-repo --ima
 # 기대: CRITICAL/HIGH 키가 없어야 함
 ```
 
-빌드 위치도 함께 기억할 것: 대회 PC(Windows)는 Docker/WSL 불가, VPC CloudShell 은 인터넷이 없어 alpine 을 못 받는다 → **기본 CloudShell**(amd64 네이티브).
+빌드 위치도 함께 기억한다. 대회 PC(Windows)는 Docker/WSL 이 안 되고, VPC CloudShell 은 인터넷이 없어 alpine 을 못 받는다. 남는 선택지는 **기본 CloudShell**(amd64 네이티브)뿐이다.
 </Quiz>
 
 <Quiz title="데이터베이스 레벨 최신순 조회">

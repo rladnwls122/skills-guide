@@ -7,7 +7,9 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: 개요
 
-타이머 4시간, **대회 조건 그대로**(자기 런북·저장소·AWS 공식 문서 허용, **AI·검색 금지**) set-02 1과제를 처음부터 끝까지 — terraform → docker/ECR → eksctl → k8s/helm → 검증 시드 → mark.sh 셀프 채점. 여기에 **문서에 없는 변형 3건**을 주입해 문서 밖 대응력까지 측정한다.
+타이머 4시간, **대회 조건 그대로**(자기 런북·저장소·AWS 공식 문서 허용, **AI·검색 금지**) set-02 1과제를 처음부터 끝까지 돈다. terraform → docker/ECR → eksctl → k8s/helm → 검증 시드 → mark.sh 셀프 채점 순이다.
+
+여기에 **문서에 없는 변형 3건**을 주입해 문서 밖 대응력까지 측정한다.
 
 ## 목표
 
@@ -27,7 +29,13 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 :::caution[커리큘럼에서 과금이 가장 큰 날]
 풀스택 4시간+ 기동 — EKS·NAT GW·ALB·CloudFront 동시 과금.
 
-회고까지 끝나면 즉시 destroy: k8s 리소스(LBC ALB 포함) 삭제 → `eksctl delete cluster` → `terraform destroy` → CloudFront disable·삭제 확인 → 콘솔에서 잔존 리소스 육안 확인.
+회고까지 끝나면 즉시 destroy 한다.
+
+1. k8s 리소스(LBC ALB 포함) 삭제
+2. `eksctl delete cluster`
+3. `terraform destroy`
+4. CloudFront disable·삭제 확인
+5. 콘솔에서 잔존 리소스 육안 확인
 :::
 
 ## 선행 지식

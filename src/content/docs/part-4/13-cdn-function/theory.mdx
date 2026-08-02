@@ -58,7 +58,7 @@ AWS 공식 비교표에서 이 모듈 판단에 필요한 항목만 추렸다.
 | 요청 본문 접근 | 불가 | 가능 |
 | CloudFront 안에서 빌드·테스트 완결 | 가능 | 불가(Lambda 콘솔, us-east-1 리전 필요) |
 
-**어느 쪽을 언제 쓰나** — 캐시 키 정규화, 헤더 조작, URL 리다이렉트/재작성, 간단한 인가 검증처럼 가벼운 문자열 로직은 CloudFront Functions. 외부 API 호출, 파일시스템, 요청 본문 파싱처럼 무거운 작업이 필요하면 Lambda@Edge. 이 모듈은 KVS 조회 + URI/쿠키 조작뿐이라 CloudFront Functions로 충분하다 — 오히려 **Lambda@Edge는 KeyValueStore를 아예 못 써서** 이 설계를 그대로 옮길 수 없다(위 표).
+**어느 쪽을 언제 쓰나** — 캐시 키 정규화, 헤더 조작, URL 리다이렉트/재작성, 간단한 인가 검증처럼 가벼운 문자열 로직은 CloudFront Functions. 외부 API 호출, 파일시스템, 요청 본문 파싱처럼 무거운 작업이 필요하면 Lambda@Edge. 이 모듈은 KVS 조회 + URI/쿠키 조작뿐이라 CloudFront Functions로 충분하다 — 오히려 **Lambda@Edge는 KeyValueStore를 아예 못 써서** 이 설계를 그대로 옮길 수 없다(훅·기능 지원 표).
 
 ---
 

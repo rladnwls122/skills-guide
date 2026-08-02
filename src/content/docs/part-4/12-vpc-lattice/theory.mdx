@@ -69,7 +69,14 @@ Service EC2의 보안 그룹은 8080 인바운드를 **AWS가 리전마다 관�
 `0.0.0.0/0`으로 열어도 curl은 통과하고 헬스 체크도 healthy가 된다 — Lattice 트래픽도 결국 0.0.0.0/0에 포함되기 때문이다. 하지만 채점은 curl 결과가 아니라 `describe-security-groups`로 뽑은 **인바운드 규칙 JSON 원문**을 심사위원이 직접 읽는다. 소스가 프리픽스 리스트가 아니면 동작 여부와 무관하게 미충족이다.
 :::
 
-이 프리픽스 리스트 접근 제어는 Service EC2 쪽 SG의 역할이고, **VPC Association의 SG는 별개다.** Association SG는 Client VPC(`10.61.0.0/16`)에서 오는 TCP/80을 열어 클라이언트가 Lattice 생성 도메인에 닿게 하는 것이 목적이다. 하나는 "누가 타깃에 도달할 수 있는가"(프리픽스 리스트), 다른 하나는 "누가 Lattice 도메인을 호출할 수 있는가"(Client VPC CIDR)를 통제한다 — 이름이 비슷해 보여도 막는 지점이 다르다.
+이 프리픽스 리스트 접근 제어는 Service EC2 쪽 SG의 역할이고, **VPC Association의 SG는 별개다.** Association SG는 Client VPC(`10.61.0.0/16`)에서 오는 TCP/80을 열어 클라이언트가 Lattice 생성 도메인에 닿게 한다.
+
+이름이 비슷해 보여도 막는 지점이 다르다.
+
+| SG | 통제하는 것 | 기준 |
+|---|---|---|
+| Service EC2 SG | 누가 타깃에 도달할 수 있는가 | 프리픽스 리스트 |
+| VPC Association SG | 누가 Lattice 도메인을 호출할 수 있는가 | Client VPC CIDR |
 
 ## CIDR이 겹쳐도 되는 이유
 
@@ -120,7 +127,12 @@ Client VPC(`10.61.0.0/16`)와 Service VPC(`10.62.0.0/16`)는 겹치지 않지만
 - [ ] Listener → Service → Service Network → Target Group
   > Service Network가 가장 바깥 경계다. Listener가 Service Network보다 상위일 수 없다.
 
-Service Network가 가장 바깥 경계(VPC·Service를 묶는다), 그 안에 Service(도메인 이름을 발급받는 단위), Service 안에 Listener(프로토콜·포트), Listener가 Forward하는 곳이 Target Group(실제 인스턴스 목록)이다.
+바깥에서 안으로 4단계다.
+
+1. **Service Network** — 가장 바깥 경계. VPC와 Service를 묶는다.
+2. **Service** — 도메인 이름을 발급받는 단위.
+3. **Listener** — 프로토콜·포트.
+4. **Target Group** — Listener가 Forward하는 곳. 실제 인스턴스 목록이다.
 </Quiz>
 
 <Quiz title="관리형 프리픽스 리스트">

@@ -62,7 +62,7 @@ description: 지도교사 협의회 회의록과 심사위원 세션에서 확�
 
 - 쿠버네티스 관련 채점은 **선수의 AWS CloudShell에서** 진행한다.
 - CloudShell에서 EKS에 접근하는 방식은 제한하지 않는다. Access Entry·aws-auth ConfigMap 등 무엇을 써도 되고, **채점 시점에 kubectl로 클러스터에 접근되는 상태**이기만 하면 된다.
-- 채점 중 클러스터에 접근할 수 없는 경우에 한해 아래 명령을 **1회** 실행할 수 있다.
+- 채점 중 클러스터에 접근할 수 없는 경우에 한해 다음 명령을 **1회** 실행할 수 있다.
 
   ```bash
   aws eks update-kubeconfig --name <클러스터명> --region <리전>

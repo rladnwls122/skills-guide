@@ -110,7 +110,9 @@ flowchart LR
 set-03 = VPC CloudShell, set-07 = bastion(+ fallback으로 채점용 CloudShell 겸용).
 
 :::note[협의회(2026-07-31) — 접근 경로는 제한하지 않는다]
-EKS 접근 방식을 특정하지 않는 쪽으로 정리됐다. 과제지 요구는 "CloudShell에서 kubectl 명령어를 사용할 수 있어야 한다" 하나이고, CloudShell 접근이 불가한 구성이면 **선수가 채점 전에 bastion을 사전 구축해 쓰는 것도 공식적으로 허용**된다. 위 3분할·bastion 패턴이 그대로 공인된 셈이다 — 다만 "채점 전 bastion 삭제"는 세트별 과제지의 미요구 리소스 정리 원칙에서 나온 것이므로, 당일 과제지가 bastion을 언급하면 그 지시를 우선한다.
+EKS 접근 방식을 특정하지 않는 쪽으로 정리됐다. 과제지 요구는 "CloudShell에서 kubectl 명령어를 사용할 수 있어야 한다" 하나다. CloudShell 접근이 불가한 구성이면 **선수가 채점 전에 bastion을 사전 구축해 쓰는 것도 공식적으로 허용**된다.
+
+본 PC·VPC CloudShell·일반 CloudShell 3분할과 bastion 패턴이 그대로 공인된 셈이다. 다만 "채점 전 bastion 삭제"는 세트별 과제지의 미요구 리소스 정리 원칙에서 나온 것이므로, 당일 과제지가 bastion을 언급하면 그 지시를 우선한다.
 
 회의록이 붙인 조건 셋을 함께 지킨다([대회 운영 규칙](/reference/competition-rules/)).
 
@@ -269,7 +271,12 @@ trust policy가 `Principal: arn:aws:iam::<acct>:root`인 역할을, 같은 계�
   > ExternalId는 평가 2(trust) 안의 추가 조건일 뿐이다. 조건이 없어도 평가 1(호출자 정책)에서 이미 막힌다.
 - [ ] 성공하지만 세션이 `max_session_duration` 없이 기본 1시간으로 제한된다
 
-`AccessDenied`. AssumeRole은 **평가 1: 호출자의 identity-based policy에 `sts:AssumeRole` 허용** → **평가 2: 역할 trust policy의 Principal 매칭 + ExternalId 조건**을 순서대로 모두 통과해야 임시 자격증명이 발급된다. `:root` trust는 후보 범위를 계정으로 넓힐 뿐 권한을 주지 않는다 — 이것이 같은 계정 `:root` trust가 안전하게 쓰이는 이유다.
+`AccessDenied`. AssumeRole은 두 평가를 순서대로 모두 통과해야 임시 자격증명을 발급한다.
+
+1. 호출자의 identity-based policy에 `sts:AssumeRole` 허용이 있는가.
+2. 역할 trust policy의 Principal이 매칭되고 ExternalId 조건이 맞는가.
+
+`:root` trust는 후보 범위를 계정으로 넓힐 뿐 권한을 주지 않는다 — 이것이 같은 계정 `:root` trust가 안전하게 쓰이는 이유다.
 </Quiz>
 
 <Quiz title="ExternalId 정확 일치">
@@ -277,7 +284,9 @@ mark 9-1은 audit role의 ExternalId를 문자열 **정확 일치**로 본다. E
 
 ---
 
-대회 당일 맞춰야 하는 두 값은 **terraform apply에 넣는 `player_number`**와 **채점 셸에서 export하는 등번호(`number`)**다. 둘이 다르면 mark 9-1의 문자열 비교와 mark 9-2의 assume이 **모두** 실패한다. 9-2는 성공과 실패 양쪽이 다 채점 대상이라는 점도 기억할 것 — ExternalId 없이 assume하면 `AccessDenied`, 붙여서 assume한 뒤 `describe-vpcs`는 성공하고 `describe-instances`는 거부되어야 한다. 참고로 `get-role`은 `MaxSessionDuration=3600`도 함께 본다.
+대회 당일 맞춰야 하는 두 값은 **terraform apply에 넣는 `player_number`**와 **채점 셸에서 export하는 등번호(`number`)**다. 둘이 다르면 mark 9-1의 문자열 비교와 mark 9-2의 assume이 **모두** 실패한다.
+
+9-2는 성공과 실패 양쪽이 다 채점 대상이다. ExternalId 없이 assume하면 `AccessDenied` 여야 하고, 붙여서 assume한 뒤에는 `describe-vpcs`가 성공하고 `describe-instances`가 거부되어야 한다. `get-role`은 `MaxSessionDuration=3600`도 함께 본다.
 </Quiz>
 
 <Quiz title="Corefile이 되돌아가는 이유">
@@ -290,7 +299,14 @@ CoreDNS 커스텀 도메인(`wsc2026.skills.local`)을 패치했는데 어느 �
   > kubelet과 Corefile은 서로를 덮어쓰지 않는다. 둘 다 수동으로 맞춰야 하는 **독립된 두 군데**라서 문제가 되는 것이다.
 - [ ] Karpenter가 노드를 교체할 때 coredns가 기본 설정으로 재배포돼서
 
-coredns addon 업데이트가 Corefile을 addon 기본값으로 초기화한다. 업데이트 금지, 이미 했다면 패치를 재적용하고 grep으로 재확인한다. 커스텀 도메인은 **① kubelet clusterDomain**(eksctl `overrideBootstrapCommand`의 nodeadm NodeConfig, 노드그룹 **모두**에)과 **② CoreDNS Corefile** 두 군데를 함께 바꿔야 하며, mark 4-1은 kubelet configz와 Corefile을 각각 grep한다. kps의 Alertmanager `clusterDomain`도 같이 맞춘다.
+coredns addon 업데이트가 Corefile을 addon 기본값으로 초기화한다. 업데이트하지 않는다. 이미 했다면 패치를 재적용하고 grep으로 재확인한다.
+
+커스텀 도메인은 두 군데를 함께 바꿔야 한다.
+
+1. **kubelet clusterDomain** — eksctl `overrideBootstrapCommand`의 nodeadm NodeConfig. 노드그룹 **모두**에 넣는다.
+2. **CoreDNS Corefile**
+
+mark 4-1은 kubelet configz와 Corefile을 각각 grep한다. kps의 Alertmanager `clusterDomain`도 같이 맞춘다.
 </Quiz>
 
 <QuizResults confetti />

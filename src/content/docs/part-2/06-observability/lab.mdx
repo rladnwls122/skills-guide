@@ -33,7 +33,12 @@ PART-2 클러스터(앱 배포 완료 상태) 위에서 진행한다. 명령은 
    kubectl get pods -n observability
    ```
 
-   values 필수 확인 포인트: `podMonitorSelectorNilUsesHelmValues: false`, `ruleSelectorNilUsesHelmValues: false`, `additionalDataSources`(prometheus/alertmanager/cloudwatch 이름 정확 일치), Grafana `sidecar.dashboards.label: grafana_dashboard`.
+   values 파일 필수 확인 포인트:
+
+   - `podMonitorSelectorNilUsesHelmValues: false`
+   - `ruleSelectorNilUsesHelmValues: false`
+   - `additionalDataSources` — prometheus/alertmanager/cloudwatch 이름 정확 일치
+   - Grafana `sidecar.dashboards.label: grafana_dashboard`
 
 2. **Fluent Bit 배포**
 

@@ -7,7 +7,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
-아래 절차는 문제지·지급 코드(`docdb_client.py`)와 2026-08-01 정정본의 판정 기준을 근거로 한다. 같은 구성의 Terraform 정답은 `skills-2026`의 브랜치 `set-08/task-2`, `set-08/task-2/module-1-nosql`이다 — 이 실습은 콘솔·CLI로 손에 익히는 경로이므로 먼저 스스로 만든 뒤 대조한다. 명령은 PowerShell 기준이고 리전은 전부 `ap-northeast-2`(서울)로 고정한다. 지급 파일 경로는 예시(`national-skills-v7\2과제\모듈1_지급파일`)를 그대로 썼다 — 실제 대회에서는 대회 플랫폼이 지급하는 경로로 바꾼다.
+이 실습 절차는 문제지·지급 코드(`docdb_client.py`)와 2026-08-01 정정본의 판정 기준을 근거로 한다. 같은 구성의 Terraform 정답은 `skills-2026`의 브랜치 `set-08/task-2`, `set-08/task-2/module-1-nosql`이다 — 이 실습은 콘솔·CLI로 손에 익히는 경로이므로 먼저 스스로 만든 뒤 대조한다. 명령은 PowerShell 기준이고 리전은 전부 `ap-northeast-2`(서울)로 고정한다. 지급 파일 경로는 예시(`national-skills-v7\2과제\모듈1_지급파일`)를 그대로 썼다 — 실제 대회에서는 대회 플랫폼이 지급하는 경로로 바꾼다.
 
 ## 실습 목표
 
@@ -263,7 +263,7 @@ import { Steps } from '@astrojs/starlight/components';
    curl -s -w "`nhttp_code=%{http_code}`n" http://${CLIENT_IP}:8080/v1/admin/indexes
    ```
 
-   각 컬렉션에 기본 `_id_` 인덱스 + 위 표의 인덱스가 전부 보여야 한다(orders 4개·products 3개·sessions 4개, `_id_` 포함).
+   각 컬렉션에 기본 `_id_` 인덱스와 인덱스 설계표의 인덱스가 전부 보여야 한다(orders 4개·products 3개·sessions 4개, `_id_` 포함).
 
 10. **조회 검증**
 
@@ -334,7 +334,7 @@ aws iam delete-role --role-name skills-nosql-client-ec2-role
 ```
 
 :::caution[과금 주의]
-DocumentDB 인스턴스는 stop이 없다 — **삭제만이 과금을 멈춘다.** KMS 키는 삭제 예약 후에도 대기 기간(위 예시 7일) 동안 잔존 리소스로 남는다 — alias만 지우고 끝냈다고 착각하지 않는다.
+DocumentDB 인스턴스는 stop이 없다 — **삭제만이 과금을 멈춘다.** KMS 키는 삭제 예약 후에도 대기 기간(이 실습 예시는 7일) 동안 잔존 리소스로 남는다 — alias만 지우고 끝냈다고 착각하지 않는다.
 :::
 
 ## 오답 노트 양식

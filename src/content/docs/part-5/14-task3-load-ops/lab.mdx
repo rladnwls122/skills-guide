@@ -176,7 +176,7 @@ CloudWatch에서는 Container Insights(파드 CPU)와 RDS Proxy 지표(`Database
 
 1. **RED** — k6 콘솔의 요청 수·오류율·`http_req_duration` p90으로 증상을 확인한다.
 2. **USE** — `kubectl top`(사용률), HPA 이용률과 Pending 파드·Proxy borrow latency(포화), Events와 타깃 상태(오류)로 원인 계층을 좁힌다.
-3. 좁혀진 계층에 해당하는 노브를 아래 표에서 하나만 고른다.
+3. 좁혀진 계층에 해당하는 노브를 튜닝 노브 표에서 하나만 고른다.
 
 ## 튜닝 노브 표
 
@@ -204,7 +204,7 @@ aws cloudfront create-invalidation --distribution-id <id> --paths "/images/*"
 
 ## 드릴 C — 노브 조정 루프 (관찰 → 노브 1개 → 재측정)
 
-드릴 B의 한 프로파일(예: Spike)을 부하를 건 채로 반복하며 아래 순서를 돈다. **노브는 한 번에 하나만** — 두 개를 같이 바꾸면 다음 회차에서 어느 쪽이 개선의 원인인지 알 수 없다.
+드릴 B의 한 프로파일(예: Spike)을 부하를 건 채로 반복하며 이어지는 순서를 돈다. **노브는 한 번에 하나만** 바꾼다. 두 개를 같이 바꾸면 다음 회차에서 어느 쪽이 개선의 원인인지 알 수 없다.
 
 <Steps>
 

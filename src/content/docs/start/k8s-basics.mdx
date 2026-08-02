@@ -290,7 +290,7 @@ Pod이 `CrashLoopBackOff` 다. 가장 먼저 실행할 두 명령은? **모두**
 - [ ] `kubectl logs <pod>` — 현재 컨테이너 로그를 본다
   > 재시작 대기(BackOff) 중에는 현재 컨테이너가 없거나 방금 시작된 상태라 로그가 비어 있기 쉽다. 원인은 **죽기 직전** 로그에 있으므로 `--previous` 가 필요하다.
 
-`describe` 의 **Events 섹션이 디버깅 1순위**다(ImagePullBackOff, Insufficient cpu, Readiness probe failed 등이 여기 찍힌다). 그다음이 `logs --previous` — 앱이 왜 스스로 종료했는지는 죽기 직전 로그에만 남는다.
+`describe` 의 **Events 섹션이 디버깅 1순위**다. ImagePullBackOff, Insufficient cpu, Readiness probe failed 가 전부 여기 찍힌다. 그다음이 `logs --previous` — 앱이 왜 스스로 종료했는지는 죽기 직전 로그에만 남는다.
 </Quiz>
 
 <Quiz title="Secret은 무엇으로 보강하나">

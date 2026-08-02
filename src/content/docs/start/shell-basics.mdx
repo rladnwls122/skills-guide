@@ -127,7 +127,11 @@ Windows PowerShell에서 `curl http://...` 이 기대와 다르게 동작하는 
   > "없어서 실패"가 아니라 "**있는데 다른 것**이라 실패"다. 그래서 에러 없이 엉뚱한 객체가 나와 더 헷갈린다.
 - [ ] curl이 관리자 권한을 요구하기 때문. 관리자 셸에서 실행한다
 
-PowerShell은 `curl`·`wget`을 각각 `Invoke-WebRequest`의 별칭으로 잡아 두었다. 문법도 출력도 다르므로 `-H`, `-d` 같은 curl 플래그가 통하지 않는다. **`curl.exe`** 로 명시하면 진짜 curl이 실행된다. 함께 기억할 PowerShell 함정: `$` 포함 문자열은 작은따옴표(`'pa$$word'`), PowerShell 7 필수(5.1은 CP949로 출력이 깨짐), `sed`/`grep`은 없으므로 Git Bash나 CloudShell에서 실행.
+PowerShell은 `curl`·`wget`을 각각 `Invoke-WebRequest`의 별칭으로 잡아 두었다. 문법도 출력도 다르므로 `-H`, `-d` 같은 curl 플래그가 통하지 않는다. **`curl.exe`** 로 명시하면 진짜 curl이 실행된다. 함께 기억할 PowerShell 함정 셋:
+
+- `$` 가 든 문자열은 작은따옴표로 감싼다(`'pa$$word'`).
+- PowerShell 7 이 필수다. 5.1은 CP949로 출력이 깨진다.
+- `sed`·`grep` 은 없다. Git Bash나 CloudShell에서 실행한다.
 </Quiz>
 
 <QuizResults confetti />

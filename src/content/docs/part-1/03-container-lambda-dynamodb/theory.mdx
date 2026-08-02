@@ -122,8 +122,8 @@ graph LR
         I3["client_id=c3<br/>concert_name=B, created_at=t2"]
     end
     subgraph GSI["<span class='icon--mdi icon--mdi--layers-outline'></span> GSI concert_name-created_at-index<br/>(HASH concert_name + RANGE created_at)"]
-        G1["A: [t1, t3] 정렬 저장"]
-        G2["B: [t2]"]
+        G1["A: &#91;t1, t3&#93; 정렬 저장"]
+        G2["B: &#91;t2&#93;"]
     end
     TABLE -- "자동 복제" --> GSI
     Q["Query(concert_name=A,<br/>ScanIndexForward=False)"] --> GSI

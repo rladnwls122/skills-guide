@@ -76,7 +76,7 @@ import { Steps } from '@astrojs/starlight/components';
 
    ```powershell
    aws dynamodb get-item --table-name wsc2026-student-score --key '{\"studentId\":{\"S\":\"STU1020\"},\"examDate\":{\"S\":\"2026-05-30\"}}' --query "Item.[studentId.S,average.N,grade.S]" --output text
-   # 기대: STU1020    96.6    A   (96.60000000000001 이면 Decimal 미사용)
+   # 기대: STU1020    96.6    A   (항목이 아예 없으면 float 저장이 TypeError 로 죽은 것)
 
    aws s3 ls s3://$B/
    # 기대: PRE error/  PRE input/  PRE processed/  — 딱 3줄
@@ -94,7 +94,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 - test.csv 2회 업로드 → error JSON 8개 → 오답. 재실행은 반드시 A-3의 1)~2)부터.
 - processed/·error/에 폴더 마커를 만들어두면 `s3 ls`에 0바이트 잉여 라인 → 오답. 마커는 `input/`만.
-- 평균을 float로 계산 → 96.60000000000001 + boto3 float 저장 거부.
+- 평균을 float로 계산 → boto3 가 `Float types are not supported` 로 저장 거부. `decimal.Decimal` 로 계산·저장.
 - 처리 Lambda 이름은 mark에만 있다(`wsc2026-student-score-function`) — task.md만 보고 이름을 지어내면 0점.
 - PowerShell에서 JSON 인자는 `\"` 이스케이프 필수.
 

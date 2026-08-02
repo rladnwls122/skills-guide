@@ -193,7 +193,7 @@ set-03 실측: 제공 바이너리에 `/delay` 엔드포인트가 없어(404, µ
 
 - [x] Fluent Bit `log_to_metrics` 필터로 액세스 로그에서 requests/errors counter를 만들고, `prometheus_exporter` OUTPUT(:2021)을 PodMonitor로 Prometheus에 수집시킨다
 - [ ] Grafana cloudwatch datasource로 CloudWatch Logs Insights 쿼리를 알람 조건에 건다
-  > 알람은 PrometheusRule(PromQL)로 평가된다. Grafana datasource는 대시보드 조회용이지 Prometheus 룰의 입력이 아니다.
+  > Grafana 관리형 알림이라면 CloudWatch datasource 로도 평가할 수 있다. 다만 이 과제의 채점 대상은 **PrometheusRule(PromQL)** 이고, Grafana datasource 는 그 룰의 입력이 되지 못한다.
 - [ ] kube-state-metrics가 이미 HTTP 상태코드별 카운터를 노출하므로 그대로 쓴다
   > kube-state-metrics는 Deployment/Pod 같은 k8s 오브젝트 상태만 노출한다. 애플리케이션 HTTP 코드는 없다.
 - [ ] 앱 컨테이너에 exporter 사이드카를 붙이고 앱 코드에 `/metrics` 핸들러를 추가한다

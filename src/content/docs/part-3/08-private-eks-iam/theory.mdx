@@ -51,16 +51,20 @@ flowchart LR
     end
     NAT@{ icon: "logos:aws-vpc", form: "square", label: "NAT Gateway", pos: "b", h: 46, w: 46 }
     N -->|경로 A| NAT --> Internet[공개 레지스트리<br/>+ ECR + eks-auth]
-    VPCE@{ icon: "logos:aws-vpc", form: "square", label: "VPC Endpoint<br/>s3(Gateway)/ecr.api/ecr.dkr", pos: "b", h: 46, w: 46 }
+    VPCE@{ icon: "logos:aws-vpc", form: "square", label: "VPC Endpoint<br/>이미지 pull: s3(Gateway)/ecr.api/ecr.dkr<br/>인증: sts/oidc-eks/eks-auth", pos: "b", h: 46, w: 46 }
     N -->|경로 B| VPCE --> ECR[(ECR)]
     style VPCE fill:#e8f4e8
 ```
 
   - 경로 A(NAT): 세트에 프라이빗 통신 요구가 없으면 이걸로 충분(비용·생성 시간 절감). S3 Gateway Endpoint만 두어 이미지 레이어 pull을 안정화하는 절충이 set-03.
-  - 경로 B(Endpoint): "인터넷 미경유" 요구 시 s3/ecr.api/ecr.dkr 필수 (set-07은 ECR·CloudWatch를 Endpoint로).
+  - 경로 B(Endpoint): "인터넷 미경유" 요구 시 이미지 pull 용 `s3`(Gateway)/`ecr.api`/`ecr.dkr` 만으로는 부족하다. 인증에 `sts`(IRSA 의 `AssumeRoleWithWebIdentity`)·`oidc-eks`(OIDC 디스커버리)·`eks-auth`(Pod Identity), 노드 부트스트랩에 `ec2` 가 더 필요하고, 워크로드에 따라 `logs`·`elasticloadbalancing`·`kms` 를 추가한다 (set-07은 ECR·CloudWatch를 Endpoint로).
 
-:::danger[함정 — eks / eks-auth Endpoint]
-set-03 실측(endpoints.tf 주석): `eks` / `eks-auth` Interface Endpoint를 `private_dns_enabled`로 만들면 PHZ가 OIDC/eks-auth 도메인 해석을 가로채 **Pod Identity/IRSA가 깨진다**. fully private여도 NAT 경유 호출로 충분하므로 이 둘은 만들지 않는다.
+:::danger[함정 — eks Endpoint 가 OIDC 해석을 가린다]
+set-03 실측(endpoints.tf 주석): `eks` Interface Endpoint를 `private_dns_enabled`로 만들면 그 PHZ가 `eks.<region>.amazonaws.com` 을 가져가면서 `oidc.eks.<region>.amazonaws.com` 해석까지 가려 **IRSA가 깨진다**. NAT가 있으면 이 호출은 NAT 경유로 충분하므로 set-03은 이 엔드포인트를 만들지 않는다.
+
+**`eks-auth` 는 반대다.** AWS는 아웃바운드 인터넷이 없는 클러스터에서 Pod Identity에 `com.amazonaws.<region>.eks-auth` 를 **필수**로 문서화한다. 프라이빗 DNS 이름이 `eks-auth.<region>.api.aws` 라 OIDC 도메인과 겹치지 않아 위 문제를 일으키지 않는다 — 만들지 않으면 오히려 Pod Identity가 죽는다.
+
+2026년 7월부터는 OIDC 디스커버리 전용 엔드포인트 `com.amazonaws.<region>.oidc-eks` 가 있다. `eks` 엔드포인트를 프라이빗 DNS로 켜야 하는 구성이라면 이것을 함께 만들어 해석을 되살린다. 둘이 더는 양자택일이 아니다.
 :::
 
 ### ④ 세트별 차이
@@ -248,17 +252,20 @@ set-03은 internet-facing ALB + CloudFront prefix list SG(직접 curl 000), set-
 eksctl이 생성 중 퍼블릭 엔드포인트를 임시로 켰다가 완료 시 자동으로 끈다. 그래서 밖에서도 만들 수 있다. 생성이 중단되면 퍼블릭이 열린 채 남고, mark 4-1은 `describe-cluster`로 `[endpointPublicAccess, endpointPrivateAccess]`가 `[false, true]`인지 직접 확인한다. 생성 직후 습관화할 것 — 확인은 `aws eks describe-cluster --name <cluster> --query 'cluster.resourcesVpcConfig.[endpointPublicAccess,endpointPrivateAccess]'`, 재차단은 `aws eks update-cluster-config --name <cluster> --resources-vpc-config endpointPublicAccess=false`.
 </Quiz>
 
-<Quiz title="eks / eks-auth Endpoint 금지">
-fully-private 클러스터라도 `eks` / `eks-auth` Interface Endpoint는 만들지 않는다. 왜인가?
+<Quiz title="eks Endpoint 와 OIDC 해석">
+fully-private 클러스터에 `eks` Interface Endpoint를 `private_dns_enabled`로 만들었더니 IRSA가 깨졌다. 이유와 대응은?
 
-- [x] `private_dns_enabled` Endpoint가 만드는 PHZ가 OIDC/eks-auth 도메인 해석을 가로채 Pod Identity/IRSA가 깨진다
-- [ ] `eks` / `eks-auth`는 Interface Endpoint를 지원하지 않아 생성 자체가 실패한다
+- [x] Endpoint의 PHZ가 `eks.<region>.amazonaws.com` 을 가져가면서 `oidc.eks.<region>.amazonaws.com` 해석까지 가린다 → NAT 경유로 두거나 `oidc-eks` Endpoint를 함께 만든다
+- [ ] `eks-auth` Endpoint도 같은 이유로 Pod Identity를 깨뜨리므로 둘 다 만들지 않는다
+  > `eks-auth` 의 프라이빗 DNS 이름은 `eks-auth.<region>.api.aws` 라 OIDC 도메인과 겹치지 않는다. 오히려 아웃바운드 인터넷이 없으면 Pod Identity에 **필수**다 — 안 만들면 그쪽이 죽는다.
+- [ ] `eks`는 Interface Endpoint를 지원하지 않아 생성 자체가 실패한다
   > 생성은 정상적으로 된다. 문제는 만들어진 뒤 DNS 해석이 가로채이는 것이라 더 찾기 어렵다.
-- [ ] Endpoint가 있으면 컨트롤 플레인이 퍼블릭 엔드포인트를 다시 열어버린다
 - [ ] Interface Endpoint는 시간당 과금이라 비용 pillar에서 감점된다
-  > 비용은 부수적 이유다. 이 둘을 만들지 않는 결정적 사유는 인증 파괴다.
+  > 비용은 부수적 이유다. 여기서 결정적인 것은 인증 파괴다.
 
-`private_dns_enabled` Endpoint의 PHZ가 OIDC/eks-auth 도메인 해석을 가로채 Pod Identity/IRSA가 깨진다(set-03 실측, endpoints.tf 주석). fully private여도 이 호출은 NAT 경유로 충분하므로 이 둘은 만들지 않는다. 반대로 "인터넷 미경유" 요구가 있을 때 필요한 것은 `s3`(Gateway) / `ecr.api` / `ecr.dkr` 쪽이다.
+`eks` Endpoint의 PHZ가 OIDC 도메인 해석을 가린다(set-03 실측, endpoints.tf 주석). set-03은 NAT가 있으므로 이 Endpoint를 만들지 않는 쪽을 택했고, 2026년 7월 이후에는 `com.amazonaws.<region>.oidc-eks` 를 함께 만들어 해석을 되살리는 선택지도 있다.
+
+"인터넷 미경유" 요구가 있을 때 필요한 목록은 이미지 pull(`s3` Gateway / `ecr.api` / `ecr.dkr`)에서 끝나지 않는다. `sts`·`oidc-eks`·`eks-auth`·`ec2` 를 빠뜨리면 IRSA와 Pod Identity가 함께 죽는다.
 </Quiz>
 
 <Quiz title="AssumeRole 이중 평가">

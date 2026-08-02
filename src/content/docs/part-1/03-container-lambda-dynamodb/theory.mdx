@@ -15,7 +15,7 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 **① 한 줄 정의** — 베이스 이미지는 컨테이너의 OS 레이어이며, 선택에 따라 취약점 스캔 가능 여부·TLS 신뢰 저장소·타임존 데이터가 결정된다.
 
-**② 왜 필요한가 (채점 관점)** — mark 3-1 은 "ECR 스캔 결과에 Critical/High 없음"을 검사한다. 그런데 **scratch 베이스는 ECR Basic 스캔(Clair)이 아예 스캔하지 못한다** — 취약점이 없어서가 아니라 OS 패키지 DB 가 없어서. 스캔 불가는 "스캔 통과"가 아니다.
+**② 왜 필요한가 (채점 관점)** — mark 3-1 은 "ECR 스캔 결과에 Critical/High 없음"을 검사한다. 그런데 **scratch 베이스는 ECR 기본 스캔이 아예 스캔하지 못한다**(`UNSUPPORTED_IMAGE`) — 취약점이 없어서가 아니라 OS 패키지 DB 가 없어서. 스캔 불가는 "스캔 통과"가 아니다.
 
 **③ 핵심 원리**:
 
@@ -60,7 +60,7 @@ ENTRYPOINT ["/book"]
 **스캔에서 High 가 나오면**: `RUN apk upgrade --no-cache` 한 줄을 추가해 재빌드/재푸시한다 (set-02 README 실측 대응).
 
 :::caution[빌드 환경]
-대회 PC(Windows, Docker/WSL 불가)에서는 빌드 불가 → **기본 CloudShell** 에서 빌드한다. CloudShell 은 amd64 네이티브라 단일 아키텍처 이미지가 되고 스캔과 호환된다. (VPC CloudShell 은 인터넷이 없어 alpine 을 못 받는다 — 기본 CloudShell 사용.)
+대회 PC(Windows, Docker/WSL 불가)에서는 빌드 불가 → **기본 CloudShell** 에서 빌드한다. CloudShell 은 amd64 네이티브라 단일 아키텍처 이미지가 되고 스캔과 호환된다. (VPC CloudShell 은 홈이 비영속이고 업로드 메뉴를 못 써 빌드 작업에 부적합하다 — 기본 CloudShell 사용.)
 :::
 
 **④ 세트별 차이** — 앱 언어/포트/태그가 바뀌지만 "고정 버전 alpine + tzdata/TZ + 비루트 + CloudShell(amd64) 빌드" 골격은 공통.
@@ -180,7 +180,7 @@ resource "aws_dynamodb_table" "data" {
 - `deletion_protection_enabled = true` 는 채점 항목이자 destroy 함정 — 삭제 전 false 로 바꿔 apply 해야 한다.
 
 :::danger[boto3 Decimal 함정 (set-02 task-2 module-1 실측)]
-DynamoDB 숫자에 Python float 를 넣으면 **boto3 가 저장 자체를 거부**한다. 또 `483/5` 를 float 로 계산하면 `96.60000000000001` 이 되어 채점 기대값 `96.6` 과 불일치.
+DynamoDB 숫자에 Python float 를 넣으면 **boto3 가 저장 자체를 거부**한다 — `TypeError: Float types are not supported. Use Decimal types instead.` 값이 어긋나서가 아니라 저장에서 예외로 죽는다(`483/5` 는 float 로도 정확히 `96.6` 이다).
 :::
 
 반드시:
@@ -197,7 +197,7 @@ item[field] = Decimal(str(score))                              # 저장 시에�
 
 ## 4. Lambda — ALB 통합 조회 함수
 
-**① 한 줄 정의** — ALB Lambda 타깃으로 호출되는 함수는 `queryStringParameters` 를 읽어 GSI Query 하고, `statusCode/statusDescription/isBase64Encoded/headers/body` 형식으로 응답해야 한다.
+**① 한 줄 정의** — ALB Lambda 타깃으로 호출되는 함수는 `queryStringParameters` 를 읽어 GSI Query 하고, `statusCode`·`headers`·`isBase64Encoded` 를 갖춘 객체로 응답해야 한다(이 셋이 ALB 가 요구하는 필수 항목이다).
 
 **② 왜 필요한가 (채점 관점)** — mark 9-2 는 실제 HTTP 응답 본문을 **기대 출력과 문자열 수준으로 비교**한다. 최신순 정렬, JSON 키 순서, 비ASCII(`akaね`) 보존, 400/빈배열 처리까지 전부 점수다. 연결 정보 하드코딩은 별도 감점(환경변수 주입 필수).
 
@@ -284,7 +284,7 @@ environment {
 }
 ```
 
-**④ 세트별 차이** — 통합 대상(ALB vs API Gateway — 응답 포맷이 다르다: ALB 는 statusDescription 필요), 런타임 버전, 조회 축이 바뀐다. "env 주입 + Query + 정렬 + 응답 포맷 정확 일치" 원칙은 공통.
+**④ 세트별 차이** — 통합 대상(ALB vs API Gateway — 응답 포맷이 다르다: ALB 는 `isBase64Encoded` 가 필수), 런타임 버전, 조회 축이 바뀐다. "env 주입 + Query + 정렬 + 응답 포맷 정확 일치" 원칙은 공통.
 
 ---
 
@@ -293,7 +293,7 @@ environment {
 <Quiz title="scratch 베이스의 문제">
 scratch 베이스가 mark 3-1 과 런타임에서 문제가 되는 이유를 모두 고르라.
 
-- [x] ECR Basic 스캔(Clair)이 OS 패키지 DB 가 없어 아예 스캔하지 못한다 — **스캔 불가는 스캔 통과가 아니다**
+- [x] ECR 기본 스캔이 OS 패키지 DB 가 없어 아예 스캔하지 못한다(`UNSUPPORTED_IMAGE`) — **스캔 불가는 스캔 통과가 아니다**
 - [x] CA 번들이 없어 DynamoDB TLS 연결이 실패한다
 - [x] zoneinfo 가 없어 `TZ=Asia/Seoul` 이 무시되고 created_at 이 UTC 로 저장된다
 - [ ] scratch 는 `USER` 지시어를 지원하지 않아 비루트 실행이 불가능하다
@@ -303,7 +303,7 @@ scratch 베이스가 mark 3-1 과 런타임에서 문제가 되는 이유를 모
 
 scratch 는 세 곳에서 동시에 깨진다.
 
-- ECR Basic 스캔(Clair)이 scratch 를 스캔하지 못해 스캔 결과 검증이 불가하다.
+- ECR 기본 스캔이 scratch 를 스캔하지 못해 스캔 결과 검증이 불가하다.
 - CA 번들이 없어 DynamoDB TLS 연결이 실패한다.
 - zoneinfo 가 없어 created_at 이 UTC 로 저장된다.
 
@@ -346,7 +346,7 @@ aws ecr describe-image-scan-findings --repository-name wskorea26-book-repo --ima
 # 기대: CRITICAL/HIGH 키가 없어야 함
 ```
 
-빌드 위치도 함께 기억한다. 대회 PC(Windows)는 Docker/WSL 이 안 되고, VPC CloudShell 은 인터넷이 없어 alpine 을 못 받는다. 남는 선택지는 **기본 CloudShell**(amd64 네이티브)뿐이다.
+빌드 위치도 함께 기억한다. 대회 PC(Windows)는 Docker/WSL 이 안 되고, VPC CloudShell 은 홈이 비영속이라 빌드 중간물이 세션과 함께 날아간다. 남는 선택지는 **기본 CloudShell**(amd64 네이티브)뿐이다.
 </Quiz>
 
 <Quiz title="데이터베이스 레벨 최신순 조회">
@@ -386,11 +386,11 @@ _KEYS = ["username", "created_at", "email", "booking_id", "client_id", "concert_
 return [{k: item.get(k) for k in _KEYS} for item in items]   # json.dumps 는 dict 삽입 순서 유지
 ```
 
-응답 봉투도 ALB 규격을 정확히 지켜야 한다 — `statusCode` / `statusDescription`(`"200 OK"`) / `isBase64Encoded` / `headers` / `body`. API Gateway 통합이면 `statusDescription` 이 필요 없다는 점이 세트별 차이다.
+응답 봉투도 ALB 규격을 지켜야 한다. AWS 가 요구하는 필수 항목은 **`statusCode` / `headers` / `isBase64Encoded`** 셋이고 `body` 는 생략할 수 있다. `statusDescription`(`"200 OK"`)은 필수가 아니며 빠지면 ALB 가 사유 문구를 채운다 — 넣어도 무해하니 예제에서는 함께 둔다. API Gateway 통합은 `isBase64Encoded` 만 공유하고 나머지 봉투가 다르다는 점이 세트별 차이다.
 </Quiz>
 
 <Quiz title="boto3 Decimal 함정">
-DynamoDB 숫자 필드에 Python `float` 를 넣으면 boto3 가 저장 자체를 거부한다. 게다가 `483 / 5` 를 float 로 계산하면 `96.60000000000001` 이 되어 채점 기대값과 어긋난다. `Decimal(str(483)) / Decimal("5")` 로 계산했을 때 나오는 정확한 값은 [[96.6]] 이다.
+DynamoDB 숫자 필드에 Python `float` 를 넣으면 boto3 가 저장 자체를 거부한다(`TypeError: Float types are not supported`). `Decimal(str(483)) / Decimal("5")` 로 계산했을 때 나오는 정확한 값은 [[96.6]] 이다.
 
 ---
 

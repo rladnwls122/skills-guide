@@ -33,7 +33,7 @@ TG healthy 2~3분, CloudFront 전파 수 분, Config 첫 평가 5~10분 — [소
 
 ## 원인 순위(빈도순)로 확인한다
 
-troubleshooting.md의 각 항목은 원인을 실측 빈도순(①②③)으로 나열한다. ①부터 확인 — 대회장 통계적으로 가장 빠른 경로다.
+[트러블슈팅 문서](/reference/troubleshooting/)의 각 항목은 원인을 실측 빈도순(①②③)으로 나열한다. ①부터 확인 — 대회장 통계적으로 가장 빠른 경로다.
 
 ## 훈련이 만드는 것
 
@@ -60,14 +60,14 @@ Pod가 Pending에서 안 나온다. 가장 먼저 칠 명령은?
 <Quiz title="ALB → Lambda 502">
 ALB 타깃그룹이 Lambda인 구성에서 502가 돌아온다. 원인과 조치는?
 
-- [x] 함수 응답이 ALB 통합 포맷을 어겼다 — `statusCode`·`statusDescription`·`body` 세 필드를 갖춘 객체를 반환하도록 고친다
+- [x] 함수 응답이 ALB 통합 포맷을 어겼다 — `statusCode`·`headers`·`isBase64Encoded` 세 필드를 갖춘 객체를 반환하도록 고친다
 - [ ] 타깃그룹 헬스체크 경로가 틀렸다 — health check path를 고친다
   > Lambda 타깃그룹은 HTTP 헬스체크로 상태를 보지 않는다. 경로를 고쳐도 502는 그대로다.
 - [ ] 보안그룹이 Lambda 아웃바운드를 막고 있다 — 규칙을 연다
   > ALB→Lambda는 보안그룹 경로를 타지 않는다(서비스 호출). 네트워크를 의심하기 전에 함수 응답 본문부터 본다.
 - [ ] Lambda 동시성이 부족하다 — reserved concurrency를 올린다
 
-**ALB 통합 응답 포맷 위반.** 반환 객체에 `statusCode` / `statusDescription` / `body` 가 모두 있어야 한다. 1차 소스는 해당 함수의 CloudWatch Logs — 함수가 200으로 끝났는데 ALB가 502면 포맷 문제로 거의 확정된다.
+**ALB 통합 응답 포맷 위반.** AWS 가 요구하는 필수 항목은 `statusCode` / `headers` / `isBase64Encoded` 셋이다 — `body` 는 생략할 수 있고 `statusDescription` 은 필수가 아니다. 1차 소스는 해당 함수의 CloudWatch Logs — 함수가 200으로 끝났는데 ALB가 502면 포맷 문제로 거의 확정된다.
 </Quiz>
 
 <Quiz title="OAC S3 오리진 403">

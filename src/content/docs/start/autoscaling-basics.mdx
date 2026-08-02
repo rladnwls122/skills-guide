@@ -142,7 +142,7 @@ Karpenter는 인스턴스를 어느 서브넷에, 어떤 보안 그룹으로 띄
 
 #### 축소는 `consolidation`이 담당한다
 
-`spec.disruption.consolidationPolicy`가 언제 노드를 정리할지 정한다. `WhenEmpty`는 완전히 빈 노드만, `WhenEmptyOrUnderutilized`는 놀고 있는 노드의 Pod를 다른 노드로 옮겨서까지 정리한다. `consolidateAfter`는 그 판단까지의 대기 시간이다.
+`spec.disruption.consolidationPolicy`가 언제 노드를 정리할지 정한다. 값은 셋이다 — `WhenEmpty`는 완전히 빈 노드만, `WhenEmptyOrUnderutilized`는 놀고 있는 노드의 Pod를 다른 노드로 옮겨서까지, `Balanced`는 절감액이 중단 비용을 정당화할 때만 정리한다. `consolidateAfter`는 그 판단까지의 대기 시간이다.
 
 ### 4. Fargate — Pod 하나가 곧 노드 하나
 

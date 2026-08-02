@@ -57,7 +57,7 @@ DocumentDB 클러스터는 VPC 밖으로 나가는 퍼블릭 엔드포인트 자
 
 반대로 Client EC2는 채점기가 접근해야 하므로 Public IP와 `TCP/8080` 인바운드가 필요하다. "공개 앱 계층 + 비공개 데이터 계층"이라는 동일한 패턴은 [vpc-basics](/start/vpc-basics/)에서 이미 다뤘다.
 
-TLS도 선택이 아니라 기본이다. DocumentDB는 TLS 연결을 요구하고, 클라이언트는 서버 인증서를 검증할 CA 번들(`global-bundle.pem`)을 갖고 있어야 한다. `docdb_client.py`의 `mongo_client()`는 `tls=True`와 `tlsCAFile=CA_FILE`을 명시하고, 그 전에 `os.path.exists(CA_FILE)`부터 확인해 파일이 없으면 연결을 시도하지도 않고 즉시 실패한다.
+TLS는 새 클러스터의 기본값이다(클러스터 파라미터 그룹의 `tls` 로 끌 수는 있지만 대회에서 그럴 이유가 없다). 켜져 있는 이상 클라이언트는 서버 인증서를 검증할 CA 번들(`global-bundle.pem`)을 갖고 있어야 한다. `docdb_client.py`의 `mongo_client()`는 `tls=True`와 `tlsCAFile=CA_FILE`을 명시하고, 그 전에 `os.path.exists(CA_FILE)`부터 확인해 파일이 없으면 연결을 시도하지도 않고 즉시 실패한다.
 
 ## 4. Secrets Manager 연동
 

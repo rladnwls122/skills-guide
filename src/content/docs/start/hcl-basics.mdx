@@ -145,10 +145,12 @@ resource "aws_subnet" "a" {
 5. 조건 표현식과 문자열 보간을 확인한다.
 
    ```hcl
-   > var_is_public = true
    > true ? "public" : "private"
+   > false ? "public" : "private"
    > "wskorea26-${"pub"}-subnet-c"
    ```
+
+   `terraform console` 은 **식만 평가한다**. `var_is_public = true` 같은 대입문을 치면 `Extra characters after expression` 오류가 난다.
 
 6. `exit` 또는 Ctrl+D 로 나온다. 만든 디렉토리는 지워도 된다 — 아무것도 만들어지지 않았다.
 

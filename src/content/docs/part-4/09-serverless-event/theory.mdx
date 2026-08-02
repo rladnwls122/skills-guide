@@ -49,12 +49,12 @@ flowchart LR
 1. **S3 트리거 suffix `.csv`** — 처리 Lambda가 `error/`에 `.json`을 쓰는데, suffix 필터가 없으면 그 쓰기가 다시 트리거를 발화해 **재귀 무한루프**가 된다. suffix `.csv` 하나로 차단(출력이 `.json`이라 매치 안 됨).
 2. **ASL에서 S3 이동은 Copy+Delete 2상태** — S3에 "move" API는 없다. `MoveToProcessed`(CopyObject) → `DeleteInputProcessed`(DeleteObject)로 상태를 2개로 분리한다. 채점은 상태 이름이 아니라 State Machine [name,type]과 S3/DDB 최종 상태만 본다.
 
-:::note[실측 — Decimal 나눗셈]
-`Decimal("483")/Decimal("5")` = 정확히 `96.6`. float로 하면 `96.60000000000001`이 되고, 애초에 boto3는 DynamoDB에 float 저장 자체를 거부한다(TypeError). 평균 계산은 반드시 `decimal.Decimal`.
+:::note[실측 — 평균은 Decimal로]
+평균 계산은 반드시 `decimal.Decimal`. boto3가 DynamoDB에 float 저장 자체를 거부하기 때문이다 — `TypeError: Float types are not supported. Use Decimal types instead.` 값이 틀려서가 아니다(`483/5`는 파이썬 float로도 정확히 `96.6`이다). 저장 시점에 예외로 죽는다.
 :::
 
-4. **처리 Lambda를 State Machine에서 ARN 직접 호출** — 출력이 `$.result`에 그대로 실려 `.Payload` 언랩이 필요 없다.
-5. **IAM 역할 2개** — Lambda 공용 `wsc2026-lambda-student-role` + Step Functions용 `wsc2026-stepfunction-student-role` (과제가 Lambda 역할을 하나만 명명하므로 두 Lambda가 공용).
+3. **처리 Lambda를 State Machine에서 ARN 직접 호출** — 출력이 `$.result`에 그대로 실려 `.Payload` 언랩이 필요 없다.
+4. **IAM 역할 2개** — Lambda 공용 `wsc2026-lambda-student-role` + Step Functions용 `wsc2026-stepfunction-student-role` (과제가 Lambda 역할을 하나만 명명하므로 두 Lambda가 공용).
 
 ### ④ 채점이 보는 상태
 
@@ -83,12 +83,14 @@ flowchart LR
 suffix `.csv` 하나로 차단된다 — 출력이 `.json`이라 매치되지 않기 때문이다. 이 필터가 이 아키텍처에서 재귀를 막는 유일한 장치다.
 </Quiz>
 
-<Quiz title="Decimal 나눗셈">
-처리 Lambda에서 평균을 `sum/count`로, 즉 파이썬 float로 계산했다. 483/5의 결과는 [[96.60000000000001]] 이 되어 기대값 96.6과 어긋난다.
+<Quiz title="평균을 float로 계산하면">
+처리 Lambda에서 평균을 `sum/count`로, 즉 파이썬 float로 계산해 `put_item`에 넘기면 boto3가 [[TypeError]] 를 던지며 저장이 실패한다.
 
 ---
 
-float가 깨뜨리는 이유는 **두 가지**다. (a) `483/5`가 `96.60000000000001`로 계산돼 채점 기대값 `STU1020 96.6 A`와 불일치한다. (b) 애초에 boto3는 DynamoDB에 float 저장 자체를 거부한다(`TypeError`) — 값이 틀리기 전에 저장이 실패한다. 평균 계산은 반드시 `decimal.Decimal`로: `Decimal("483")/Decimal("5")`는 정확히 `96.6`이다.
+boto3는 DynamoDB에 float 저장 자체를 거부한다 — `Float types are not supported. Use Decimal types instead.` 값이 틀리기 전에 저장에서 죽는다.
+
+흔한 오해와 달리 **`483/5`는 파이썬 float로도 정확히 `96.6`이다**(`483/5 == 96.6`이 `True`). 두 피연산자가 정확한 정수라 나눗셈이 한 번만 반올림되고 그 결과가 `float("96.6")`과 같은 값이기 때문이다. Decimal을 쓰는 이유는 부동소수점 오차가 아니라 **boto3의 타입 제약**이다: `Decimal("483")/Decimal("5")` → `96.6`.
 </Quiz>
 
 <Quiz title="중복 업로드 복구 순서">

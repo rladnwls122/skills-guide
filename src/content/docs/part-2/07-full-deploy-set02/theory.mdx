@@ -62,7 +62,9 @@ graph TD
 **② 왜 (채점 관점)**
 
 :::danger[제공 자료 수정 금지]
-제공 book 바이너리는 **`POST /v1/book`과 `GET /health`만 서빙하며 수정 금지**다. 그런데 채점은 `https://<CF>/book`으로 POST(9-1)·GET(9-2)·에러(9-3)를 시험한다. **ALB는 경로 재작성이 불가능**하므로 CloudFront Function이 유일한 해법이고, GET은 애초에 앱이 아닌 Lambda가 처리한다.
+제공 book 바이너리는 **`POST /v1/book`과 `GET /health`만 서빙하며 수정 금지**다. 그런데 채점은 `https://<CF>/book`으로 POST(9-1)·GET(9-2)·에러(9-3)를 시험한다. 경로를 어딘가에서 재작성해야 하는데, 수상 과제 풀이는 **CloudFront Function(viewer-request)** 으로 한다. GET은 애초에 앱이 아닌 Lambda가 처리한다.
+
+ALB 도 2025년 10월부터 리스너 규칙에서 URL·Host 헤더 재작성을 지원하므로 기술적으로 유일한 해법은 아니다. 그래도 CloudFront 쪽에 두는 이유는 `/book*` 동작의 분기(POST→ALB, GET→Lambda)와 재작성 지점이 한곳에 모이고, `X-Origin-Verify` 검사를 하는 ALB 규칙을 건드리지 않아도 되기 때문이다.
 :::
 
 **③ 원리**
@@ -144,7 +146,7 @@ graph LR
 | 단계 | 왜 이 위치인가 |
 |---|---|
 | 1 terraform | 모든 ID/ARN의 원천. `.env.ps1`로 영속화해 터미널 끊겨도 재개 |
-| 2 이미지 (기본 CloudShell) | 로컬 Windows에 Docker 없음. **VPC CloudShell은 인터넷이 없어 alpine 못 받으므로 불가**. 스캔 Critical/High 0 확인(mark 3-1)까지 |
+| 2 이미지 (기본 CloudShell) | 로컬 Windows에 Docker 없음. **VPC CloudShell은 홈이 비영속·업로드 메뉴 불가라 빌드에 부적합**(NAT 가 있어 pull 자체는 된다). 스캔 Critical/High 0 확인(mark 3-1)까지 |
 | 3 eksctl | terraform output($\{VAR\}) 필요. 가장 오래 걸려 이미지 빌드와 병행 가능 |
 | 4 LBC | TGB CRD 제공자 — 앱 TGB보다 먼저 |
 | 5 앱 | ns→configmap→deployment(ECR 치환)→service/pdb→TGB→target healthy |
@@ -207,7 +209,7 @@ CloudFront Function 이 `GET /book` 은 재작성하지 않는 이유를 모두 
 - [ ] GET 은 ALB 기본 액션(403)에 걸려 어차피 오리진에 도달하지 못한다
   > 403 은 커스텀 헤더가 **없을 때**의 기본 액션이다. CloudFront 경유 요청에는 `X-Origin-Verify` 가 주입되므로 규칙 p20 에 잡힌다.
 
-제공된 book 바이너리는 `POST /v1/book` 과 `GET /health` 만 서빙하며 수정 금지다. 그런데 채점은 `https://<CF>/book` 으로 POST(9-1)·GET(9-2)·에러(9-3)를 때린다. ALB 는 경로 재작성이 불가능하므로 CloudFront Function 이 유일한 해법이고, GET 은 애초에 앱이 아닌 Lambda 가 처리한다.
+제공된 book 바이너리는 `POST /v1/book` 과 `GET /health` 만 서빙하며 수정 금지다. 그런데 채점은 `https://<CF>/book` 으로 POST(9-1)·GET(9-2)·에러(9-3)를 때린다. 그래서 경로 재작성이 필요하고, 이 풀이는 그것을 CloudFront Function 에서 한다. GET 은 애초에 앱이 아닌 Lambda 가 처리한다. (ALB 리스너 규칙도 2025년 10월부터 URL 재작성을 지원하므로 유일한 방법은 아니다 — 다만 분기와 재작성을 한곳에 모으려고 CloudFront 를 쓴다.)
 
 ```javascript
 function handler(event) {
@@ -239,19 +241,19 @@ viewer-request 재작성은 behavior 재매칭을 유발하지 않는다. 이게
 </Quiz>
 
 <Quiz title="이미지 빌드 위치">
-book 이미지 빌드를 VPC CloudShell 에서 할 수 없는 이유와 올바른 위치는?
+book 이미지 빌드를 VPC CloudShell 이 아니라 기본 CloudShell 에서 하는 이유는?
 
-- [x] VPC CloudShell 은 인터넷이 없어 `alpine` 베이스 이미지를 pull 하지 못한다 → 인터넷과 docker 가 있는 **기본 CloudShell** 에서 build/push 하고 스캔 Critical/High 0 을 확인한다
-- [ ] arm64 로 빌드되어 스캔과 호환되지 않는다 → 기본 CloudShell 에서 빌드한다
-  > 결론만 맞고 이유가 틀렸다. 기본 CloudShell 이 amd64 네이티브라 단일 아키텍처 이미지가 되는 건 부수 효과이고, VPC CloudShell 의 진짜 문제는 **인터넷 부재**다.
-- [ ] VPC CloudShell 에는 docker 가 설치되어 있지 않다 → 대회 PC(Windows)에서 빌드한다
-  > 대회 PC 는 Docker/WSL 을 쓸 수 없다. 그리고 문제는 docker 유무가 아니라 베이스 이미지를 받을 인터넷이 없다는 것이다.
+- [x] VPC CloudShell 은 홈 디렉터리가 비영속이고 업로드/다운로드 메뉴를 쓸 수 없어 빌드 작업에 부적합하다 → 인터넷과 docker 가 있는 **기본 CloudShell** 에서 build/push 하고 스캔 Critical/High 0 을 확인한다
+- [ ] VPC CloudShell 은 인터넷이 없어 `alpine` 베이스 이미지를 pull 하지 못한다
+  > 흔한 오해다. **NAT 가 걸린 프라이빗 서브넷의 VPC 환경은 퍼블릭 인터넷에 나간다** — set-02 의 `priv-subnet-d` 가 정확히 그 구성이라 pull 자체는 된다. (반대로 퍼블릭 서브넷에 띄운 VPC 환경은 퍼블릭 IP 가 없어 나가지 못한다.)
+- [ ] arm64 로 빌드되어 스캔과 호환되지 않는다
+  > 기본 CloudShell 이 amd64 네이티브인 것은 부수 효과이고, 스캔이 아키텍처 때문에 막히지는 않는다.
 - [ ] ECR 이 VPC 엔드포인트로만 열려 있어 push 가 안 된다 → 엔드포인트를 추가한다
-  > push 가 아니라 **pull(alpine 받기)** 이 막히는 것이 문제다. 엔드포인트를 추가해도 Docker Hub 는 여전히 못 간다.
+  > push 는 막히지 않는다. VPC 환경에는 `ecr.api`·`ecr.dkr` 접근이 기본 제공된다.
 
-VPC CloudShell 은 인터넷이 없어 alpine 베이스 이미지를 pull 할 수 없다. **기본 CloudShell**(인터넷 O, docker 내장)에서 build/push 하고 스캔 Critical/High 0 을 확인한다.
+**기본 CloudShell**(인터넷 O, docker 내장, 홈 영속)에서 build/push 하고 스캔 Critical/High 0 을 확인한다. VPC CloudShell 을 못 쓰는 이유는 인터넷이 아니라 **작업 환경의 휘발성**이다.
 
-VPC CloudShell 의 용도는 따로 있다 — 9단계 채점(mark.sh)이다. private 엔드포인트 EKS API 에 닿아야 하므로 priv-subnet-d + `vpc-environment-sg` 로 띄운다. 파일 업로드가 안 되므로 스크립트는 **heredoc 붙여넣기**로 넣는다.
+VPC CloudShell 의 용도는 따로 있다 — 9단계 채점(mark.sh)이다. private 엔드포인트 EKS API 에 닿아야 하므로 priv-subnet-d + `vpc-environment-sg` 로 띄운다. 업로드 메뉴를 쓸 수 없으므로 스크립트는 **heredoc 붙여넣기**로 넣는다.
 </Quiz>
 
 <Quiz title="정리(destroy) 순서">

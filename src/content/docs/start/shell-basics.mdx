@@ -49,7 +49,7 @@ EOF
 `<<'EOF'`(따옴표)면 `$` 그대로, `<<EOF`면 변수 확장 — 헷갈리면 따옴표 붙이는 게 안전.
 
 :::caution[PowerShell 함정 (본 PC가 Windows일 때)]
-- `curl`은 Invoke-WebRequest 별칭 → 진짜 curl은 **`curl.exe`**
+- 5.1 에서 `curl`은 Invoke-WebRequest 별칭 → 진짜 curl은 **`curl.exe`** (7 부터는 별칭이 없어졌지만 그대로 `curl.exe` 로 쓴다)
 - `$` 포함 문자열(비밀번호 등)은 **작은따옴표** `'pa$$word'`
 - **PowerShell 7 필수** — 5.1은 CP949 인코딩이라 jq/terraform 출력이 깨짐
 - sed/grep은 PowerShell에 없음 → Git Bash 또는 CloudShell에서 실행
@@ -76,7 +76,7 @@ EOF
    EOF
    grep -rl "skills" .                 # 어느 파일에 있는지
    sed -i 's/skills/contest/g' vpc.tf  # 일괄 치환
-   grep -n "contest" vpc.tf            # 3곳 바뀌었는지 확인
+   grep -n "contest" vpc.tf            # 2곳 바뀌었는지 확인
    ```
 
 2. **`terraform output -json`을 가정한 jq 추출**
@@ -118,16 +118,16 @@ jq의 기본 출력은 **JSON 값**이라 문자열이면 따옴표가 붙는다
 </Quiz>
 
 <Quiz title="PowerShell의 curl 함정">
-Windows PowerShell에서 `curl http://...` 이 기대와 다르게 동작하는 이유와 해결책은?
+Windows PowerShell 5.1에서 `curl http://...` 이 기대와 다르게 동작하는 이유와 해결책은?
 
 - [x] `curl`이 `Invoke-WebRequest`의 별칭이기 때문. 진짜 curl은 `curl.exe`로 실행한다
 - [ ] PowerShell 5.1의 CP949 인코딩 때문. PowerShell 7로 올리면 해결된다
-  > CP949 인코딩 문제는 **실재하지만 다른 증상**이다(jq·terraform 출력 깨짐). PowerShell 7에서도 `curl` 별칭은 그대로 살아 있다.
+  > CP949 인코딩 문제는 **실재하지만 다른 증상**이다(jq·terraform 출력 깨짐). 다만 `curl` 별칭은 PowerShell 7에서 실제로 사라졌으므로, 이 함정은 5.1 에서만 만난다.
 - [ ] PowerShell에는 curl이 아예 없어서 명령을 못 찾는 것. Git Bash에서 실행한다
   > "없어서 실패"가 아니라 "**있는데 다른 것**이라 실패"다. 그래서 에러 없이 엉뚱한 객체가 나와 더 헷갈린다.
 - [ ] curl이 관리자 권한을 요구하기 때문. 관리자 셸에서 실행한다
 
-PowerShell은 `curl`·`wget`을 각각 `Invoke-WebRequest`의 별칭으로 잡아 두었다. 문법도 출력도 다르므로 `-H`, `-d` 같은 curl 플래그가 통하지 않는다. **`curl.exe`** 로 명시하면 진짜 curl이 실행된다. 함께 기억할 PowerShell 함정 셋:
+**Windows PowerShell 5.1** 은 `curl`·`wget`을 각각 `Invoke-WebRequest`의 별칭으로 잡아 두었다. 문법도 출력도 다르므로 `-H`, `-d` 같은 curl 플래그가 통하지 않는다. **`curl.exe`** 로 명시하면 진짜 curl이 실행된다. (PowerShell 6.0 부터 이 별칭들이 제거돼 7에서는 `curl` 이 곧 `curl.exe` 다. 그래도 대회 PC 에 어느 버전이 뜰지 모르니 `curl.exe` 로 쓰는 습관이 안전하다.) 함께 기억할 PowerShell 함정 셋:
 
 - `$` 가 든 문자열은 작은따옴표로 감싼다(`'pa$$word'`).
 - PowerShell 7 이 필수다. 5.1은 CP949로 출력이 깨진다.

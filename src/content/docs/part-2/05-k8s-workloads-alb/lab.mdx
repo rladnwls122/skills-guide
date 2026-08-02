@@ -5,6 +5,8 @@ description: "LBC 설치와 book 앱 manifest 5종 적용, TG healthy·ALB 규�
 
 > 문서 유형: tutorial
 
+원리와 채점 관점은 [05 이론 — k8s 워크로드와 ALB 연동](/part-2/05-k8s-workloads-alb/theory/)에 있다.
+
 ## 목표
 
 - [ ] LBC를 helm으로 addon 노드에 설치
@@ -138,3 +140,4 @@ eksctl delete cluster -f eksctl/cluster.rendered.yaml --disable-nodegroup-evicti
 aws dynamodb update-table --table-name wskorea26-data-table --no-deletion-protection-enabled
 cd terraform; terraform destroy -var "player_number=$env:NUM"
 ```
+

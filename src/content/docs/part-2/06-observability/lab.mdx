@@ -7,6 +7,8 @@ import { Steps } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
+원리와 채점 관점은 [06 이론 — 로그 파이프라인과 로그 기반 메트릭](/part-2/06-observability/theory/)에 있다.
+
 PART-2 클러스터(앱 배포 완료 상태) 위에서 진행한다. 명령은 클러스터에 kubectl이 되는 셸(대회 기준: VPC CloudShell 또는 bastion) 기준 bash.
 
 ## 목표 체크박스
@@ -132,3 +134,4 @@ helm uninstall monitoring -n observability   # Grafana NLB도 함께 삭제됨 �
 aws logs delete-log-group --log-group-name /wsc2026/eks/book-app   # Terraform 관리면 destroy로
 # 08을 이어서 하면 클러스터는 유지, 하루 이상 쉬면 eksctl delete cluster
 ```
+

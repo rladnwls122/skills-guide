@@ -7,6 +7,8 @@ import { Steps } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
+원리와 채점 관점은 [03 이론 — 컨테이너·Lambda·DynamoDB](/part-1/03-container-lambda-dynamodb/theory/)에 있다.
+
 **방식**: Dockerfile·tf·index.py 를 직접 쓴다 → apply·직접 invoke 검증 → `skills-2026` 정답과 diff. ALB 는 이 모듈 범위 밖이므로 Lambda 는 `aws lambda invoke` 로 ALB 이벤트를 흉내 내 검증한다.
 
 ## 실습 목표
@@ -206,3 +208,4 @@ aws ecr describe-repositories --repository-names wskorea26-book-repo 2>&1 # Repo
 ```
 
 CMK 는 PendingDeletion 7일 대기 — 정상. CloudShell 홈의 이미지/파일은 과금 대상이 아니므로 방치해도 되지만, 대회 습관상 `docker image prune -af` 로 정리한다.
+

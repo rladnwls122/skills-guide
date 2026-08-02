@@ -107,6 +107,33 @@ NACL의 번호 순서 평가가 함정이다. 100번에 `0.0.0.0/0 ALLOW`, 200�
 
 SG는 규칙의 대상으로 **다른 SG를 지정**할 수 있다. `ALB의 SG 에서 오는 8080` 같은 규칙은 IP가 바뀌어도 그대로 산다. 대회에서 계층 간 통신을 여는 표준 방식이다.
 
+### 프리픽스 리스트 — CIDR 묶음 하나를 규칙의 소스로 쓴다
+
+프리픽스 리스트는 CIDR 여러 개에 이름을 붙인 묶음이고, ID 는 `pl-` 로 시작한다. 종류가 둘이다.
+
+| 종류 | 만드는 주체 | 쓰임 |
+|---|---|---|
+| 고객 관리형 | 사용자 | 사내 대역 등 자주 쓰는 CIDR 묶음을 한 번 정의해 여러 SG·RTB 에서 참조 |
+| AWS 관리형 | AWS | S3·CloudFront·VPC Lattice 같은 서비스의 대역. 대역이 바뀌어도 규칙은 그대로 |
+
+AWS 관리형 프리픽스 리스트의 ID 는 **계정·리전마다 다르다**. 문서에서 본 값을 그대로 쓰지 않고 조회해서 쓴다.
+
+```bash
+aws ec2 describe-managed-prefix-lists --region ap-northeast-1 \
+  --filters Name=prefix-list-name,Values=com.amazonaws.ap-northeast-1.vpc-lattice \
+  --query 'PrefixLists[0].PrefixListId' --output text
+# 기대: pl-... (계정·리전마다 값이 다르다)
+```
+
+CLI 로 SG 규칙을 넣을 때 프리픽스 리스트는 `--cidr` 로 지정할 수 없다. `--ip-permissions` 구조 안의 `PrefixListIds` 로만 받는다.
+
+```bash
+aws ec2 authorize-security-group-ingress --group-id sg-... \
+  --ip-permissions 'IpProtocol=tcp,FromPort=8080,ToPort=8080,PrefixListIds=[{PrefixListId=pl-...}]'
+```
+
+특정 서비스에서 오는 트래픽만 열라는 요구는 `0.0.0.0/0` 으로 열면 통신은 되지만 채점은 미충족이다. 관리형 프리픽스 리스트를 소스로 지정해야 충족한다.
+
 ### 라우팅 테이블 조회 — 가장 긴 접두사가 이긴다
 
 라우팅 테이블에 여러 경로가 겹치면 **가장 구체적인(접두사가 긴) 경로**가 선택된다. 우선순위 필드나 규칙 순서는 없다.
@@ -127,6 +154,20 @@ VPC CIDR에 대한 `local` 경로는 자동 생성되며 **지울 수 없다**. 
 - **Transit Gateway(TGW)**: 허브 하나에 VPC·VPN·Direct Connect를 스포크로 붙인다. 연결이 n개로 끝나고, 라우팅 테이블을 TGW 쪽에서 나눠 스포크 간 통신을 선택적으로 허용한다.
 
 양쪽 다 **CIDR이 겹치면 통신이 성립하지 않는다**. 다만 막히는 지점이 다르다 — 피어링은 연결 생성 자체가 거부되고, TGW 는 어태치먼트가 만들어지되 그 VPC 의 경로가 TGW 라우팅 테이블에 전파되지 않는다. 어느 쪽이든 결과는 같으므로 VPC를 여러 개 설계할 때 CIDR을 미리 갈라 둔다.
+
+### 연결 방식이 무엇을 보고 판단하는가 — L3·L4·L7
+
+연결 방식을 고를 때 기준은 **트래픽의 어느 부분까지 보고 목적지를 정하느냐**다.
+
+| 계층 | 판단 근거 | 이 대역에서 쓰는 것 |
+|---|---|---|
+| L3 | 목적지 IP 주소와 CIDR | 라우팅 테이블, VPC 피어링, Transit Gateway |
+| L4 | TCP/UDP 포트까지 | NLB, PrivateLink 엔드포인트 서비스 |
+| L7 | HTTP 메서드·경로·헤더까지 | ALB 리스너 규칙, CloudFront 동작, VPC Lattice |
+
+L3 로 잇는 방식은 두 VPC 사이에 **IP 경로 자체를 만든다**. 그래서 CIDR 이 겹치면 목적지를 하나로 정할 수 없어 막힌다. L7 로 잇는 방식은 클라이언트가 IP 대신 DNS 이름을 호출하고 중간의 프록시가 목적지를 고르므로 CIDR 이 겹쳐도 무방하다.
+
+**VPC Lattice** 는 서비스 네트워크 하나에 VPC·서비스를 붙여 다대다로 잇는 L7 방식이다. 피어링·TGW·PrivateLink 와 무엇이 어떻게 다른지, Service Network·Service·Target Group·Listener 4계층이 각각 무엇인지는 [VPC Lattice 이론](/part-4/12-vpc-lattice/theory/)에서 다룬다.
 
 ### VPC 엔드포인트 — 프라이빗 경로로 AWS API 부르기
 

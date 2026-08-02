@@ -7,6 +7,8 @@ import { Steps } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
+원리와 채점 관점은 [01 이론 — Terraform 문법과 VPC 구조](/part-1/01-terraform-vpc/theory/)에 있다.
+
 **방식**: 정답지를 보지 않고 백지에서 tf 코드를 쓴다 → apply·검증 → 마지막에 `skills-2026` 정답과 diff 해서 설계 차이를 복기한다.
 
 ## 실습 목표
@@ -152,3 +154,4 @@ VPC 모듈은 의존 리소스가 없으므로 destroy 순서 고민 없이 한 
 :::caution[과금 주의]
 EIP 가 남았는지 마지막으로 꼭 확인한다 — 남아 있으면 시간당 과금이다.
 :::
+

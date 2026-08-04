@@ -20,6 +20,16 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] (심화) s3 키 정책을 set-03 방식 root-less 로 재작성
 - [ ] (보너스) WAF Web ACL을 CloudFront에 붙이고, 오탐 규칙을 Count로 돌렸다가 검증 후 Block으로 복구하는 절차를 실행
 
+선행 지식과 목표는 [모듈 개요](/part-1/02-kms-s3-cloudfront/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- Terraform 인자: [aws_kms_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) · [aws_s3_bucket_server_side_encryption_configuration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_server_side_encryption_configuration) · [aws_cloudfront_origin_access_control](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_origin_access_control) · [aws_cloudfront_distribution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_distribution)
+- 정책 문서 합성과 보너스 WAF: [aws_iam_policy_document](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) · [aws_wafv2_web_acl](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/wafv2_web_acl) — 중첩 블록은 페이지 안 `### ... Block` 소제목에 따로 있다
+- 관리형 캐시 정책 ID 를 코드에서 얻는 data 소스: [aws_cloudfront_cache_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/cloudfront_cache_policy)
+- 키 정책에 쓸 KMS 액션 이름: [Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ## 사전 준비
 
 정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 정답지 경로는 클론 루트 `~\skills-2026` 기준이다.

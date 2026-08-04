@@ -23,6 +23,15 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] 조회 4종을 전부 HTTP 200 + 기대 데이터로 재현한다
 - [ ] 실습 종료 시 전 리소스를 destroy한다
 
+선행 지식과 목표는 [모듈 개요](/part-4/11-documentdb/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- CLI 플래그·출력 필드: `aws docdb create-db-cluster help` · `aws docdb describe-db-clusters help` · `aws secretsmanager create-secret help`
+- 정답지 Terraform 과 대조할 때: [aws_docdb_cluster](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/docdb_cluster) · [aws_docdb_cluster_instance](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/docdb_cluster_instance) · [aws_secretsmanager_secret](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret)
+- 접속·TLS 실패 증상은 [트러블슈팅](/reference/troubleshooting/)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ---
 
 <Steps>

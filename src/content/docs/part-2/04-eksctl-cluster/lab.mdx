@@ -16,6 +16,15 @@ sidebar:
 - [ ] mark 5-1 ~ 5-3 채점 명령을 직접 실행해 기대 출력과 대조
 - [ ] (실패 대비) 부분 복구 명령 4종을 알고 있다
 
+선행 지식과 목표는 [모듈 개요](/part-2/04-eksctl-cluster/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- ClusterConfig 필드: `eksctl utils schema > schema.json` 뒤 `jq -r '.definitions.ClusterConfig.properties | keys[]' schema.json`, 브라우저는 [schema.eksctl.io](https://schema.eksctl.io/)
+- CLI 플래그·출력 필드: `aws eks describe-cluster help` · `aws eks describe-nodegroup help`
+- 노드 배치를 보는 YAML 필드: `kubectl explain pod.spec.nodeSelector` · `kubectl explain node.metadata.labels`
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ## 0. 사전 준비 — 정답지 클론과 변수 영속화
 
 정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 이 가이드의 정답지 경로는 전부 **클론 루트 `~\skills-2026`** 기준이다. 다른 위치에 클론했다면 아래 `cd` 경로만 본인 것으로 바꾼다.

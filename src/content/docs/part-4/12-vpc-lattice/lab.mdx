@@ -21,6 +21,15 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] `curl /v1/client/orders?id=1001` → `order_id=1001, via=vpc-lattice` E2E를 재현할 수 있다
 - [ ] 실습 종료 후 Lattice 리소스부터 역순으로 destroy할 수 있다
 
+선행 지식과 목표는 [모듈 개요](/part-4/12-vpc-lattice/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- CLI 의 중첩 JSON 구조: `aws vpc-lattice create-target-group help` · `aws vpc-lattice create-listener help`
+- 정답지 Terraform 과 대조할 때: [aws_vpclattice_service_network](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpclattice_service_network) · [aws_vpclattice_service](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpclattice_service) · [aws_vpclattice_target_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpclattice_target_group) · [aws_vpclattice_listener](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpclattice_listener)
+- 프리픽스 리스트를 소스로 쓰는 규칙: `aws ec2 describe-managed-prefix-lists help` · [aws_security_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 <Steps>
 
 1. **사전 준비 — 리전·지급 파일**

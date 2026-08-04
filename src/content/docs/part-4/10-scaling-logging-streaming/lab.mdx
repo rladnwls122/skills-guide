@@ -18,6 +18,16 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] (유형 5) 정답지 코드를 mark.md 2-1~2-6·4-1~4-5-B와 전부 대조한다 — 실제 배포는 선택(Part C)
 - [ ] 두 클러스터·VPC를 전부 정리한다
 
+선행 지식과 목표는 [모듈 개요](/part-4/10-scaling-logging-streaming/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- CRD YAML 필드: `kubectl explain scaledobject.spec.triggers` · `kubectl explain nodepool.spec.disruption` (정본은 [KEDA Scalers](https://keda.sh/docs/latest/scalers/) · [Karpenter NodePool](https://karpenter.sh/docs/concepts/nodepools/))
+- helm values 키: `helm show values kedacore/keda --version 2.20.1` · `helm show values oci://public.ecr.aws/karpenter/karpenter --version 1.14.0`
+- LogQL 문법: [Loki 쿼리 문서](https://grafana.com/docs/loki/latest/query/)
+- Terraform 인자(유형 5): [aws_kinesis_stream](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kinesis_stream) · [aws_msk_cluster](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/msk_cluster) · [aws_cloudformation_stack](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudformation_stack)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ---
 
 ## Part A — 유형 3 · 오토스케일링 (ap-northeast-2, skm-)

@@ -16,6 +16,15 @@ sidebar:
 - [ ] CloudShell VPC Environment에서 mark.sh 실행, **80% 이상** 득점
 - [ ] 정리 절차까지 완료 (과금 0 확인)
 
+선행 지식과 목표는 [모듈 개요](/part-2/07-full-deploy-set02/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- Terraform 인자: [aws_cloudfront_distribution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_distribution) · [aws_lb_listener_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_listener_rule) · [aws_lambda_permission](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_permission)
+- helm values 키와 CRD 필드: `helm show values prometheus-community/kube-prometheus-stack` · `kubectl explain targetgroupbinding.spec`
+- CLI 플래그·출력 필드: `aws cloudfront list-distributions help` · `aws cloudfront wait help`
+- 과제를 받고 5분 안에 열어 둘 탭 목록도 [실전 문서 검색 가이드](/reference/search-guide/)에 있다
+:::
+
 작업 루트: `~\skills-2026\set-02\task-1` (이하 상대 경로). 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다 — 다른 위치에 클론했다면 `~\skills-2026` 만 본인 경로로 바꾼다.
 제공자료(`book`, `index.html`, `main.jpeg`)는 `..\..\shared\provided\task-1\` — 수정 금지.
 

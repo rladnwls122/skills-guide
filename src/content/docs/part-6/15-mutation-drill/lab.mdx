@@ -17,6 +17,15 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] 친구 또는 AI에게 "변형 과제지" 제작을 의뢰: set-02 리소스 이름 5~10개를 임의 변경한 목록 (예: `wskorea26-book-alb` → `wskorea26-ticket-alb`, 라벨 `node-type` 값 변경, 쿠키명 변경 등). 본인은 목록을 미리 보지 않는다.
 - [ ] 작업 브랜치 생성: `git checkout -b drill/mutation-01`
 
+선행 지식과 목표는 [모듈 개요](/part-6/15-mutation-drill/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- 바뀐 스펙이 어느 인자인지: [Terraform AWS Provider 리소스 목록](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)에서 리소스 타입부터 연다
+- 바뀐 이름이 YAML 어느 필드인지: `kubectl api-resources` · `kubectl explain <리소스>.spec`
+- mark 스크립트가 쓰는 CLI 플래그: `aws <서비스> <명령> help`, 읽는 순서는 [mark 스크립트 가이드](/reference/mark-script-guide/)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ---
 
 ## 훈련 ① — 30분 치환 드릴

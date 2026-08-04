@@ -20,6 +20,14 @@ import { Steps } from '@astrojs/starlight/components';
 드릴 1회는 3시간 안에 끝내고 destroy한다 ([모듈 개요](/part-5/14-task3-load-ops/)의 과금 절차).
 :::
 
+:::note[실전 참조 — 막히면 여는 곳]
+- k6 옵션·임계값 문법: [k6 문서](https://grafana.com/docs/k6/latest/)
+- 대시보드에 칠 쿼리: [PromQL 기초](https://prometheus.io/docs/prometheus/latest/querying/basics/)
+- 노브의 실제 필드 이름: `kubectl explain hpa.spec.behavior` · `kubectl explain nodepool.spec.limits` (정본은 [Karpenter NodePool](https://karpenter.sh/docs/concepts/nodepools/))
+- 부하 중 증상별 확인 명령: [트러블슈팅](/reference/troubleshooting/)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ## 준비
 
 정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 경로는 클론 루트 `~\skills-2026` 기준이다.

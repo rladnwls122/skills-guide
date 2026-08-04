@@ -32,6 +32,15 @@ $env:NUM            # 기대: 비번호가 그대로 출력
 - [ ] (유형 2) 타입 원복 시연을 레이스 없이(stop-rule 비활성화) 수행한다
 - [ ] 두 모듈 모두 terraform destroy로 정리한다
 
+선행 지식과 목표는 [모듈 개요](/part-4/09-serverless-event/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- Terraform 인자(유형 1): [aws_sfn_state_machine](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sfn_state_machine) · [aws_s3_bucket_notification](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_notification) · [aws_lambda_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function)
+- Terraform 인자(유형 2): [aws_cloudwatch_event_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_rule) · [aws_config_config_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/config_config_rule) · [aws_cloudtrail](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudtrail)
+- CLI 플래그·출력 필드: `aws stepfunctions list-executions help` · `aws configservice get-compliance-details-by-config-rule help`
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ---
 
 ## Part A — 유형 1 · 서버리스 워크플로 (ap-southeast-1)

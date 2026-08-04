@@ -20,6 +20,16 @@ sidebar:
 - 복구 순서는 반드시 **확인 명령 → 원인 → 조치**. 확인 없이 고치면 복구에 성공해도 실패 처리.
 :::
 
+선행 지식과 목표는 [모듈 개요](/part-6/16-break-fix/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- 증상별 확인 명령: [트러블슈팅](/reference/troubleshooting/)
+- YAML 필드가 맞는지: `kubectl explain deployment.spec.template.spec.containers` · `kubectl explain pod.spec.nodeSelector`
+- CLI 플래그·출력 필드: `aws elbv2 describe-target-health help` · `aws ec2 authorize-security-group-ingress help`
+- Terraform 쪽 원복: [aws_cloudfront_distribution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_distribution) · [aws_lb_listener_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_listener_rule)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ## 시나리오 표
 
 | # | 망가뜨리는 방법 | 기대 증상 | 목표 | 복구 확인 |

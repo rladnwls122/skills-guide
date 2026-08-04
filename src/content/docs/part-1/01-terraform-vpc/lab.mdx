@@ -21,6 +21,15 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] output → outputs.json → .env 영속화
 - [ ] 당일 destroy 로 NAT 과금 차단
 
+선행 지식과 목표는 [모듈 개요](/part-1/01-terraform-vpc/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- Terraform 인자: [aws_vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc) · [aws_subnet](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) · [aws_nat_gateway](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/nat_gateway) · [aws_route_table](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table)
+- 인자 이름만 기억나지 않을 때: `terraform providers schema -json` (`terraform init` 을 마친 디렉터리에서)
+- 검증 명령의 플래그·출력 필드: `aws ec2 describe-route-tables help` · `aws ec2 describe-nat-gateways help`
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ## 사전 준비
 
 정답지 저장소를 아직 안 받았다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 저장소는 **홈 디렉터리 아래**에 받는다 — 이 가이드의 정답지 경로는 전부 클론 루트 `~\skills-2026` 기준이다.

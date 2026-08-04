@@ -22,6 +22,15 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] 테스트 데이터로 최신순·키 순서·비ASCII·400·빈배열을 실제 응답으로 검증
 - [ ] 삭제방지 해제 → destroy 순서 체득
 
+선행 지식과 목표는 [모듈 개요](/part-1/03-container-lambda-dynamodb/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- Terraform 인자: [aws_ecr_repository](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_repository) · [aws_dynamodb_table](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/dynamodb_table) · [aws_lambda_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) · [aws_cloudwatch_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group)
+- CLI 플래그·출력 필드: `aws ecr describe-image-scan-findings help` · `aws dynamodb describe-table help` · `aws lambda invoke help`
+- 실행역할 3-statement 에 넣을 액션 이름: [Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) 의 DynamoDB·KMS 페이지
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ## 사전 준비
 
 정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 정답지 경로는 클론 루트 `~\skills-2026` 기준이다.

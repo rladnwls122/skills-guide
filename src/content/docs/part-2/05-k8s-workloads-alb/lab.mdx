@@ -16,6 +16,15 @@ sidebar:
 - [ ] TG 타깃 healthy 확인 + ALB 403/규칙 채점 명령 셀프 검증
 - [ ] Pod 강제 삭제로 self-healing과 graceful shutdown 관찰
 
+선행 지식과 목표는 [모듈 개요](/part-2/05-k8s-workloads-alb/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- helm values 키: `helm show values eks/aws-load-balancer-controller --version 3.4.0`, 브라우저는 [ArtifactHub](https://artifacthub.io/packages/helm/aws/aws-load-balancer-controller)
+- YAML·CRD 필드: `kubectl explain deployment.spec.template.spec` · `kubectl explain targetgroupbinding.spec` (CRD 정본은 [TargetGroupBinding 문서](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/targetgroupbinding/targetgroupbinding/))
+- CLI 플래그·출력 필드: `aws elbv2 describe-rules help` · `aws elbv2 describe-target-health help`
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ## 0. 사전 준비
 
 - 정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론). 경로는 클론 루트 `~\skills-2026` 기준이다.

@@ -24,6 +24,16 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] (B) VPC CloudShell(또는 bastion) 멱등 셋업 블록 1회 왕복
 - [ ] (B) CoreDNS 커스텀 도메인 양쪽 적용 확인
 
+선행 지식과 목표는 [모듈 개요](/part-3/08-private-eks-iam/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- IAM 액션·조건 키(`sts:AssumeRole`·`sts:ExternalId`): [Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html)
+- `AccessDenied` 가 어디서 났는지 판정: [정책 평가 로직](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html)
+- CLI 플래그·출력 필드: `aws sts assume-role help` · `aws eks update-cluster-config help`
+- 같은 역할을 코드로 옮길 때: [aws_iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ---
 
 ## 실습 A. Audit Role — assume 성공/실패 양쪽 재현

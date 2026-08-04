@@ -20,6 +20,15 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] 쿠키 강제 시 동작(mark 2-4), 무작위 배정·쿠키 보존(mark 2-5), KVS 동적 반영(mark 2-6)을 각각 재현한다
 - [ ] `mark2.sh`로 셀프 채점하고, 실습 종료 시 destroy까지 마친다
 
+선행 지식과 목표는 [모듈 개요](/part-4/13-cdn-function/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- CLI 플래그·출력 필드: `aws cloudfront test-function help` · `aws cloudfront-keyvaluestore put-key help`
+- Terraform 인자: [aws_cloudfront_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_function) · [aws_cloudfront_key_value_store](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_key_value_store) · [aws_cloudfront_cache_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_cache_policy) · [aws_cloudfront_response_headers_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_response_headers_policy)
+- `cloudfront-js-2.0` 런타임이 무엇을 지원하는지: [CloudFront 개발자 가이드](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ---
 
 <Steps>

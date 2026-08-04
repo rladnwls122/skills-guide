@@ -22,6 +22,15 @@ PART-2 클러스터(앱 배포 완료 상태) 위에서 진행한다. 명령은 
 - [ ] Grafana datasource 3종 + 대시보드 sidecar import 확인
 - [ ] 트래픽 시드 후 대시보드 No Data 패널 0개 확인
 
+선행 지식과 목표는 [모듈 개요](/part-2/06-observability/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- helm values 키: `helm show values prometheus-community/kube-prometheus-stack --version 87.2.1 > kps.yaml` 뒤 `grep -n`, 브라우저는 [ArtifactHub kube-prometheus-stack](https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack)
+- CRD YAML 필드: `kubectl explain prometheusrule.spec.groups` · `kubectl explain podmonitor.spec` (정본은 [prometheus-operator API](https://prometheus-operator.dev/docs/api-reference/api/))
+- CLI 플래그·출력 필드: `aws logs tail help` · `aws logs filter-log-events help`
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ## 사전 준비 — 매니페스트 출처와 작업 디렉터리
 
 아래 명령이 `-f` 로 넘기는 파일은 전부 정답지 저장소의 **`set-03/task-1/k8s/`** 아래에 있다. 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다.

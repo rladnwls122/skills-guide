@@ -410,6 +410,46 @@ aws iam delete-role --role-name skills-nosql-client-ec2-role
 DocumentDB 인스턴스는 stop이 없다 — **삭제만이 과금을 멈춘다.** KMS 키는 삭제 예약 후에도 대기 기간(이 실습 예시는 7일) 동안 잔존 리소스로 남는다 — alias만 지우고 끝냈다고 착각하지 않는다.
 :::
 
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. 리소스 이름 접두어가 `skills-nosql-` 에서 바뀌면 어디가 함께 움직이나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   클러스터·인스턴스 식별자, Secret 이름, KMS 별칭, Client EC2 의 `Name` 태그 넷이다. mark 1-1 은 클러스터 식별자와 별칭으로, 1-2 는 Secret 이름과 `Name` 태그로 직접 조회한다. 어느 하나라도 과제지와 다르면 그 항목이 조회 단계에서 멈춘다.
+
+   </details>
+
+2. 세션 만료 기준이 "만료 시각 도달" 에서 "마지막 접속 후 30분" 으로 바뀌면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `create_indexes.py` 의 TTL 인덱스 한 줄이다. 대상 필드를 `lastSeen` 으로 바꾸고 `expireAfterSeconds` 를 1800 으로 준다. 나머지 인덱스·컬렉션·`docdb_client.py` 는 그대로 둔다 — TTL 은 문서 구조가 아니라 인덱스 옵션이다. 인자 이름은 pymongo 의 `create_index` 문서에서 확인하고, 찾는 순서는 [검색 가이드](/reference/search-guide/)에 있다. mark 1-4 가 `/v1/admin/indexes` 응답으로 이 구성을 본다.
+
+   </details>
+
+3. `retail_dataset.json` 을 `mongoimport` 로 직접 적재하면 어느 체크가 깨지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 1-3 과 1-5 둘 다다. 1-3 은 `/v1/admin/summary` 의 `dateFieldTypes` 를 보는데 날짜가 문자열로 들어가 `str` 이 나온다. 1-5 의 `pending` 범위 조회도 날짜 비교가 성립하지 않아 빈 배열이 된다. 적재는 반드시 `POST /v1/admin/seed` 로 한다.
+
+   </details>
+
+4. 백업 보존 기간 요구가 1일에서 7일로 바뀌면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   클러스터 생성 명령의 `--backup-retention-period` 값이다. 이미 만들었다면 `aws docdb modify-db-cluster --backup-retention-period 7` 로 바꾼다. mark 1-1 은 `describe-db-clusters` 출력 표를 그대로 보므로 이 값이 표에 드러난다.
+
+   </details>
+
 ## 오답 노트 양식
 
 ```

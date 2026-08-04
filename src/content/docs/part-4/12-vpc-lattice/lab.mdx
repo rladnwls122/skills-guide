@@ -470,6 +470,46 @@ aws ec2 delete-vpc --vpc-id $SERVICE_VPC_ID
 
 </details>
 
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. Client·Service VPC CIDR 이 `10.61.0.0/16`·`10.62.0.0/16` 에서 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `create-vpc`·`create-subnet` 의 CIDR 과, Client VPC 대역을 소스로 쓰는 `skills-lattice-assoc-sg` 인바운드 규칙이다. 피어링도 Transit Gateway 도 없으므로 라우팅은 손대지 않는다 — Lattice 는 두 대역이 겹쳐도 동작한다. mark 2-1 이 두 VPC 의 CIDR 을 표로 확인한다.
+
+   </details>
+
+2. 서비스 포트가 8080 에서 9090 으로 바뀌면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   Target Group 설정의 포트와 헬스 체크, Service EC2 보안 그룹의 인바운드 포트, 그리고 서비스 앱의 systemd 유닛이다. Listener 의 80 은 그대로 둔다 — Lattice 리스너 포트와 타깃 포트는 별개다. 중첩 JSON 구조가 막히면 `aws vpc-lattice create-target-group help` 를 열고, 찾는 순서는 [검색 가이드](/reference/search-guide/)에 있다.
+
+   </details>
+
+3. Service EC2 보안 그룹을 `0.0.0.0/0` 으로 열면 어느 체크가 깨지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 2-4 다. 이 항목은 Service EC2 의 보안 그룹을 JSON 그대로 출력해 소스를 확인한다. 헬스 체크도 E2E 도 통과하므로 2-5 는 살아 있지만 2-4 만 떨어진다. 소스는 `com.amazonaws.ap-northeast-1.vpc-lattice` 관리형 프리픽스 리스트여야 한다.
+
+   </details>
+
+4. Service Network 이름을 `skills-lattice-sn` 이 아닌 값으로 만들면 어디까지 번지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   채점 준비 단계가 이 이름으로 `SERVICE_NETWORK_ID` 를 뽑는다. 이름이 다르면 그 변수가 `None` 이 되어 mark 2-3 의 연결 조회가 통째로 비고, 같은 변수를 쓰는 2-4 도 함께 무너진다. Service·Target Group 이름도 같은 방식이라 셋 다 과제지 표기 그대로 만든다.
+
+   </details>
+
 ## 오답 노트 양식
 
 ```

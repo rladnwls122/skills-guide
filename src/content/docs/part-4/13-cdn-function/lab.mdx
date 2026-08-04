@@ -165,6 +165,46 @@ terraform destroy -auto-approve
 CloudFront distribution은 disable→삭제 순서로 진행돼 몇 분 걸릴 수 있다(같은 서비스 기준 [02-kms-s3-cloudfront](/part-1/02-kms-s3-cloudfront/lab/) 실측 5~10분 수준). destroy 명령이 끝난 뒤 다음 작업으로 넘어간다.
 :::
 
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. 쿠키명이 `x-sp-ab` 에서 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   세 곳이다. `variables.tf` 의 `ab_cookie_name`, `cloudfront/req-fn.js`, `cloudfront/res-fn.js` 다. 두 JS 파일은 `file()` 로 그대로 읽히는 정적 코드라 변수 치환이 닿지 않는다 — `x-sp-ab` 와 `x-sp-ab-assigned` 를 직접 고친다. 캐시 정책의 쿠키 화이트리스트는 변수를 쓰므로 자동으로 따라간다. mark 2-3-A 가 화이트리스트를, 2-4-A·2-5-A 가 실제 Set-Cookie 를 본다.
+
+   </details>
+
+2. B 배정 비율이 0.3 에서 0.5 로 바뀌면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `variables.tf` 의 `ab_weight` 한 곳이다. 함수 코드는 매 실행 KVS 에서 `weight` 를 읽으므로 JS 는 그대로 두고 함수도 다시 publish 하지 않는다. mark 2-2-A 가 KVS 의 키·값을 정렬해 전부 출력하므로 이 값이 그 줄에 그대로 드러난다.
+
+   </details>
+
+3. 함수를 `DEVELOPMENT` 스테이지에 둔 채 채점하면 어느 체크가 깨지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 2-2-A 가 `describe-function --stage LIVE` 로 상태·런타임·KVS 연결을 뽑는데 LIVE 사본이 없다. 배포의 cache behavior 에도 연결되지 않아 2-3-A 의 함수 연결 줄이 비고, 2-4-A 부터 2-6-A 까지 동작 검증이 전부 무너진다.
+
+   </details>
+
+4. KVS 에 콘솔로 키를 하나 더 넣으면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 2-2-A 는 KVS 의 모든 키를 정렬해 출력하므로 여분 키가 그대로 보여 정확 일치가 깨진다. `keys_exclusive` 리소스가 다음 apply 때 여분 키를 지우지만, apply 전에 채점하면 그대로 남는다. 값 변경이 필요하면 콘솔이 아니라 `ab_weight` 같은 변수로 넣는다.
+
+   </details>
+
 ## 오답 노트 양식 (3열)
 
 ```

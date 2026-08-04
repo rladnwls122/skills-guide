@@ -265,4 +265,53 @@ aws kms describe-key --key-id alias/wskorea26-s3-key 2>&1   # NotFoundException 
 KMS 키는 즉시 삭제되지 않고 **PendingDeletion(7일)** 상태로 남는다 — 정상이며 대기 중 과금 없음. 같은 이름 키를 바로 다시 만들어도 alias 는 재사용 가능(이전 alias 는 destroy 로 삭제됨).
 :::
 
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. 비번호가 `103` 에서 `217` 로 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `terraform.tfvars` 의 `player_number` 한 곳이다. 버킷 이름은 `data.tf` 의 `local.bucket_name` 이 접두어와 이어 붙인다. `grep -rn '"103"' *.tf` 가 `variables.tf` 의 기본값 한 건만 내야 하드코딩이 없는 것이다. mark.sh 는 버킷을 접두어로 찾지만 mark 2-1-A 의 기대 출력은 비번호까지 포함한 이름이다.
+
+   </details>
+
+2. 객체 경로가 `web/main` 에서 `web/2026` 으로 바뀌면 어디를 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `variables.tf` 의 `object_prefix` 한 곳이다. `s3.tf` 의 객체 key 와 `cloudfront.tf` 의 `origin_path` 가 같은 변수를 쓴다. `grep -rn "web/main" *.tf` 가 `variables.tf` 한 건이면 된다. 경로를 바꾸면 mark 2-1-A 의 객체 키와 8-5-A 의 루트 응답이 함께 움직인다.
+
+   </details>
+
+3. 정적 파일에 `style.css` 가 하나 더 지급되면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `s3.tf` 두 곳이다. `aws_s3_object.static` 의 `for_each` 목록에 파일명을 넣고, `local.content_types` 에 `css = "text/css"` 를 더한다. 버킷·퍼블릭 차단·암호화·OAC·버킷 정책은 그대로 둔다 — 버킷 정책이 `버킷ARN/*` 전체를 허용하기 때문이다. `content_type` 인자 이름이 막히면 [검색 가이드](/reference/search-guide/)의 Registry 동선으로 `aws_s3_object` 문서를 연다.
+
+   </details>
+
+4. CMK 별칭을 `wskorea26-s3-key` 대신 `wskorea26-s3-cmk` 로 만들면 어느 체크가 깨지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 2-2-A 다. 이 항목은 객체의 `SSEKMSKeyId` 로 키를 역조회해 별칭 이름을 두 줄 출력하고 `alias/wskorea26-s3-key` 와 정확히 비교한다. DynamoDB 별칭은 같은 방식으로 mark 4-1-A 가 본다. `alias/` 접두어는 `kms.tf` 가 붙이므로 변수에는 이름만 넣는다.
+
+   </details>
+
+5. 배포 comment 를 `wskorea26-concert-cf` 에서 다른 값으로 바꾸면 어디까지 영향이 가나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark.sh 는 맨 앞에서 comment 로 배포 ID 를 찾고, 그 ID 로 도메인까지 얻는다. comment 가 다르면 ID 가 `None` 이 되어 mark 8-1-A 부터 8-5-A 까지, 그리고 도메인을 쓰는 9-1-A~9-3-A 까지 함께 무너진다. 고칠 곳은 `variables.tf` 의 `cloudfront_name` 한 곳이다.
+
+   </details>
+
 `apply` 가 실패하면 [01 실습의 apply 실패 세 갈래](/part-1/01-terraform-vpc/lab/)를 먼저 본다. 증상별 확인 명령은 [트러블슈팅](/reference/troubleshooting/), 실습을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 돌린다.

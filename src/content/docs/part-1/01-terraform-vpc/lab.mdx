@@ -214,5 +214,45 @@ VPC 모듈은 의존 리소스가 없으므로 destroy 순서 고민 없이 한 
 EIP 가 남았는지 마지막으로 꼭 확인한다 — 남아 있으면 시간당 과금이다.
 :::
 
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. VPC CIDR 이 `172.16.0.0/16` 에서 `10.20.0.0/16` 으로 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `terraform.tfvars` 의 `vpc_cidr` 과 `variables.tf` 의 `subnets` map 네 줄이다. 서브넷 대역은 VPC 대역 안에 들어가야 하므로 함께 바뀐다. `vpc.tf` 는 전부 변수 참조라 손대지 않는다 — `grep -n "172.16" vpc.tf` 가 0건이면 하드코딩이 없는 것이다.
+
+   </details>
+
+2. 서브넷을 AZ 2개에서 3개로 늘리라면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   고칠 곳은 `variables.tf` 의 `subnets` map 하나다. public·private 항목을 AZ 하나만큼 더 넣는다. `vpc.tf` 는 그대로 둔다 — 서브넷·EIP·NAT·프라이빗 RTB·라우트·연결이 전부 `for_each` 와 `local.public_by_az` 파생이라 항목 수를 따라간다. AZ 이름이 실제로 있는지는 `aws ec2 describe-availability-zones --query 'AvailabilityZones[].ZoneName'` 로 확인하고, 인자 이름이 막히면 [검색 가이드](/reference/search-guide/)의 Registry 동선을 탄다.
+
+   </details>
+
+3. `wskorea26-priv-subnet-c` 를 실수로 `wskorea26-public-rtb` 에 연결하면 채점의 어느 항목이 깨지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 1-2-A 다. 이 항목은 서브넷 ID 로 라우트 테이블을 역조회해 **이름 문자열**을 출력하고 기대값과 정확히 비교한다. 인터넷이 되는지는 보지 않으므로 통신이 멀쩡해도 실격이다. mark 1-1-A 는 CIDR 만 보므로 영향이 없다.
+
+   </details>
+
+4. NAT 게이트웨이 이름을 `book-ngw-c` 대신 `ngw-c` 로 만들면 mark 가 잡나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 1-2-A 는 프라이빗 RTB 의 기본 라우트에서 `NatGatewayId` 만 뽑으므로 NAT 이름을 비교하지 않는다. 반대로 VPC·서브넷·라우트 테이블은 전부 `Name` 태그로 조회하므로 그쪽 오타는 조회 자체가 실패한다. 이름 규칙은 과제지 요구이므로 `variables.tf` 의 `nat_name_prefix` 를 과제지대로 맞춘다.
+
+   </details>
+
 막히면 [트러블슈팅](/reference/troubleshooting/), 실습을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 한 번 돌린다.
 

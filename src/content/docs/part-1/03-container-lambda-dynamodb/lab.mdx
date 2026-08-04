@@ -264,5 +264,45 @@ aws ecr describe-repositories --repository-names wskorea26-book-repo 2>&1 # Repo
 
 CMK 는 PendingDeletion 7일 대기 — 정상. CloudShell 홈의 이미지/파일은 과금 대상이 아니므로 방치해도 되지만, 대회 습관상 `docker image prune -af` 로 정리한다.
 
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. GSI 이름이 `concert_name-created_at-index` 에서 다른 값으로 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   두 곳이다. `dynamodb.tf` 의 `global_secondary_index.name` 과 `lambda.tf` 의 `INDEX_NAME` 환경 변수다. `INDEX_NAME` 은 변수가 아니라 리터럴이라 한쪽만 고치면 Query 가 `ValidationException` 으로 죽는다. `grep -rn "concert_name-created_at-index" .` 로 두 건이 다 잡히는지 본다.
+
+   </details>
+
+2. Lambda 런타임 요구가 `python3.14` 에서 `python3.13` 으로 바뀌면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `variables.tf` 의 `lambda_runtime` 한 곳이다. `lambda.tf` 는 그 변수를 참조만 한다. mark 6-1-A 는 함수 이름·런타임·`TABLE_NAME` 세 값을 한 줄로 뽑아 정확히 비교하므로 런타임 문자열이 하나라도 다르면 그 항목이 통째로 실패한다.
+
+   </details>
+
+3. 조회 결과를 최신순이 아니라 오래된 순으로 내라면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `lambda/index.py` 의 Query 인자 `ScanIndexForward` 를 `True` 로 바꾼다. 테이블·GSI·실행역할은 그대로 둔다 — 정렬 방향은 인덱스 구조가 아니라 조회 옵션이기 때문이다. 인자 이름이 막히면 `aws dynamodb query help` 나 boto3 문서를 열고, 찾는 순서는 [검색 가이드](/reference/search-guide/)에 있다.
+
+   </details>
+
+4. 이미지를 `stable` 대신 `latest` 태그로 올리면 어느 체크가 깨지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 3-1-A 다. 이 항목은 `--image-ids imageTag=stable` 로 이미지를 지목해 태그 목록과 스캔 결과를 뽑는다. `stable` 이 없으면 조회부터 실패하고, `stable` 에 `latest` 를 덧붙이면 태그 목록이 두 개로 나와 기대 출력과 어긋난다.
+
+   </details>
+
 `apply` 가 실패하면 [01 실습의 apply 실패 세 갈래](/part-1/01-terraform-vpc/lab/)를 먼저 본다. 증상별 확인 명령은 [트러블슈팅](/reference/troubleshooting/), 실습을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 돌린다.
 

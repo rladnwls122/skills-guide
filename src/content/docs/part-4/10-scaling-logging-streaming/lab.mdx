@@ -272,3 +272,45 @@ cd ..\..\module-4\terraform ; terraform destroy -auto-approve   # module-4를 �
 :::caution[삭제 순서]
 Karpenter 노드가 남은 채 클러스터를 지우면 **고아 EC2가 남는다** — NodePool 삭제 후 노드 반환을 확인하고 클러스터를 삭제한다.
 :::
+
+---
+
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다. 답은 유형 3 정답지(`set-07/task-2/module-3-eks-scaling`) 실측 기준이다.
+
+1. SQS 큐 이름이 `skm-order-queue` 에서 바뀌면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   terraform 의 큐 이름 변수 한 곳이다. deployment 와 ScaledObject 는 `${SQS_URL}` 자리표시자를 terraform output 으로 치환하는 구조라 파일 자체는 그대로 두고 다시 렌더만 하면 된다. mark 3-1-A 가 `get-queue-url --queue-name` 으로 큐를 찾으므로 이름이 과제지와 정확히 같아야 한다.
+
+   </details>
+
+2. Pod 1개당 목표 메시지가 5건에서 10건으로 바뀌면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `k8s/30-keda-scaledobject.yaml` 의 `triggers[0].metadata.queueLength` 한 곳이다. `advanced.horizontalPodAutoscalerConfig` 의 scaleDown 설정은 그대로 둔다 — 그 값들은 스케일인 채점 창에 맞춘 것이지 목표치와 무관하다. mark 3-4-A 가 min·max·트리거 종류·queueLength 를 한 줄로 뽑아 비교한다. 필드 이름은 `kubectl explain scaledobject.spec.triggers` 로 확인하고, 동선은 [검색 가이드](/reference/search-guide/)에 있다.
+
+   </details>
+
+3. NodePool 의 인스턴스 타입 목록에 `t3.large` 를 더하면 어느 체크가 흔들리나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 3-5-A 다. 이 항목은 `node.kubernetes.io/instance-type` 요구 조건의 값 목록을 정렬해 콤마로 이어 출력하므로 목록이 늘면 그 줄이 그대로 달라진다. 같은 항목이 taint 개수와 EC2NodeClass 이름도 함께 본다. 과제지가 타입을 지정했다면 그 목록만 남긴다.
+
+   </details>
+
+4. `maxReplicaCount` 를 5에서 3으로 줄이면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 3-6-A 가 2분간 폴링해 최대 Ready 파드 수와 최대 앱 노드 수를 기록한다. 파드가 3에서 멈추면 기대치인 5를 못 채우고, 파드 CPU 요청 합이 노드 한 대의 할당 가능량을 넘지 못해 노드도 2대에 이르지 못한다. 한 값이 두 지표를 동시에 떨어뜨리는 자리다.
+
+   </details>

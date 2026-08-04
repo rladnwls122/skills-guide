@@ -196,5 +196,45 @@ cd terraform; terraform destroy -var "player_number=$env:NUM"
 
 `$env:NUM` 은 `.env.ps1` 이 담고 있다. 없으면 `$env:NUM = "<본인 비번호>"` 를 먼저 실행한다 — 값이 다르면 destroy 가 다른 이름의 리소스를 지우려 한다.
 
+## 8. 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. 오리진 검증 헤더 값이 `wskorea26-cf` 에서 다른 값으로 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `terraform/variables.tf` 의 `origin_verify_value` 한 곳이다. `cloudfront.tf` 의 `custom_header` 와 `alb.tf` 의 리스너 규칙 두 개가 같은 변수를 참조한다. 이 값은 mark 7-2-A 가 두 줄로, mark 8-4-A 가 헤더 이름과 짝지어 본다. `grep -rn "wskorea26-cf" *.tf` 가 `variables.tf` 한 건이면 된다.
+
+   </details>
+
+2. ALB 에 `/admin*` 경로용 규칙을 하나 더 두라면 어디를 고치고, 무엇을 조심하나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `alb.tf` 에 `aws_lb_listener_rule` 을 하나 더 쓴다. 조심할 곳은 mark 7-2-A 다 — 이 항목은 리스너의 **모든** 규칙에서 `HttpHeaderConfig.Values[]` 를 뽑아 `wskorea26-cf` 두 줄을 기대한다. 새 규칙에 헤더 조건을 또 달면 줄이 세 개가 되어 정확 일치가 깨진다. 조건 블록 이름이 막히면 [검색 가이드](/reference/search-guide/)를 거쳐 `aws_lb_listener_rule` 문서나 `aws elbv2 describe-rules help` 를 연다.
+
+   </details>
+
+3. 앱 헬스 경로가 `/health` 에서 `/healthz` 로 바뀌면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   두 곳이다. `terraform/alb.tf` 의 타깃그룹 `health_check.path` 와 `k8s/app/deployment.yaml` 의 readiness·liveness probe 경로다. mark 7-1-A 는 헬스체크 설정을 보지 않지만, 타깃이 unhealthy 로 남으면 7-2-A 의 `curl` 과 9-1-A~9-3-A 앱 테스트가 함께 무너진다.
+
+   </details>
+
+4. 네임스페이스가 `wskorea26` 에서 다른 이름으로 바뀌면 어디까지 번지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `k8s/00-namespaces.yaml`, deployment·service·pdb·TargetGroupBinding 의 `namespace`, 그리고 `eksctl/cluster.yaml` 의 IRSA serviceAccount 네임스페이스까지다. mark 5-4-A 가 `kubectl get namespace <이름>` 으로 존재를 확인하고, 이어서 그 네임스페이스 파드가 올라간 노드의 `node-type` 라벨을 본다.
+
+   </details>
+
 막히면 [트러블슈팅](/reference/troubleshooting/), 그날을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 돌린다.
 

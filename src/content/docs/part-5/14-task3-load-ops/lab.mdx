@@ -334,6 +334,46 @@ aws cloudfront create-invalidation --distribution-id <id> --paths "/images/*"
   /reference/troubleshooting/ 에 추가
 ```
 
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다. 3과제는 mark 스크립트가 없고 네 축으로 채점한다 — 비정상 요청 처리·고가용성 및 안정성·성능 효율성·비용 최적화다(`task-3/mark-sample.md`).
+
+1. 과제지가 비번호와 DB 비밀번호를 다른 값으로 지정하면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `terraform/terraform.tfvars` 의 `player_number`·`db_password` 와, 셸의 `$env:DB_PASSWORD` 를 함께 바꾼다. tfvars 쪽은 RDS 와 RDS Proxy 가 실제로 만드는 값이고, 환경 변수는 매니페스트의 `<DB_PASSWORD>` 자리를 치환할 때만 쓰인다. 두 값이 어긋나면 인프라는 정상으로 뜨는데 앱만 DB 인증에 실패해 배포 실패가 아니라 런타임 500 으로 나타난다.
+
+   </details>
+
+2. 노드 상한을 9대에서 12대로 올리라면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `k8s/01-nodepool.yaml` 의 `limits.cpu` 와 앱 매니페스트 HPA 의 `maxReplicas` 를 함께 올린다. 상한 하나만 올리면 파드가 안 늘어 노드도 안 는다. 인스턴스 타입 목록은 `requirements` 한 곳이고 Auto Mode 가 vCPU 1개 이하를 거부하므로 t3.medium 아래로는 못 내린다. 필드 이름은 `kubectl explain nodepool.spec.limits` 로 확인하고, 동선은 [검색 가이드](/reference/search-guide/)에 있다.
+
+   </details>
+
+3. 그 변경은 어느 판정 축에 닿나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   두 축이 반대로 움직인다. 고가용성·성능 효율성 축은 로드 처리 비율과 응답 시간 구간으로 배점되므로 오르고, 비용 최적화 축은 노드 수의 함수라 내려간다. 그래서 노브는 한 번에 하나만 바꾸고 같은 조건으로 재측정한다.
+
+   </details>
+
+4. user API 응답 시간 기준이 0.2초에서 0.1초로 강화되면 어디부터 보나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `db/02-index.sql` 의 `email` 인덱스다. 성능 효율성 축은 "응답 시간 기준 이하 비율" 을 구간별로 나눠 배점하므로 기준이 내려가면 데이터 계층이 먼저 걸린다. 확인은 DB 에서 `EXPLAIN SELECT ... WHERE email=` 이고, 그다음이 파드 CPU limit 유무다.
+
+   </details>
+
 ## 오답 노트 양식 (3열)
 
 ```

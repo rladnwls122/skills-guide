@@ -280,3 +280,52 @@ cd terraform; terraform destroy -var "player_number=$env:NUM"
 2. 10단계를 순서만 백지에 쓴다 (각 단계 한 줄 이유 포함).
 3. 함정 표를 가리고 8개 이상 복기.
 
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다. 이 모듈은 통합 배포라 값 하나가 여러 컴포넌트에 걸친다.
+
+1. 비번호가 `103` 에서 `217` 로 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `terraform.tfvars` 의 `player_number` 한 곳과, 셸의 `$env:NUM` 이다. 버킷 이름 `wskorea26-concert-bucket-<비번호>` 와 Grafana 계정 `skills-<비번호>-admin` 이 여기서 파생된다. `$env:NUM` 이 어긋나면 마지막 `terraform destroy -var "player_number=$env:NUM"` 이 다른 이름의 리소스를 지우려 든다.
+
+   </details>
+
+2. CloudFront 에 `/admin*` 경로를 ALB 로 보내라면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `cloudfront.tf` 에 `ordered_cache_behavior` 를 하나 더 쓴다. 오리진 두 개·OAC·버킷 정책·ALB 리스너 규칙은 그대로 둔다 — 새 경로도 같은 ALB 오리진을 재사용하기 때문이다. mark 8-3-A 는 `/book*` 을 지목해 조회하므로 기존 항목은 그대로 통과한다. 인자 이름이 막히면 [검색 가이드](/reference/search-guide/)를 거쳐 `aws_cloudfront_distribution` 문서를 연다.
+
+   </details>
+
+3. ALB 이름이 `wskorea26-book-alb` 에서 바뀌면 어디까지 영향이 가나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark.sh 는 맨 앞에서 이 이름으로 ALB ARN·DNS·리스너 ARN 을 얻는다. 이름이 다르면 mark 7-1-A·7-2-A 가 조회부터 실패하고, 오리진 도메인을 비교하는 8-2-A 도 어긋난다. 고칠 곳은 `variables.tf` 의 `book_alb_name` 한 곳이다.
+
+   </details>
+
+4. Grafana 비밀번호가 과제지에서 바뀌면 어느 체크가 걸리나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 10-1 이다. 이 항목은 수동 채점이라 스크립트가 접속 URL 과 계정만 찍고 채점자가 직접 로그인한다. 로그인이 안 되면 Monitoring 3.5점을 통째로 잃는다. 고칠 곳은 `variables.tf` 의 `grafana_admin_password` 와 helm values 이고, PowerShell 에서는 `$` 가 든 값을 작은따옴표로만 쓴다.
+
+   </details>
+
+5. 커스텀 헤더 두 개 중 `wskorea26-s3-access` 가 불필요해 보여 지우면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 8-4-A 는 배포의 모든 오리진에서 커스텀 헤더를 이름·값 쌍으로 전부 뽑아 두 줄을 기대한다. 하나를 지우면 한 줄만 나와 정확 일치가 깨진다. 값은 `variables.tf` 의 `origin_verify_header`·`s3_access_header` 에 있고, 중복돼 보여도 과제지 요구 그대로 둔다.
+
+   </details>
+

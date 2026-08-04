@@ -203,5 +203,45 @@ aws logs delete-log-group --log-group-name /wsc2026/eks/book-app   # Terraform �
 
 </details>
 
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. 로그 그룹 이름이 `/wsc2026/eks/book-app` 에서 다른 값으로 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   두 곳이다. `logging/fluent-bit.yaml` 의 `cloudwatch_logs` OUTPUT 에 있는 `log_group_name` 과, 그 그룹을 먼저 만드는 Terraform 로그 그룹 리소스다. 같은 블록의 `auto_create_group false` 는 그대로 둔다 — Fluent Bit 이 그룹을 만들면 CMK 암호화가 빠진다. 확인은 `aws logs tail <새 그룹> --since 10m` 이다.
+
+   </details>
+
+2. Grafana 관리자 비밀번호가 과제지에서 바뀌면 어느 체크가 깨지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 11-2 다. 이 항목은 그 계정으로 `/api/datasources` 와 `/api/search` 를 호출해 데이터소스 3종과 대시보드 제목을 뽑는다. 비밀번호가 다르면 두 목록이 모두 빈다. 11-3 의 수동 접속도 같은 계정이다. 고칠 곳은 `monitoring/kube-prometheus-stack-values.yaml` 의 `adminPassword` 다.
+
+   </details>
+
+3. Fluent Bit 을 `observability` 가 아닌 `logging` 네임스페이스에 배포하면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 11-1 이 `observability` 네임스페이스에서 `fluent-bit`·`prometheus`·`grafana` 이름을 가진 Running 파드 수를 센다. 다른 네임스페이스에 있으면 그 수가 0 이다. 파이프라인은 동작하는데 채점만 0점이 되는 형태라 배포 전에 네임스페이스부터 과제지와 맞춘다.
+
+   </details>
+
+4. 알람을 6종에서 7종으로 늘리라면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `monitoring/prometheus-rules.yaml` 의 그룹 아래에 `alert` 를 하나 더 쓰고, Grafana 대시보드의 Alerts 로우에도 추가한다. helm values 는 그대로 둔다 — `ruleSelectorNilUsesHelmValues: false` 덕에 새 PrometheusRule 이 자동으로 잡히고, `defaultRules.create: false` 도 유지해야 기본 번들 알람이 섞이지 않는다. 필드 이름은 `kubectl explain prometheusrule.spec.groups` 로 확인하고, 찾는 순서는 [검색 가이드](/reference/search-guide/)에 있다.
+
+   </details>
+
 막히면 [트러블슈팅](/reference/troubleshooting/), 그날을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 돌린다.
 

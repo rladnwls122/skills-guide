@@ -259,5 +259,45 @@ eksctl delete cluster -f cluster.rendered.yaml --disable-nodegroup-eviction
 # terraform 리소스(VPC 등)는 PART-2 전체 종료 전까지 유지 가능 — NAT 시간당 과금은 인지할 것
 ```
 
+## 7. 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. 클러스터 이름이 `wskorea26-cluster` 에서 다른 값으로 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   파일 안의 리터럴은 `eksctl/cluster.yaml` 의 `metadata.name` 한 곳뿐이다. `terraform/variables.tf` 의 `cluster_name` 은 선언만 있고 어느 리소스도 참조하지 않는다 — `grep -rn "var.cluster_name" *.tf` 가 0건이다. 나머지는 명령 인자다: `aws eks update-kubeconfig --name` 과 LBC helm 의 `--set clusterName`. mark 5-1-A 부터 5-4-A 까지 전부 이 이름으로 클러스터를 찾는다.
+
+   </details>
+
+2. EKS 버전 요구가 `1.35` 에서 `1.34` 로 바뀌면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `cluster.yaml` 의 `version` 한 곳이다. 값에 따옴표를 빼면 YAML 이 숫자로 읽어 `1.34` 가 소수로 파싱된다. mark 5-1-A 는 `wskorea26-cluster 1.35` 처럼 이름과 버전을 한 줄로 비교하므로 문자열이 그대로 맞아야 한다.
+
+   </details>
+
+3. 노드그룹을 addon·app 둘에서 셋으로 늘리라면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `cluster.yaml` 의 `managedNodeGroups` 에 항목을 하나 더 넣고 `labels`·`tags.Name`·`instanceName` 을 과제지 이름대로 채운다. `vpc.subnets` 와 `iam.serviceAccounts` 는 그대로 둔다 — 노드그룹이 같은 프라이빗 서브넷 두 개를 공유하기 때문이다. 필드 이름이 막히면 `eksctl utils schema` 출력이나 [schema.eksctl.io](https://schema.eksctl.io/)를 열고, 찾는 순서는 [검색 가이드](/reference/search-guide/)에 있다.
+
+   </details>
+
+4. `addonsConfig.disableDefaultAddons` 를 빼면 어느 체크가 흔들리나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 5-4-A 다. 이 항목은 kube-system 파드가 올라간 노드의 `node-type` 라벨을 뽑아 중복을 지우고 출력한다. 기대값은 `addon` 한 줄인데, 기본 애드온이 설치되면 metrics-server 가 app 노드에 스케줄돼 `app` 이 함께 나온다. 예외로 빠지는 것은 `aws-node` 와 `kube-proxy` 둘뿐이다.
+
+   </details>
+
 막히면 [트러블슈팅](/reference/troubleshooting/), 그날을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 돌린다.
 

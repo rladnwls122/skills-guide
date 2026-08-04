@@ -65,6 +65,8 @@ sidebar:
 - 정상 출력 vs 고장 출력에서 새로 외운 차이:
 ```
 
-:::caution[종료 후]
-스택 destroy 잊지 말 것 (README의 과금 절차).
+:::caution[종료 후 — 과금]
+이 드릴은 set-02 1과제 스택을 **켜 둔 채로** 돈다. EKS 컨트롤 플레인·NAT 게이트웨이·ALB 2대·CloudFront 가 전부 시간당 과금이라, 12개 시나리오를 하루에 다 못 끝냈어도 그날 안에 지운다.
+
+정리 순서는 [07 실습 ⑩](/part-2/07-full-deploy-set02/lab/)과 같다 — helm → `eksctl delete cluster` → DynamoDB 삭제방지 해제 → `terraform destroy`. 지운 뒤 [잔존 리소스 점검](/reference/cleanup-check/)을 돌려 빈 출력을 확인한다.
 :::

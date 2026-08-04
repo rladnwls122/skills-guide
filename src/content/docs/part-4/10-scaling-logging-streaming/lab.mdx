@@ -9,7 +9,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
-정답지: `skills-2026/set-07/task-2/`. terraform은 본 PC(PowerShell), 클러스터/헬름/이미지 빌드는 CloudShell(Docker 내장)에서 한다 — 채점과 같은 셸이라 클러스터 생성자 신원 = 채점 신원이 자동 일치한다. 상세 명령 전문은 각 모듈 README 런북에 있다. 이 랩은 순서·검증·함정에 집중한다.
+정답지: `skills-2026/set-07/task-2/` — 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 경로는 클론 루트 `~\skills-2026` 기준이다. terraform은 본 PC(PowerShell), 클러스터/헬름/이미지 빌드는 CloudShell(Docker 내장)에서 한다 — 채점과 같은 셸이라 클러스터 생성자 신원 = 채점 신원이 자동 일치한다. 상세 명령 전문은 각 모듈 README 런북에 있다. 이 랩은 순서·검증·함정에 집중한다.
 
 ## 실습 목표
 
@@ -253,7 +253,7 @@ eksctl delete cluster --name o11y-cluster --region ap-northeast-1
 
 ```powershell
 # 본 PC
-cd skills-2026\set-07\task-2\module-3-eks-scaling\terraform ; terraform destroy -auto-approve
+cd ~\skills-2026\set-07\task-2\module-3-eks-scaling\terraform ; terraform destroy -auto-approve
 cd ..\..\module-4\terraform ; terraform destroy -auto-approve   # module-4를 배포했을 때만
 ```
 

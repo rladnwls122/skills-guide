@@ -22,6 +22,8 @@ import { Steps } from '@astrojs/starlight/components';
 
 ## 사전 준비
 
+정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 정답지 경로는 클론 루트 `~\skills-2026` 기준이다.
+
 ```powershell
 mkdir my-cdn-lab; cd my-cdn-lab
 # 업로드할 더미 정적 파일
@@ -83,7 +85,10 @@ mkdir provided
 3. **apply & 검증**
 
    ```powershell
-   terraform init && terraform fmt && terraform validate && terraform apply
+   terraform init
+   terraform fmt
+   terraform validate
+   terraform apply
    # CloudFront 배포 완료까지 수 분 소요
 
    $BUCKET = terraform output -raw s3_bucket_name
@@ -121,7 +126,15 @@ mkdir provided
 
    </details>
 
-   배포 완료 대기가 필요하면: `aws cloudfront wait distribution-deployed --id <배포ID>`.
+   배포 완료를 기다려야 하면 배포 ID 를 먼저 조회한다. CloudFront 배포에는 Name 태그가 없어 `comment` 로 찾는다.
+
+   ```powershell
+   $CF_ID = aws cloudfront list-distributions `
+     --query "DistributionList.Items[?Comment=='wskorea26-concert-cf'].Id | [0]" --output text
+   aws cloudfront wait distribution-deployed --id "$CF_ID"
+   ```
+
+   기대: `$CF_ID` 가 `E` 로 시작하는 13자 안팎의 문자열. `None` 이 나오면 comment 값이 스펙과 다른 것이다.
 
 4. **(심화) root-less 키 정책으로 재작성**
 
@@ -141,11 +154,11 @@ mkdir provided
 5. **정답과 diff**
 
    ```powershell
-   git diff --no-index .\kms.tf C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\kms.tf
-   git diff --no-index .\s3.tf  C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\s3.tf
-   git diff --no-index .\cloudfront.tf C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\cloudfront.tf
+   git diff --no-index .\kms.tf $HOME\skills-2026\set-02\task-1\terraform\kms.tf
+   git diff --no-index .\s3.tf  $HOME\skills-2026\set-02\task-1\terraform\s3.tf
+   git diff --no-index .\cloudfront.tf $HOME\skills-2026\set-02\task-1\terraform\cloudfront.tf
    # 심화 diff
-   git diff --no-index .\kms.tf C:\Users\kryuk\practice\skills-2026\set-03\task-1\terraform\kms.tf
+   git diff --no-index .\kms.tf $HOME\skills-2026\set-03\task-1\terraform\kms.tf
    ```
 
    <details class="diagram-note">
@@ -190,9 +203,9 @@ mkdir provided
    정답 대조:
 
    ```powershell
-   git diff --no-index .\waf.tf C:\Users\kryuk\practice\skills-2026\set-03\task-1\terraform\waf.tf
+   git diff --no-index .\waf.tf $HOME\skills-2026\set-03\task-1\terraform\waf.tf
    # 관리형 규칙 그룹 구조를 보고 싶다면(set-07 은 이 모듈의 스펙과 다르므로 참고용)
-   git diff --no-index .\waf.tf C:\Users\kryuk\practice\skills-2026\set-07\task-1\terraform\waf.tf
+   git diff --no-index .\waf.tf $HOME\skills-2026\set-07\task-1\terraform\waf.tf
    ```
 
 </Steps>
@@ -201,6 +214,7 @@ mkdir provided
 
 | 함정 | 증상 / 결과 |
 |---|---|
+| PowerShell 5.1 에서 `&&` 로 명령 연결 | `'&&' 연산자는 예약되어 있습니다` 파서 에러 — 줄을 나눠 실행 |
 | 키 정책에 배포 ARN 직접 참조 | `Error: Cycle` — SourceAccount 조건으로 우회 |
 | 버킷 정책 없이 퍼블릭 차단만 | `get-bucket-policy-status` 호출 에러 → mark 2-2 실패 |
 | 객체 content_type 누락 | 브라우저가 html 을 다운로드 (기본 octet-stream) |
@@ -239,3 +253,5 @@ aws kms describe-key --key-id alias/wskorea26-s3-key 2>&1   # NotFoundException 
 :::note[실측]
 KMS 키는 즉시 삭제되지 않고 **PendingDeletion(7일)** 상태로 남는다 — 정상이며 대기 중 과금 없음. 같은 이름 키를 바로 다시 만들어도 alias 는 재사용 가능(이전 alias 는 destroy 로 삭제됨).
 :::
+
+`apply` 가 실패하면 [01 실습의 apply 실패 세 갈래](/part-1/01-terraform-vpc/lab/)를 먼저 본다. 증상별 확인 명령은 [트러블슈팅](/reference/troubleshooting/), 실습을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 돌린다.

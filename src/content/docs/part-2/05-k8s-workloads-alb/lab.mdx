@@ -16,13 +16,16 @@ sidebar:
 - [ ] TG 타깃 healthy 확인 + ALB 403/규칙 채점 명령 셀프 검증
 - [ ] Pod 강제 삭제로 self-healing과 graceful shutdown 관찰
 
-전제: 04의 클러스터가 떠 있고 `.env.ps1` 로드됨. 컨테이너 이미지가 ECR에 `stable` 태그로 존재
-(아직이면 06 lab의 2단계를 먼저 — 기본 CloudShell에서 docker build/push).
+## 0. 사전 준비
+
+- 정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론). 경로는 클론 루트 `~\skills-2026` 기준이다.
+- [04 실습](/part-2/04-eksctl-cluster/lab/)의 클러스터가 떠 있고, 같은 문서의 `.env.ps1` 이 만들어져 있어야 한다. 이 실습이 쓰는 `$env:VPC_ID`·`$env:ECR`·`$env:APP_TG`·`$env:ALB_DNS` 는 전부 그 파일에서 온다.
+- 컨테이너 이미지가 ECR 에 `stable` 태그로 올라가 있어야 한다. 아직이면 [03 실습의 4단계](/part-1/03-container-lambda-dynamodb/lab/)를 먼저 한다 — 기본 CloudShell 에서 docker build/push 다.
 
 ## 1. AWS Load Balancer Controller
 
 ```powershell
-cd C:\Users\kryuk\practice\skills-2026\set-02\task-1
+cd ~\skills-2026\set-02\task-1
 . .\.env.ps1
 
 helm repo add eks https://aws.github.io/eks-charts; helm repo update
@@ -52,6 +55,23 @@ kubectl -n kube-system get pod -l app.kubernetes.io/name=aws-load-balancer-contr
 기대: `2/2 READY`, 두 Pod 모두 **addon 노드** 위 (NODE 열의 노드를 `kubectl get node -L node-type`로 확인).
 
 ## 2. book 앱 배포 (순서 중요)
+
+치환에 쓸 두 변수부터 확인한다. 비어 있으면 아래 apply 가 자리표시자를 그대로 넣어 `ImagePullBackOff` 로 간다.
+
+```powershell
+$env:ECR ; $env:APP_TG
+```
+
+기대: ECR 리포지토리 URI 한 줄(`<계정ID>.dkr.ecr.ap-northeast-2.amazonaws.com/wskorea26-book-repo`)과 타깃그룹 ARN 한 줄. 빈 줄이 나오면 `set-02\task-1` 에서 `. .\.env.ps1` 을 다시 실행한다. `.env.ps1` 자체가 없으면 이름으로 직접 조회해도 된다.
+
+```powershell
+$env:ECR    = aws ecr describe-repositories --repository-names wskorea26-book-repo `
+  --query 'repositories[0].repositoryUri' --output text
+$env:APP_TG = aws elbv2 describe-target-groups --names wskorea26-book-tg `
+  --query 'TargetGroups[0].TargetGroupArn' --output text
+$env:ALB_DNS = aws elbv2 describe-load-balancers --names wskorea26-book-alb `
+  --query 'LoadBalancers[0].DNSName' --output text
+```
 
 ```powershell
 cd k8s
@@ -158,9 +178,14 @@ kubectl -n wskorea26 get pod -w      # Ctrl+C로 중단
 :::
 
 ```powershell
+cd ~\skills-2026\set-02\task-1
 helm -n kube-system uninstall aws-load-balancer-controller
 eksctl delete cluster -f eksctl/cluster.rendered.yaml --disable-nodegroup-eviction
 aws dynamodb update-table --table-name wskorea26-data-table --no-deletion-protection-enabled
 cd terraform; terraform destroy -var "player_number=$env:NUM"
 ```
+
+`$env:NUM` 은 `.env.ps1` 이 담고 있다. 없으면 `$env:NUM = "<본인 비번호>"` 를 먼저 실행한다 — 값이 다르면 destroy 가 다른 이름의 리소스를 지우려 한다.
+
+막히면 [트러블슈팅](/reference/troubleshooting/), 그날을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 돌린다.
 

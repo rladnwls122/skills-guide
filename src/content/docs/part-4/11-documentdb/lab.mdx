@@ -11,7 +11,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 원리와 채점 관점은 [11 이론 — DocumentDB NoSQL](/part-4/11-documentdb/theory/)에 있다.
 
-이 실습 절차는 문제지·지급 코드(`docdb_client.py`)와 2026-08-01 정정본의 판정 기준을 근거로 한다. 같은 구성의 Terraform 정답은 `skills-2026`의 브랜치 `set-08/task-2`, `set-08/task-2/module-1-nosql`이다 — 이 실습은 콘솔·CLI로 손에 익히는 경로이므로 먼저 스스로 만든 뒤 대조한다. 명령은 PowerShell 기준이고 리전은 전부 `ap-northeast-2`(서울)로 고정한다. 지급 파일 경로는 예시(`national-skills-v7\2과제\모듈1_지급파일`)를 그대로 썼다 — 실제 대회에서는 대회 플랫폼이 지급하는 경로로 바꾼다.
+이 실습 절차는 문제지·지급 코드(`docdb_client.py`)와 2026-08-01 정정본의 판정 기준을 근거로 한다. 같은 구성의 Terraform 정답은 `skills-2026`의 브랜치 `set-08/task-2`, `set-08/task-2/module-1-nosql`이다 — 이 실습은 콘솔·CLI로 손에 익히는 경로이므로 먼저 스스로 만든 뒤 대조한다. 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론) 후 `git switch set-08/task-2` 로 브랜치를 바꾼다(`main` 에는 병합돼 있지 않다). 명령은 PowerShell 기준이고 리전은 전부 `ap-northeast-2`(서울)로 고정한다. 지급 파일 경로는 1단계에서 `$PROVIDED` 변수 하나로 잡고 그 뒤로는 변수만 쓴다 — 실제 대회에서는 그 한 줄만 대회 플랫폼이 지급한 경로로 바꾼다.
 
 ## 실습 목표
 
@@ -31,8 +31,12 @@ import { Steps } from '@astrojs/starlight/components';
 
    DocumentDB 서브넷 그룹은 서로 다른 AZ의 서브넷 2개 이상이 필요하다. 새 VPC를 만들지 않고 리전 기본 VPC의 기본 서브넷을 쓴다(계정에 기본 VPC가 없다면 [vpc-basics](/start/vpc-basics/)대로 서브넷 2개 이상을 먼저 만든다).
 
+   지급 파일(`docdb_client.py`·`retail_dataset.json`)이 놓인 폴더를 변수 하나로 잡아 둔다. 뒤의 `scp` 가 이 변수를 쓴다 — 대회에서는 대회 플랫폼이 내려 준 폴더로 값만 바꾼다.
+
    ```powershell
    $env:AWS_DEFAULT_REGION = "ap-northeast-2"
+   $PROVIDED = "$HOME\Downloads\2과제\모듈1_지급파일"   # 본인 지급 파일 폴더로 교체
+   Get-ChildItem $PROVIDED                              # 기대: docdb_client.py, retail_dataset.json
 
    $subnets = aws ec2 describe-subnets --filters "Name=default-for-az,Values=true" --query "Subnets[].SubnetId" --output json | ConvertFrom-Json
    $SUBNET_1 = $subnets[0]
@@ -214,7 +218,7 @@ import { Steps } from '@astrojs/starlight/components';
 7. **지급 코드 배치 + 서비스 기동**
 
    ```powershell
-   scp -i skills-nosql-key.pem "C:\Users\kryuk\Downloads\national-skills-v7\2과제\모듈1_지급파일\docdb_client.py" "C:\Users\kryuk\Downloads\national-skills-v7\2과제\모듈1_지급파일\retail_dataset.json" ec2-user@${CLIENT_IP}:/tmp/
+   scp -i skills-nosql-key.pem "$PROVIDED\docdb_client.py" "$PROVIDED\retail_dataset.json" ec2-user@${CLIENT_IP}:/tmp/
    ssh -i skills-nosql-key.pem ec2-user@$CLIENT_IP "sudo mv /tmp/docdb_client.py /tmp/retail_dataset.json /opt/skills-nosql/ && sudo systemctl start skills-nosql"
    ```
 

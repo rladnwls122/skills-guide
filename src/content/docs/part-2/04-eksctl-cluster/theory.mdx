@@ -22,6 +22,8 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 컨트롤 플레인·데이터 플레인·노드그룹·애드온이 각각 무엇인지는 [eks-basics](/start/eks-basics/)에 정의가 있다.
 
+eksctl 이 실제로 하는 일은 CloudFormation 스택을 대신 짜는 것이다. YAML 한 장을 읽어 **클러스터 → OIDC/서비스 계정 → 노드그룹** 순으로 스택 세 벌을 만들고, 앞 단계가 끝나야 뒤 단계를 건다. 콘솔 클릭이나 `aws eks create-cluster` 로는 이 순서와 사이에 필요한 IAM 역할·보안 그룹을 사람이 직접 챙겨야 한다. 생성에 약 20분이 걸리는 것도 스택 세 벌이 직렬로 도는 시간이다.
+
 **② 왜 (채점 관점)** — 채점은 `aws eks describe-cluster / describe-nodegroup` 출력을 정확 비교한다(mark 5-1~5-3: 버전 1.35, 로그 5종, KMS 별칭, 서브넷 이름, 노드그룹 이름/타입/tags.Name). 콘솔 클릭보다 YAML 한 장이 재현·수정(30% 변동 대비)에 압도적으로 유리하다.
 
 **③ 원리**
@@ -71,14 +73,16 @@ ClusterConfig 한 장에 들어가는 최상위 블록들이다. `vpc` 는 기�
 **① 한 줄 정의**
 - **IRSA**: OIDC 공급자를 통해 ServiceAccount 토큰으로 IAM 역할을 위임받는 방식(노드 상주 컴포넌트 없음).
 - **Pod Identity**: `eks-pod-identity-agent` DaemonSet이 노드에서 자격증명을 중계하는 신형 방식.
-- **Access Entry**: **사람/도구의 kubectl 접근**을 aws-auth ConfigMap 대신 EKS API(`authenticationMode: API`)로 관리하는 방식 — 위 둘(Pod용)과 축이 다르다.
+- **Access Entry**: **사람/도구의 kubectl 접근**을 EKS API 로 관리하는 방식. 예전에는 클러스터 안의 aws-auth ConfigMap 을 고쳐 IAM 신원을 등록했는데, Access Entry 는 그 매핑을 EKS API 쪽으로 옮긴다. 켜는 스위치가 `authenticationMode: API` 다.
+
+앞의 둘은 파드에 AWS 권한을 주는 방식이고, Access Entry 는 사람이 클러스터를 조작할 권한을 주는 방식이다. 축이 다르므로 서로 대체 관계가 아니다.
 
 앞의 두 방식은 [eks-basics 의 IRSA·Pod Identity 절](/start/eks-basics/#irsa와-eks-pod-identity)이 먼저 다룬다. Access Entry 는 그 문서에 없는 개념이라 이 문서가 정의를 맡는다.
 
 **② 왜 (채점 관점 — 여기가 갈림길)**
 
 :::danger[세트별 채점 갈림]
-**set-02는 반드시 IRSA.** mark 5-4는 "kube-system 파드(aws-node/kube-proxy 제외)는 전부 addon 노드"를 검사한다. Pod Identity를 쓰면 `eks-pod-identity-agent` **DaemonSet이 app 노드에도 떠서 5-4 감점**.
+**set-02는 반드시 IRSA.** mark 5-4는 "kube-system 파드(aws-node/kube-proxy 제외)는 전부 addon 노드"를 검사한다. 그런데 Pod Identity 는 `eks-pod-identity-agent` 를 DaemonSet 으로 깔고, DaemonSet 은 정의상 **모든 노드에 하나씩** 뜬다. 그래서 app 노드에도 kube-system 파드가 하나 생겨 **5-4 감점**이다.
 **set-03/07은 Pod Identity + Access Entry(authMode=API, aws-auth 미사용)** — 해당 세트엔 5-4 같은 노드 배치 검사가 없어 신형 방식을 쓴다.
 :::
 
@@ -161,8 +165,14 @@ YAML 작성법 비교 (실측):
 | Terraform 준비물 | IAM **정책**(attachPolicyARNs로 참조) | IAM **역할**(trust=pods.eks.amazonaws.com) |
 | kubectl 인증 | Access Entry (authMode=API) | Access Entry (authMode=API) — **공통** |
 | aws-auth ConfigMap | 미사용 | 미사용 |
-| 엔드포인트 | public+private (본 PC에서 kubectl) | fully private (`privateCluster.enabled`) — kubectl은 VPC CloudShell |
-| EBS CSI | 미설치 (csi-node DaemonSet도 5-4 위반) → Prometheus emptyDir | 세트 요구에 따름 |
+| 엔드포인트 | public+private | fully private (`privateCluster.enabled`) |
+| EBS CSI | 미설치 | 세트 요구에 따름 |
+
+마지막 두 줄은 결과만 적었다. 이유는 이렇다.
+
+**엔드포인트** — set-02 는 public 이 함께 열려 있어 본 PC 에서 바로 kubectl 을 쓴다. set-03·07 은 private 만 열리므로 kubectl 을 VPC CloudShell 에서 실행해야 한다.
+
+**EBS CSI** — set-02 가 이 애드온을 깔지 않는 이유도 mark 5-4 다. EBS CSI 는 노드마다 `ebs-csi-node` DaemonSet 을 띄우는데, 그 파드가 app 노드에 뜬 kube-system 파드가 되어 배치 검사에 걸린다. 그래서 Prometheus 의 저장소도 PVC 대신 emptyDir 로 둔다.
 
 ---
 

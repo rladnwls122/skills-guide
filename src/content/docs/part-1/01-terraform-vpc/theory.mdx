@@ -22,6 +22,8 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 **① 한 줄 정의** — provider 는 Terraform 이 AWS API 를 호출할 때 쓰는 플러그인이고, `required_providers` 블록으로 버전을 고정한다.
 
+provider 블록이 리전을 갖는 이유는 AWS API 자체가 리전별로 나뉘어 있기 때문이다. VPC·S3 버킷·KMS 키 같은 리소스는 만들어진 리전 안에만 존재하고, 호출 주소(엔드포인트)도 `ec2.ap-northeast-2.amazonaws.com` 처럼 리전이 박혀 있다. provider 의 `region` 이 그 주소를 정하므로, 이 값이 그 provider 로 만드는 모든 리소스의 위치가 된다. 다른 리전에도 리소스를 만들어야 하면 provider 를 하나 더 선언해 별칭(alias)을 붙인다.
+
 **② 왜 필요한가 (채점 관점)** — 대회 규칙상 SW 버전은 최신 안정 버전으로 **고정**해야 한다(latest 금지). 또 리전이 틀리면 mark.sh가 리소스를 아예 못 찾아 전 항목 0점이 된다. 리전은 반드시 변수로 주입한다.
 
 **③ 핵심 원리** — set-02 실측:

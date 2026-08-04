@@ -222,6 +222,8 @@ resource "aws_dynamodb_table" "data" {
 
 [`aws_dynamodb_table`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/dynamodb_table) 정의 한 벌이다. `attribute` 블록에는 키로 쓰는 속성 셋만 적는다 — 나머지 필드는 스키마리스라 선언하지 않는다. GSI 는 `concert_name` 을 HASH, `created_at` 을 RANGE 로 두어 정렬 축을 만들고 `projection_type = "ALL"` 로 모든 필드를 함께 복제한다. 삭제방지·SSE·PITR 셋이 각각 별도 채점 항목이다.
 
+나머지 두 필드도 한 줄씩 붙인다. `billing_mode = "PAY_PER_REQUEST"` 는 읽기·쓰기 용량을 미리 잡아 두지 않고 요청 건수만큼 과금하는 온디맨드 모드다. 대회처럼 트래픽을 예측할 수 없고 몇 시간만 띄우는 환경에서는 용량 산정 자체가 필요 없어진다. `point_in_time_recovery` 는 최근 35일 중 임의 시각으로 테이블을 되돌리는 연속 백업이고, 켜기만 하면 별도 설정이 없다.
+
 </details>
 
 - `attribute` 는 **키로 쓰는 속성만** 정의한다. 비키 속성을 정의하면 오히려 validate 에러.
@@ -245,7 +247,9 @@ item[field] = Decimal(str(score))                              # 저장 시에�
 
 ## 4. Lambda — ALB 통합 조회 함수
 
-**① 한 줄 정의** — ALB Lambda 타깃으로 호출되는 함수는 `queryStringParameters` 를 읽어 GSI Query 하고, `statusCode`·`headers`·`isBase64Encoded` 를 갖춘 객체로 응답해야 한다(이 셋이 ALB 가 요구하는 필수 항목이다).
+**① 한 줄 정의** — ALB Lambda 타깃 함수는 입력·처리·출력이 각각 정해져 있다.
+
+입력은 ALB 가 넘기는 이벤트의 `queryStringParameters` 다. 처리는 그 값으로 GSI 를 Query 하는 것이다. 출력은 평범한 JSON 이 아니라 `statusCode`·`headers`·`isBase64Encoded` 를 갖춘 객체다 — ALB 가 이 필드들을 읽어 HTTP 응답을 조립하므로, 하나라도 빠지면 함수가 성공해도 ALB 가 502 를 낸다.
 
 "누가 부르느냐로 Lambda 의 이벤트 모양이 갈린다"는 전제는 [serverless-basics 의 Lambda 절](/start/serverless-basics/#1-lambda--누가-부르느냐로-동작이-갈린다)에 있다.
 
@@ -328,6 +332,7 @@ def handler(event, context):
 - **ensure_ascii=False** — 기본값(True)이면 `"akaね"` 로 나가 문자열 비교 실패.
 - **queryStringParameters 없으면 400 / 결과 없으면 [] + 200** — 예외가 아니라 명세.
 - **env 주입** — Terraform 에서 `TABLE_NAME = aws_dynamodb_table.data.name` (mark 6-1 이 env 검사).
+- **`LastEvaluatedKey` 루프** — Query 한 번이 돌려주는 양은 최대 1MB 다. 1MB 를 넘으면 DynamoDB 가 거기서 끊고 다음 시작점을 `LastEvaluatedKey` 로 돌려주므로, 그 값이 나오는 동안 `ExclusiveStartKey` 에 넣어 다시 Query 해야 전체가 모인다. 이 루프를 빼면 예약이 많은 공연에서만 결과가 잘려 나가 재현이 어려운 감점이 된다.
 
 Terraform 측 (set-02 `lambda.tf` 파일 실측 요지) — `archive_file` 로 zip 을 만들고, 실행역할은 최소권한 3-statement 로 짠다.
 

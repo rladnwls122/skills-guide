@@ -33,6 +33,10 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 ### ② 왜 (채점 관점)
 
 - mark 스크립트는 CloudWatch 로그의 **키/형식 정확 일치**를 grep 한다 (set-07 11-1-A: 키가 정확히 `client_ip,method,path,status_code,timestamp` 5개 + `/health` 로그 **0건**).
+
+그 5키가 왜 하필 그 형식인지부터 짚는다. 과제지가 CloudWatch 로 전송된 로그의 예시 한 줄을 그대로 박아 두었기 때문이다 — `{"timestamp":"...","method":"POST","path":"/v1/book","status_code":200,"client_ip":"..."}`. 반면 앱이 stdout 으로 찍는 원본은 logfmt 한 줄이고 `duration` 처럼 예시에 없는 필드까지 들어 있다. 그래서 파이프라인이 원본을 그대로 흘리면 키 이름도 개수도 어긋난다. 파서로 필요한 값을 뽑고 Lua 로 5키만 다시 조립하는 것은 이 간극을 메우는 작업이다. `status_code` 를 문자열이 아니라 정수로, `timestamp` 를 ISO8601 `Z` 표기로 맞추는 것도 같은 이유다.
+
+`/health` 를 버리는 것도 형식 문제의 연장이다. `/health` 는 ALB 헬스체크가 주기적으로 때리는 경로라 사용자 요청과 섞이면 로그가 그것만으로 채워지고, 뒤에서 만드는 요청 수·오류율 메트릭도 실제 트래픽을 반영하지 못한다.
 - Grafana 대시보드는 패널 존재만이 아니라 **데이터 표시 여부**까지 본다 — No Data 패널 하나라도 있으면 오답.
 - 알람(11-4)은 실제 Firing 여부를 검사한다. HTTP 계열 알람의 유일한 소스가 로그 기반 메트릭이므로 파이프라인이 끊기면 알람 점수도 통째로 날아간다.
 
@@ -203,7 +207,9 @@ flowchart TD
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-Grafana 와 Prometheus 에 설정이 들어가는 세 경로다. 데이터소스 3종은 values 파일이 직접 넣고, 대시보드는 ConfigMap 에 `grafana_dashboard=1` 라벨을 붙이면 사이드카가 그 라벨을 감시하다 자동으로 import 한다. PrometheusRule 과 PodMonitor 는 셀렉터 설정 두 개(`...NilUsesHelmValues=false`)를 꺼야 릴리스 라벨이 없는 리소스까지 잡힌다 — 이 값을 안 바꾸면 알람과 메트릭이 조용히 누락된다.
+Grafana 와 Prometheus 에 설정이 들어가는 세 경로다. 데이터소스 3종은 values 파일이 직접 넣고, 대시보드는 ConfigMap 에 `grafana_dashboard=1` 라벨을 붙이면 사이드카가 그 라벨을 감시하다 자동으로 import 한다.
+
+PrometheusRule 과 PodMonitor 를 잡는 경로는 셀렉터 값 두 개에 달려 있다. `ruleSelectorNilUsesHelmValues` 와 `podMonitorSelectorNilUsesHelmValues` 는 기본값이 `true` 이고, 그때 Prometheus 는 **자기 helm 릴리스 라벨이 붙은 리소스만** 수집 대상으로 고른다. `false` 로 바꾸면 라벨 기준이 풀려 클러스터의 모든 PrometheusRule·PodMonitor 를 본다. 우리가 직접 쓴 룰과 PodMonitor 에는 그 릴리스 라벨이 없으므로 `false` 로 바꾼다.
 
 </details>
 

@@ -109,7 +109,16 @@ aws ec2 describe-vpcs --output table   # 전체를 표로 훑기
   > 정확히 반대다. jq가 "현재 입력"을 뜻하는 `.`에서 시작한다.
 - [ ] jq는 `[0]` 인덱싱을 지원하지 않아 `first` 함수를 써야 한다
 
-`--query`는 AWS CLI에 내장된 **JMESPath**(`Vpcs[0].VpcId` — 점 없이 시작), jq는 **외부 도구**의 별도 문법(`.Vpcs[0].VpcId` — 점으로 시작)이다. raw 값을 얻는 방법도 다르다 — `--query` 는 `--output text`, jq는 `-r`. 채점 스크립트(mark.sh)는 주로 **jq**를 쓰므로 둘 다 읽을 수 있어야 "채점이 어떤 필드를 보는지" 역추적할 수 있다.
+둘은 실행 주체부터 다르다. `--query` 는 AWS CLI 안에 들어 있는 JMESPath 엔진이고, jq 는 파이프 뒤에서 도는 별개 프로그램이다.
+
+| | `--query` | jq |
+|---|---|---|
+| 소속 | AWS CLI 내장 | 외부 도구 |
+| 문법 | JMESPath | jq 문법 |
+| 같은 표현 | `Vpcs[0].VpcId` | `.Vpcs[0].VpcId` |
+| raw 값 얻기 | `--output text` | `-r` |
+
+채점 스크립트(mark.sh)는 주로 jq 를 쓴다. 그래서 두 문법을 다 읽을 수 있어야 "채점이 어떤 필드를 보는지"를 역추적할 수 있다.
 </Quiz>
 
 <Quiz title="--region 생략 시 리전 결정">

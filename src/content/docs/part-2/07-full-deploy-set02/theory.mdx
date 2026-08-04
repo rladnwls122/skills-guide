@@ -19,7 +19,7 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 **① 한 줄 정의** — User → CloudFront(정적=S3, 동적=/book*→ALB) → ALB(POST→Pod, GET→Lambda) → DynamoDB 구조의 콘서트 예매 플랫폼.
 
-**② 왜 (채점 관점)** — 30점 중 CloudFront 6.5 + Application 6 + EKS 5 = 17.5점이 이 그림 위에서 결정된다. 화살표마다 붙는 **인증 방식**이 곧 채점 항목(OAC=8-2, 커스텀 헤더=8-4/7-2, IRSA=간접적으로 9-1/9-2)이다. IRSA(IAM Roles for Service Accounts)가 파드에 AWS 권한을 주는 원리는 [eks-basics 의 IRSA 절](/start/eks-basics/#irsa와-eks-pod-identity)에 있다.
+**② 왜 (채점 관점)** — 30점 중 CloudFront 6.5 + Application 6 + EKS 5 = 17.5점이 이 그림 위에서 결정된다. 외울 것은 상자가 아니라 화살표다. 구간마다 **인증 방식**이 다르고, 그 방식 하나하나가 채점 항목이다. IRSA(IAM Roles for Service Accounts)가 파드에 AWS 권한을 주는 원리는 [eks-basics 의 IRSA 절](/start/eks-basics/#irsa와-eks-pod-identity)에 있다.
 
 **③ 정답 도식 — 매일 백지에 재현할 것. 화살표의 인증 주석까지가 정답이다.**
 
@@ -55,6 +55,7 @@ set-02 1과제 전체가 한 장에 있다. 요청은 CloudFront 한 곳으로 �
 </details>
 
 암기 포인트(화살표별 인증):
+
 | 구간 | 인증/보호 |
 |---|---|
 | CF → S3 | **OAC**(sigv4 서명) + 커스텀 헤더 `wskorea26-s3-access: true` |
@@ -63,6 +64,10 @@ set-02 1과제 전체가 한 장에 있다. 요청은 CloudFront 한 곳으로 �
 | Pod → DynamoDB | **IRSA** (wskorea26-book-sa) |
 | Lambda → DynamoDB | Lambda 실행 역할 (최소권한) |
 | 채점 CloudShell → EKS API | private 엔드포인트 + `wskorea26-cluster-extra-sg` 443 |
+
+여섯 구간 중 셋이 채점 항목과 직접 이어진다. CF→S3 의 OAC 는 mark 8-2 가, CF→ALB 의 커스텀 헤더는 mark 8-4 와 7-2 가 조회한다. Pod→DynamoDB 의 IRSA 는 전용 항목이 없고, 앱이 실제로 저장에 성공하는지를 보는 mark 9-1·9-2 를 통해 간접 확인된다.
+
+S3 쪽 화살표에 인증 수단이 둘인 이유는 목적이 다르기 때문이다. 접근 통제는 OAC 혼자 한다 — 버킷 정책이 보는 것은 서명과 `AWS:SourceArn` 이지 헤더가 아니다. 커스텀 헤더 `wskorea26-s3-access: true` 는 과제지가 "S3 로 전달하는 요청에는 이 헤더가 포함되어야 한다"고 지정한 값이고, mark 8-4 가 배포의 커스텀 헤더 목록을 **정확히 2줄**로 비교한다. 즉 이 헤더는 보안 장치가 아니라 채점되는 구성값이므로 이름·값·개수를 그대로 맞춘다.
 
 ---
 
@@ -206,14 +211,22 @@ graph LR
 
 | 구성 | set-02 | set-03 | set-07 |
 |---|---|---|---|
-| WAF | 없음 | 있음 — 커스텀 SQLi/XSS 매치 규칙 + Rate(200/60s), 로깅 없음. 배점 1.5/30 | 있음 — 관리형 규칙 그룹(CommonRuleSet+KnownBadInputsRuleSet) + Rate(50/60s) + 커스텀 응답(403) + 로깅. 배점 2.5/30 |
-| 관측성 | 있음 — Prometheus 이름 미지정(도구 자유), Grafana 대시보드 5개 패널만 지정. 배점 3.5/30. **Pod 로그 CloudWatch 전송 요구는 정정으로 삭제**(채점 대상 아님 — [정정 내역](/reference/errata/)) → Fluent Bit 불필요 | 있음 — Prometheus+Alertmanager+Node Exporter+Fluent Bit+Grafana 스택 지정, 부하 생성 후 실시간 자동 채점. 배점 5.2/30 | 있음 — Fluent Bit+Prometheus+Grafana 스택 지정, 대시보드 패널 구성·배치까지 정밀 채점. 배점 5.0/30(Observability 2.0 + Grafana 1.5 + Log Pipeline Test 1.5) |
-| KMS 키 정책 | root principal 위임 허용 | **root·`kms:*` 금지**(root-less, lockout safety check 통과 필요) — [PART-1 모듈 02 이론 3절](/part-1/02-kms-s3-cloudfront/theory/) | root 위임 허용(Platform 키 1개만 WAF 로그용 us-east-1 MRK) |
-| 기타 | — | Software Stack에 EC2 명시(본문 요구사항은 EKS 노드그룹으로 충족 — 별도 EC2 자원 없음) | Audit IAM Role(External ID 필수, 최대 세션 1시간) 별도 절 |
+| WAF | 없음 | 있음 · 1.5점 | 있음 · 2.5점 |
+| 관측성 | 있음 · 3.5점 | 있음 · 5.2점 | 있음 · 5.0점 |
+| KMS 키 정책 | root 위임 허용 | **root-less** | root 위임 허용 |
+| 기타 | — | Software Stack 에 EC2 명시 | Audit IAM Role 별도 절 |
 
-관측성은 **세 후보 전부에 있다.** 차이는 있고 없고가 아니라 채점 방식이다. set-02는 도구를 자유롭게 고르고 수동 채점 위주라 부담이 적다. set-03·set-07은 Prometheus+Grafana+Fluent Bit 스택이 못박혀 있고, mark.sh가 부하를 직접 생성해 실시간으로 확인한다.
+네 줄을 하나씩 푼다.
 
-set-02의 부담은 정정으로 한 번 더 줄었다. "Pod 로그를 CloudWatch Logs로 전송" 문구가 최종 요구사항에서 빠진 잔여 문구로 확인되어 삭제됐다. **set-02가 선정되면 로그 파이프라인(Fluent Bit·CloudWatch)에 시간을 쓰지 않는다.**
+**WAF** — set-02 는 요구 자체가 없다. set-03 은 SQLi·XSS 매치 규칙을 직접 짜고 Rate 를 200/60s 로 걸며 로깅 요구는 없다. set-07 은 관리형 규칙 그룹 둘(`AWSManagedRulesCommonRuleSet`·`AWSManagedRulesKnownBadInputsRuleSet`)에 Rate 50/60s 와 403 커스텀 응답을 붙이고 로깅까지 요구한다. 규칙을 짜는 방식이 정반대라 세트가 바뀌면 코드를 통째로 갈아야 한다.
+
+**관측성** — 세 후보 전부에 있다. 차이는 있고 없고가 아니라 채점 방식이다. set-02 는 Prometheus 도구 이름을 지정하지 않고 Grafana 패널 5개만 요구해 수동 채점 위주라 부담이 적다. set-03 은 Prometheus·Alertmanager·Node Exporter·Fluent Bit·Grafana 스택이 못박혀 있고 mark.sh 가 부하를 직접 만들어 실시간 확인한다. set-07 은 Fluent Bit·Prometheus·Grafana 스택에 더해 대시보드 패널 구성과 배치까지 정밀 채점하고, 5.0점이 Observability 2.0 + Grafana 1.5 + Log Pipeline Test 1.5 로 쪼개져 있다.
+
+set-02 의 관측성 부담은 정정으로 한 번 더 줄었다. "Pod 로그를 CloudWatch Logs 로 전송" 문구가 최종 요구사항에서 빠진 잔여 문구로 확인되어 삭제됐다([정정 내역](/reference/errata/)). **set-02 가 선정되면 로그 파이프라인(Fluent Bit·CloudWatch)에 시간을 쓰지 않는다.**
+
+**KMS 키 정책** — set-02 와 set-07 은 키 정책에 root 위임을 그대로 쓴다. set-07 만 WAF 로그용 Platform 키 하나를 us-east-1 에 MRK 로 더 둔다. set-03 은 root principal 과 `kms:*` 를 둘 다 금지하므로 관리 액션을 개별 나열하고 KMS 의 lockout safety check 를 통과시켜야 한다. 그 구현은 [PART-1 모듈 02 이론 3절](/part-1/02-kms-s3-cloudfront/theory/)에 있다.
+
+**기타** — set-03 은 Software Stack 목록에 EC2 가 적혀 있지만 본문 요구사항은 EKS 노드그룹으로 충족되므로 별도 EC2 를 만들지 않는다. set-07 은 External ID 를 요구하고 최대 세션을 1시간으로 제한하는 Audit IAM Role 절이 따로 있다.
 
 배점으로 보면 관측성이 WAF보다 무겁다. WAF는 set-03·set-07 각각 1.5·2.5점, 관측성은 5.2·5.0점이다.
 

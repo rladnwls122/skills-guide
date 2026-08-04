@@ -75,7 +75,9 @@ resource "aws_kms_alias" "s3" {
 
 **① 한 줄 정의** — 키 정책은 CMK 에 직접 붙는 리소스 정책으로, "키를 관리하는 statement(admin)"와 "키를 사용하는 statement(use)"를 분리해 쓴다.
 
-**② 왜 필요한가 (채점 관점)** — IAM 정책과 달리 KMS 는 **키 정책이 없으면 그 누구도(관리자 포함) 키에 접근 못 한다**. admin/use 분리는 최소권한 채점의 기본형이고, set-03 처럼 정책 텍스트 자체를 grep 하는 세트도 있다.
+**② 왜 필요한가 (채점 관점)** — IAM 정책과 달리 KMS 는 **키 정책이 1차 관문이다.** 키 정책에 적힌 만큼만 통과하고, 계정 관리자라도 키 정책이 비어 있으면 그 키를 다루지 못한다.
+
+그래서 이 한 장에 관리 주체와 사용 주체가 함께 적힌다. 두 주체는 필요한 액션이 전혀 다르다 — 관리자는 키 자체를 켜고 끄고 지우고, 소비자는 그 키로 데이터를 암·복호화할 뿐이다. 한 statement 에 몰아 쓰면 소비자에게까지 관리 액션이 새므로 statement 를 둘로 나눈다. 이 admin/use 분리가 최소권한 채점의 기본형이고, set-03 처럼 정책 텍스트 자체를 grep 하는 세트도 있다.
 
 **③ 핵심 원리** — 액션 두 부류:
 
@@ -126,7 +128,7 @@ data "aws_iam_policy_document" "kms_s3" {
 
 </details>
 
-root principal 은 "계정의 IAM 정책에 권한 위임"을 의미 — 이게 있어야 배포자 IAM 정책만으로 키 관리가 된다.
+`EnableRoot` statement 의 root principal 은 "이 계정의 IAM 정책에 판단을 위임한다"는 뜻이다. 이 statement 를 넣어 두면 키 정책을 매번 고치지 않고도 배포자의 IAM 정책만으로 키를 관리할 수 있다.
 
 **④ 세트별 차이** — set-02 는 root 위임 허용. set-03 은 root·`kms:*` 금지(3절).
 
@@ -195,7 +197,11 @@ flowchart TD
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-root-less 키 정책이 통과하는 조건을 판정 순서로 그렸다. 첫 관문은 채점 쪽이다 — root principal 이나 `kms:*` 가 정책에 있으면 그 자리에서 실격이다. 둘째 관문은 KMS 쪽이다 — 정책을 넣는 신원에게 `kms:PutKeyPolicy` 가 없으면 키를 아무도 못 다루게 되는 상태가 되므로 apply 를 거부한다. 둘 다 피하는 형태가 관리 권한은 `kms:CallerAccount` 조건으로 계정 전체에 위임하고, 서비스에는 사용 권한만 따로 주는 구성이다.
+root-less 키 정책이 통과하는 조건을 판정 순서로 그렸다. 첫 관문은 채점 쪽이다 — root principal 이나 `kms:*` 가 정책에 있으면 그 자리에서 실격이다.
+
+둘째 관문은 KMS 쪽이다. KMS 는 새 키 정책을 받을 때 "이 정책을 넣는 신원이 다음에도 이 키 정책을 고칠 수 있는가"를 확인한다. 그 신원에게 `kms:PutKeyPolicy` 를 허용해 두면 통과하고, 빠뜨리면 apply 가 거부된다 — 정책을 넣은 순간 키를 되돌릴 수 있는 사람이 사라지기 때문이다.
+
+두 관문을 함께 통과하는 형태가 관리 권한은 `kms:CallerAccount` 조건으로 계정 전체에 위임하고, 서비스에는 사용 권한만 따로 주는 구성이다.
 
 </details>
 
@@ -479,6 +485,8 @@ resource "aws_wafv2_web_acl" "unicorn" {
 
 [`aws_wafv2_web_acl`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/wafv2_web_acl) 로 만든 set-07 방식의 Web ACL 이다. CloudFront 에 붙이는 ACL 은 반드시 us-east-1 에 만들어야 해서 별칭 프로바이더를 쓴다. 기본 액션이 `allow` 라 규칙에 걸린 요청만 막히고, 규칙은 priority 오름차순으로 평가된다. `override_action.none` 은 관리형 그룹 안 각 규칙이 자기 동작을 그대로 수행하라는 뜻이다 — `count` 로 바꾸면 차단 대신 집계만 한다.
 
+`visibility_config` 는 이 규칙의 관측 설정이고 세 필드가 필수다. `cloudwatch_metrics_enabled` 는 규칙별 매치 수를 CloudWatch 메트릭으로 내보낼지, `metric_name` 은 그 메트릭에 붙일 이름, `sampled_requests_enabled` 는 매치된 요청 표본을 콘솔에서 볼 수 있게 남길지 정한다. 오탐 대응이 이 표본에서 시작하므로 두 값을 `true` 로 켜 둔다.
+
 </details>
 
 - **priority**: 숫자가 작을수록 먼저 평가한다. 먼저 매치되고 **terminating action**(Block·Allow — Count 는 non-terminating)을 낸 규칙에서 평가가 즉시 끝난다.
@@ -603,7 +611,7 @@ set-03 유형(키 정책에 root principal·`kms:*` 금지)에 대해 옳은 것
 - [ ] root principal 을 넣되 Condition 으로 제한하면 mark 의 grep 을 피할 수 있다
   > set-03 mark 의 check_kms 는 정책 **텍스트를 grep** 한다. Condition 이 붙어 있든 말든 `:root` 문자열이 남으면 실격이다.
 - [ ] 관리 액션을 전부 빼면 "최소권한"이 되어 lockout safety check 도 함께 통과한다
-  > 정반대다. 관리 액션이 하나도 없으면 KMS 가 "누구도 관리할 수 없는 키"로 판단해 apply 자체를 거부한다.
+  > 정반대다. KMS 는 키 정책에 관리 액션이 남아 있어야 apply 를 받아 준다. 관리 액션을 전부 빼면 그 키를 되돌릴 수 있는 신원이 사라지므로 KMS 가 정책 자체를 거부한다.
 - [ ] 계정 위임만 있으면 서비스 principal 은 자동으로 키를 쓸 수 있다
   > `kms:CallerAccount` 조건은 서비스가 자기 이름으로 부르는 경로를 덮지 못한다. 키 소비자(EKS Pod 역할, Lambda 실행 역할, 서비스 principal)를 키 정책에 **직접** 나열해야 한다. set-03 은 db 키에 `book_pod`/`book_function` 역할을, bucket 키에 `cloudfront.amazonaws.com`(SourceAccount 조건)을, function 키에 `lambda.amazonaws.com`(EncryptionContext 조건)을 명시한다.
 

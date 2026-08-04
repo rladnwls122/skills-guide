@@ -46,7 +46,7 @@ flowchart LR
 
 </details>
 
-**2층은 1층의 결과를 보고 움직인다.** 노드 오토스케일러는 메트릭을 보지 않는다 — 오직 "스케줄되지 못한 Pod가 있는가"만 본다. 그래서 Pod가 늘어도 기존 노드에 다 들어가면 노드는 한 대도 안 늘어난다. 채점이 "노드 2대 이상"을 기대한다면 그건 **리소스 요청량으로 설계된 결과**이지 Pod 개수로 정해지는 게 아니다.
+**2층은 1층의 결과를 보고 움직인다.** 노드 오토스케일러는 메트릭을 보지 않는다 — 오직 "스케줄되지 못한 Pod가 있는가"만 본다. 그래서 Pod가 늘어도 기존 노드에 다 들어가면 노드는 한 대도 안 늘어난다. 채점이 "노드 2대 이상"을 기대한다면 그건 **리소스 요청량으로 설계된 결과**이지 Pod 개수로 정해지는 게 아니다. `requests` 합과 노드 용량으로 대수를 계산하는 방법은 ⑤의 "노드 수는 Pod 수가 아니라 `requests` 합이 정한다" 절에 숫자로 나와 있다.
 
 ### 1. HPA — 이용률의 분모는 `requests`다
 
@@ -58,7 +58,7 @@ HorizontalPodAutoscaler는 메트릭을 보고 Deployment의 `replicas`를 조�
 
 CPU 이용률을 쓸 때 **분모가 노드의 CPU가 아니라 Pod의 `resources.requests.cpu`** 라는 점이 중요하다. `requests`를 크게 잡으면 같은 부하에서 이용률이 낮게 계산돼 스케일아웃이 늦어지고, 작게 잡으면 과민해진다. `requests`는 스케줄링 단위이면서 동시에 이용률의 기준선이다.
 
-HPA는 **약 15초 주기**로 메트릭을 다시 읽고 판단한다(컨트롤 플레인 설정). 이것이 감지 지연의 하한이다.
+HPA는 **약 15초 주기**로 메트릭을 다시 읽고 판단한다(컨트롤 플레인 설정). 부하가 튀어도 다음 주기가 올 때까지는 아무 판단도 일어나지 않으므로, 이 15초가 감지에 걸리는 최소 시간이다.
 
 #### `behavior` — 늘릴 때와 줄일 때를 따로 정한다
 
@@ -265,7 +265,7 @@ kubectl get nodes --show-labels
 
 | 증상 | 원인 | 확인 |
 |---|---|---|
-| ScaledObject는 READY인데 Pod가 안 늘어난다 | KEDA가 큐를 못 읽는다(권한). 큐를 읽는 주체는 앱이 아니라 오퍼레이터 | `kubectl describe hpa` 의 메트릭 값, KEDA 오퍼레이터 로그 |
+| ScaledObject는 READY인데 Pod가 안 늘어난다 | KEDA 오퍼레이터에 큐 읽기 권한 없음 | `kubectl describe hpa` 의 메트릭 값, KEDA 오퍼레이터 로그 |
 | Pod는 늘었는데 노드가 그대로 | `requests` 합이 기존 노드 용량 안 | `kubectl describe node` 의 Allocated resources |
 | Pending Pod가 있는데 노드가 안 뜬다 | 디스커버리 태그 누락(서브넷·보안 그룹) | Karpenter 컨트롤러 로그, 서브넷 태그 |
 | 노드는 떴는데 Pod가 계속 Pending | NodePool에 선언 안 한 라벨을 nodeSelector가 요구 | `kubectl get nodes --show-labels` 로 대조 |

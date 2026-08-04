@@ -172,7 +172,7 @@ flowchart TB
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-대회 스택 한 벌이 클러스터 안에서 어떻게 이어지는지 전부 그린 그림이다. 트래픽은 CloudFront → ALB → 타깃그룹 → Pod 으로 내려가고, 그 마지막 연결을 TargetGroupBinding 이 만든다 — LBC 가 그 리소스를 읽어 Pod IP 를 타깃그룹에 등록한다. 클러스터 안은 노드그룹 둘로 갈린다. addon 노드그룹에는 LBC·kube-prometheus-stack 같은 시스템 릴리스가, app 노드그룹에는 앱 Deployment 가 nodeSelector·toleration 으로 배치된다. 점선은 트래픽이 아니라 설정·제어 관계다 — PDB 는 동시 중단 수를 제한하고, ServiceAccount 는 IRSA 로 IAM 역할과 이어진다.
+대회 스택 한 벌이 클러스터 안에서 어떻게 이어지는지 전부 그린 그림이다. 트래픽은 CloudFront → ALB → 타깃그룹 → Pod 으로 내려가고, 그 마지막 연결을 TargetGroupBinding 이 만든다 — LBC 가 TargetGroupBinding 을 읽어 Pod IP 를 타깃그룹에 등록한다. 클러스터 안은 노드그룹 둘로 갈린다. addon 노드그룹에는 LBC·kube-prometheus-stack 같은 시스템 릴리스가, app 노드그룹에는 앱 Deployment 가 nodeSelector·toleration 으로 배치된다. 점선은 트래픽이 아니라 설정·제어 관계다 — PDB 는 동시 중단 수를 제한하고, ServiceAccount 는 IRSA 로 IAM 역할과 이어진다.
 
 </details>
 

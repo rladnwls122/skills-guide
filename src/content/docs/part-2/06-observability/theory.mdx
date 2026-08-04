@@ -74,14 +74,21 @@ flowchart LR
 
 ### ④ 변형 포인트
 
-당일 과제의 약 30% 가 수정된다.
+당일 과제의 약 30% 가 수정된다. 세트별 실측값은 이렇다.
+
+| | set-02 | set-03 | set-07 |
+|---|---|---|---|
+| 인증 | IRSA | Pod Identity | Pod Identity |
+| 로그 형식 | 세트 지정 | Reference02 문자열(`INFO  {"level":...}`) | 정확히 5키 JSON(`client_ip,method,path,status_code,timestamp`) |
+| HTTP 메트릭 | — | **log_to_metrics** (:2021 → PodMonitor) | CloudWatch Exporter(ALB TargetResponseTime) |
+| Fluent Bit ns | monitoring | observability | logging |
 
 | 바뀌는 값 | 고칠 곳 | 확인 |
 |---|---|---|
 | CloudWatch 로그 형식·키 | Lua 재조립 스크립트 | 과제지 예시 한 줄과 키 이름·개수·타입 일치 |
-| Fluent Bit 네임스페이스 | 배포 매니페스트의 ns (monitoring / observability / logging) | 채점이 그 ns 의 fluent-bit Running 수를 센다 |
-| 인증 방식 (IRSA ↔ Pod Identity) | SA 와 IAM 연결 | 권한이 없으면 수집은 되고 전송만 실패한다 |
-| HTTP 메트릭 소스 | log_to_metrics ↔ CloudWatch Exporter(ALB TargetResponseTime) | 앱이 `/metrics` 를 노출하는지로 갈린다 |
+| Fluent Bit 네임스페이스 | 배포 매니페스트의 ns | 채점이 그 ns 의 fluent-bit Running 수를 센다 |
+| 인증 방식 | SA 와 IAM 연결(IRSA 또는 Pod Identity) | 권한이 없으면 수집은 되고 전송만 실패한다 |
+| HTTP 메트릭 소스 | log_to_metrics 또는 CloudWatch Exporter | 앱이 `/metrics` 를 노출하는지로 갈린다 |
 
 판단 기준은 과제지가 CloudWatch 로그 예시 한 줄을 박아 두었는지다. 예시가 있으면 그 키 이름·개수·타입이 곧 채점 기준이 되고, `/health` 처럼 사용자 요청이 아닌 라인은 버린다.
 

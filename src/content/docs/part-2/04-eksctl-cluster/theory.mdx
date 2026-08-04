@@ -249,16 +249,24 @@ addons:
 
 애드온 버전은 **지정하지 않는다**(작업규칙 2: EKS Addon 미고정 — eksctl이 클러스터 버전 default 사용).
 
-**④ 변형 포인트** — 이름과 라벨 키가 세트마다 다르다.
+**④ 변형 포인트** — 이름과 라벨 키가 세트마다 다르다. 세트별 실측값은 이렇다.
+
+| 항목 | set-02 | set-03 |
+|---|---|---|
+| NG 이름 | `wskorea26-addon-ng` / `wskorea26-app-ng` | `wsc2026-addon-nodegroup` / `wsc2026-workload-ng` |
+| label 키 | `node-type` | `wsc2026/node` |
+| taint | 없음 | workload NG 에 NoSchedule |
+| tags.Name | 있음(mark 5-3 채점) | 없음(`instanceName`만) |
+| 부트스트랩 | 기본 | `overrideBootstrapCommand`(nodeadm NodeConfig)로 clusterDomain 변경 |
 
 | 바뀌는 값 | 고칠 곳 | 확인 |
 |---|---|---|
 | 노드그룹 이름 | `managedNodeGroups[].name` | `describe-nodegroup` 이름 비교(mark 5-3) |
-| label 키 (`node-type` ↔ `wsc2026/node`) | 노드그룹 `labels` + 워크로드 `nodeSelector` | 두 곳이 같은 키·값 |
+| label 키 | 노드그룹 `labels` + 워크로드 `nodeSelector` | 두 곳이 같은 키·값 |
 | taint 요구 | 노드그룹 `taints` + 앱 Deployment `tolerations` | taint 만 걸면 앱이 그 노드에 못 뜬다 |
 | EC2 인스턴스 Name 태그 요구 | `instanceName` | 인스턴스 태그는 이 필드로만 붙는다 |
-| `describe-nodegroup` tags.Name 채점 | `tags.Name` | 채점 대상이 아니면 넣지 않는다(set-03) |
-| 부트스트랩 커스터마이즈 | `overrideBootstrapCommand`(nodeadm NodeConfig) | set-03 은 clusterDomain 변경에 사용 |
+| `describe-nodegroup` tags.Name 채점 | `tags.Name` | 채점 대상이 아니면 넣지 않는다 |
+| 부트스트랩 커스터마이즈 | `overrideBootstrapCommand`(nodeadm NodeConfig) | 필요할 때만 |
 
 판단 기준은 과제지가 이름을 어디에 명시하는지다 — EC2 인스턴스 태그 요구면 `instanceName`, `describe-nodegroup` 출력 검사면 `tags.Name` 이다. 애드온 버전은 어느 세트에서도 지정하지 않는다.
 

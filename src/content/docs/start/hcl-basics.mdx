@@ -1,6 +1,8 @@
 ---
 title: HCL 기초 (선수 학습, 약 1.5시간)
 description: Terraform 이 .tf 파일을 읽는 규칙과 정답지에서 실제로 쓰이는 타입·표현식·반복·함수를 정리한 선수 학습.
+sidebar:
+  order: 8
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
@@ -423,10 +425,10 @@ IAM 정책을 코드로 쓸 때 `data "aws_iam_policy_document"` 를 `jsonencode
 
 ## ⑦ 다음 단계
 
-문법이 잡혔으면 실제 VPC 를 세우면서 써 본다. 모듈 01 이 이 문서의 내용을 그대로 쓴다.
+여기까지가 PART-1 이 전제하는 기초다 — 모듈 01 이 이 문서의 내용을 그대로 쓴다. 남은 선수 학습은 PART-2 이후에 필요한 쿠버네티스 계열이니, 곧장 실습으로 넘어가고 싶으면 모듈 01 로 가도 된다.
 
-<LinkButton href="/part-1/01-terraform-vpc/" icon="right-arrow">PART-1 모듈 01 로</LinkButton>
-<LinkButton href="/start/vpc-basics/" variant="minimal">VPC 기초 먼저 보기</LinkButton>
+<LinkButton href="/start/k8s-basics/" icon="right-arrow">다음 선수 학습 — Kubernetes 기초</LinkButton>
+<LinkButton href="/part-1/01-terraform-vpc/" variant="minimal">PART-1 모듈 01 로</LinkButton>
 
 ## 공식 문서
 

@@ -1,6 +1,8 @@
 ---
 title: EKS 기초 (선수 학습, 약 1시간 30분)
 description: 관리형 컨트롤 플레인과 데이터 플레인의 경계, IRSA와 Pod Identity, VPC CNI의 IP 할당 방식, ALB로 들어오는 외부 트래픽 경로를 정리한 선수 학습.
+sidebar:
+  order: 11
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
@@ -310,7 +312,7 @@ Ingress 를 만들었는데 `kubectl get ingress` 의 `ADDRESS` 가 계속 비�
 
 모듈 04에서 `eksctl` 로 클러스터를 세우고, 모듈 05에서 워크로드와 ALB를 올린다.
 
-<LinkButton href="/start/awscli-basics/" icon="right-arrow">다음 선수 학습 — AWS CLI 기초</LinkButton>
+<LinkButton href="/start/serverless-basics/" icon="right-arrow">다음 선수 학습 — 서버리스·이벤트 기초</LinkButton>
 <LinkButton href="/part-2/04-eksctl-cluster/" variant="minimal">PART 2 — EKS Core</LinkButton>
 
 ## 공식 문서

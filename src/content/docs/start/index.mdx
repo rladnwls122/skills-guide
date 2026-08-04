@@ -1,6 +1,8 @@
 ---
 title: 00 — 사전 준비 (Day 0, 반나절)
 description: 학습용 AWS 계정·도구·비용 알람을 준비하고 선수 지식을 자가진단하는 Day 0 체크리스트.
+sidebar:
+  order: 0
 ---
 
 import { Steps, Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
@@ -73,17 +75,19 @@ git clone https://github.com/ishs-cloud-computing/skills-2026.git
 
 | # | 질문 | 부족 시 보충 (반나절 내) |
 |---|---|---|
-| 1 | VPC/서브넷/RTB/IGW·NAT 차이를 그림으로 그릴 수 있다 | AWS VPC 공식 워크숍 2h |
-| 2 | IAM 사용자/역할/정책(JSON) 구조를 안다 | IAM 정책 문서 1h |
-| 3 | aws cli 자격증명 설정·호출을 해봤다 | 위 2번 실습 |
-| 4 | 컨테이너/이미지/레지스트리 개념을 안다 | Docker getting-started 2h |
-| 5 | grep/sed/jq, heredoc을 쓸 수 있다 | 셸 원라이너 연습 1h |
+| 1 | VPC/서브넷/RTB/IGW·NAT 차이를 그림으로 그릴 수 있다 | [vpc-basics](/start/vpc-basics/)로 보충 · AWS VPC 공식 워크숍 2h |
+| 2 | IAM 사용자/역할/정책(JSON) 구조를 안다 | [iam-basics](/start/iam-basics/)로 보충 · IAM 정책 문서 1h |
+| 3 | aws cli 자격증명 설정·호출을 해봤다 | [awscli-basics](/start/awscli-basics/)로 보충 · 위 2번 실습 |
+| 4 | 컨테이너/이미지/레지스트리 개념을 안다 | [docker-basics](/start/docker-basics/)로 보충 · Docker getting-started 2h |
+| 5 | grep/sed/jq, heredoc을 쓸 수 있다 | [shell-basics](/start/shell-basics/)로 보충 · 셸 원라이너 연습 1h |
 | 6 | Git clone/branch/diff를 쓸 수 있다 | 생략 가능 |
 | 7 | Pod/Deployment/Service 차이를 설명할 수 있다 | [k8s-basics](/start/k8s-basics/)로 보충 |
 | 8 | 키 정책과 IAM 정책이 왜 둘 다 필요한지 설명할 수 있다 | [kms-basics](/start/kms-basics/)로 보충 |
 | 9 | EventBridge의 이벤트 버스·룰·이벤트 패턴이 각각 무엇인지 설명할 수 있다 | [serverless-basics](/start/serverless-basics/)로 보충 |
 | 10 | HPA가 목표 Pod 수를 어떻게 계산하고, 노드는 무엇을 보고 늘어나는지 설명할 수 있다 | [autoscaling-basics](/start/autoscaling-basics/)로 보충 |
 | 11 | ALB 의 리스너·규칙·타깃그룹이 각각 무엇이고 헬스체크가 왜 필요한지 설명할 수 있다 | [loadbalancer-basics](/start/loadbalancer-basics/)로 보충 |
+| 12 | Terraform HCL 의 블록 구조와 참조 주소(`aws_vpc.this.id`)를 읽을 수 있다 | [hcl-basics](/start/hcl-basics/)로 보충 |
+| 13 | EKS 클러스터가 IAM 과 어떻게 엮이는지(IRSA·클러스터 생성자 신원) 설명할 수 있다 | [eks-basics](/start/eks-basics/)로 보충 |
 
 9·10번은 **2과제 전용**이다. PART-4에 들어가기 전까지는 몰라도 진도가 막히지 않으므로, 자가진단 "아니오" 개수에는 넣되 보충은 PART-4 직전에 해도 된다.
 
@@ -143,11 +147,11 @@ Terraform 은 다르다. **채점 대상이 아니다** — 과제지·채점지
     [읽기](/start/loadbalancer-basics/)
   </Card>
   <Card title="EKS 기초" icon="cloud-download">
-    자가진단 7 (권장) — IRSA·VPC CNI·ALB, PART-2 모듈 04
+    자가진단 13 — IRSA·VPC CNI·ALB, PART-2 모듈 04
     [읽기](/start/eks-basics/)
   </Card>
   <Card title="HCL 기초" icon="seti:config">
-    채점 대상은 아니지만 정답지를 읽으려면 필요 — PART-1 전체
+    자가진단 12 — 채점 대상은 아니지만 정답지를 읽으려면 필요, PART-1 전체
     [읽기](/start/hcl-basics/)
   </Card>
   <Card title="서버리스·이벤트 기초" icon="random">

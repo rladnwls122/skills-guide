@@ -1,6 +1,8 @@
 ---
 title: S3 기초 (선수 학습, 약 1시간)
 description: 버킷·객체 모델과 퍼블릭 액세스 차단·버킷 정책·객체 소유권의 평가 순서, CloudFront OAC 연동, 버전 관리와 수명 주기를 정리한 선수 학습.
+sidebar:
+  order: 3
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
@@ -362,9 +364,9 @@ S3 이벤트는 **정확히 한 번이 아니라 최소 한 번** 전달된다. 
 
 ## ⑦ 다음 단계
 
-모듈 02에서 KMS·S3·CloudFront를 Terraform으로 한 스택에 묶는다.
+SSE-KMS 가 실제로 어떤 키를 어떻게 쓰는지는 다음 문서에서 이어진다. 모듈 02에서 KMS·S3·CloudFront를 Terraform으로 한 스택에 묶는다.
 
-<LinkButton href="/start/docker-basics/" icon="right-arrow">다음 선수 학습 — Docker 기초</LinkButton>
+<LinkButton href="/start/kms-basics/" icon="right-arrow">다음 선수 학습 — KMS 기초</LinkButton>
 <LinkButton href="/part-1/02-kms-s3-cloudfront/" variant="minimal">PART 1 — KMS + S3 + CloudFront 실습</LinkButton>
 
 ## 공식 문서

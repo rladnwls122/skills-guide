@@ -41,6 +41,9 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 - `RUN`은 빌드 시점, `ENTRYPOINT`/`CMD`는 실행 시점 — [docker-basics](/start/docker-basics/)
 - 베이스 이미지 크기가 pull 지연과 스캔 결과를 좌우한다 — [docker-basics](/start/docker-basics/)
 - 역할(Role) = 자격증명 없는 신원. Lambda 실행역할이 이것 — [iam-basics](/start/iam-basics/)
+- 파티션 키로 항목을 찾고, 다른 축의 조회는 GSI 로 푼다 — [dynamodb-basics](/start/dynamodb-basics/)
+- Query 는 파티션 키로 좁혀 읽고 Scan 은 전부 읽고 거른다 — [dynamodb-basics](/start/dynamodb-basics/)
+- boto3 로 숫자를 저장할 때는 `float` 가 아니라 `Decimal` — [dynamodb-basics](/start/dynamodb-basics/)
 
 막히는 항목이 있으면 그 링크를 먼저 읽는다. 아니면 바로 다음 파일로 간다.
 

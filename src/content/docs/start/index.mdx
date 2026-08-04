@@ -88,6 +88,8 @@ git clone https://github.com/ishs-cloud-computing/skills-2026.git
 | 11 | ALB 의 리스너·규칙·타깃그룹이 각각 무엇이고 헬스체크가 왜 필요한지 설명할 수 있다 | [loadbalancer-basics](/start/loadbalancer-basics/)로 보충 |
 | 12 | Terraform HCL 의 블록 구조와 참조 주소(`aws_vpc.this.id`)를 읽을 수 있다 | [hcl-basics](/start/hcl-basics/)로 보충 |
 | 13 | EKS 클러스터가 IAM 과 어떻게 엮이는지(IRSA·클러스터 생성자 신원) 설명할 수 있다 | [eks-basics](/start/eks-basics/)로 보충 |
+| 14 | DynamoDB 의 파티션 키·GSI 로 조회 패턴을 설계할 수 있다 | [dynamodb-basics](/start/dynamodb-basics/)로 보충 |
+| 15 | Prometheus 가 메트릭을 어떻게 모으고 PodMonitor 가 무엇인지 안다 | [observability-basics](/start/observability-basics/)로 보충 |
 
 9·10번은 **2과제 전용**이다. PART-4에 들어가기 전까지는 몰라도 진도가 막히지 않으므로, 자가진단 "아니오" 개수에는 넣되 보충은 PART-4 직전에 해도 된다.
 
@@ -153,6 +155,14 @@ Terraform 은 다르다. **채점 대상이 아니다** — 과제지·채점지
   <Card title="HCL 기초" icon="seti:config">
     자가진단 12 — 채점 대상은 아니지만 정답지를 읽으려면 필요, PART-1 전체
     [읽기](/start/hcl-basics/)
+  </Card>
+  <Card title="DynamoDB 기초" icon="document">
+    자가진단 14 — PK·GSI·Query/Scan·과금 모드·Decimal, PART-1 모듈 03
+    [읽기](/start/dynamodb-basics/)
+  </Card>
+  <Card title="관측성 기초" icon="magnifier">
+    자가진단 15 — Prometheus pull 수집·exporter·PodMonitor·메트릭 종류, PART-2 모듈 06
+    [읽기](/start/observability-basics/)
   </Card>
   <Card title="서버리스·이벤트 기초" icon="random">
     자가진단 9 — Lambda 호출 방식·EventBridge 룰·CloudTrail 경유·SQS, PART-4 모듈 09

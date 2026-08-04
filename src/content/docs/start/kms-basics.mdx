@@ -32,6 +32,8 @@ import { Steps, LinkButton } from '@astrojs/starlight/components';
 
 S3 버킷에 파일(`main.jpeg`)을 업로드하고 다운로드할 때 일어나는 아키텍처 흐름을 통해 DEK의 실제 용도를 이해한다.
 
+버킷에 KMS 키를 미리 지정해 두면 S3 는 객체를 저장할 때마다 그 키로 암호화한다. 이 설정을 **SSE-KMS**, 풀어서 서버 측 암호화(Server-Side Encryption)의 KMS 방식이라고 부른다. 버킷 쪽에서 이 설정을 켜는 방법과 채점이 무엇을 보는지는 [S3 기초](/start/s3-basics/)에 있다.
+
 ##### A. 데이터를 암호화하여 저장할 때 (Encrypt 과정)
 
 사용자가 S3 버킷에 `main.jpeg` 파일을 업로드할 때 발생하는 동작은 다음과 같다.
@@ -136,11 +138,99 @@ KMS 키 정책이 특정 S3 버킷이나 CloudFront 배포판의 ARN을 참조�
 
 *   **해결책**: 키 정책의 `Condition` 블록에서 구체적인 리소스 대신 계정 ID(`aws_caller_identity` 로 조회)나 선수 번호 변수를 조합해 동적으로 평가되도록 우회한다.
 
+set-03 이 CloudFront 에 복호화를 허용하는 구문이 이 우회의 실물이다. CloudFront 배포 ARN 을 `Condition` 에 박으면 키 → 배포 → 버킷 → 키로 고리가 닫히므로, 배포 대신 **계정 ID** 로 범위를 좁힌다.
+
+```hcl title="kms.tf — 순환 참조를 피하는 Condition"
+statement {
+  sid       = "AllowCloudFrontDecrypt"
+  effect    = "Allow"
+  actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+  resources = ["*"]
+  principals {
+    type        = "Service"
+    identifiers = ["cloudfront.amazonaws.com"]
+  }
+  # 배포 ARN 을 쓰면 순환 참조. 계정 ID 는 배포보다 먼저 확정되므로 고리가 닫히지 않는다
+  condition {
+    test     = "StringEquals"
+    variable = "aws:SourceAccount"
+    values   = [local.account_id]
+  }
+}
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+CloudFront 서비스가 이 키로 객체를 복호화하도록 허용하되, 요청이 **내 계정의** 배포에서 왔을 때만 통과시킨다. `aws:SourceAccount` 는 요청을 유발한 리소스의 소유 계정을 담는 조건 키다. 배포 ARN 을 쓰면 정확도는 올라가지만 Terraform 의 의존 그래프에 고리가 생겨 `Cycle` 오류로 apply 자체가 멈춘다. 계정 ID 는 `aws_caller_identity` 로 배포 전에 이미 알 수 있는 값이라 고리를 만들지 않는다.
+
+</details>
+
 ---
 
 ## ④ 핵심 코드 패턴
 
-### 1. root-less 키 정책을 위한 Admin 액션 목록 정의
+### 1. root-less 키 정책 실물 — 적용된 JSON
+
+set-03 정답지가 S3 버킷용 키에 실제로 붙이는 키 정책이다. 액션 목록만 줄여서 옮겼다.
+
+```json title="wsc2026-bucket-kms 의 키 정책"
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "KeyAdministration",
+      "Effect": "Allow",
+      "Principal": { "AWS": "*" },
+      "Action": [
+        "kms:Create*", "kms:Describe*", "kms:Enable*", "kms:List*",
+        "kms:Put*", "kms:Update*", "kms:Revoke*", "kms:Disable*",
+        "kms:Get*", "kms:Delete*",
+        "kms:ScheduleKeyDeletion", "kms:CancelKeyDeletion",
+        "kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*",
+        "kms:CreateGrant", "kms:RetireGrant"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "kms:CallerAccount": "123456789012" }
+      }
+    },
+    {
+      "Sid": "AllowCloudFrontDecrypt",
+      "Effect": "Allow",
+      "Principal": { "Service": "cloudfront.amazonaws.com" },
+      "Action": ["kms:Decrypt", "kms:GenerateDataKey"],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "aws:SourceAccount": "123456789012" }
+      }
+    }
+  ]
+}
+```
+
+구문(Statement) 하나가 "누구에게 무엇을 허용하는가" 한 줄이고, 이 정책에는 그런 줄이 둘이다. 칸별로 읽는다.
+
+| 칸 | 이 정책에서의 값 | 뜻 |
+|---|---|---|
+| `Sid` | `KeyAdministration` | 구문 이름. 사람이 읽기 위한 꼬리표이고 평가에는 쓰이지 않는다 |
+| `Effect` | `Allow` | 허용인지 거부인지 |
+| `Principal` | `{ "AWS": "*" }` · `{ "Service": "cloudfront.amazonaws.com" }` | 이 구문이 대상으로 삼는 신원 |
+| `Action` | `kms:Put*` 등 | 허용하는 KMS API |
+| `Resource` | `"*"` | 대상 리소스 |
+| `Condition` | `kms:CallerAccount` · `aws:SourceAccount` | 추가로 만족해야 하는 조건 |
+
+:::danger[`"Resource": "*"` 는 "모든 리소스"가 아니다]
+키 정책은 **KMS 키 하나에 붙어 있는 문서**다. 그 문서가 통제하는 대상은 붙어 있는 그 키뿐이므로 `Resource` 칸에 쓸 값이 애초에 하나밖에 없고, `"*"` 는 **이 정책이 붙은 키 자신**을 가리키는 관용 표기다. 계정의 다른 KMS 키에는 아무 영향이 없다.
+
+사용자·역할에 붙는 신원 기반 IAM 정책의 `"Resource": "*"` 는 글자만 같고 뜻이 다르다. 그쪽은 진짜로 계정의 모든 키를 가리킨다. 같은 표기가 붙는 자리에 따라 뜻이 갈리는 지점이라 처음 보면 반드시 걸린다.
+:::
+
+관리자 구문의 `Principal` 이 `"*"` 인 것도 같은 이유로 오해를 부른다. 전 세계 공개가 아니다 — 바로 아래 `kms:CallerAccount` 조건이 **이 계정에서 온 호출**로 범위를 좁히고, 계정 안에서 실제로 누가 쓸 수 있는지는 각 신원의 IAM 정책이 정한다. `arn:aws:iam::123456789012:root` 라고 쓰면 같은 뜻이지만, 채점이 정책 원문에서 `:root` 문자열을 찾아내므로 조건식으로 우회한 것이다. 배포자 ARN 을 `aws_iam_session_context` 로 조회해 직접 박는 방식도 같은 목적을 달성한다.
+
+두 방식 모두 `kms:Put*` 이 관리 구문에 들어 있어야 Lockout Safety Check 를 통과한다.
+
+### 2. root-less 키 정책을 위한 Admin 액션 목록 정의
 
 ```hcl
 locals {
@@ -163,7 +253,7 @@ locals {
 
 </details>
 
-### 2. CLI를 이용한 KMS 키 상태 자가 검증
+### 3. CLI를 이용한 KMS 키 상태 자가 검증
 
 키를 만든 직후에는 CLI로 상태를 바로 확인한다.
 

@@ -72,14 +72,18 @@ flowchart LR
 
 핵심: **한 번 파싱한 레코드를 태그 분기(`app.access` / `app.metrics`)로 두 OUTPUT에 나눠 보낸다.** CloudWatch 갈래는 형식 재조립(format.lua), 메트릭 갈래는 log_to_metrics를 거친다.
 
-### ④ 세트별 차이
+### ④ 변형 포인트
 
-| | set-02 | set-03 | set-07 |
-|---|---|---|---|
-| 인증 | IRSA | Pod Identity | Pod Identity |
-| 로그 형식 | 세트 지정 | Reference02 문자열(`INFO  {"level":...}`) | 정확히 5키 JSON(`client_ip,method,path,status_code,timestamp`) |
-| HTTP 메트릭 | — | **log_to_metrics** (:2021 → PodMonitor) | CloudWatch Exporter(ALB TargetResponseTime) |
-| Fluent Bit ns | monitoring | observability | logging |
+당일 과제의 약 30% 가 수정된다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| CloudWatch 로그 형식·키 | Lua 재조립 스크립트 | 과제지 예시 한 줄과 키 이름·개수·타입 일치 |
+| Fluent Bit 네임스페이스 | 배포 매니페스트의 ns (monitoring / observability / logging) | 채점이 그 ns 의 fluent-bit Running 수를 센다 |
+| 인증 방식 (IRSA ↔ Pod Identity) | SA 와 IAM 연결 | 권한이 없으면 수집은 되고 전송만 실패한다 |
+| HTTP 메트릭 소스 | log_to_metrics ↔ CloudWatch Exporter(ALB TargetResponseTime) | 앱이 `/metrics` 를 노출하는지로 갈린다 |
+
+판단 기준은 과제지가 CloudWatch 로그 예시 한 줄을 박아 두었는지다. 예시가 있으면 그 키 이름·개수·타입이 곧 채점 기준이 되고, `/health` 처럼 사용자 요청이 아닌 라인은 버린다.
 
 ---
 
@@ -121,10 +125,17 @@ Fluent Bit 파드 한 개가 노드에서 무엇을 붙들고 있는지다. 노�
 - **Lua duration 변환**: Go는 duration을 `136.048µs`, `89.8ms`, `1.5s`, `1m30s`처럼 단위 붙은 문자열로 찍는다. histogram의 `Value_field`는 숫자여야 하므로 초 단위 float로 변환한다(단위표 ns/µs/us/ms/s + `NmM.Ns` 패턴 별도 처리 — set-03 `prepare.lua`).
 - **/health 드롭**: Lua에서 `path == "/health"`면 `return -1, 0, 0`(레코드 폐기). 채점이 CloudWatch에서 /health 0건을 확인한다.
 
-### ④ 세트별 차이
+### ④ 변형 포인트
 
-- set-03: 드롭+변환(prepare.lua)과 형식 조립(format.lua)을 분리. Reference02는 "LEVEL 5자 패딩 + 키 순서 고정 JSON 문자열".
-- set-07: reshape.lua 하나로 5키 재구성(`timestamp` ISO8601Z, `status_code` 정수화). **키 이름·개수 정확 일치**가 채점 포인트.
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 수집 대상 네임스페이스 | INPUT tail 의 `Path /var/log/containers/*_<ns>_*.log` | 파일명이 `<pod>_<namespace>_<container>-<id>.log` |
+| 앱 로그 원본 형식 | `bookaccess` 정규식 파서 | 파서가 뽑는 키가 재조립에 필요한 키를 모두 덮는지 |
+| 출력 로그 형식 | Lua 스크립트 (set-03 `format.lua` / set-07 `reshape.lua`) | CloudWatch 로그 한 줄이 과제지 예시와 같은지 |
+| 로그 그룹 이름 | Terraform 로그 그룹 + `cloudwatch_logs` OUTPUT | `auto_create_group false` 유지 — Fluent Bit 이 만들면 암호화 미적용 |
+| taint 있는 노드그룹 | DaemonSet 의 `tolerations: [operator: Exists]` | 앱이 뜬 노드에도 fluent-bit 이 Running |
+
+Lua 를 몇 개로 나눌지도 세트마다 다르다. set-03 은 드롭·변환(`prepare.lua`)과 형식 조립(`format.lua`)을 나누고 Reference02 형식("LEVEL 5자 패딩 + 키 순서 고정 JSON 문자열")을 만든다. set-07 은 `reshape.lua` 하나로 5키를 재구성한다(`timestamp` ISO8601Z, `status_code` 정수화). `/health` 드롭 분기는 어느 쪽이든 남긴다 — 채점이 CloudWatch 에서 0건을 확인한다.
 
 ---
 

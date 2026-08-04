@@ -178,6 +178,23 @@ CloudFront Functions는 만들면 바로 `DEVELOPMENT` 스테이지에 들어간
 
 ---
 
+## 6. 변형 포인트
+
+당일 과제는 전체 채점 점수의 약 30% 범위 안에서 수정된다([대회 운영 규칙](/reference/competition-rules/)). 함수 JS 는 Terraform 변수가 아니라 정적 파일이라 접두어 치환이 닿지 않는다 — 바뀐 값을 파일 안에서 직접 고친다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 쿠키명 `x-sp-ab` | `terraform/cloudfront/req-fn.js` · `res-fn.js` + 캐시 정책 화이트리스트 쿠키 | `aws cloudfront test-function --stage LIVE` |
+| 헤더명 `x-sp-ab-assigned` | `terraform/cloudfront/req-fn.js` · `res-fn.js` | `aws cloudfront test-function --stage LIVE` |
+| KVS 키명 `weight`·`version_a`·`version_b` | `terraform/cloudfront/req-fn.js` + `aws_cloudfrontkeyvaluestore_keys_exclusive` | `list-keys` 정확 일치 |
+| A/B 비율·버전 경로 값 | `aws_cloudfrontkeyvaluestore_keys_exclusive` 의 키 값 | `list-keys` |
+| 쿠키 수명 `Max-Age=86400` | `terraform/cloudfront/res-fn.js` 의 `attributes` | `aws cloudfront test-function --stage LIVE` |
+| 함수 이름 | `aws_cloudfront_function` 의 `skillsphone-cdn-ab-req-fn` · `skillsphone-cdn-ab-res-fn` | `describe-function --stage LIVE` 가 `DEPLOYED` |
+
+쿠키명은 두 자리를 함께 바꾼다. 함수 JS 만 고치고 캐시 정책의 화이트리스트 쿠키 이름을 그대로 두면 CloudFront 가 옛 이름 쿠키로 캐시 키를 만들어, 배정이 바뀌어도 같은 캐시 항목이 나간다.
+
+---
+
 ## 자기 점검 퀴즈
 
 <Quiz title="CloudFront Functions가 붙을 수 있는 훅">

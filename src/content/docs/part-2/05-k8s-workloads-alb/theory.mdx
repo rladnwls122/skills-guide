@@ -71,7 +71,17 @@ set-02 실측값:
 
 여기서 뺄셈이 하나 필요하다. 유예 45초는 SIGTERM 시점이 아니라 **preStop 이 시작한 시점부터** 센다. preStop 이 앞에서 15초를 쓰므로 SIGTERM 이후 남는 시간은 약 30초다.
 
-**④ 세트별 차이** — set-03은 workload NG에 NoSchedule taint가 있어 Deployment에 toleration 필수, label 키도 `wsc2026/node`. set-02는 nodeSelector만.
+**④ 변형 포인트** — 당일 과제의 약 30% 가 수정된다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| label 키 (`node-type` ↔ `wsc2026/node`) | Deployment 의 `nodeSelector` | 노드그룹 label 키와 같은 값(mark 5-4) |
+| taint 있는 노드그룹 | Deployment 에 `tolerations` 추가 | toleration 이 없으면 그 노드에 스케줄되지 않는다 |
+| 헬스체크 경로·포트 | `readinessProbe` · `livenessProbe` 의 `httpGet` | 타깃그룹 health_check 경로와 같은 값 |
+| 가용성 요구 | `replicas`, `topologySpreadConstraints`, PDB `minAvailable` | AZ 하나가 죽어도 최소 1개 생존 |
+| 종료 유예 요구 | `preStop` 의 `sleep` + `terminationGracePeriodSeconds` | 유예가 preStop 보다 커야 한다 — 45초에 15초면 SIGTERM 이후 약 30초 |
+
+부팅이 느린 앱이 나오면 `startupProbe` 를 더한다(set-02 는 쓰지 않는다). QoS 를 Guaranteed 로 요구하면 `requests` 와 `limits` 를 같은 값으로 맞춘다.
 
 ---
 
@@ -97,6 +107,12 @@ helm -n <ns> list / helm -n <ns> uninstall <release>
 ```
 
 버전은 **고정**한다(작업규칙 2, latest 금지). 예: LBC `--version 3.4.0`, kube-prometheus-stack `--version 87.5.1`.
+
+**④ 변형 포인트** — 바뀌는 값이 전부 명령 인자 쪽에 모인다.
+
+- **바뀌는 값**: release 이름, 네임스페이스, 차트 버전 핀, values 항목.
+- **고칠 곳**: `helm upgrade --install` 의 인자와 `values.yaml`. 차트 자체는 손대지 않는다.
+- **확인**: `helm -n <ns> list` 로 release 이름과 차트 버전을 본다. 같은 명령을 다시 돌려도 멱등이다.
 
 ---
 
@@ -182,7 +198,17 @@ TargetGroupBinding 한 장이다. `serviceRef` 로 대상 Service 와 포트를,
 
 </details>
 
-**④ 세트별 차이** — 패턴 자체는 전 세트 동일. 차이는 LBC 자격증명(set-02 IRSA / set-03·07 Pod Identity)과 nodeSelector label 키뿐.
+**④ 변형 포인트** — 패턴은 그대로 두고 이름과 자격증명만 바꾼다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| ALB·타깃그룹 이름 | Terraform `aws_lb` · `aws_lb_target_group` 의 이름 | 채점이 이름을 정확 비교(mark 7-1) — Ingress 로는 TG 이름을 못 정한다 |
+| 클러스터 이름·VPC | helm `--set clusterName` · `--set vpcId` | `vpcId` 는 terraform output 을 담은 `$env:VPC_ID` |
+| LBC 자격증명 방식 | `serviceAccount.create=false` + `serviceAccount.name`(IRSA) ↔ Pod Identity | eksctl 이 만든 SA 를 helm 이 덮어쓰지 않는다 |
+| addon 노드 label 키 | helm `--set nodeSelector.<키>=<값>` | 노드그룹 label 키와 같은 값(mark 5-4) |
+| Service 이름·포트 | `k8s/app/targetgroupbinding.yaml` 의 `serviceRef` | `targetType` 이 타깃그룹 설정과 일치 |
+
+패턴 자체는 세트가 바뀌어도 같다 — Terraform 이 ALB/TG 를 이름 고정으로 만들고, TargetGroupBinding 은 Pod IP 등록만 맡는다.
 
 ---
 
@@ -223,7 +249,16 @@ graph TD
 - **Lambda 타깃 3종 세트**: `aws_lb_target_group`(target_type="lambda") + `aws_lambda_permission`(principal=elasticloadbalancing.amazonaws.com, source_arn=TG ARN) + `aws_lb_target_group_attachment`(depends_on=permission). permission 없이 attach하면 실패한다. 세 리소스가 왜 한 세트로 묶이는지는 [loadbalancer-basics 3-3 절](/start/loadbalancer-basics/#3-3-lambda-타깃은-세-리소스가-한-세트다)에 있다.
 - Pod TG는 `target_type = "ip"`, health_check path `/health` — Deployment readiness와 같은 경로로 맞춘다.
 
-**④ 세트별 차이** — 규칙 수·조건은 과제지마다 다르다. set-02는 "헤더 2규칙 + 403 기본"이 채점 고정값. 다른 세트는 mark의 기대 출력(줄 수!)을 먼저 읽고 규칙 수를 역산할 것.
+**④ 변형 포인트** — 규칙 수와 조건은 과제지마다 다르다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 헤더 값 (`wskorea26-cf`) | `alb.tf` 의 헤더 조건 + CloudFront 커스텀 헤더 | 양쪽 값이 같아야 403 이 아닌 경로로 간다 |
+| 규칙 수·조건 | 리스너 규칙(priority 10 / 20) | `describe-rules` 의 `HttpHeaderConfig.Values[]` 줄 수(mark 7-2) |
+| 차단 응답 | 리스너 기본 액션 fixed-response 403 | `curl http://<ALB>/book` 이 403 |
+| Lambda 타깃 요구 | `aws_lb_target_group`(target_type="lambda") + `aws_lambda_permission` + `aws_lb_target_group_attachment` | permission 없이 attach 하면 실패 |
+
+규칙 수는 스스로 정하지 않는다. mark 의 기대 출력 줄 수를 먼저 읽고 규칙 수를 역산한다 — set-02 는 "헤더 2규칙 + 403 기본"이 채점 고정값이다.
 
 ---
 

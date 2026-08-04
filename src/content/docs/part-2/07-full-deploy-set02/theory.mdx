@@ -139,7 +139,18 @@ function handler(event) {
 - ALB origin: http-only + 헤더 `X-Origin-Verify: wskorea26-cf`.
 - 커스텀 헤더는 **정확히 2개**(mark 8-4가 2줄 정확 일치).
 
-**④ 세트별 차이** — CF Function/이중 Origin 구성은 set-02 고유. 다른 세트는 과제지의 경로/메서드 요구를 보고 "앱이 서빙하는 경로 vs 채점이 때리는 경로"의 간극을 먼저 찾을 것 — 간극이 있으면 CF Function, 없으면 불필요.
+**④ 변형 포인트** — 당일 과제의 약 30% 가 수정된다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 앱이 서빙하는 경로 `/v1/book` | `book-rewrite.js` 의 `request.uri` 대입값 | 파드 앱이 서빙하는 경로와 같은 문자열 |
+| 채점이 때리는 경로 `/book` | `book-rewrite.js` 의 `request.uri ===` 비교값 | mark 9-1·9-2 가 치는 URL 과 같은 문자열 |
+| 재작성 대상 메서드 `POST` | `book-rewrite.js` 의 `request.method ===` 비교값 | GET 은 재작성 안 됨 |
+| 경로 패턴 `/book*` | ALB 오리진을 쓰는 캐시 동작의 path pattern | 재작성 **전** 경로가 이 패턴에 매칭 |
+| 배포 식별 문자열 `wskorea26-concert-cf` | `cloudfront.tf` 의 Comment | mark 8-1 의 CF_ID 조회 성공 |
+| 커스텀 헤더 이름·값 | `cloudfront.tf` 의 S3 오리진·ALB 오리진 각 1줄 | 배포의 커스텀 헤더가 정확히 2줄 (mark 8-4) |
+
+CloudFront Function 과 이중 오리진 구성은 set-02 고유다. 다른 세트에서는 앱이 서빙하는 경로와 채점이 때리는 경로 사이에 간극이 있는지부터 확인한다 — 간극이 있으면 CloudFront Function 을 두고, 두 경로가 같으면 함수 자체가 필요 없다.
 
 ---
 
@@ -195,7 +206,16 @@ graph LR
 | 9 채점 | CloudShell VPC Environment(priv-subnet-d + vpc-environment-sg), mark.sh **heredoc 붙여넣기**(파일 업로드 불가) |
 | 10 정리 | helm → eksctl → **DynamoDB 삭제방지 해제** → terraform destroy |
 
-**④ 세트별 차이** — 기본 순서(인프라→이미지→클러스터→컨트롤러→앱→관측성)는 전 세트 공통이다. 세트별로 빠지는 단계만 제거한다(예: 컨테이너 없는 과제는 2 생략).
+**④ 변형 포인트**
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 컨테이너 요구 유무 | 2 이미지 단계 | 컨테이너가 없으면 이 단계를 생략 |
+| 관측성 요구 범위 | 6 모니터링 · 7 Fluent Bit 단계 | set-02 는 로그 파이프라인 제외(4절) |
+| 채점 셸 위치 | 9 채점 단계의 CloudShell 서브넷·SG | `priv-subnet-d` + `vpc-environment-sg` |
+| 삭제방지가 걸린 리소스 | 10 정리 단계의 해제 명령 | `terraform destroy` 가 끝까지 통과 |
+
+순서 자체(인프라→이미지→클러스터→컨트롤러→앱→관측성→검증→채점→정리)는 전 세트 공통이다. 세트별로 단계를 빼거나 더할 뿐 앞뒤를 바꾸지 않는다 — 각 단계가 다음 단계의 입력을 만들기 때문이다.
 
 ---
 

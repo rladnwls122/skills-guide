@@ -11,7 +11,7 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 선행 지식과 학습 경로는 [모듈 개요](/part-4/09-serverless-event/)에.
 
-2과제는 독립 모듈 여러 개로 구성되며, 모듈마다 "패턴"이 반복된다. 이 문서는 그중 유형 1·2를 다룬다. 각 유형은 ① 도식 ② 언제 나오나 ③ 핵심 연결 고리 ④ 채점이 보는 상태 ⑤ 퀴즈 순서다.
+2과제는 독립 모듈 여러 개로 구성되며, 모듈마다 "패턴"이 반복된다. 이 문서는 그중 유형 1·2를 다룬다. 각 유형은 ① 도식 ② 언제 나오나 ③ 핵심 연결 고리 ④ 채점이 보는 상태 ⑤ 변형 포인트 ⑥ 퀴즈 순서다. `유형 2 변형` 절만 ④ 가 고정 이름·값이고, 그 표에 변형 축을 함께 담아 별도의 변형 포인트를 두지 않는다.
 
 Lambda·EventBridge·CloudTrail·Step Functions·SQS 다섯 가지의 기본 동작은 [serverless-basics](/start/serverless-basics/)에 있다. 이 문서는 그것들을 어떻게 잇는가만 다룬다.
 
@@ -80,7 +80,21 @@ flowchart LR
 - 기대 결과: `STU1020 96.6 A` (get-item), `processed/`에 test.csv만, `error/`에 error_*_STU2001/STU2002/STU2004/unknown.json **정확히 4개**.
 - 채점 상태 = "깨끗한 버킷/테이블에서 test.csv 1회 처리 완료 + SUCCEEDED 실행 1건".
 
-### ⑤ 퀴즈
+### ⑤ 변형 포인트
+
+당일 과제의 약 30% 가 수정된다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 리소스 이름 | 상태 머신 `wsc2026-student-score-workflow` · 처리 Lambda `wsc2026-student-score-function` · 테이블 `wsc2026-student-score` | task.md 와 mark 스크립트 양쪽 문자열 |
+| 입력 파일 확장자 | S3 이벤트 알림의 suffix 필터 | 오류 출력 확장자 `.json` 과 다름 |
+| 폴더 이름 | 이벤트 알림 prefix · ASL 의 CopyObject·DeleteObject 대상 키 | 폴더 마커는 `input/` 하나만 |
+| 계산 규칙(평균·등급) | 처리 Lambda 의 행 검증·계산부 | `Decimal` 로 저장 · `STU1020 96.6 A` |
+| 채점용 입력 파일 | 리셋 절차 ③ 의 업로드 대상 | `error/` JSON 개수 = CSV 오류 행 수(기대 4개) |
+
+폴더 3종·suffix 필터·Copy+Delete 2상태는 이 패턴의 구조라서 이름이 바뀌어도 유지한다. IAM 역할 개수는 과제가 명명한 이름 수를 따른다 — Lambda 역할 이름이 하나뿐이면 두 Lambda 가 공용으로 쓴다.
+
+### ⑥ 퀴즈
 
 <Quiz title="suffix 필터를 빼면">
 트리거 Lambda를 호출하는 S3 이벤트 알림에 suffix 필터를 걸지 않았다. 무슨 일이 벌어지나? (힌트: 처리 Lambda가 `error/`에 쓰는 파일의 확장자)
@@ -216,7 +230,20 @@ flowchart TB
 이름 정확 일치 채점에서는 오타처럼 보여도 적힌 그대로 만든다. 다만 대표 사례였던 set-02의 `wsc2026-alaytics-ec2-role`(alaytics)은 **이의 제기로 오타가 수정됐고 채점 대상도 아니다** — [정정 내역](/reference/errata/)을 확인하지 않으면 이미 고쳐진 오타를 사양으로 착각한다.
 :::
 
-### ⑤ 퀴즈
+### ⑤ 변형 포인트
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 감시할 위반 종류 | EventBridge 룰과 복구 Lambda 의 개수 | task.md ∪ mark 합집합 — 함수 6개·룰 6개 |
+| 원본 인스턴스 타입 `t3.micro` | type-change 룰의 `anything-but` + 복구 Lambda 의 비교값 | 두 곳이 같은 문자열 |
+| 역할 이름 `wsc2026-event-ec2-role` | 인스턴스 프로파일 Name + Lambda `ROLE_NAME` 환경변수 | 세 값이 같은 문자열 |
+| 필수 태그 키 `Project` | provider `default_tags` + Config required-tags 룰 | NON_COMPLIANT 조회가 `None` |
+| Config 기록 스코프 | 레코더의 리소스 타입 목록 | EC2 Instance·SecurityGroup 만 |
+| 룰 이름 `wsc2026-ec2-stop-rule` | 시연 전후의 `disable-rule`·`enable-rule` 인자 | 시연 후 다시 enable |
+
+위반 종류가 추가되면 그 종류에 네이티브 EventBridge 이벤트가 있는지부터 확인한다. 없으면 CloudTrail 경로라 지연이 수십 초~1분으로 늘고, 채점 스크립트의 sleep 시간을 그 기준으로 읽어야 한다.
+
+### ⑥ 퀴즈
 
 <Quiz title="두 감지 경로의 지연 차이">
 SG 인바운드 규칙 추가에 대한 자동복구가 인스턴스 stop 복구보다 눈에 띄게 느리다. 근본 이유는?
@@ -372,6 +399,16 @@ jq -n --arg sg "$PROTECTED_SECURITY_GROUP_ID" \
 | 환경변수 | `PROTECTED_SECURITY_GROUP_ID`(SG ID) · `SNS_TOPIC_ARN` |
 | CloudTrail / 룰 | `skills-ceh-cloudtrail`(Logging Enabled) / `skills-ceh-sg-change-rule`(default 버스) |
 | IAM 권한 | Security Group 조회·수정, SNS 발행, CloudWatch Logs 기록 |
+
+이름 하나가 바뀌면 두 곳 이상이 함께 움직인다.
+
+| 바뀌는 값 | 함께 고칠 곳 | 확인 |
+|---|---|---|
+| 보호 대상 SG ID | Lambda 환경변수 `PROTECTED_SECURITY_GROUP_ID` | 결과 JSON 의 `status` 가 `IGNORED` 가 아님 |
+| 함수 파일명 | 핸들러 `<파일명>.lambda_handler` | zip 안 파일명과 핸들러 앞부분 일치 |
+| SNS 토픽 이름 | `SNS_TOPIC_ARN` 환경변수 + IAM `sns:Publish` | 결과 JSON 의 `publishStatus` |
+| 함수 이름 | 로그 그룹 `/aws/lambda/<함수 이름>` | 채점 3-5 가 로그 그룹 존재를 확인 |
+| 룰 이름 | EventBridge 룰 + Lambda 리소스 정책 | 채점 3-4 의 `describe-rule`·`get-policy` |
 
 ### ⑤ 퀴즈
 

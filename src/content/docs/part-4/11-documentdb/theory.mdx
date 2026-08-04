@@ -103,6 +103,23 @@ TTL 인덱스의 `expireAfterSeconds: 0`은 "삽입 후 0초"가 아니다. `exp
 파일을 직접 `mongoimport`하면 날짜가 문자열로 들어간다. `/v1/admin/summary`의 `dateFieldTypes`가 `"str"`로 나오고, `status`+`dueAt` 범위 비교가 전부 빈 배열이 된다.
 :::
 
+## 6. 변형 포인트
+
+당일 과제는 전체 채점 점수의 약 30% 범위 안에서 수정된다([대회 운영 규칙](/reference/competition-rules/)). 이 모듈에서 바뀔 값과 고칠 자리는 정해져 있다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 클러스터·인스턴스 이름 | `skills-nosql-docdb-cluster` · `skills-nosql-docdb-instance-1` | `describe-db-clusters` · `describe-db-instances` |
+| 인스턴스 클래스·리전 | `db.t3.medium` · 서울 ap-northeast-2 | `describe-db-instances` |
+| Secret 이름과 `host` 값 | `skills-nosql-docdb-secret` 의 `username`·`password`·`host` | `describe-db-clusters` 의 `Endpoint` |
+| 데이터베이스·컬렉션 이름 | `skills_retail` 의 `orders`·`products`·`sessions` | `GET /v1/admin/summary` 의 `counts` |
+| 적재 건수 | 주문 8 · 상품 6 · 세션 3 | `GET /v1/admin/summary` 의 `counts` |
+| 인덱스 필드·정렬 방향·`unique` | `create_index()` 로 직접 생성 | `GET /v1/admin/indexes` |
+| TTL 기준 필드 | `sessions` 의 `{expiresAt: 1}` · `expireAfterSeconds: 0` | `GET /v1/admin/indexes` |
+| CA 번들 경로 | `docdb_client.py` 의 `CA_FILE` | `/opt/skills-nosql/global-bundle.pem` 존재 |
+
+`docdb_client.py` 는 지급 코드이므로 이름·건수·인덱스 사양이 바뀌어도 코드를 고치는 자리는 `CA_FILE` 경로 하나다. 나머지는 전부 AWS 리소스와 Secret 값, 그리고 직접 만드는 인덱스 쪽에서 흡수한다.
+
 ## 자기 점검 퀴즈
 
 <Quiz title="Secret의 host 값">

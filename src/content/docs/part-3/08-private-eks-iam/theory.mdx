@@ -85,10 +85,18 @@ set-03 실측(endpoints.tf 주석): `eks` Interface Endpoint를 `private_dns_ena
 2026년 7월부터는 OIDC 디스커버리 전용 엔드포인트 `com.amazonaws.<region>.oidc-eks` 가 있다. `eks` 엔드포인트를 프라이빗 DNS로 켜야 하는 구성이라면 이것을 함께 만들어 해석을 되살린다. 둘이 더는 양자택일이 아니다.
 :::
 
-### ④ 세트별 차이
+### ④ 변형 포인트
 
-- set-03: `privateCluster: {enabled: true, skipEndpointCreation: true}` + NAT + S3 Gateway만.
-- set-07: NAT + ECR/CloudWatch Interface Endpoint 병행, 작업 호스트로 SSM bastion 채택.
+당일 과제의 약 30% 가 수정된다. 이 주제에서 바뀌는 값은 대부분 엔드포인트 목록 한 곳에 모인다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 엔드포인트 공개 여부 | eksctl 설정의 `privateCluster.enabled` | mark 4-1 의 `describe-cluster` 가 `[false, true]` |
+| 이미지 pull 경로 | NAT 유지 또는 `endpoints.tf` 의 `s3`·`ecr.api`·`ecr.dkr` | 노드에서 이미지 pull 성공 |
+| "인터넷 미경유" 요구 | `endpoints.tf` 에 `sts`·`oidc-eks`·`eks-auth`·`ec2` 추가 | IRSA·Pod Identity 동작 |
+| 워크로드 종류 | `logs`·`elasticloadbalancing`·`kms` 엔드포인트 | 해당 API 호출 성공 |
+
+set-03 은 `privateCluster` 에 `skipEndpointCreation: true` 를 주고 NAT 와 S3 Gateway Endpoint 만으로 끝낸다. set-07 은 NAT 에 ECR·CloudWatch Interface Endpoint 를 병행하고 작업 호스트로 SSM bastion 을 쓴다. 엔드포인트를 늘릴 때 `eks` 를 프라이빗 DNS 로 켜면 `oidc-eks` 를 함께 만든다.
 
 ---
 
@@ -134,9 +142,16 @@ flowchart LR
 - set-07 변형: CloudShell 대신 **SSM bastion**(private 서브넷 EC2, 인바운드 0, 프로파일은 SSM 전용) — 30분 타임아웃·비영속을 피한다. 단 bastion은 **채점 전 삭제**(인스턴스+프로파일+role까지).
 - set-07 배포본 v4부터 **채점용 VPC CloudShell 환경(`unicorn-mark`)이 Public 서브넷에서 Private 서브넷으로 옮겨졌다.** 채점 트래픽이 private 서브넷에서 출발하므로 컨트롤 플레인 추가 SG의 443 허용 소스와 라우팅을 그 기준으로 잡는다.
 
-### ④ 세트별 차이
+### ④ 변형 포인트
 
-set-03 = VPC CloudShell, set-07 = bastion(+ fallback으로 채점용 CloudShell 겸용).
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 작업 호스트 | VPC CloudShell(set-03) · SSM bastion(set-07, 채점용 CloudShell 겸용) | private API 에 `kubectl` 이 닿음 |
+| 채점 셸의 출발 서브넷 | 컨트롤 플레인 추가 SG 의 443 허용 소스 + 라우팅 | set-07 v4 는 private 서브넷 |
+| 릴레이 경로 | 셋업 블록의 `aws s3 cp` 대상과 `_transfer/` 접두사 | 채점 전 `aws s3 rm _transfer/ --recursive` |
+| 환경변수 파일 | `~/.wsc2026-env` 의 이름·값 | 재접속 후 `source` 한 번으로 복구 |
+
+bastion 을 쓰면 채점 전에 인스턴스·인스턴스 프로파일·역할까지 함께 지운다.
 
 :::note[협의회(2026-07-31) — 접근 경로는 제한하지 않는다]
 EKS 접근 방식을 특정하지 않는 쪽으로 정리됐다. 과제지 요구는 "CloudShell에서 kubectl 명령어를 사용할 수 있어야 한다" 하나다. CloudShell 접근이 불가한 구성이면 **선수가 채점 전에 bastion을 사전 구축해 쓰는 것도 공식적으로 허용**된다.
@@ -189,9 +204,16 @@ flowchart TD
 addon을 업데이트하면 **Corefile이 초기화**될 수 있다. 이미 했다면 패치를 재적용하고 grep으로 재확인한다.
 :::
 
-### ④ 세트별 차이
+### ④ 변형 포인트
 
-도메인 문자열만 다르다. 커스텀 도메인 요구가 없는 세트는 건드리지 않는다.
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 클러스터 도메인 문자열 | eksctl `overrideBootstrapCommand` 의 nodeadm `clusterDomain` | mark 4-1 의 kubelet configz grep |
+| 같은 문자열 | CoreDNS Corefile ConfigMap | mark 4-1 의 Corefile grep |
+| 같은 문자열 | kps Alertmanager 의 `clusterDomain`(모듈 06) | helm values 가 같은 값 |
+| 노드그룹 개수 | 노드그룹마다 `overrideBootstrapCommand` | 모든 노드에서 `nslookup kubernetes.default.svc.<도메인>` 성공 |
+
+바뀌는 것은 도메인 문자열 하나지만 반영할 곳이 셋이다. 한 곳만 바꾸면 파드 DNS 가 깨진다. 커스텀 도메인 요구가 없는 세트는 세 곳을 모두 기본값 `cluster.local` 로 둔다.
 
 ---
 
@@ -237,9 +259,16 @@ flowchart TD
 - **요구 목록 외 권한 추가는 수동 채점 리스크**: 테이블이 CMK 암호화라 조회에 `kms:Decrypt`가 실제로 필요하지만, 요구 목록에 없는 액션 추가는 "최소권한 위반"으로 읽힐 수 있다. 넣는다면 리소스를 해당 키 ARN 하나로 못박고 sid로 사유를 명시한다.
 - **root-less KMS 재확인(모듈 02 연계)**: 유의사항에 root/`kms:*` 금지가 있는 세트(set-03)는 키 정책을 관리자 principal `"*"` + `kms:CallerAccount` 조건(계정 위임) + 서비스별 최소 statement로 구성한다. 여기 audit role 의 trust 와 대비된다 — trust policy 는 `:root` ARN 을 그대로 쓰지만 KMS 키 정책은 채점이 `:root` 문자열을 grep 하므로 조건식으로 같은 뜻을 표현한다. 계정 위임이라 root 자격증명으로 apply·채점해도 막히지 않는다. 실물 JSON 은 [kms-basics](/start/kms-basics/#1-root-less-키-정책-실물--적용된-json)에 있다.
 
-### ④ 세트별 차이
+### ④ 변형 포인트
 
-set-07만 audit role이 명시 요구. set-03은 대신 root-less KMS가 하드 포인트.
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 선수등번호 | `player_number` 변수 + 채점 셸이 export 하는 `number` | 두 값이 같은 문자열 (mark 9-1) |
+| ExternalId 접두사 `unicorn-audit-2026` | trust policy 의 `sts:ExternalId` 조건값 | `get-role` 출력과 과제지 문자열 일치 |
+| 최대 세션 3600초 | `max_session_duration` | `get-role` 의 MaxSessionDuration |
+| 허용 액션 목록 | 권한 정책 statement (set-07 `iam.tf`) | describe-vpcs 성공 · describe-instances 거부 (mark 9-2) |
+
+audit role 을 명시 요구하는 것은 set-07 뿐이다. set-03 의 하드 포인트는 root-less KMS 키 정책이고, 그쪽은 신원이 아니라 `kms:CallerAccount` 조건으로 위임한다.
 
 ---
 
@@ -279,9 +308,13 @@ internal ALB 를 CloudFront VPC Origin 으로 노출하는 구성이다. 사용�
 
 - ALB SG 인바운드를 `com.amazonaws.global.cloudfront.origin-facing` **managed prefix list**로만 열면 직접 접근은 차단된다 — 채점 기대값이 403 또는 000(타임아웃/연결 불가)인 이유. 000 유도는 prefix list SG로 달성한다.
 
-### ④ 세트별 차이
+### ④ 변형 포인트
 
-set-03은 internet-facing ALB + CloudFront prefix list SG(직접 curl 000), set-07은 internal ALB + VPC Origin. 모듈 02·06의 CloudFront 내용과 교차 확인.
+- **바뀌는 값** — ALB 노출 방식과 CloudFront 오리진 종류. set-03 은 internet-facing ALB, set-07 은 internal ALB + VPC Origin 이다.
+- **고칠 곳** — ALB 스키마, ALB SG 인바운드 소스(`com.amazonaws.global.cloudfront.origin-facing` prefix list), CloudFront 오리진 설정. KMS 는 set-07 만 WAF 로그용 MRK primary 를 us-east-1 에 둔다.
+- **확인** — ALB 직접 curl 이 403 또는 000. MRK 는 alias 가 양 리전에 있고 회전 90일을 primary 가 관리한다.
+
+모듈 02·06 의 CloudFront 내용과 교차 확인한다.
 
 ---
 

@@ -113,6 +113,23 @@ Client VPC(`10.61.0.0/16`)와 Service VPC(`10.62.0.0/16`)는 겹치지 않지만
 3. **`SERVICE_URL`에 Service EC2의 사설 IP를 직접 넣으면 안 된다.** 반드시 `get-service`의 `dnsEntry.domainName` — 사설 IP를 쓰면 Lattice를 거치지 않으므로 `via=vpc-lattice`라는 응답 자체가 이 아키텍처를 증명하지 못한다.
 :::
 
+## 변형 포인트
+
+당일 과제는 전체 채점 점수의 약 30% 범위 안에서 수정된다([대회 운영 규칙](/reference/competition-rules/)). 이 모듈에서 바뀔 값과 고칠 자리는 정해져 있다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 4계층 리소스 이름 | `skills-lattice-sn` · `skills-lattice-order-service` · `skills-lattice-http-listener` · `skills-lattice-order-tg` | `asgmt2_module2_check.sh` [2-3] |
+| EC2 이름·앱 포트 | `skills-lattice-client-ec2` :80 · `skills-lattice-service-ec2` :8080 | `asgmt2_module2_check.sh` [2-2] |
+| 리스너·타깃 포트, 헬스 체크 경로 | Listener HTTP/80 · Target Group HTTP/8080 `/health` | `curl /health` |
+| 리전 | 프리픽스 리스트 `com.amazonaws.ap-northeast-1.vpc-lattice` | `aws ec2 describe-managed-prefix-lists` |
+| Service EC2 SG 인바운드 소스 | 8080 소스 = 프리픽스 리스트 ID(`pl-...`) | `describe-security-groups` |
+| Client VPC CIDR | `10.61.0.0/16` — Association SG 의 TCP/80 소스 | `get-service-network-vpc-association` 의 `securityGroupIds` |
+| 클라이언트 호출 대상 | `SERVICE_URL` = `get-service` 의 `dnsEntry.domainName` | `curl /v1/client/orders?id=1001` |
+| 주문 ID·응답 문자열 | `id=1001` → `order_id=1001, via=vpc-lattice` | `asgmt2_module2_check.sh` [2-5] |
+
+리전이 바뀌면 프리픽스 리스트 이름의 리전 부분도 함께 바뀐다 — 이름을 그대로 두면 `pl-` ID 조회가 빈 결과를 내고 Service EC2 SG 규칙을 만들 소스가 없어진다. `SERVICE_URL` 은 사설 IP를 넣어도 응답이 오므로 값이 틀려도 증상이 늦게 드러난다. 두 값은 치환 후 바로 확인한다.
+
 ## 자기 점검 퀴즈
 
 <Quiz title="왜 피어링이나 TGW가 아니라 Lattice인가">

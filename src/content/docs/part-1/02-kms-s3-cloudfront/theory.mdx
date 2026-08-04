@@ -9,13 +9,15 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 > 문서 유형: explanation
 
+선행 지식과 학습 경로는 [모듈 개요](/part-1/02-kms-s3-cloudfront/)에.
+
 암호화(KMS)와 정적 웹 서빙(S3+CloudFront)은 거의 모든 세트에 나온다. 채점은 "alias 이름 역조회", "정책 텍스트 grep", "퍼블릭 차단 상태" 같은 기계적 검사이므로, 정확한 구조를 암기 수준으로 익힌다.
 
 ---
 
 ## 1. Envelope Encryption 과 CMK
 
-**① 한 줄 정의** — envelope encryption 은 데이터를 데이터 키(DEK)로 암호화하고, 그 DEK 를 다시 KMS 의 CMK 로 암호화해 보관하는 2단 구조다.
+**① 한 줄 정의** — envelope encryption 은 데이터를 데이터 키(DEK)로 암호화하고, 그 DEK 를 다시 KMS 의 CMK 로 암호화해 보관하는 2단 구조다. 봉투 암호화·CMK·키 정책이라는 말 자체가 처음이면 [kms-basics](/start/kms-basics/)를 먼저 읽는다.
 
 **② 왜 필요한가 (채점 관점)** — S3 SSE-KMS, DynamoDB SSE, EKS secrets 암호화가 전부 이 구조다. mark 는 "어떤 CMK 로 암호화됐는가"를 **alias 로 역조회**하므로 alias 이름 정확 일치가 점수다.
 
@@ -61,7 +63,7 @@ resource "aws_kms_alias" "s3" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-CMK 와 별칭을 만드는 두 리소스다. 키 자체에는 이름이 없고 채점은 `alias/wskorea26-s3-key` 로 역조회하므로 별칭이 사실상 이름 노릇을 한다. `enable_key_rotation` 은 연 1회 자동 교체를, `deletion_window_in_days` 는 삭제 예약 후 되돌릴 수 있는 유예 기간을 정한다.
+[`aws_kms_key`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) 와 [`aws_kms_alias`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) 로 CMK 와 별칭을 만든다. 키 자체에는 이름이 없고 채점은 `alias/wskorea26-s3-key` 로 역조회하므로 별칭이 사실상 이름 노릇을 한다. `enable_key_rotation` 은 연 1회 자동 교체를, `deletion_window_in_days` 는 삭제 예약 후 되돌릴 수 있는 유예 기간을 정한다.
 
 </details>
 
@@ -120,7 +122,7 @@ data "aws_iam_policy_document" "kms_s3" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-키 정책을 두 조각으로 나눠 합친다. 위쪽은 계정 root 에 전권을 주는 기본 구문이고, 아래쪽이 CloudFront 서비스에 복호화만 허용하는 구문이다. `source_policy_documents` 가 둘을 한 문서로 합성한다. 키 정책의 `resources` 가 항상 `"*"` 인 이유는 그 정책이 붙은 키 자신을 뜻하기 때문이고, `aws:SourceAccount` 조건이 다른 계정의 CloudFront 가 이 키를 쓰지 못하게 막는다.
+키 정책을 두 조각으로 나눠 합친다. 위쪽은 계정 root 에 전권을 주는 기본 구문이고, 아래쪽이 CloudFront 서비스에 복호화만 허용하는 구문이다. `source_policy_documents` 가 둘을 한 문서로 합성한다. 키 정책의 `resources` 가 항상 `"*"` 인 이유는 그 정책이 붙은 키 자신을 뜻하기 때문이고([kms-basics 의 실물 JSON 절](/start/kms-basics/#1-root-less-키-정책-실물--적용된-json)이 이 표기를 IAM 정책의 `"Resource": "*"` 와 나란히 놓고 푼다), `aws:SourceAccount` 조건이 다른 계정의 CloudFront 가 이 키를 쓰지 못하게 막는다.
 
 </details>
 
@@ -132,9 +134,11 @@ root principal 은 "계정의 IAM 정책에 권한 위임"을 의미 — 이게 
 
 ## 3. 심화 — set-03 root-less 키 정책
 
-**① 한 줄 정의** — 유의사항이 "키 정책에 root principal 과 `kms:*` 액션 금지"를 걸면, 배포자 IAM 신원을 admin principal 로 명시하고 액션을 전부 나열해야 한다.
+**① 한 줄 정의** — 유의사항이 "키 정책에 root principal 과 `kms:*` 액션 금지"를 걸면, 관리자 principal 을 `"*"` 로 두고 `kms:CallerAccount` 조건으로 계정 하나에 가둔 뒤 액션을 전부 나열해야 한다.
 
-**② 왜 필요한가 (채점 관점)** — set-03 mark 의 check_kms 가 **정책 텍스트를 grep** 해서 `:root` 나 `kms:*` 가 있으면 실격 처리한다. 동시에 KMS 의 lockout safety check 를 통과해야 하는데, 이 검사가 보는 것은 **호출한 신원 본인에게 `kms:PutKeyPolicy` 가 허용되는가** 하나다. 그래서 배포자 신원의 statement 에 `kms:Put*` 를 반드시 포함시키고, 나머지 관리·운영 액션도 개별 나열한다.
+**② 왜 필요한가 (채점 관점)** — set-03 mark 의 check_kms 가 **정책 텍스트를 grep** 해서 `:root` 나 `kms:*` 가 있으면 실격 처리한다. 동시에 KMS 의 lockout safety check 를 통과해야 하는데, 이 검사가 보는 것은 **호출한 신원 본인에게 `kms:PutKeyPolicy` 가 허용되는가** 하나다. 그래서 관리 statement 에 `kms:Put*` 를 반드시 포함시키고, 나머지 관리·운영 액션도 개별 나열한다.
+
+principal 을 배포자 한 사람의 ARN 으로 좁히지 않는 이유는 채점 쪽에 있다. 과제지가 "미리 IAM 사용자를 만들어 그 신원으로 진행하라"고 말하지 않으면 채점자는 지급받은 root 로 접속한다. KMS 는 IAM 정책이 아니라 키 정책이 1차 관문이라, 관리자를 배포자 신원 하나로 잠그면 채점 스크립트 자신이 `describe-key`·`get-key-policy` 조차 못 해 KMS 항목이 통째로 0점이 된다. `"*"` + `kms:CallerAccount` 는 계정 밖 principal 을 막으면서 계정 안 신원 판단은 각자의 IAM 정책에 맡기므로, root 로 채점해도 통과한다.
 
 **③ 핵심 원리** — set-03 kms.tf 실측:
 
@@ -154,11 +158,18 @@ locals {
 data "aws_iam_policy_document" "kms_admin" {
   statement {
     sid       = "KeyAdministration"
+    effect    = "Allow"
     actions   = local.kms_admin_actions
     resources = ["*"]
     principals {
       type        = "AWS"
-      identifiers = local.kms_admin_arns   # 배포자 신원 (aws_iam_session_context)
+      identifiers = ["*"]
+    }
+    # 이 조건이 principal "*" 의 범위를 이 계정으로 좁힌다. 빠지면 전 세계 공개다
+    condition {
+      test     = "StringEquals"
+      variable = "kms:CallerAccount"
+      values   = [local.account_id]
     }
   }
 }
@@ -167,7 +178,7 @@ data "aws_iam_policy_document" "kms_admin" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-root 없이 키를 관리하는 set-03 방식이다. `kms:*` 라는 문자열을 쓰지 않고 접두어를 나열해 사실상 같은 권한을 만든다 — 채점이 정책 본문에서 `kms:*` 와 root principal 을 문자열로 찾기 때문이다. principal 은 배포를 실행한 신원이고, 그 신원에 `kms:PutKeyPolicy` 가 없으면 KMS 가 잠김 방지 검사에서 apply 자체를 거부한다.
+root 없이 키를 관리하는 set-03 방식이다. `kms:*` 라는 문자열을 쓰지 않고 접두어를 나열해 사실상 같은 권한을 만든다 — 채점이 정책 본문에서 `kms:*` 와 root principal 을 문자열로 찾기 때문이다. principal 은 `"*"` 지만 전 세계 공개가 아니다. 바로 아래 `kms:CallerAccount` 조건이 이 계정에서 온 호출로 범위를 좁히고, 계정 안에서 누가 실제로 쓸 수 있는지는 각 신원의 IAM 정책이 정한다. 액션 목록에 `kms:Put*` 가 들어 있어야 KMS 의 잠김 방지 검사가 apply 를 통과시킨다.
 
 </details>
 
@@ -184,12 +195,14 @@ flowchart TD
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-root-less 키 정책이 통과하는 조건을 판정 순서로 그렸다. 첫 관문은 채점 쪽이다 — root principal 이나 `kms:*` 가 정책에 있으면 그 자리에서 실격이다. 둘째 관문은 KMS 쪽이다 — 정책을 넣는 신원에게 `kms:PutKeyPolicy` 가 없으면 키를 아무도 못 다루게 되는 상태를 막으려고 apply 를 거부한다. 둘 다 피하는 형태가 배포자에게 관리 권한을, 서비스에는 사용 권한만 주는 구성이다.
+root-less 키 정책이 통과하는 조건을 판정 순서로 그렸다. 첫 관문은 채점 쪽이다 — root principal 이나 `kms:*` 가 정책에 있으면 그 자리에서 실격이다. 둘째 관문은 KMS 쪽이다 — 정책을 넣는 신원에게 `kms:PutKeyPolicy` 가 없으면 키를 아무도 못 다루게 되는 상태가 되므로 apply 를 거부한다. 둘 다 피하는 형태가 관리 권한은 `kms:CallerAccount` 조건으로 계정 전체에 위임하고, 서비스에는 사용 권한만 따로 주는 구성이다.
 
 </details>
 
 :::danger[치명 함정]
-배포자 신원이 admin 이므로, **root(또는 다른 신원)로 apply 하면 이후 그 키에 대한 모든 작업이 거부**된다. eksctl·docker push·kubectl 도 terraform 과 **같은 자격증명**으로 실행해야 한다. 또 root 위임이 없으니 키 소비자(EKS Pod 역할, Lambda 실행 역할, 서비스 principal)를 키 정책에 **직접** 나열해야 한다 — set-03 은 db 키에 `book_pod`/`book_function` 역할, function 키에 lambda 서비스 principal(EncryptionContext 조건)까지 명시한다.
+관리 statement 하나로 끝나지 않는다. AWS 서비스가 **자기 이름으로**(서비스 principal 로) 키를 부르는 경로는 `kms:CallerAccount` 조건으로 덮이지 않으므로, 그 소비자마다 **별도 statement 를 직접** 써야 한다. set-03 은 bucket 키에 `cloudfront.amazonaws.com`(`aws:SourceAccount` 조건), function 키에 `lambda.amazonaws.com`(`kms:EncryptionContext` 조건)을 명시하고, db 키에도 사용 주체인 `book_pod`·`book_function` 역할을 최소 액션으로 따로 적어 둔다.
+
+관리자 principal 을 배포자 ARN 하나로 좁혔다면 함정이 하나 더 붙는다 — 그 신원이 아닌 자격증명으로 apply·eksctl·kubectl 을 실행하는 순간 그 키의 모든 작업이 거부된다. set-03 정답지가 계정 위임을 쓰는 이상 이 제약은 없지만, 배포자 고정 방식을 골랐다면 도구 전부를 같은 자격증명으로 돌려야 한다.
 :::
 
 **④ 세트별 차이** — root-less 는 set-03 유형의 유의사항이 있을 때만. 평상시(set-02)는 root 위임이 단순하고 안전하다. 과제지 유의사항을 먼저 읽고 결정한다.
@@ -226,6 +239,8 @@ encryption_configuration {
 
 **① 한 줄 정의** — 정적 웹 버킷은 퍼블릭 액세스 4종을 전부 차단하고, CMK 로 SSE-KMS 암호화하되 BucketKey 로 KMS 호출을 줄인다.
 
+퍼블릭 액세스 차단이 접근 통제 4층 중 어디에 해당하는지, SSE-KMS 가 다른 암호화 방식과 무엇이 다른지는 [s3-basics](/start/s3-basics/)에 있다.
+
 **② 왜 필요한가 (채점 관점)** — mark 2-2 가 퍼블릭 차단 상태와 암호화 키를 검사하고, `get-bucket-policy-status` 가 `IsPublic: false` 를 반환하려면 OAC 버킷 정책이 있어야 한다. 버킷 이름은 `wskorea26-concert-bucket-<비번호>` — 비번호 변수화 필수.
 
 **③ 핵심 원리** — set-02 s3.tf 실측:
@@ -254,7 +269,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "web" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-버킷 두 속성을 각각 별도 리소스로 건다. 퍼블릭 차단은 네 항목을 모두 true 로 두어야 채점을 통과하고, 기본 암호화는 알고리즘을 `aws:kms` 로 두고 어느 키인지까지 지정한다. `bucket_key_enabled` 는 객체마다 KMS 를 부르는 대신 버킷 수준에서 DEK 를 재사용하게 해 호출 수와 비용을 줄인다.
+버킷 두 속성을 [`aws_s3_bucket_public_access_block`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_public_access_block) 과 [`aws_s3_bucket_server_side_encryption_configuration`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_server_side_encryption_configuration) 이라는 별도 리소스로 각각 건다. 퍼블릭 차단은 네 항목을 모두 true 로 두어야 채점을 통과하고, 기본 암호화는 알고리즘을 `aws:kms` 로 두고 어느 키인지까지 지정한다. `bucket_key_enabled` 는 객체마다 KMS 를 부르는 대신 버킷 수준에서 DEK 를 재사용하게 해 호출 수와 비용을 줄인다.
 
 </details>
 
@@ -276,7 +291,7 @@ resource "aws_s3_object" "static" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-정적 파일 두 개를 객체로 올린다. `for_each` 의 각 값이 파일명이 되고 키는 `web/main/` 접두어가 붙는다. `source_hash` 는 파일 내용이 바뀌었을 때만 다시 올리게 하고, `content_type` 은 확장자를 `regex` 로 뽑아 매핑에서 찾되 없으면 기본값으로 떨어진다 — 이 값이 틀리면 브라우저가 HTML 을 파일로 내려받는다.
+정적 파일 두 개를 [`aws_s3_object`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_object) 로 올린다. `for_each` 의 각 값이 파일명이 되고 키는 `web/main/` 접두어가 붙는다. `source_hash` 는 파일 내용이 바뀌었을 때만 다시 올리게 하고, `content_type` 은 확장자를 `regex` 로 뽑아 매핑에서 찾되 없으면 기본값으로 떨어진다 — 이 값이 틀리면 브라우저가 HTML 을 파일로 내려받는다.
 
 </details>
 
@@ -290,7 +305,7 @@ resource "aws_s3_object" "static" {
 
 ## 6. CloudFront OAC + 버킷 정책 + 순환 참조 우회
 
-**① 한 줄 정의** — OAC(Origin Access Control)는 CloudFront 가 S3 에 SigV4 서명으로 접근하게 하는 장치이고, 버킷 정책은 `AWS:SourceArn = 배포 ARN` 조건으로 그 배포에게만 GetObject 를 허용한다.
+**① 한 줄 정의** — OAC(Origin Access Control)는 CloudFront 가 S3 에 SigV4 서명으로 접근하게 하는 장치이고, 버킷 정책은 `AWS:SourceArn = 배포 ARN` 조건으로 그 배포에게만 GetObject 를 허용한다. OAC 가 원본을 비공개로 유지하는 구조 자체는 [s3-basics 의 OAC 절](/start/s3-basics/#cloudfront-oac--원본을-비공개로-유지하는-구조)에 있다.
 
 **② 왜 필요한가 (채점 관점)** — "버킷 직접 접근 불가 + CloudFront 경유만 가능"이 정적 웹 채점의 표준형. 퍼블릭 차단 4종과 양립하는 유일한 정상 경로가 OAC 다.
 
@@ -392,7 +407,7 @@ origin {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-OAC 를 만들고 오리진에 붙이는 부분이다. `signing_behavior = "always"` 는 CloudFront 가 모든 요청에 SigV4 서명을 붙인다는 뜻이라 버킷을 비공개로 둘 수 있다. `domain_name` 은 웹사이트 엔드포인트가 아니라 리전 도메인이어야 하고, `origin_path` 가 `/web/main` 이라 사용자의 `/` 요청이 `web/main/index.html` 로 이어진다.
+[`aws_cloudfront_origin_access_control`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_origin_access_control) 로 OAC 를 만들고 오리진에 붙이는 부분이다. `signing_behavior = "always"` 는 CloudFront 가 모든 요청에 SigV4 서명을 붙인다는 뜻이라 버킷을 비공개로 둘 수 있다. `domain_name` 은 웹사이트 엔드포인트가 아니라 리전 도메인이어야 하고, `origin_path` 가 `/web/main` 이라 사용자의 `/` 요청이 `web/main/index.html` 로 이어진다.
 
 </details>
 
@@ -462,7 +477,7 @@ resource "aws_wafv2_web_acl" "unicorn" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-set-07 방식의 Web ACL 이다. CloudFront 에 붙이는 ACL 은 반드시 us-east-1 에 만들어야 해서 별칭 프로바이더를 쓴다. 기본 액션이 `allow` 라 규칙에 걸린 요청만 막히고, 규칙은 priority 오름차순으로 평가된다. `override_action.none` 은 관리형 그룹 안 각 규칙이 자기 동작을 그대로 수행하라는 뜻이다 — `count` 로 바꾸면 차단 대신 집계만 한다.
+[`aws_wafv2_web_acl`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/wafv2_web_acl) 로 만든 set-07 방식의 Web ACL 이다. CloudFront 에 붙이는 ACL 은 반드시 us-east-1 에 만들어야 해서 별칭 프로바이더를 쓴다. 기본 액션이 `allow` 라 규칙에 걸린 요청만 막히고, 규칙은 priority 오름차순으로 평가된다. `override_action.none` 은 관리형 그룹 안 각 규칙이 자기 동작을 그대로 수행하라는 뜻이다 — `count` 로 바꾸면 차단 대신 집계만 한다.
 
 </details>
 
@@ -583,18 +598,18 @@ set-02 에서 CMK 를 만드는 대상은 과제지에 이름이 있는 셋뿐�
 <Quiz title="set-03 root-less 키 정책">
 set-03 유형(키 정책에 root principal·`kms:*` 금지)에 대해 옳은 것을 모두 고르라.
 
-- [x] `kms:*` 를 못 쓰므로 관리 액션을 개별 나열하되, 배포자 신원 statement 에 `kms:Put*` 가 있어야 KMS lockout safety check(호출 신원의 후속 `PutKeyPolicy` 가능 여부 검사)를 통과한다
-- [x] 배포자 신원만 admin 이므로, root 로 apply 하면 이후 그 키에 대한 모든 작업이 거부된다
+- [x] `kms:*` 를 못 쓰므로 관리 액션을 개별 나열하되, 관리 statement 에 `kms:Put*` 가 있어야 KMS lockout safety check(호출 신원의 후속 `PutKeyPolicy` 가능 여부 검사)를 통과한다
+- [x] 관리자 principal 을 `"*"` 로 두고 `kms:CallerAccount` 조건으로 계정을 못 박으면, `:root` 문자열 없이 계정 위임과 같은 효과를 낸다
 - [ ] root principal 을 넣되 Condition 으로 제한하면 mark 의 grep 을 피할 수 있다
   > set-03 mark 의 check_kms 는 정책 **텍스트를 grep** 한다. Condition 이 붙어 있든 말든 `:root` 문자열이 남으면 실격이다.
 - [ ] 관리 액션을 전부 빼면 "최소권한"이 되어 lockout safety check 도 함께 통과한다
   > 정반대다. 관리 액션이 하나도 없으면 KMS 가 "누구도 관리할 수 없는 키"로 판단해 apply 자체를 거부한다.
-- [ ] root 위임이 없어도 서비스 principal 은 자동으로 키를 쓸 수 있다
-  > root 위임이 없으면 키 소비자(EKS Pod 역할, Lambda 실행 역할, 서비스 principal)를 키 정책에 **직접** 나열해야 한다. set-03 은 db 키에 `book_pod`/`book_function` 역할을, function 키에 lambda 서비스 principal(EncryptionContext 조건)까지 명시한다.
+- [ ] 계정 위임만 있으면 서비스 principal 은 자동으로 키를 쓸 수 있다
+  > `kms:CallerAccount` 조건은 서비스가 자기 이름으로 부르는 경로를 덮지 못한다. 키 소비자(EKS Pod 역할, Lambda 실행 역할, 서비스 principal)를 키 정책에 **직접** 나열해야 한다. set-03 은 db 키에 `book_pod`/`book_function` 역할을, bucket 키에 `cloudfront.amazonaws.com`(SourceAccount 조건)을, function 키에 `lambda.amazonaws.com`(EncryptionContext 조건)을 명시한다.
 
-`kms:*` 를 못 쓰는 조건에서 관리 액션을 개별 나열해야 KMS lockout safety check 를 통과한다. 그리고 배포자 신원만 admin 이므로 **root 로 apply 하면 이후 그 키의 모든 작업(사용·수정·삭제)이 거부**된다.
+`kms:*` 를 못 쓰는 조건에서 관리 액션을 개별 나열해야 KMS lockout safety check 를 통과한다. 그리고 관리자 principal 은 `arn:...:root` 대신 `"*"` + `kms:CallerAccount` 조건으로 쓴다 — 문자열 `:root` 를 남기지 않으면서 계정 위임과 같은 효과를 낸다.
 
-치명 함정의 실무 결론: eksctl·docker push·kubectl 도 terraform 과 **같은 자격증명**으로 실행해야 한다.
+계정 위임을 고르는 실무 이유: 과제지가 별도 IAM 사용자를 지시하지 않으면 채점자는 지급 계정 root 로 접속한다. 관리자를 배포자 신원 하나로 좁히면 채점 스크립트가 `get-key-policy` 조차 못 해 KMS 항목이 통째로 날아간다.
 
 root-less 는 set-03 유형의 유의사항이 있을 때만 쓴다. 평상시(set-02)는 root 위임이 단순하고 안전하다 — 과제지 유의사항을 먼저 읽고 결정할 것.
 </Quiz>

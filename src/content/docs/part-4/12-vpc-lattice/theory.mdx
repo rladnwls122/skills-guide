@@ -9,6 +9,8 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 > 문서 유형: explanation
 
+선행 지식과 학습 경로는 [모듈 개요](/part-4/12-vpc-lattice/)에.
+
 2과제 set-08 task-2 module-2(Simplify Service Networking with VPC Lattice, **도쿄 ap-northeast-1**)를 다룬다. 참고 구현은 `skills-2026`의 브랜치 `set-08/task-2`, `set-08/task-2/module-2-lattice`에 있고, 항목별 판정 기준은 2026-08-01 정정본이 정본이다([정정 내역](/reference/errata/)). 정정본 2-4가 **Service EC2 보안 그룹의 TCP/8080 인바운드는 Lattice 관리형 프리픽스 리스트로만 열고 `0.0.0.0/0`이면 미충족**임을 명문화했다.
 
 ## 도식 — Client/Service VPC와 Lattice 경로
@@ -55,7 +57,7 @@ Client EC2는 Client VPC 안에서 Lattice가 생성한 도메인 이름을 호�
 | 내부 ALB/NLB + PrivateLink | 서비스 단위(Endpoint Service) | 무방 | 없음 — 서비스마다 개별 NLB·엔드포인트 구성 | L4/L7 프록시 |
 | VPC Lattice | 서비스 네트워크(다대다) | 무방 | 있음 — 같은 Service Network에 묶인 VPC·서비스는 서로 접근 가능 | L7(HTTP/gRPC 인식) |
 
-피어링·TGW가 CIDR 겹침에 막히는 이유는 라우팅 테이블에 상대 CIDR을 목적지로 올리기 때문이다(전이성·CIDR 제약의 근본 원리는 [vpc-basics](/start/vpc-basics/) 참고). PrivateLink(내부 ALB/NLB + VPC 엔드포인트)는 이미 CIDR 제약이 없는 L4/L7 방식이지만, 서비스마다 NLB와 엔드포인트 서비스를 개별로 만들어야 한다. Lattice는 그 구성을 Service Network 하나로 묶어 다대다로 확장한다 — VPC 여러 개, 서비스 여러 개가 같은 Service Network에 붙으면 서로 접근할 수 있다.
+피어링·TGW가 CIDR 겹침에 막히는 이유는 라우팅 테이블에 상대 CIDR을 목적지로 올리기 때문이다([vpc-basics 의 VPC 연결 절](/start/vpc-basics/#vpc-연결--피어링과-transit-gateway)과 [L3·L4·L7 절](/start/vpc-basics/#연결-방식이-무엇을-보고-판단하는가--l3l4l7)이 이 표의 근본 원리다). PrivateLink(내부 ALB/NLB + VPC 엔드포인트)는 이미 CIDR 제약이 없는 L4/L7 방식이지만, 서비스마다 NLB와 엔드포인트 서비스를 개별로 만들어야 한다. Lattice는 그 구성을 Service Network 하나로 묶어 다대다로 확장한다 — VPC 여러 개, 서비스 여러 개가 같은 Service Network에 붙으면 서로 접근할 수 있다.
 
 ## 4계층 구조
 
@@ -71,6 +73,8 @@ Lattice 리소스는 네 계층으로 나뉜다. 이 모듈의 고정 이름을 
 **VPC Association은 Client VPC에만 만든다.** Service VPC는 Target Group의 `vpcIdentifier`로만 연결되고 별도 Association이 없다 — Lattice가 Target Group 설정을 보고 Service VPC 안에 필요한 경로를 알아서 만든다. Client VPC를 Association 하는 이유는 그 VPC 안의 리소스(Client EC2)가 Lattice 생성 도메인을 **호출**해야 하기 때문이다. 호출하는 쪽만 Association이 필요하다.
 
 ## 관리형 프리픽스 리스트로 접근 제어
+
+프리픽스 리스트가 무엇이고 보안 그룹 규칙의 소스로 어떻게 쓰이는지는 [vpc-basics 의 프리픽스 리스트 절](/start/vpc-basics/#프리픽스-리스트--cidr-묶음-하나를-규칙의-소스로-쓴다)에 있다.
 
 Service EC2의 보안 그룹은 8080 인바운드를 **AWS가 리전마다 관리하는 프리픽스 리스트**(`com.amazonaws.ap-northeast-1.vpc-lattice`)에서만 열어야 한다. 이 프리픽스 리스트는 Lattice의 데이터 플레인이 타깃에 접근할 때 실제로 쓰는 IP 대역을 담고 있고, `aws ec2 describe-managed-prefix-lists`로 조회해 ID(`pl-...`)를 얻는다.
 

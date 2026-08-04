@@ -150,8 +150,9 @@ mkdir provided
 
    set-03 유의사항을 가정하고 s3 키 정책에서 root statement 를 제거:
 
-   - `data "aws_iam_session_context"` + `aws_caller_identity` 로 배포자 ARN 조회
-   - `kms:*` 없이 admin 액션을 개별 나열한 `kms_admin` 문서 작성 (lockout 검사 통과를 위해 배포자 신원에 `kms:Put*` 필수)
+   - `aws_caller_identity` 로 계정 ID 를 조회
+   - principal 을 `["*"]` 로 두고 `condition { test = "StringEquals", variable = "kms:CallerAccount", values = [local.account_id] }` 로 계정을 못 박기
+   - `kms:*` 없이 admin 액션을 개별 나열한 `kms_admin` 문서 작성 (lockout 검사 통과를 위해 `kms:Put*` 필수)
    - apply 후 정책 텍스트 자가 grep:
 
    ```powershell

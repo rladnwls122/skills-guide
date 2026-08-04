@@ -9,7 +9,11 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 > 문서 유형: explanation
 
+선행 지식과 학습 경로는 [모듈 개요](/part-4/09-serverless-event/)에.
+
 2과제는 독립 모듈 여러 개로 구성되며, 모듈마다 "패턴"이 반복된다. 이 문서는 그중 유형 1·2를 다룬다. 각 유형은 ① 도식 ② 언제 나오나 ③ 핵심 연결 고리 ④ 채점이 보는 상태 ⑤ 퀴즈 순서다.
+
+Lambda·EventBridge·CloudTrail·Step Functions·SQS 다섯 가지의 기본 동작은 [serverless-basics](/start/serverless-basics/)에 있다. 이 문서는 그것들을 어떻게 잇는가만 다룬다.
 
 ---
 
@@ -56,10 +60,10 @@ flowchart LR
 ### ③ 핵심 연결 고리 (여기가 끊어지면 전체가 죽는다)
 
 1. **S3 트리거 suffix `.csv`** — 처리 Lambda가 `error/`에 `.json`을 쓰는데, suffix 필터가 없으면 그 쓰기가 다시 트리거를 발화해 **재귀 무한루프**가 된다. suffix `.csv` 하나로 차단(출력이 `.json`이라 매치 안 됨).
-2. **ASL에서 S3 이동은 Copy+Delete 2상태** — S3에 "move" API는 없다. `MoveToProcessed`(CopyObject) → `DeleteInputProcessed`(DeleteObject)로 상태를 2개로 분리한다. 채점은 상태 이름이 아니라 State Machine [name,type]과 S3/DDB 최종 상태만 본다.
+2. **ASL에서 S3 이동은 Copy+Delete 2상태** — S3에 "move" API는 없다. Step Functions 의 Task 하나가 AWS API 하나에 대응하기 때문이다([serverless-basics 의 Step Functions 절](/start/serverless-basics/#4-step-functions--task-하나가-api-하나다)). `MoveToProcessed`(CopyObject) → `DeleteInputProcessed`(DeleteObject)로 상태를 2개로 분리한다. 채점은 상태 이름이 아니라 State Machine [name,type]과 S3/DDB 최종 상태만 본다.
 
 :::note[실측 — 평균은 Decimal로]
-평균 계산은 반드시 `decimal.Decimal`. boto3가 DynamoDB에 float 저장 자체를 거부하기 때문이다 — `TypeError: Float types are not supported. Use Decimal types instead.` 값이 틀려서가 아니다(`483/5`는 파이썬 float로도 정확히 `96.6`이다). 저장 시점에 예외로 죽는다.
+평균 계산은 반드시 `decimal.Decimal`([dynamodb-basics 의 Decimal 절](/start/dynamodb-basics/#숫자는-decimal-로-오간다)). boto3가 DynamoDB에 float 저장 자체를 거부하기 때문이다 — `TypeError: Float types are not supported. Use Decimal types instead.` 값이 틀려서가 아니다(`483/5`는 파이썬 float로도 정확히 `96.6`이다). 저장 시점에 예외로 죽는다.
 :::
 
 3. **처리 Lambda를 State Machine에서 ARN 직접 호출** — 출력이 `$.result`에 그대로 실려 `.Payload` 언랩이 필요 없다.
@@ -193,7 +197,7 @@ flowchart TB
 
 ### ③ 핵심 연결 고리
 
-1. **감지 경로가 2종이고 지연이 다르다.** 인스턴스 stop/terminate는 **네이티브 "EC2 Instance State-change Notification" 이벤트(수 초)**. SG 규칙 변경·역할 교체·타입 변경은 네이티브 이벤트가 **없어서** CloudTrail(API 기록) → EventBridge 경로(수십 초~1분 지연). apply 직후엔 트레일 활성화까지 몇 분 더 걸린다.
+1. **감지 경로가 2종이고 지연이 다르다.** 인스턴스 stop/terminate는 **네이티브 "EC2 Instance State-change Notification" 이벤트(수 초)**. SG 규칙 변경·역할 교체·타입 변경은 네이티브 이벤트가 **없어서** CloudTrail(API 기록) → EventBridge 경로(수십 초~1분 지연). 이 두 경로가 갈리는 이유는 [serverless-basics 의 CloudTrail 절](/start/serverless-basics/#3-cloudtrail--네이티브-이벤트가-없는-변경을-이어-준다)에 있다. apply 직후엔 트레일 활성화까지 몇 분 더 걸린다.
 2. **stop 복구는 `stopping` 상태에서 트리거 + waiter로 stopped 직후 start.** mark 3-4는 stop 후 (다른 항목 채점 + sleep 30) 시점에 `running`을 기대한다. `stopped` 이벤트를 기다렸다 시작하면 늦는다. `stopping`에서 받아 boto3 waiter(5초 간격)로 stopped를 감지하자마자 start.
 3. **무한루프 2중 차단.** 복구 Lambda의 원복 동작 자체가 또 이벤트를 만든다. (a) type-change 룰의 이벤트 패턴에 `anything-but: t3.micro`로 원복 이벤트 제외, (b) Lambda 안에서도 현재 값이 원본이면 즉시 return. role-remediation도 현재 프로파일이 원본이면 return.
 4. **레이스 컨디션: 타입 원복 시연 전 stop-rule 비활성화.** 타입 변경 시연 절차(stop→modify→start)의 stop이 stop-remediation과 레이스해서, 복구 Lambda가 인스턴스를 다시 켜버리면 modify가 `IncorrectInstanceState`로 실패한다. `aws events disable-rule --name wsc2026-ec2-stop-rule` 후 시연, 끝나면 enable.

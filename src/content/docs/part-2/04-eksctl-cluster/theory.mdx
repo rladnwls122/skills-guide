@@ -10,6 +10,8 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
+선행 지식과 학습 경로는 [모듈 개요](/part-2/04-eksctl-cluster/)에.
+
 > 교재 원본: `skills-2026/set-02/task-1/eksctl/cluster.yaml`, `set-03/task-1/eksctl/cluster.yaml`
 
 ---
@@ -17,6 +19,8 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 ## 1. eksctl ClusterConfig 구조
 
 **① 한 줄 정의** — eksctl은 `ClusterConfig` YAML 한 장으로 EKS 컨트롤 플레인 + 노드그룹 + IAM 연동 + 애드온을 선언적으로 생성하는 공식 CLI다.
+
+컨트롤 플레인·데이터 플레인·노드그룹·애드온이 각각 무엇인지는 [eks-basics](/start/eks-basics/)에 정의가 있다.
 
 **② 왜 (채점 관점)** — 채점은 `aws eks describe-cluster / describe-nodegroup` 출력을 정확 비교한다(mark 5-1~5-3: 버전 1.35, 로그 5종, KMS 별칭, 서브넷 이름, 노드그룹 이름/타입/tags.Name). 콘솔 클릭보다 YAML 한 장이 재현·수정(30% 변동 대비)에 압도적으로 유리하다.
 
@@ -68,6 +72,8 @@ ClusterConfig 한 장에 들어가는 최상위 블록들이다. `vpc` 는 기�
 - **IRSA**: OIDC 공급자를 통해 ServiceAccount 토큰으로 IAM 역할을 위임받는 방식(노드 상주 컴포넌트 없음).
 - **Pod Identity**: `eks-pod-identity-agent` DaemonSet이 노드에서 자격증명을 중계하는 신형 방식.
 - **Access Entry**: **사람/도구의 kubectl 접근**을 aws-auth ConfigMap 대신 EKS API(`authenticationMode: API`)로 관리하는 방식 — 위 둘(Pod용)과 축이 다르다.
+
+앞의 두 방식은 [eks-basics 의 IRSA·Pod Identity 절](/start/eks-basics/#irsa와-eks-pod-identity)이 먼저 다룬다. Access Entry 는 그 문서에 없는 개념이라 이 문서가 정의를 맡는다.
 
 **② 왜 (채점 관점 — 여기가 갈림길)**
 
@@ -163,6 +169,8 @@ YAML 작성법 비교 (실측):
 ## 3. 노드그룹 2분할 (addon / app)
 
 **① 한 줄 정의** — 시스템 컴포넌트용 addon 노드그룹과 애플리케이션 전용 app 노드그룹으로 분리하고 label(+필요시 taint)로 스케줄을 통제한다.
+
+label·nodeSelector·taint/toleration·DaemonSet 이 각각 무엇인지는 [k8s-basics](/start/k8s-basics/)에, 노드그룹 2분할이 대회 아키텍처에서 차지하는 자리는 그 문서의 대회 실전 아키텍처 절에 있다.
 
 **② 왜 (채점 관점)** — mark 5-3이 `describe-nodegroup`으로 노드그룹 이름·인스턴스 타입·**tags.Name**·서브넷을 검사하고, mark 5-4가 "kube-system 파드는 addon 노드, wskorea26 파드는 app 노드"를 `kubectl get pod -o wide`로 검사한다.
 

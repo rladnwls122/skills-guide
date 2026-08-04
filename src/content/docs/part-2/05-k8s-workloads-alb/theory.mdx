@@ -9,6 +9,8 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 > 문서 유형: explanation
 
+선행 지식과 학습 경로는 [모듈 개요](/part-2/05-k8s-workloads-alb/)에.
+
 > 교재 원본: `skills-2026/set-02/task-1/k8s/app/*`, `terraform/alb.tf`
 
 ---
@@ -16,6 +18,8 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 ## 1. 프로덕션급 Deployment
 
 **① 한 줄 정의** — Deployment는 Pod 복제본을 선언적으로 유지하는 컨트롤러이며, 대회에서는 "고가용성 + 노드 배치 + 무중단"을 만족하는 스펙을 요구한다.
+
+Deployment·Pod·probe·ServiceAccount 는 [k8s-basics](/start/k8s-basics/)가 먼저 정의한다. 아래 표의 `requests`/`limits` 와 QoS 등급은 [그 문서의 requests / limits 절](/start/k8s-basics/#2-6-리소스-요청과-상한--requests--limits)에 있다.
 
 **② 왜 (채점 관점)** — mark 5-4가 wskorea26 파드의 노드 배치(app)를, mark 9-1~9-4가 실제 애플리케이션 동작을 검사한다. probe가 없으면 죽은 Pod가 타깃에 남아 9번 항목이 간헐 실패하고, 노드 배치가 틀리면 5-4 감점.
 
@@ -86,6 +90,8 @@ helm -n <ns> list / helm -n <ns> uninstall <release>
 ## 3. AWS Load Balancer Controller + TargetGroupBinding 패턴
 
 **① 한 줄 정의** — LBC는 k8s 리소스를 보고 ELB API를 호출하는 컨트롤러이며, **TargetGroupBinding(TGB)** 은 "이미 존재하는 TG"에 Service 뒤 Pod IP를 등록/해제하는 CRD(CustomResourceDefinition — 쿠버네티스에 새 리소스 종류를 추가하는 정의)다.
+
+ALB·타깃그룹·헬스체크가 무엇인지, 그리고 왜 대회가 "Ingress 로 만들게 하는 길" 대신 "직접 만들고 등록만 맡기는 길"을 고르는지는 [loadbalancer-basics 의 길 B 절](/start/loadbalancer-basics/#5-3-길-b--내가-만들고-등록만-맡긴다-targetgroupbinding)에서 두 방식을 나란히 놓고 설명한다.
 
 **② 왜 (채점 관점 — 수상 과제 공통 패턴)** — 채점은 `wskorea26-book-alb`, `wskorea26-book-tg` 같은 **정확한 이름**을 검사한다(mark 7-1 등). Ingress 로 만들면 ALB 이름은 `alb.ingress.kubernetes.io/load-balancer-name` 애노테이션으로 맞출 수 있지만, **타깃그룹 이름은 지정할 수 없다** — 컨트롤러가 `k8s-` 로 시작하는 이름을 자동으로 짓는다. 그래서:
 
@@ -161,6 +167,8 @@ TargetGroupBinding 한 장이다. `serviceRef` 로 대상 Service 와 포트를,
 
 **① 한 줄 정의** — 리스너(80/HTTP)의 기본 액션은 fixed-response 403, 규칙 2개가 CloudFront 커스텀 헤더를 검증해 POST는 Pod TG로, 그 외는 Lambda TG로 보낸다.
 
+"CloudFront 를 거친 요청만 받는다"는 이 구성의 목적 자체는 [loadbalancer-basics 3-1 절](/start/loadbalancer-basics/#3-1-cloudfront-를-거친-요청만-받는다)에 있다.
+
 **② 왜 (채점 관점)** — mark 7-2가 `describe-rules`의 `HttpHeaderConfig.Values[]` 출력으로 **`wskorea26-cf` 정확히 2줄** + `curl http://<ALB>/book` = **403**을 검사한다.
 
 :::danger[규칙 개수는 정확히 2개]
@@ -189,7 +197,7 @@ graph TD
 </details>
 
 - 규칙 평가는 priority 순 — POST는 10에서 잡히고, 헤더만 있는 GET 등은 20으로 떨어진다.
-- **Lambda 타깃 3종 세트**: `aws_lb_target_group`(target_type="lambda") + `aws_lambda_permission`(principal=elasticloadbalancing.amazonaws.com, source_arn=TG ARN) + `aws_lb_target_group_attachment`(depends_on=permission). permission 없이 attach하면 실패한다.
+- **Lambda 타깃 3종 세트**: `aws_lb_target_group`(target_type="lambda") + `aws_lambda_permission`(principal=elasticloadbalancing.amazonaws.com, source_arn=TG ARN) + `aws_lb_target_group_attachment`(depends_on=permission). permission 없이 attach하면 실패한다. 세 리소스가 왜 한 세트로 묶이는지는 [loadbalancer-basics 3-3 절](/start/loadbalancer-basics/#3-3-lambda-타깃은-세-리소스가-한-세트다)에 있다.
 - Pod TG는 `target_type = "ip"`, health_check path `/health` — Deployment readiness와 같은 경로로 맞춘다.
 
 **④ 세트별 차이** — 규칙 수·조건은 과제지마다 다르다. set-02는 "헤더 2규칙 + 403 기본"이 채점 고정값. 다른 세트는 mark의 기대 출력(줄 수!)을 먼저 읽고 규칙 수를 역산할 것.

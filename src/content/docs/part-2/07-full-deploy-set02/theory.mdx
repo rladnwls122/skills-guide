@@ -9,6 +9,8 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 > 문서 유형: explanation
 
+선행 지식과 학습 경로는 [모듈 개요](/part-2/07-full-deploy-set02/)에.
+
 > 교재 원본: `skills-2026/set-02/task-1/` (README.md, mark.md, terraform/cloudfront.tf, cloudfront/book-rewrite.js)
 
 ---
@@ -17,7 +19,7 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 **① 한 줄 정의** — User → CloudFront(정적=S3, 동적=/book*→ALB) → ALB(POST→Pod, GET→Lambda) → DynamoDB 구조의 콘서트 예매 플랫폼.
 
-**② 왜 (채점 관점)** — 30점 중 CloudFront 6.5 + Application 6 + EKS 5 = 17.5점이 이 그림 위에서 결정된다. 화살표마다 붙는 **인증 방식**이 곧 채점 항목(OAC=8-2, 커스텀 헤더=8-4/7-2, IRSA=간접적으로 9-1/9-2)이다.
+**② 왜 (채점 관점)** — 30점 중 CloudFront 6.5 + Application 6 + EKS 5 = 17.5점이 이 그림 위에서 결정된다. 화살표마다 붙는 **인증 방식**이 곧 채점 항목(OAC=8-2, 커스텀 헤더=8-4/7-2, IRSA=간접적으로 9-1/9-2)이다. IRSA(IAM Roles for Service Accounts)가 파드에 AWS 권한을 주는 원리는 [eks-basics 의 IRSA 절](/start/eks-basics/#irsa와-eks-pod-identity)에 있다.
 
 **③ 정답 도식 — 매일 백지에 재현할 것. 화살표의 인증 주석까지가 정답이다.**
 
@@ -67,6 +69,8 @@ set-02 1과제 전체가 한 장에 있다. 요청은 CloudFront 한 곳으로 �
 ## 2. CloudFront 핵심 — 이중 Origin과 경로 재작성
 
 **① 한 줄 정의** — Origin 2개(ALB 커스텀/S3 OAC)를 가진 배포에서, viewer-request CloudFront Function이 POST /book만 /v1/book으로 재작성한다.
+
+S3 쪽 오리진이 OAC 로 비공개를 유지하는 구조는 [s3-basics 의 OAC 절](/start/s3-basics/#cloudfront-oac--원본을-비공개로-유지하는-구조)에, ALB 쪽이 커스텀 헤더로 CloudFront 경유만 받는 구조는 [loadbalancer-basics 3-1 절](/start/loadbalancer-basics/#3-1-cloudfront-를-거친-요청만-받는다)에 있다.
 
 **② 왜 (채점 관점)**
 

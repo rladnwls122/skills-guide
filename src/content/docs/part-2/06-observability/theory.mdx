@@ -9,6 +9,8 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 > 문서 유형: explanation
 
+선행 지식과 학습 경로는 [모듈 개요](/part-2/06-observability/)에.
+
 대회 관측성 요구는 항상 같은 세 줄기다.
 
 1. 앱 로그를 CloudWatch로 보낸다(형식 정확히).
@@ -16,6 +18,8 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 3. Grafana 대시보드·알람을 만든다.
 
 함정은 "앱이 /metrics를 노출하지 않는다"는 데서 나온다.
+
+메트릭이 무엇인지, Prometheus 가 왜 "가져가는" 방식인지, Grafana 와 역할이 어떻게 갈리는지는 [observability-basics](/start/observability-basics/)가 먼저 다룬다. 이 문서는 그 위에서 대회 파이프라인을 조립한다.
 
 ---
 
@@ -126,6 +130,8 @@ Fluent Bit 파드 한 개가 노드에서 무엇을 붙들고 있는지다. 노�
 
 Fluent Bit 필터. 통과하는 로그 레코드를 세거나(counter) 필드 값을 집계해(histogram) Prometheus 메트릭으로 만든 뒤, `prometheus_exporter` OUTPUT이 `:2021/metrics`로 노출한다.
 
+여기서 Fluent Bit 은 [exporter](/start/observability-basics/#2-4-exporter--메트릭을-낼-줄-모르는-것을-위해) 노릇을 한다 — 메트릭을 낼 줄 모르는 앱 대신 `/metrics` 를 여는 자리다. counter 와 histogram 의 차이는 [메트릭 종류 절](/start/observability-basics/#2-6-메트릭-종류--counter--gauge--histogram)에 있다.
+
 ### ② 왜 (채점 관점)
 
 제공 앱 바이너리가 /metrics를 노출하지 않는 세트(set-03)에서 트래픽 패널·HighErrorRate/HighLatency 알람의 **유일한 소스**다. 이게 없으면 대시보드 Row와 알람 2종이 전부 No Data.
@@ -157,7 +163,7 @@ flowchart LR
 **배포 후 반드시 `:2021/metrics`를 curl 해서 실제 메트릭명을 확인**하고 prometheus-rules.yaml / dashboard.json의 이름과 대조한다. 접두어 규칙이 버전에 따라 다를 수 있어 실측이 원칙.
 :::
 
-- PodMonitor가 붙으려면 kps values에 `podMonitorSelectorNilUsesHelmValues: false`가 있어야 release 라벨 없이도 선택된다.
+- PodMonitor가 붙으려면 kps values에 `podMonitorSelectorNilUsesHelmValues: false`가 있어야 release 라벨 없이도 선택된다. PodMonitor 가 "무엇을 긁을지"를 어떻게 고르는지는 [observability-basics 의 PodMonitor 절](/start/observability-basics/#2-5-podmonitor--무엇을-긁을지-선언한다) 참고.
 - **함정**: `aws-for-fluent-bit` 이미지에 log_to_metrics가 빠진 빌드가 있다. 필터가 안 먹으면 upstream `fluent/fluent-bit` 최신 안정 태그로 이미지만 교체(설정 호환).
 
 ### ④ 세트별 차이

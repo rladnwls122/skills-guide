@@ -10,6 +10,8 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
+선행 지식과 학습 경로는 [모듈 개요](/part-1/01-terraform-vpc/)에.
+
 이 문서는 set-02 task-1 실측 코드를 근거로, "채점 스크립트(mark.sh)가 무엇을 보는가" 관점으로 Terraform 문법과 VPC 를 정리한다.
 
 블록 구조·참조 주소·의존성 그래프처럼 **HCL 을 읽는 법 자체**는 [hcl-basics](/start/hcl-basics/) 로 옮겼다. `resource "aws_vpc" "this"` 의 라벨 두 개가 각각 무엇인지 헷갈리면 그 문서를 먼저 본다.
@@ -152,13 +154,13 @@ resource "aws_iam_role" "book_lambda" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-data 소스 두 종류의 쓰임이다. `aws_caller_identity` 는 지금 자격 증명의 계정 ID 를 조회해 하드코딩을 없애고, `aws_iam_policy_document` 는 JSON 을 문자열로 쓰는 대신 HCL 로 조립해 `.json` 속성으로 내준다. 역할 블록은 그 결과를 신뢰 정책으로 받는다 — 오타가 나면 apply 가 아니라 plan 단계에서 걸린다.
+data 소스 두 종류의 쓰임이다. [`aws_caller_identity`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) 는 지금 자격 증명의 계정 ID 를 조회해 하드코딩을 없애고, [`aws_iam_policy_document`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) 는 JSON 을 문자열로 쓰는 대신 HCL 로 조립해 `.json` 속성으로 내준다. [`aws_iam_role`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) 블록은 그 결과를 신뢰 정책으로 받는다 — 오타가 나면 apply 가 아니라 plan 단계에서 걸린다.
 
 </details>
 
 `source_policy_documents = [다른문서.json]` 로 정책 문서를 상속·합성할 수 있다 (Day 2 KMS 에서 핵심).
 
-**④ 세트별 차이** — set-03 은 `aws_iam_session_context` 로 "지금 apply 하는 신원"까지 조회해 KMS 관리자로 박는다(root-less 키 정책). Day 2 에서 다룬다.
+**④ 세트별 차이** — set-03 은 같은 `aws_caller_identity` 의 계정 ID 를 KMS 키 정책의 `kms:CallerAccount` 조건에 넣어 root ARN 없이 계정 위임을 표현한다(root-less 키 정책). Day 2 에서 다룬다.
 
 ---
 
@@ -192,7 +194,7 @@ resource "aws_route_table_association" "public" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-`for_each` 의 두 가지 입력 형태다. 위쪽은 map 을 그대로 받아 `each.key`(이름)와 `each.value.*`(속성)를 쓰고, 아래쪽은 리스트를 `toset()` 으로 감싸 받는다 — `for_each` 는 리스트를 거부하기 때문이다. `aws_subnet.this[each.key]` 처럼 키로 인스턴스를 지목하는 참조도 여기서 나온다.
+`for_each` 의 두 가지 입력 형태다. 위쪽은 [`aws_subnet`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) 이 map 을 그대로 받아 `each.key`(이름)와 `each.value.*`(속성)를 쓰고, 아래쪽 [`aws_route_table_association`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association) 은 리스트를 `toset()` 으로 감싸 받는다 — `for_each` 는 리스트를 거부하기 때문이다. `aws_subnet.this[each.key]` 처럼 키로 인스턴스를 지목하는 참조도 여기서 나온다.
 
 </details>
 
@@ -206,6 +208,8 @@ resource "aws_route_table_association" "public" {
 ## 5. VPC 아키텍처 (set-02 :badge[실측]{variant=note})
 
 **① 한 줄 정의** — `wskorea26-vpc`(172.16.0.0/16)에 AZ c/d 로 public 2 + private 2 서브넷을 두고, public 은 IGW 공용 RTB 1개, private 은 AZ별 NAT + AZ별 RTB 2개로 라우팅한다.
+
+`/16` 같은 CIDR 표기, AZ(가용 영역), IGW·NAT GW·RTB(라우트 테이블)가 각각 무엇인지는 [vpc-basics](/start/vpc-basics/)에 정의가 있다. IGW 와 NAT GW 의 역할 차이만 다시 보려면 [그 문서의 IGW와 NAT GW 절](/start/vpc-basics/#igw와-nat-gw)로 간다.
 
 **② 왜 필요한가 (채점 관점)** — mark 1-1 은 CIDR 을, **mark 1-2 는 "RTB↔서브넷 연결"과 기본 라우트의 GatewayId(IGW)·NatGatewayId(NAT)를 그대로 검사**한다. 서브넷이 엉뚱한 RTB 에 붙어 있으면 인터넷이 되더라도 감점이다.
 
@@ -270,7 +274,7 @@ resource "aws_nat_gateway" "this" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-NAT 를 AZ 별로 짝지어 만드는 부분이다. `private_az_suffix` 는 AZ 이름의 마지막 글자(c·d)를 뽑아 리소스 이름에 쓰고, `public_by_az` 는 AZ 를 키로 퍼블릭 서브넷을 찾는 역방향 map 이다. 그래서 `subnet_id` 한 줄이 "이 프라이빗 서브넷과 같은 AZ 의 퍼블릭 서브넷"을 가리킬 수 있다. `depends_on` 이 필요한 이유는 IGW 가 붙기 전에 NAT 를 만들면 실패하기 때문이다.
+[`aws_nat_gateway`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/nat_gateway) 를 AZ 별로 짝지어 만드는 부분이다. `private_az_suffix` 는 AZ 이름의 마지막 글자(c·d)를 뽑아 리소스 이름에 쓰고, `public_by_az` 는 AZ 를 키로 퍼블릭 서브넷을 찾는 역방향 map 이다. 그래서 `subnet_id` 한 줄이 "이 프라이빗 서브넷과 같은 AZ 의 퍼블릭 서브넷"을 가리킬 수 있다. `depends_on` 이 필요한 이유는 IGW 가 붙기 전에 NAT 를 만들면 실패하기 때문이다.
 
 </details>
 
@@ -372,7 +376,7 @@ NAT Gateway 는 어디에 배치해야 하며, 그 이유는?
 
 `data "aws_caller_identity" "current"` 를 선언하고 `data.aws_caller_identity.current.account_id` 로 쓴다. 보통 `locals` 에 `account_id` 로 한 번 담아 재사용한다.
 
-set-03 은 여기서 한 발 더 나가 `aws_iam_session_context` 로 "지금 apply 하는 신원"까지 조회해 KMS 관리자로 박는다(root-less 키 정책). 계정 ID 만 필요하면 `aws_caller_identity`, 배포자 역할 ARN 이 필요하면 `aws_iam_session_context` 다.
+set-03 은 이 계정 ID 를 root-less KMS 키 정책에서 한 번 더 쓴다 — 관리자 `Principal` 을 `"*"` 로 두고 `kms:CallerAccount` 조건에 계정 ID 를 넣어, `:root` 문자열 없이 "내 계정에서 온 호출"만 통과시킨다. 구조는 [kms-basics](/start/kms-basics/#1-root-less-키-정책-실물--적용된-json)에 실물 JSON 으로 있다.
 </Quiz>
 
 <Quiz title="map output 에서 값 꺼내기">

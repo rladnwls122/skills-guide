@@ -11,7 +11,9 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 CloudFront가 요청을 처리하는 동안 코드를 끼워 넣는 방법은 두 가지다 — **CloudFront Functions**와 **Lambda@Edge**. 이 모듈(set-07 task-2 모듈 2, `skillsphone` A/B 테스팅, us-east-1)은 둘 중 CloudFront Functions만 쓴다. 이 구분이 이 모듈의 핵심이므로 먼저 정리하고, 그다음 실제 함수 코드와 배포 함정을 본다.
 
-S3 퍼블릭 차단·OAC 버킷 정책·순환 참조 같은 CloudFront 공통 구조는 이미 [02. KMS + S3 + CloudFront 이론](/part-1/02-kms-s3-cloudfront/theory/)이 다룬다. 여기서는 반복하지 않고 함수 자체에 집중한다.
+선행 지식과 학습 경로는 [모듈 개요](/part-4/13-cdn-function/)에.
+
+S3 퍼블릭 차단·OAC 버킷 정책·순환 참조 같은 CloudFront 공통 구조는 이미 [02. KMS + S3 + CloudFront 이론](/part-1/02-kms-s3-cloudfront/theory/)이 다룬다. 기초 정의만 다시 보려면 [s3-basics 의 OAC 절](/start/s3-basics/#cloudfront-oac--원본을-비공개로-유지하는-구조)로 간다. 여기서는 반복하지 않고 함수 자체에 집중한다.
 
 ---
 

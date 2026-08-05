@@ -1,6 +1,8 @@
 ---
 title: S3 기초 (선수 학습, 약 1시간)
 description: 버킷·객체 모델과 퍼블릭 액세스 차단·버킷 정책·객체 소유권의 평가 순서, CloudFront OAC 연동, 버전 관리와 수명 주기를 정리한 선수 학습.
+sidebar:
+  order: 3
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
@@ -64,7 +66,22 @@ S3 요청 하나가 허용되기까지의 관문 순서다. 퍼블릭 액세스 
 
 </details>
 
-위 도식은 **요청 시점**의 판정이다. BPA는 그보다 앞선 **쓰기 시점**에도 작동한다. `BlockPublicPolicy` 가 켜져 있으면 퍼블릭을 허용하는 버킷 정책은 `PutBucketPolicy` 호출 자체가 거부된다 — 조건 없는 `"Principal": "*"` 가 AWS가 드는 대표 예다. 즉 BPA를 켠 채로 퍼블릭 정책을 넣으면 저장 단계에서 `AccessDenied` 로 막히고, 정책을 먼저 붙인 뒤 BPA를 켜면 정책은 그대로 남은 채 `RestrictPublicBuckets` 가 요청 시점에 판정을 무효화한다. 증상이 다르므로 어느 순서로 켰는지부터 확인한다.
+#### BPA 를 이루는 4개 항목
+
+퍼블릭 액세스 차단은 스위치 하나가 아니라 독립된 항목 네 개다. 콘솔의 "모든 퍼블릭 액세스 차단"은 이 넷을 한 번에 켜는 버튼이고, API 로는 `PutPublicAccessBlock` 에 넷을 각각 넘긴다. 앞의 둘이 ACL 을 보고 뒤의 둘이 버킷 정책을 본다.
+
+| 항목 | 보는 대상 | 작동 시점 | 하는 일 |
+|---|---|---|---|
+| `BlockPublicAcls` | ACL | 쓰기 | 퍼블릭 ACL 을 새로 넣는 요청을 거부한다 |
+| `IgnorePublicAcls` | ACL | 요청 | 이미 붙어 있는 퍼블릭 ACL 을 무시한다 |
+| `BlockPublicPolicy` | 버킷 정책 | 쓰기 | 퍼블릭을 허용하는 버킷 정책의 저장을 거부한다 |
+| `RestrictPublicBuckets` | 버킷 정책 | 요청 | 퍼블릭으로 판정된 버킷에 대한 익명·교차 계정 접근을 막는다 |
+
+같은 대상을 보는 두 항목이 시점으로 갈린다. `Block*` 은 퍼블릭 설정이 **들어오는 것**을 막고, `Ignore*`·`Restrict*` 는 이미 들어와 있는 설정이 **효력을 내는 것**을 막는다. 채점은 넷이 모두 `true` 인지를 본다.
+
+#### 켠 순서에 따라 증상이 갈린다
+
+요청 흐름 도식이 보여준 것은 **요청 시점**의 판정이다. BPA는 그보다 앞선 **쓰기 시점**에도 작동한다. `BlockPublicPolicy` 가 켜져 있으면 퍼블릭을 허용하는 버킷 정책은 `PutBucketPolicy` 호출 자체가 거부된다 — 조건 없는 `"Principal": "*"` 가 AWS가 드는 대표 예다. 즉 BPA를 켠 채로 퍼블릭 정책을 넣으면 저장 단계에서 `AccessDenied` 로 막히고, 정책을 먼저 붙인 뒤 BPA를 켜면 정책은 그대로 남은 채 `RestrictPublicBuckets` 가 요청 시점에 판정을 무효화한다. 증상이 다르므로 어느 순서로 켰는지부터 확인한다.
 
 ### 객체 소유권과 ACL
 
@@ -362,9 +379,9 @@ S3 이벤트는 **정확히 한 번이 아니라 최소 한 번** 전달된다. 
 
 ## ⑦ 다음 단계
 
-모듈 02에서 KMS·S3·CloudFront를 Terraform으로 한 스택에 묶는다.
+SSE-KMS 가 실제로 어떤 키를 어떻게 쓰는지는 다음 문서에서 이어진다. 모듈 02에서 KMS·S3·CloudFront를 Terraform으로 한 스택에 묶는다.
 
-<LinkButton href="/start/docker-basics/" icon="right-arrow">다음 선수 학습 — Docker 기초</LinkButton>
+<LinkButton href="/start/kms-basics/" icon="right-arrow">다음 선수 학습 — KMS 기초</LinkButton>
 <LinkButton href="/part-1/02-kms-s3-cloudfront/" variant="minimal">PART 1 — KMS + S3 + CloudFront 실습</LinkButton>
 
 ## 공식 문서

@@ -1,6 +1,8 @@
 ---
 title: HCL 기초 (선수 학습, 약 1.5시간)
 description: Terraform 이 .tf 파일을 읽는 규칙과 정답지에서 실제로 쓰이는 타입·표현식·반복·함수를 정리한 선수 학습.
+sidebar:
+  order: 8
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
@@ -57,6 +59,8 @@ resource "aws_vpc" "this" {
 | `each.key` / `each.value` | `for_each` 반복 중인 현재 항목 | `each.value.cidr` |
 
 `locals` 는 선언은 복수형(`locals {}`), 참조는 단수형(`local.x`)이다 — 처음에 가장 많이 틀리는 곳.
+
+세 가지의 역할이 서로 다르다. `variable` 은 값을 받는 자리만 선언하고, 실제 값은 `terraform.tfvars` 가 준다 — 그 이름의 파일은 `plan`·`apply` 때 자동으로 읽힌다. `variable` 에 `default` 가 있으면 tfvars 없이도 동작하고, tfvars 에 같은 이름이 있으면 tfvars 값이 이긴다. `locals` 는 밖에서 주입받지 않고 다른 값에서 계산해 내는 값이다.
 
 ### 내가 쓰는 값(argument)과 AWS 가 돌려주는 값(attribute)
 
@@ -128,7 +132,7 @@ argument 와 attribute 를 가르는 예다. `cidr_block` 은 내가 넣는 값�
    > { name = "vpc", cidr = "10.0.0.0/16" }
    ```
 
-   `toset` 을 통과하면 중복이 사라지고 순서가 없어진다. `for_each` 가 list 를 거부하고 set·map 만 받는 이유가 이것이다.
+   `toset` 을 통과하면 중복이 사라지고 순서가 없어진다. `for_each` 가 list 를 거부하고 set·map 만 받는 것은 항목마다 **변하지 않는 고유한 이름표**가 필요하기 때문이다 — list 의 이름표는 인덱스뿐이고 인덱스는 중간을 빼면 밀린다. ⑤에서 다시 다룬다.
 
 3. `for` 표현식으로 목록을 만들어 본다. 왼쪽 대괄호면 list, 중괄호면 map 이 나온다.
 
@@ -309,8 +313,25 @@ content_type = lookup(local.content_types, regex("[^.]+$", each.value), "applica
 `regex("[^.]+$", "index.html")` 이 `"html"` 을 뽑고, 그걸 키로 `content_types` 맵을 찾고, 없으면 `application/octet-stream` 을 쓴다.
 
 :::tip[정책 JSON 은 두 가지 방법이 있다]
-`jsonencode({...})` 로 직접 쓰는 방법과 `data "aws_iam_policy_document"` 로 쓰는 방법이다. 후자가 오타를 잡아 주고 여러 statement 를 합치기 쉬워 IAM 정책에는 주로 이쪽을 쓴다. EventBridge 이벤트 패턴처럼 IAM 정책이 아닌 JSON 에는 `jsonencode` 를 쓴다.
+`jsonencode({...})` 로 직접 쓰는 방법과 `data "aws_iam_policy_document"` 로 쓰는 방법이다. 후자가 오타를 잡아 주고 여러 statement 를 합치기 쉬워 IAM 정책에는 주로 이쪽을 쓴다. JSON 을 heredoc 문자열로 적으면 따옴표·콤마 실수가 `apply` 까지 살아남지만, `aws_iam_policy_document` 는 인자 이름을 provider 가 검증해 `terraform validate`·`plan` 단계에서 걸린다. 문서끼리 합칠 때는 `source_policy_documents = [다른문서.json]` 로 다른 정책 문서를 상속한다 — 공통 statement 하나를 여러 키 정책이 나눠 쓰는 방식이다. EventBridge 이벤트 패턴처럼 IAM 정책이 아닌 JSON 에는 `jsonencode` 를 쓴다.
 :::
+
+### provider 의 리전과 버전 고정
+
+`provider` 블록이 리전을 갖는 이유는 AWS API 자체가 리전별로 나뉘어 있기 때문이다. VPC·S3 버킷·KMS 키 같은 리소스는 만들어진 리전 안에만 존재하고, 호출 주소도 `ec2.ap-northeast-2.amazonaws.com` 처럼 리전이 박혀 있다. `provider` 의 `region` 이 그 주소를 정하므로 이 값이 그 provider 로 만드는 모든 리소스의 위치가 된다.
+
+`terraform` 블록의 `required_providers` 는 provider 플러그인 버전을 고정한다. `version = "~> 6.54"` 는 **6.54 이상 7.0 미만**을 뜻한다 — 맨 오른쪽 자리만 올라가도 좋다는 표기다.
+
+```hcl
+terraform {
+  required_version = ">= 1.6.0"
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "~> 6.54" }
+  }
+}
+```
+
+`provider` 블록의 `default_tags` 는 그 provider 로 만드는 모든 리소스에 공통 태그를 붙인다. 리소스별 `tags` 와 병합되고, 같은 키가 겹치면 리소스별 값이 이긴다.
 
 ### `lifecycle` 과 `provider alias`
 
@@ -423,10 +444,10 @@ IAM 정책을 코드로 쓸 때 `data "aws_iam_policy_document"` 를 `jsonencode
 
 ## ⑦ 다음 단계
 
-문법이 잡혔으면 실제 VPC 를 세우면서 써 본다. 모듈 01 이 이 문서의 내용을 그대로 쓴다.
+여기까지가 PART-1 이 전제하는 문법 기초다 — 모듈 01 이 이 문서의 내용을 그대로 쓴다. PART-1 에 남은 기초는 모듈 03 이 전제하는 DynamoDB 하나이고, 그 뒤로는 PART-2 이후에 필요한 쿠버네티스 계열이다. 곧장 실습으로 넘어가고 싶으면 모듈 01 로 가도 된다.
 
-<LinkButton href="/part-1/01-terraform-vpc/" icon="right-arrow">PART-1 모듈 01 로</LinkButton>
-<LinkButton href="/start/vpc-basics/" variant="minimal">VPC 기초 먼저 보기</LinkButton>
+<LinkButton href="/start/dynamodb-basics/" icon="right-arrow">다음 선수 학습 — DynamoDB 기초</LinkButton>
+<LinkButton href="/part-1/01-terraform-vpc/" variant="minimal">PART-1 모듈 01 로</LinkButton>
 
 ## 공식 문서
 

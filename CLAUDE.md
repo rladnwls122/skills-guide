@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드를 담은 Astro Starlight 문서 사이트. Vercel 로 배포된다(https://skills-2026-learn-module.vercel.app/). 애플리케이션 코드는 없고 `.mdx` 콘텐츠가 전부다 — 하는 일은 **문서 작성**과 **사이트 설정 조정** 둘 중 하나다.
+전국기능경기대회 클라우드컴퓨팅 16일 완성 가이드를 담은 Astro Starlight 문서 사이트. Vercel 로 배포된다(https://skills-2026-learn-module.vercel.app/). 애플리케이션 코드는 없고 `.mdx` 콘텐츠가 전부다 — 하는 일은 **문서 작성**과 **사이트 설정 조정** 둘 중 하나다.
 
 ## 콘텐츠 근거
 

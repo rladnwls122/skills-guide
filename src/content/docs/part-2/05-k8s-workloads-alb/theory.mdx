@@ -1,11 +1,15 @@
 ---
 title: 05. 이론 — k8s 워크로드와 ALB 연동
 description: "probe·노드 배치·무중단 스펙과 ALB/TG 고정 생성 + TargetGroupBinding 패턴 정리."
+sidebar:
+  order: 2
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 > 문서 유형: explanation
+
+선행 지식과 학습 경로는 [모듈 개요](/part-2/05-k8s-workloads-alb/)에.
 
 > 교재 원본: `skills-2026/set-02/task-1/k8s/app/*`, `terraform/alb.tf`
 
@@ -14,6 +18,8 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 ## 1. 프로덕션급 Deployment
 
 **① 한 줄 정의** — Deployment는 Pod 복제본을 선언적으로 유지하는 컨트롤러이며, 대회에서는 "고가용성 + 노드 배치 + 무중단"을 만족하는 스펙을 요구한다.
+
+Deployment·Pod·probe·ServiceAccount 는 [k8s-basics](/start/k8s-basics/)가 먼저 정의한다. 아래 표의 `requests`/`limits` 와 QoS 등급은 [그 문서의 requests / limits 절](/start/k8s-basics/#2-6-리소스-요청과-상한--requests--limits)에 있다.
 
 **② 왜 (채점 관점)** — mark 5-4가 wskorea26 파드의 노드 배치(app)를, mark 9-1~9-4가 실제 애플리케이션 동작을 검사한다. probe가 없으면 죽은 Pod가 타깃에 남아 9번 항목이 간헐 실패하고, 노드 배치가 틀리면 5-4 감점.
 
@@ -37,22 +43,45 @@ Deployment 하나에 채점이 요구하는 축이 여섯 개 걸린다. 프로�
 
 </details>
 
-각 요소의 이유:
+set-02 실측값:
 
-| 요소 | 값 (실측) | 이유 |
+| 요소 | 값 (실측) |
+|---|---|
+| readinessProbe | httpGet /health:8080, delay 5, period 10 |
+| livenessProbe | httpGet /health:8080, delay 10, period 15 |
+| nodeSelector | `node-type: app` |
+| toleration | set-02 없음 / set-03 은 workload taint 대응 |
+| topologySpread | zone 키, maxSkew 1, **DoNotSchedule** |
+| PDB (별도 manifest) | `minAvailable: 1` |
+| resources | requests 100m/128Mi, limits 500m/256Mi |
+| preStop + grace | `sleep 15` / 45s |
+
+각 값을 그렇게 두는 이유는 이렇다.
+
+- **probe 2종** — readiness 는 준비되지 않은 Pod 로 트래픽이 가는 것을 막아 타깃그룹의 healthy 판정과 결과를 일치시킨다. liveness 는 행이 걸린 컨테이너를 자동으로 재시작한다.
+- **배치** — `nodeSelector` 가 앱 Pod 을 app 노드에만 올린다(mark 5-4). taint 를 건 노드그룹을 쓰는 세트에서는 toleration 을 함께 달아야 그 노드에 스케줄이 허용된다.
+- **AZ 분산** — `topologySpread` 는 AZ 하나가 통째로 죽어도 최소 1개가 살아남게 한다. `DoNotSchedule` 은 제약을 못 지키면 스케줄 자체를 거부하는 하드 제약이고, `ScheduleAnyway` 는 최선 노력의 소프트 제약이다.
+- **드레인 중 가용성** — PDB `minAvailable: 1` 이 노드 드레인 중에도 최소 1개를 남긴다.
+- **QoS 등급** — QoS 는 노드 자원이 부족할 때 어느 Pod 부터 축출할지 정하는 등급이다. `requests` 와 `limits` 를 둘 다 적으면 등급이 정해지고, 두 값을 같게 맞추면 가장 늦게 축출되는 Guaranteed 가 된다. set-02 는 두 값을 다르게 두어 순간 버스트를 허용한다.
+- **무중단 종료** — `preStop` 과 `terminationGracePeriodSeconds` 는 짝으로 움직인다. 두 값이 어떻게 맞물리는지는 graceful shutdown 흐름에서 이어 설명한다.
+
+**graceful shutdown 흐름** — Pod 삭제가 시작되면 엔드포인트 제거 전파와 preStop 실행이 동시에 일어난다. preStop 의 `sleep 15` 가 도는 15초 동안 ALB/TGB 가 타깃 등록 해제를 끝낸다. 그동안 컨테이너는 살아 있으므로, 이미 도착했지만 아직 응답을 못 보낸 요청(in-flight 요청)도 마저 처리된다.
+
+`sleep` 이 끝나면 컨테이너에 SIGTERM 이 간다. SIGTERM 은 프로세스에 종료를 요청하는 시그널이고, 받은 프로세스는 곧바로 죽는 대신 정리할 시간을 갖는다. 그 시간의 상한이 `terminationGracePeriodSeconds` 다.
+
+여기서 뺄셈이 하나 필요하다. 유예 45초는 SIGTERM 시점이 아니라 **preStop 이 시작한 시점부터** 센다. preStop 이 앞에서 15초를 쓰므로 SIGTERM 이후 남는 시간은 약 30초다.
+
+**④ 변형 포인트** — 당일 과제의 약 30% 가 수정된다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
 |---|---|---|
-| readinessProbe | httpGet /health:8080, delay 5, period 10 | 준비 안 된 Pod로 트래픽 차단 → TG healthy 판정과 일치 |
-| livenessProbe | httpGet /health:8080, delay 10, period 15 | 행 걸린 컨테이너 자동 재시작 |
-| nodeSelector | `node-type: app` | mark 5-4 (앱은 app 노드만) |
-| toleration | set-02 없음 / set-03은 workload taint 대응 필요 | taint 있는 NG에 스케줄 허용 |
-| topologySpread | zone 키, maxSkew 1, **DoNotSchedule** | AZ 장애에도 1개 생존. DoNotSchedule=강제(soft인 ScheduleAnyway와 구분) |
-| PDB (별도 manifest) | `minAvailable: 1` | 노드 드레인 중 최소 1개 유지 |
-| resources | requests+limits 명시 | QoS(노드 자원이 부족할 때 어느 Pod 부터 축출할지 정하는 등급) 확보. requests=limits로 맞추면 Guaranteed 클래스 |
-| preStop + grace | `sleep 15` / 45s | 아래 graceful shutdown 참조 |
+| label 키 (`node-type` ↔ `wsc2026/node`) | Deployment 의 `nodeSelector` | 노드그룹 label 키와 같은 값(mark 5-4) |
+| taint 있는 노드그룹 | Deployment 에 `tolerations` 추가 | toleration 이 없으면 그 노드에 스케줄되지 않는다 |
+| 헬스체크 경로·포트 | `readinessProbe` · `livenessProbe` 의 `httpGet` | 타깃그룹 health_check 경로와 같은 값 |
+| 가용성 요구 | `replicas`, `topologySpreadConstraints`, PDB `minAvailable` | AZ 하나가 죽어도 최소 1개 생존 |
+| 종료 유예 요구 | `preStop` 의 `sleep` + `terminationGracePeriodSeconds` | 유예가 preStop 보다 커야 한다 — 45초에 15초면 SIGTERM 이후 약 30초 |
 
-**graceful shutdown 흐름**: Pod 삭제 시작 → (동시에) 엔드포인트 제거 전파 & preStop 실행. `sleep 15` 동안 ALB/TGB가 타깃 등록 해제를 끝내므로 in-flight 요청(이미 도착했고 아직 응답을 못 보낸 요청) 유실이 없다. 이후 SIGTERM(프로세스에 종료를 요청하는 시그널. 받은 프로세스가 정리할 시간을 갖는다). `terminationGracePeriodSeconds` 45초는 **preStop 시작 시점부터** 세므로 SIGTERM 이후 남는 시간은 약 30초다.
-
-**④ 세트별 차이** — set-03은 workload NG에 NoSchedule taint가 있어 Deployment에 toleration 필수, label 키도 `wsc2026/node`. set-02는 nodeSelector만.
+부팅이 느린 앱이 나오면 `startupProbe` 를 더한다(set-02 는 쓰지 않는다). QoS 를 Guaranteed 로 요구하면 `requests` 와 `limits` 를 같은 값으로 맞춘다.
 
 ---
 
@@ -79,13 +108,25 @@ helm -n <ns> list / helm -n <ns> uninstall <release>
 
 버전은 **고정**한다(작업규칙 2, latest 금지). 예: LBC `--version 3.4.0`, kube-prometheus-stack `--version 87.5.1`.
 
+**④ 변형 포인트** — 바뀌는 값이 전부 명령 인자 쪽에 모인다.
+
+- **바뀌는 값**: release 이름, 네임스페이스, 차트 버전 핀, values 항목.
+- **고칠 곳**: `helm upgrade --install` 의 인자와 `values.yaml`. 차트 자체는 손대지 않는다.
+- **확인**: `helm -n <ns> list` 로 release 이름과 차트 버전을 본다. 같은 명령을 다시 돌려도 멱등이다.
+
 ---
 
 ## 3. AWS Load Balancer Controller + TargetGroupBinding 패턴
 
-**① 한 줄 정의** — LBC는 k8s 리소스를 보고 ELB API를 호출하는 컨트롤러이며, **TargetGroupBinding(TGB)** 은 "이미 존재하는 TG"에 Service 뒤 Pod IP를 등록/해제하는 CRD(CustomResourceDefinition — 쿠버네티스에 새 리소스 종류를 추가하는 정의)다.
+**① 한 줄 정의** — LBC(AWS Load Balancer Controller)는 클러스터 안의 k8s 리소스를 지켜보다가 ELB API 를 대신 호출하는 컨트롤러다.
 
-**② 왜 (채점 관점 — 수상 과제 공통 패턴)** — 채점은 `wskorea26-book-alb`, `wskorea26-book-tg` 같은 **정확한 이름**을 검사한다(mark 7-1 등). Ingress 로 만들면 ALB 이름은 `alb.ingress.kubernetes.io/load-balancer-name` 애노테이션으로 맞출 수 있지만, **타깃그룹 이름은 지정할 수 없다** — 컨트롤러가 `k8s-` 로 시작하는 이름을 자동으로 짓는다. 그래서:
+CRD(CustomResourceDefinition)는 쿠버네티스에 새 리소스 종류를 추가하는 정의다. LBC 를 설치하면 이 컨트롤러가 읽을 CRD 들도 함께 들어온다.
+
+**TargetGroupBinding(TGB)** 이 그 CRD 중 하나다. 이미 만들어져 있는 타깃그룹에 Service 뒤 Pod IP 를 등록하고 해제하는 일을 선언한다.
+
+ALB·타깃그룹·헬스체크가 무엇인지, 그리고 왜 대회가 "Ingress 로 만들게 하는 길" 대신 "직접 만들고 등록만 맡기는 길"을 고르는지는 [loadbalancer-basics 의 길 B 절](/start/loadbalancer-basics/#5-3-길-b--내가-만들고-등록만-맡긴다-targetgroupbinding)에서 두 방식을 나란히 놓고 설명한다.
+
+**② 왜 (채점 관점 — 수상 과제 공통 패턴)** — 채점은 `wskorea26-book-alb`, `wskorea26-book-tg` 같은 **정확한 이름**을 검사한다(mark 7-1 등). Ingress 로 만들어도 ALB 이름까지는 `alb.ingress.kubernetes.io/load-balancer-name` 애노테이션으로 맞출 수 있다. 막히는 것은 타깃그룹이다. 컨트롤러가 `k8s-` 로 시작하는 이름을 자동으로 짓고, 그 이름을 바꾸는 애노테이션이 없다.
 
 :::tip[수상 과제 공통 패턴]
 **Terraform으로 ALB/TG를 이름 고정 생성 → k8s TGB로 Pod IP만 등록.**
@@ -128,7 +169,13 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-설치 명령을 옵션별로 뜯어 놓았다. 클러스터 이름·리전·VPC 는 컨트롤러가 AWS 리소스를 찾는 데 쓰고, 서비스 계정은 만들지 않고 이름만 지정한다. 마지막 `nodeSelector` 한 줄이 addon 노드 배치 채점에 대응한다.
+설치 명령을 옵션별로 뜯어 놓았다.
+
+`serviceAccount.create=false` 와 `serviceAccount.name` 이 IRSA 와 짝이다. eksctl 이 ClusterConfig 의 `iam.serviceAccounts` 로 서비스 계정과 IAM 역할을 이미 만들어 두었으므로, helm 이 같은 이름의 계정을 다시 만들면 IRSA 애노테이션이 없는 빈 계정으로 덮인다. 그래서 만들지 말고 이름만 가리키게 한다.
+
+`--set region` 과 `--set vpcId` 는 컨트롤러가 어느 리전의 어느 VPC 에서 ELB·서브넷·보안 그룹을 다룰지 정한다. `vpcId` 는 Terraform output 을 담아 둔 `$env:VPC_ID` 로 넘기므로 값을 손으로 적을 일이 없다. `clusterName` 은 컨트롤러가 자기 클러스터의 리소스를 구분하는 기준이다.
+
+마지막 `nodeSelector` 한 줄이 addon 노드 배치 채점(mark 5-4)에 대응한다.
 
 </details>
 
@@ -151,13 +198,25 @@ TargetGroupBinding 한 장이다. `serviceRef` 로 대상 Service 와 포트를,
 
 </details>
 
-**④ 세트별 차이** — 패턴 자체는 전 세트 동일. 차이는 LBC 자격증명(set-02 IRSA / set-03·07 Pod Identity)과 nodeSelector label 키뿐.
+**④ 변형 포인트** — 패턴은 그대로 두고 이름과 자격증명만 바꾼다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| ALB·타깃그룹 이름 | Terraform `aws_lb` · `aws_lb_target_group` 의 이름 | 채점이 이름을 정확 비교(mark 7-1) — Ingress 로는 TG 이름을 못 정한다 |
+| 클러스터 이름·VPC | helm `--set clusterName` · `--set vpcId` | `vpcId` 는 terraform output 을 담은 `$env:VPC_ID` |
+| LBC 자격증명 방식 | `serviceAccount.create=false` + `serviceAccount.name`(IRSA) ↔ Pod Identity | eksctl 이 만든 SA 를 helm 이 덮어쓰지 않는다 |
+| addon 노드 label 키 | helm `--set nodeSelector.<키>=<값>` | 노드그룹 label 키와 같은 값(mark 5-4) |
+| Service 이름·포트 | `k8s/app/targetgroupbinding.yaml` 의 `serviceRef` | `targetType` 이 타깃그룹 설정과 일치 |
+
+패턴 자체는 세트가 바뀌어도 같다 — Terraform 이 ALB/TG 를 이름 고정으로 만들고, TargetGroupBinding 은 Pod IP 등록만 맡는다.
 
 ---
 
 ## 4. ALB 리스너 규칙 — 헤더/메서드 조건 + Lambda 타깃
 
 **① 한 줄 정의** — 리스너(80/HTTP)의 기본 액션은 fixed-response 403, 규칙 2개가 CloudFront 커스텀 헤더를 검증해 POST는 Pod TG로, 그 외는 Lambda TG로 보낸다.
+
+"CloudFront 를 거친 요청만 받는다"는 이 구성의 목적 자체는 [loadbalancer-basics 3-1 절](/start/loadbalancer-basics/#3-1-cloudfront-를-거친-요청만-받는다)에 있다.
 
 **② 왜 (채점 관점)** — mark 7-2가 `describe-rules`의 `HttpHeaderConfig.Values[]` 출력으로 **`wskorea26-cf` 정확히 2줄** + `curl http://<ALB>/book` = **403**을 검사한다.
 
@@ -187,10 +246,19 @@ graph TD
 </details>
 
 - 규칙 평가는 priority 순 — POST는 10에서 잡히고, 헤더만 있는 GET 등은 20으로 떨어진다.
-- **Lambda 타깃 3종 세트**: `aws_lb_target_group`(target_type="lambda") + `aws_lambda_permission`(principal=elasticloadbalancing.amazonaws.com, source_arn=TG ARN) + `aws_lb_target_group_attachment`(depends_on=permission). permission 없이 attach하면 실패한다.
+- **Lambda 타깃 3종 세트**: `aws_lb_target_group`(target_type="lambda") + `aws_lambda_permission`(principal=elasticloadbalancing.amazonaws.com, source_arn=TG ARN) + `aws_lb_target_group_attachment`(depends_on=permission). permission 없이 attach하면 실패한다. 세 리소스가 왜 한 세트로 묶이는지는 [loadbalancer-basics 3-3 절](/start/loadbalancer-basics/#3-3-lambda-타깃은-세-리소스가-한-세트다)에 있다.
 - Pod TG는 `target_type = "ip"`, health_check path `/health` — Deployment readiness와 같은 경로로 맞춘다.
 
-**④ 세트별 차이** — 규칙 수·조건은 과제지마다 다르다. set-02는 "헤더 2규칙 + 403 기본"이 채점 고정값. 다른 세트는 mark의 기대 출력(줄 수!)을 먼저 읽고 규칙 수를 역산할 것.
+**④ 변형 포인트** — 규칙 수와 조건은 과제지마다 다르다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 헤더 값 (`wskorea26-cf`) | `alb.tf` 의 헤더 조건 + CloudFront 커스텀 헤더 | 양쪽 값이 같아야 403 이 아닌 경로로 간다 |
+| 규칙 수·조건 | 리스너 규칙(priority 10 / 20) | `describe-rules` 의 `HttpHeaderConfig.Values[]` 줄 수(mark 7-2) |
+| 차단 응답 | 리스너 기본 액션 fixed-response 403 | `curl http://<ALB>/book` 이 403 |
+| Lambda 타깃 요구 | `aws_lb_target_group`(target_type="lambda") + `aws_lambda_permission` + `aws_lb_target_group_attachment` | permission 없이 attach 하면 실패 |
+
+규칙 수는 스스로 정하지 않는다. mark 의 기대 출력 줄 수를 먼저 읽고 규칙 수를 역산한다 — set-02 는 "헤더 2규칙 + 403 기본"이 채점 고정값이다.
 
 ---
 

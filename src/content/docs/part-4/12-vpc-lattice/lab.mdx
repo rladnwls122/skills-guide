@@ -1,13 +1,15 @@
 ---
 title: Lab 12 — VPC Lattice 서비스 네트워킹 (도쿄 ap-northeast-1)
 description: Client/Service VPC를 VPC Lattice만으로 연결하고, 채점 스크립트(asgmt2_module2_check.sh) 5항목을 백지에서 재현하는 실습.
+sidebar:
+  order: 3
 ---
 
 import { Steps } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
-채점 스크립트(`asgmt2_module2_check.sh`, 로컬 사본 `mark/mark2-2.sh`)가 조회하는 명령과 대조하며 진행한다. Terraform 정답은 `skills-2026`의 브랜치 `set-08/task-2`, `set-08/task-2/module-2-lattice`에 있다 — 여기서는 CLI로 만들어 손에 익힌 뒤 대조한다.
+채점 스크립트(`asgmt2_module2_check.sh`, 로컬 사본 `mark/mark2-2.sh`)가 조회하는 명령과 대조하며 진행한다. Terraform 정답은 `skills-2026`의 브랜치 `set-08/task-2`, `set-08/task-2/module-2-lattice`에 있다 — 여기서는 CLI로 만들어 손에 익힌 뒤 대조한다. 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론) 후 `git switch set-08/task-2` 로 브랜치를 바꾼다(`main` 에는 병합돼 있지 않다).
 
 이 실습의 순서는 문제지의 절 번호(4-1~4-4)가 아니라 **배포 의존성 순서**를 따른다. 보안 그룹은 인스턴스를 만드는 시점에 이미 있어야 하고, Client EC2에 넣을 `SERVICE_URL`은 Service를 만들어 도메인 이름을 받은 뒤에야 값이 생긴다 — 그래서 Service EC2를 먼저, Client EC2를 마지막에 띄운다.
 
@@ -19,9 +21,22 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] `curl /v1/client/orders?id=1001` → `order_id=1001, via=vpc-lattice` E2E를 재현할 수 있다
 - [ ] 실습 종료 후 Lattice 리소스부터 역순으로 destroy할 수 있다
 
+선행 지식과 목표는 [모듈 개요](/part-4/12-vpc-lattice/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- CLI 의 중첩 JSON 구조: `aws vpc-lattice create-target-group help` · `aws vpc-lattice create-listener help`
+- 정답지 Terraform 과 대조할 때: [aws_vpclattice_service_network](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpclattice_service_network) · [aws_vpclattice_service](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpclattice_service) · [aws_vpclattice_target_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpclattice_target_group) · [aws_vpclattice_listener](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpclattice_listener)
+- 프리픽스 리스트를 소스로 쓰는 규칙: `aws ec2 describe-managed-prefix-lists help` · [aws_security_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 <Steps>
 
 1. **사전 준비 — 리전·지급 파일**
+
+   :::caution[과금 주의 — 시작 전에 읽는다]
+   VPC Lattice 는 **Service Network 와 VPC 를 연결한 시간**과 **Service 가 처리한 트래픽(GB)** 양쪽에 과금한다. EC2 두 대도 함께 돈다. 실습을 끝내면 [정리 (당일 필수)](#정리-당일-필수) 절차를 그날 안에 반드시 돌린다 — 만들어 두고 자면 하루치가 그대로 청구된다.
+   :::
 
    ```powershell
    $env:AWS_DEFAULT_REGION = "ap-northeast-1"
@@ -454,6 +469,46 @@ aws ec2 delete-vpc --vpc-id $SERVICE_VPC_ID
 정리는 참조 관계의 역순이다. Lattice 쪽부터 리스너 → 타깃 해제 → 타깃 그룹 → 서비스 연결 → 서비스 → VPC 연결 → Service Network 순으로 지운다. 중간의 `Start-Sleep` 은 해제가 반영되기 전에 다음 삭제를 시도하면 거부되기 때문이다. 그다음 EC2 를 종료해야 보안 그룹이 지워지고, 마지막으로 서브넷·IGW·VPC 를 지운다.
 
 </details>
+
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. Client·Service VPC CIDR 이 `10.61.0.0/16`·`10.62.0.0/16` 에서 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `create-vpc`·`create-subnet` 의 CIDR 과, Client VPC 대역을 소스로 쓰는 `skills-lattice-assoc-sg` 인바운드 규칙이다. 피어링도 Transit Gateway 도 없으므로 라우팅은 손대지 않는다 — Lattice 는 두 대역이 겹쳐도 동작한다. mark 2-1 이 두 VPC 의 CIDR 을 표로 확인한다.
+
+   </details>
+
+2. 서비스 포트가 8080 에서 9090 으로 바뀌면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   Target Group 설정의 포트와 헬스 체크, Service EC2 보안 그룹의 인바운드 포트, 그리고 서비스 앱의 systemd 유닛이다. Listener 의 80 은 그대로 둔다 — Lattice 리스너 포트와 타깃 포트는 별개다. 중첩 JSON 구조가 막히면 `aws vpc-lattice create-target-group help` 를 열고, 찾는 순서는 [검색 가이드](/reference/search-guide/)에 있다.
+
+   </details>
+
+3. Service EC2 보안 그룹을 `0.0.0.0/0` 으로 열면 어느 체크가 깨지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 2-4 다. 이 항목은 Service EC2 의 보안 그룹을 JSON 그대로 출력해 소스를 확인한다. 헬스 체크도 E2E 도 통과하므로 2-5 는 살아 있지만 2-4 만 떨어진다. 소스는 `com.amazonaws.ap-northeast-1.vpc-lattice` 관리형 프리픽스 리스트여야 한다.
+
+   </details>
+
+4. Service Network 이름을 `skills-lattice-sn` 이 아닌 값으로 만들면 어디까지 번지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   채점 준비 단계가 이 이름으로 `SERVICE_NETWORK_ID` 를 뽑는다. 이름이 다르면 그 변수가 `None` 이 되어 mark 2-3 의 연결 조회가 통째로 비고, 같은 변수를 쓰는 2-4 도 함께 무너진다. Service·Target Group 이름도 같은 방식이라 셋 다 과제지 표기 그대로 만든다.
+
+   </details>
 
 ## 오답 노트 양식
 

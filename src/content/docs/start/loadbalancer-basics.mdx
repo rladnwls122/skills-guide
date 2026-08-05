@@ -1,6 +1,8 @@
 ---
 title: 로드밸런서 기초 (선수 학습, 약 1시간 30분)
 description: ALB 의 리스너·규칙·타깃그룹·타깃 4계층과 헬스체크, 타깃 유형 선택, Ingress 와 TargetGroupBinding 의 차이를 정리한 선수 학습.
+sidebar:
+  order: 11
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
@@ -105,19 +107,24 @@ ALB 안의 네 계층이다. 리스너가 포트(:80)를 받고, 규칙이 prior
 | `HealthCheckPath` | 확인용으로 부를 경로 | `/` |
 | `HealthCheckIntervalSeconds` | 몇 초마다 확인하나 | 30 |
 | `HealthCheckTimeoutSeconds` | 응답을 몇 초까지 기다리나 | 5 |
-| `HealthyThresholdCount` | 몇 번 연속 성공해야 살았다고 보나 | 5 |
-| `UnhealthyThresholdCount` | 몇 번 연속 실패해야 죽었다고 보나 | 2 |
+| `HealthyThresholdCount` | `unhealthy` 인 타깃이 몇 번 연속 성공해야 되살아나나 | 5 |
+| `UnhealthyThresholdCount` | `healthy` 인 타깃이 몇 번 연속 실패해야 죽었다고 보나 | 2 |
 | `Matcher` | 어떤 상태 코드를 성공으로 보나 | `200` |
 
 기본값은 `instance`·`ip` 타깃 기준이다. `lambda` 타깃그룹은 간격 35초, 타임아웃 30초다.
 
-**등록 직후 바로 트래픽이 가지 않는다.** 새로 등록된 타깃은 헬스체크를 1회 통과해야 `healthy` 가 되므로 기본 간격 30초만큼 기다린다. `unhealthy` 로 떨어진 타깃이 되돌아올 때는 `HealthyThresholdCount` 만큼 연속으로 성공해야 하므로 기본값이면 150초다. 대회처럼 시간이 점수인 상황에서는 간격과 임계를 줄인다.
+**등록 직후 바로 트래픽이 가지 않는다.** 판정이 두 갈래로 나뉘기 때문이다.
+
+- **새로 등록한 타깃**은 `initial` 상태로 들어가고, 헬스체크를 **한 번** 통과하면 `healthy` 가 된다. 기본 간격이 30초이므로 그만큼 기다린다.
+- **`unhealthy` 로 떨어졌던 타깃**이 되살아날 때만 `HealthyThresholdCount` 가 적용된다. 기본값 5 에 간격 30초를 곱해 150초가 걸린다.
+
+표의 기본값 5 를 신규 등록에도 적용된다고 읽으면 대기 시간을 다섯 배로 잘못 계산한다. 대회처럼 시간이 점수인 상황에서는 간격과 임계를 함께 줄인다.
 
 `aws elbv2 describe-target-health` 출력의 상태값은 여섯 가지다.
 
 | 상태 | 뜻 | 흔한 원인 |
 |---|---|---|
-| `initial` | 등록됐고 첫 헬스체크가 아직 진행 중 | 방금 등록했다. 기다리면 된다 |
+| `initial` | 등록됐고 첫 헬스체크가 아직 진행 중 | 방금 등록함 — 기다리면 넘어간다 |
 | `healthy` | 정상. 트래픽을 받는다 | — |
 | `unhealthy` | 헬스체크 실패 | 경로 오타, 앱이 그 경로에 응답하지 않음, 상태 코드 불일치, 보안 그룹이 헬스체크 포트를 막음 |
 | `unused` | 등록됐지만 쓰이지 않는다 | 타깃그룹이 어떤 리스너 규칙에도 연결되지 않았다 |
@@ -447,9 +454,9 @@ TargetGroupBinding 한 장의 필수 필드다. `serviceRef` 가 어느 Service 
 
 ### 5-4. 왜 대회는 길 B 인가
 
-채점이 `wskorea26-book-tg` 같은 **타깃그룹 이름**으로 리소스를 역조회한다(③-2). 길 A 는 타깃그룹 이름을 정할 수 없으므로 그 항목을 통과할 방법이 없다. ALB 이름은 애노테이션으로 맞출 수 있어도 타깃그룹에서 막힌다.
+채점이 `wskorea26-book-tg` 같은 **타깃그룹 이름**으로 리소스를 역조회한다(③-2). 길 A 에서는 그 이름을 컨트롤러가 짓는다. ALB 이름만은 애노테이션으로 맞출 수 있지만 타깃그룹에는 같은 애노테이션이 없어 거기서 막힌다.
 
-그래서 이름 채점이 있는 후보 세트는 전부 길 B 다.
+길 B 는 그 이름을 Terraform 이 직접 정한다. 그래서 이름 채점이 있는 후보 세트는 전부 길 B 다.
 
 ### 5-5. 판단 표
 

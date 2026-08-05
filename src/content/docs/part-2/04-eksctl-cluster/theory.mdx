@@ -1,12 +1,16 @@
 ---
 title: 04. 이론 — eksctl ClusterConfig
 description: "describe-cluster/describe-nodegroup 정확 비교를 통과하는 ClusterConfig 구조와 함정 정리."
+sidebar:
+  order: 2
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
+
+선행 지식과 학습 경로는 [모듈 개요](/part-2/04-eksctl-cluster/)에.
 
 > 교재 원본: `skills-2026/set-02/task-1/eksctl/cluster.yaml`, `set-03/task-1/eksctl/cluster.yaml`
 
@@ -15,6 +19,10 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 ## 1. eksctl ClusterConfig 구조
 
 **① 한 줄 정의** — eksctl은 `ClusterConfig` YAML 한 장으로 EKS 컨트롤 플레인 + 노드그룹 + IAM 연동 + 애드온을 선언적으로 생성하는 공식 CLI다.
+
+컨트롤 플레인·데이터 플레인·노드그룹·애드온이 각각 무엇인지는 [eks-basics](/start/eks-basics/)에 정의가 있다.
+
+eksctl 이 실제로 하는 일은 CloudFormation 스택을 대신 짜는 것이다. YAML 한 장을 읽어 **클러스터 → OIDC/서비스 계정 → 노드그룹** 순으로 스택 세 벌을 만들고, 앞 단계가 끝나야 뒤 단계를 건다. 콘솔 클릭이나 `aws eks create-cluster` 로는 이 순서와 사이에 필요한 IAM 역할·보안 그룹을 사람이 직접 챙겨야 한다. 생성에 약 20분이 걸리는 것도 스택 세 벌이 직렬로 도는 시간이다.
 
 **② 왜 (채점 관점)** — 채점은 `aws eks describe-cluster / describe-nodegroup` 출력을 정확 비교한다(mark 5-1~5-3: 버전 1.35, 로그 5종, KMS 별칭, 서브넷 이름, 노드그룹 이름/타입/tags.Name). 콘솔 클릭보다 YAML 한 장이 재현·수정(30% 변동 대비)에 압도적으로 유리하다.
 
@@ -56,7 +64,18 @@ ClusterConfig 한 장에 들어가는 최상위 블록들이다. `vpc` 는 기�
 | `cloudWatch.clusterLogging` | 로그 **5종 전부** | mark 5-1 |
 | `autoModeConfig.enabled` | false (직접 노드그룹 운용) | — |
 
-**④ 세트별 차이** — 아래 3절 표 참조.
+**④ 변형 포인트** — 당일 과제의 약 30% 가 수정된다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 클러스터 이름·비번호 prefix | `metadata.name` | `describe-cluster` 이름 비교(mark 5-1) |
+| 클러스터 버전 | `metadata.version` | 따옴표로 감싼 문자열(`"1.35"`) |
+| 등록할 서브넷 | `vpc.subnets.private` | mark 5-2 가 서브넷 Name 을 비교 — private 2개만 |
+| 로그 종류 요구 | `cloudWatch.clusterLogging` | mark 5-1 은 5종 전부 |
+| Secret 암호화 키 | `secretsEncryption.keyARN` | `${VAR}` 자리라 terraform output 치환으로 해결 |
+| 엔드포인트 공개 범위 | `vpc.clusterEndpoints` | public 이 닫히면 kubectl 은 VPC CloudShell 에서 |
+
+VPC·서브넷·SG·KMS·정책 ARN 은 YAML 에 `${VAR}` 플레이스홀더로 두고 terraform output 으로 치환한다. 손으로 고치는 값은 이름·버전·로그 목록처럼 과제지가 글자로 지정한 것들뿐이다.
 
 ---
 
@@ -65,12 +84,16 @@ ClusterConfig 한 장에 들어가는 최상위 블록들이다. `vpc` 는 기�
 **① 한 줄 정의**
 - **IRSA**: OIDC 공급자를 통해 ServiceAccount 토큰으로 IAM 역할을 위임받는 방식(노드 상주 컴포넌트 없음).
 - **Pod Identity**: `eks-pod-identity-agent` DaemonSet이 노드에서 자격증명을 중계하는 신형 방식.
-- **Access Entry**: **사람/도구의 kubectl 접근**을 aws-auth ConfigMap 대신 EKS API(`authenticationMode: API`)로 관리하는 방식 — 위 둘(Pod용)과 축이 다르다.
+- **Access Entry**: **사람/도구의 kubectl 접근**을 EKS API 로 관리하는 방식. 예전에는 클러스터 안의 aws-auth ConfigMap 을 고쳐 IAM 신원을 등록했는데, Access Entry 는 그 매핑을 EKS API 쪽으로 옮긴다. 켜는 스위치가 `authenticationMode: API` 다.
+
+앞의 둘은 파드에 AWS 권한을 주는 방식이고, Access Entry 는 사람이 클러스터를 조작할 권한을 주는 방식이다. 축이 다르므로 서로 대체 관계가 아니다.
+
+앞의 두 방식은 [eks-basics 의 IRSA·Pod Identity 절](/start/eks-basics/#irsa와-eks-pod-identity)이 먼저 다룬다. Access Entry 는 그 문서에 없는 개념이라 이 문서가 정의를 맡는다.
 
 **② 왜 (채점 관점 — 여기가 갈림길)**
 
 :::danger[세트별 채점 갈림]
-**set-02는 반드시 IRSA.** mark 5-4는 "kube-system 파드(aws-node/kube-proxy 제외)는 전부 addon 노드"를 검사한다. Pod Identity를 쓰면 `eks-pod-identity-agent` **DaemonSet이 app 노드에도 떠서 5-4 감점**.
+**set-02는 반드시 IRSA.** mark 5-4는 "kube-system 파드(aws-node/kube-proxy 제외)는 전부 addon 노드"를 검사한다. 그런데 Pod Identity 는 `eks-pod-identity-agent` 를 DaemonSet 으로 깔고, DaemonSet 은 정의상 **모든 노드에 하나씩** 뜬다. 그래서 app 노드에도 kube-system 파드가 하나 생겨 **5-4 감점**이다.
 **set-03/07은 Pod Identity + Access Entry(authMode=API, aws-auth 미사용)** — 해당 세트엔 5-4 같은 노드 배치 검사가 없어 신형 방식을 쓴다.
 :::
 
@@ -144,23 +167,31 @@ YAML 작성법 비교 (실측):
   </TabItem>
 </Tabs>
 
-**④ 세트별 차이 표**
+**④ 변형 포인트** — 파드 자격증명 방식이 갈리는 지점이다.
 
-| 항목 | set-02 | set-03 / set-07 |
+| 바뀌는 값 | 고칠 곳 | 확인 |
 |---|---|---|
-| Pod 자격증명 | **IRSA** (`withOIDC` + `serviceAccounts`) | **Pod Identity** (`podIdentityAssociations`) |
-| 이유 | mark 5-4: agent DaemonSet이 app 노드에 뜨면 감점 | 노드 배치 검사 없음, 신형 권장 방식 |
-| Terraform 준비물 | IAM **정책**(attachPolicyARNs로 참조) | IAM **역할**(trust=pods.eks.amazonaws.com) |
-| kubectl 인증 | Access Entry (authMode=API) | Access Entry (authMode=API) — **공통** |
-| aws-auth ConfigMap | 미사용 | 미사용 |
-| 엔드포인트 | public+private (본 PC에서 kubectl) | fully private (`privateCluster.enabled`) — kubectl은 VPC CloudShell |
-| EBS CSI | 미설치 (csi-node DaemonSet도 5-4 위반) → Prometheus emptyDir | 세트 요구에 따름 |
+| 파드 자격증명 방식 | `iam.withOIDC` + `serviceAccounts` ↔ `iam.podIdentityAssociations` | 노드 배치 검사(mark 5-4)가 있으면 IRSA |
+| Pod Identity 로 갈 때 | `addons` 에 `eks-pod-identity-agent` 추가 | 이 애드온이 없으면 파드가 자격 증명을 못 받는다 |
+| Terraform 준비물 | IRSA 는 IAM 정책(`attachPolicyARNs` 로 참조), Pod Identity 는 IAM 역할 | 역할 trust 는 `pods.eks.amazonaws.com` |
+| 엔드포인트 공개 범위 | `vpc.clusterEndpoints` | set-02 public+private / set-03 fully private(`privateCluster.enabled`) |
+| EBS CSI 요구 | `addons` 목록 | mark 5-4 가 있는 세트는 미설치 |
+
+kubectl 인증은 두 갈래 모두 Access Entry(`authenticationMode: API`)를 쓰고 aws-auth ConfigMap 은 쓰지 않는다. 판단 기준은 그 세트에 노드 배치 검사가 있는지다.
+
+엔드포인트와 EBS CSI 두 줄은 결과만 적었다. 이유는 이렇다.
+
+**엔드포인트** — set-02 는 public 이 함께 열려 있어 본 PC 에서 바로 kubectl 을 쓴다. set-03·07 은 private 만 열리므로 kubectl 을 VPC CloudShell 에서 실행해야 한다.
+
+**EBS CSI** — set-02 가 이 애드온을 깔지 않는 이유도 mark 5-4 다. EBS CSI 는 노드마다 `ebs-csi-node` DaemonSet 을 띄우는데, 그 파드가 app 노드에 뜬 kube-system 파드가 되어 배치 검사에 걸린다. 그래서 Prometheus 의 저장소도 PVC 대신 emptyDir 로 둔다.
 
 ---
 
 ## 3. 노드그룹 2분할 (addon / app)
 
 **① 한 줄 정의** — 시스템 컴포넌트용 addon 노드그룹과 애플리케이션 전용 app 노드그룹으로 분리하고 label(+필요시 taint)로 스케줄을 통제한다.
+
+label·nodeSelector·taint/toleration·DaemonSet 이 각각 무엇인지는 [k8s-basics](/start/k8s-basics/)에, 노드그룹 2분할이 대회 아키텍처에서 차지하는 자리는 그 문서의 대회 실전 아키텍처 절에 있다.
 
 **② 왜 (채점 관점)** — mark 5-3이 `describe-nodegroup`으로 노드그룹 이름·인스턴스 타입·**tags.Name**·서브넷을 검사하고, mark 5-4가 "kube-system 파드는 addon 노드, wskorea26 파드는 app 노드"를 `kubectl get pod -o wide`로 검사한다.
 
@@ -218,15 +249,26 @@ addons:
 
 애드온 버전은 **지정하지 않는다**(작업규칙 2: EKS Addon 미고정 — eksctl이 클러스터 버전 default 사용).
 
-**④ 세트별 차이**
+**④ 변형 포인트** — 이름과 라벨 키가 세트마다 다르다. 세트별 실측값은 이렇다.
 
 | 항목 | set-02 | set-03 |
 |---|---|---|
-| NG 이름 | wskorea26-addon-ng / wskorea26-app-ng | wsc2026-addon-nodegroup / wsc2026-workload-ng |
+| NG 이름 | `wskorea26-addon-ng` / `wskorea26-app-ng` | `wsc2026-addon-nodegroup` / `wsc2026-workload-ng` |
 | label 키 | `node-type` | `wsc2026/node` |
-| taint | 없음 | workload NG에 NoSchedule |
-| tags.Name | 있음 (mark 5-3 채점) | 없음 (instanceName만) |
+| taint | 없음 | workload NG 에 NoSchedule |
+| tags.Name | 있음(mark 5-3 채점) | 없음(`instanceName`만) |
 | 부트스트랩 | 기본 | `overrideBootstrapCommand`(nodeadm NodeConfig)로 clusterDomain 변경 |
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 노드그룹 이름 | `managedNodeGroups[].name` | `describe-nodegroup` 이름 비교(mark 5-3) |
+| label 키 | 노드그룹 `labels` + 워크로드 `nodeSelector` | 두 곳이 같은 키·값 |
+| taint 요구 | 노드그룹 `taints` + 앱 Deployment `tolerations` | taint 만 걸면 앱이 그 노드에 못 뜬다 |
+| EC2 인스턴스 Name 태그 요구 | `instanceName` | 인스턴스 태그는 이 필드로만 붙는다 |
+| `describe-nodegroup` tags.Name 채점 | `tags.Name` | 채점 대상이 아니면 넣지 않는다 |
+| 부트스트랩 커스터마이즈 | `overrideBootstrapCommand`(nodeadm NodeConfig) | 필요할 때만 |
+
+판단 기준은 과제지가 이름을 어디에 명시하는지다 — EC2 인스턴스 태그 요구면 `instanceName`, `describe-nodegroup` 출력 검사면 `tags.Name` 이다. 애드온 버전은 어느 세트에서도 지정하지 않는다.
 
 ---
 
@@ -298,6 +340,12 @@ graph LR
 </Tabs>
 
 생성 소요: **약 20분** (CloudFormation 스택: 클러스터 → OIDC/SA → 노드그룹 순).
+
+**④ 변형 포인트** — 요구가 바뀌면 치환 변수 목록도 함께 바뀐다.
+
+- **바뀌는 값**: 참조 리소스가 늘거나(서브넷·SG 추가) 자격증명 방식이 바뀌어 정책 ARN 대신 역할 ARN 을 넘길 때(`BOOK_APP_POLICY_ARN` → `BOOK_POD_ROLE_ARN`).
+- **고칠 곳**: `cluster.yaml` 의 `${VAR}` 자리와 치환 스크립트의 변수 이름 목록 두 곳. terraform output 이름도 같이 맞춘다.
+- **확인**: 치환 후 `grep '\${' cluster.rendered.yaml`(PowerShell 은 `Select-String '\$\{'`) 출력이 0줄.
 
 ---
 

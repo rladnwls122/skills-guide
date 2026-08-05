@@ -1,6 +1,8 @@
 ---
 title: 05. 실습 — book 앱 배포와 ALB 연결
 description: "LBC 설치와 book 앱 manifest 5종 적용, TG healthy·ALB 규칙을 검증하는 실습."
+sidebar:
+  order: 3
 ---
 
 > 문서 유형: tutorial
@@ -14,13 +16,25 @@ description: "LBC 설치와 book 앱 manifest 5종 적용, TG healthy·ALB 규�
 - [ ] TG 타깃 healthy 확인 + ALB 403/규칙 채점 명령 셀프 검증
 - [ ] Pod 강제 삭제로 self-healing과 graceful shutdown 관찰
 
-전제: 04의 클러스터가 떠 있고 `.env.ps1` 로드됨. 컨테이너 이미지가 ECR에 `stable` 태그로 존재
-(아직이면 06 lab의 2단계를 먼저 — 기본 CloudShell에서 docker build/push).
+선행 지식과 목표는 [모듈 개요](/part-2/05-k8s-workloads-alb/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- helm values 키: `helm show values eks/aws-load-balancer-controller --version 3.4.0`, 브라우저는 [ArtifactHub](https://artifacthub.io/packages/helm/aws/aws-load-balancer-controller)
+- YAML·CRD 필드: `kubectl explain deployment.spec.template.spec` · `kubectl explain targetgroupbinding.spec` (CRD 정본은 [TargetGroupBinding 문서](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/targetgroupbinding/targetgroupbinding/))
+- CLI 플래그·출력 필드: `aws elbv2 describe-rules help` · `aws elbv2 describe-target-health help`
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
+## 0. 사전 준비
+
+- 정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론). 경로는 클론 루트 `~\skills-2026` 기준이다.
+- [04 실습](/part-2/04-eksctl-cluster/lab/)의 클러스터가 떠 있고, 같은 문서의 `.env.ps1` 이 만들어져 있어야 한다. 이 실습이 쓰는 `$env:VPC_ID`·`$env:ECR`·`$env:APP_TG`·`$env:ALB_DNS` 는 전부 그 파일에서 온다.
+- 컨테이너 이미지가 ECR 에 `stable` 태그로 올라가 있어야 한다. 아직이면 [03 실습의 4단계](/part-1/03-container-lambda-dynamodb/lab/)를 먼저 한다 — 기본 CloudShell 에서 docker build/push 다.
 
 ## 1. AWS Load Balancer Controller
 
 ```powershell
-cd C:\Users\kryuk\practice\skills-2026\set-02\task-1
+cd ~\skills-2026\set-02\task-1
 . .\.env.ps1
 
 helm repo add eks https://aws.github.io/eks-charts; helm repo update
@@ -50,6 +64,23 @@ kubectl -n kube-system get pod -l app.kubernetes.io/name=aws-load-balancer-contr
 기대: `2/2 READY`, 두 Pod 모두 **addon 노드** 위 (NODE 열의 노드를 `kubectl get node -L node-type`로 확인).
 
 ## 2. book 앱 배포 (순서 중요)
+
+치환에 쓸 두 변수부터 확인한다. 비어 있으면 아래 apply 가 자리표시자를 그대로 넣어 `ImagePullBackOff` 로 간다.
+
+```powershell
+$env:ECR ; $env:APP_TG
+```
+
+기대: ECR 리포지토리 URI 한 줄(`<계정ID>.dkr.ecr.ap-northeast-2.amazonaws.com/wskorea26-book-repo`)과 타깃그룹 ARN 한 줄. 빈 줄이 나오면 `set-02\task-1` 에서 `. .\.env.ps1` 을 다시 실행한다. `.env.ps1` 자체가 없으면 이름으로 직접 조회해도 된다.
+
+```powershell
+$env:ECR    = aws ecr describe-repositories --repository-names wskorea26-book-repo `
+  --query 'repositories[0].repositoryUri' --output text
+$env:APP_TG = aws elbv2 describe-target-groups --names wskorea26-book-tg `
+  --query 'TargetGroups[0].TargetGroupArn' --output text
+$env:ALB_DNS = aws elbv2 describe-load-balancers --names wskorea26-book-alb `
+  --query 'LoadBalancers[0].DNSName' --output text
+```
 
 ```powershell
 cd k8s
@@ -156,9 +187,54 @@ kubectl -n wskorea26 get pod -w      # Ctrl+C로 중단
 :::
 
 ```powershell
+cd ~\skills-2026\set-02\task-1
 helm -n kube-system uninstall aws-load-balancer-controller
 eksctl delete cluster -f eksctl/cluster.rendered.yaml --disable-nodegroup-eviction
 aws dynamodb update-table --table-name wskorea26-data-table --no-deletion-protection-enabled
 cd terraform; terraform destroy -var "player_number=$env:NUM"
 ```
+
+`$env:NUM` 은 `.env.ps1` 이 담고 있다. 없으면 `$env:NUM = "<본인 비번호>"` 를 먼저 실행한다 — 값이 다르면 destroy 가 다른 이름의 리소스를 지우려 한다.
+
+## 8. 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. 오리진 검증 헤더 값이 `wskorea26-cf` 에서 다른 값으로 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `terraform/variables.tf` 의 `origin_verify_value` 한 곳이다. `cloudfront.tf` 의 `custom_header` 와 `alb.tf` 의 리스너 규칙 두 개가 같은 변수를 참조한다. 이 값은 mark 7-2-A 가 두 줄로, mark 8-4-A 가 헤더 이름과 짝지어 본다. `grep -rn "wskorea26-cf" *.tf` 가 `variables.tf` 한 건이면 된다.
+
+   </details>
+
+2. ALB 에 `/admin*` 경로용 규칙을 하나 더 두라면 어디를 고치고, 무엇을 조심하나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `alb.tf` 에 `aws_lb_listener_rule` 을 하나 더 쓴다. 조심할 곳은 mark 7-2-A 다 — 이 항목은 리스너의 **모든** 규칙에서 `HttpHeaderConfig.Values[]` 를 뽑아 `wskorea26-cf` 두 줄을 기대한다. 새 규칙에 헤더 조건을 또 달면 줄이 세 개가 되어 정확 일치가 깨진다. 조건 블록 이름이 막히면 [검색 가이드](/reference/search-guide/)를 거쳐 `aws_lb_listener_rule` 문서나 `aws elbv2 describe-rules help` 를 연다.
+
+   </details>
+
+3. 앱 헬스 경로가 `/health` 에서 `/healthz` 로 바뀌면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   두 곳이다. `terraform/alb.tf` 의 타깃그룹 `health_check.path` 와 `k8s/app/deployment.yaml` 의 readiness·liveness probe 경로다. mark 7-1-A 는 헬스체크 설정을 보지 않지만, 타깃이 unhealthy 로 남으면 7-2-A 의 `curl` 과 9-1-A~9-3-A 앱 테스트가 함께 무너진다.
+
+   </details>
+
+4. 네임스페이스가 `wskorea26` 에서 다른 이름으로 바뀌면 어디까지 번지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `k8s/00-namespaces.yaml`, deployment·service·pdb·TargetGroupBinding 의 `namespace`, 그리고 `eksctl/cluster.yaml` 의 IRSA serviceAccount 네임스페이스까지다. mark 5-4-A 가 `kubectl get namespace <이름>` 으로 존재를 확인하고, 이어서 그 네임스페이스 파드가 올라간 노드의 `node-type` 라벨을 본다.
+
+   </details>
+
+막히면 [트러블슈팅](/reference/troubleshooting/), 그날을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 돌린다.
 

@@ -1,6 +1,8 @@
 ---
 title: 13. 실습 — CDN Function A/B 배포 검증 (버지니아 북부 us-east-1)
 description: S3(OAC)+KeyValueStore+CloudFront Functions로 A/B 테스팅 스택을 배포하고 curl로 쿠키 강제·무작위 배정·KVS 동적 반영을 검증하는 실습.
+sidebar:
+  order: 3
 ---
 
 import { Steps } from '@astrojs/starlight/components';
@@ -9,7 +11,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 원리와 채점 관점은 [13 이론 — CloudFront Functions vs Lambda@Edge](/part-4/13-cdn-function/theory/)에 있다.
 
-정답지는 `skills-2026/set-07/task-2/module-2-cdn-function/`에 있다. 리전은 **us-east-1** — task.md·mark.md 양쪽에서 확인했다. 이 정답지는 실채점에서 `mark2.sh` 전 항목(2-1~2-6) 통과가 확인된 상태다.
+정답지는 `skills-2026/set-07/task-2/module-2-cdn-function/`에 있다. 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다 — 아래 경로는 클론 루트 `~\skills-2026` 기준이다. 리전은 **us-east-1** — task.md·mark.md 양쪽에서 확인했다. 이 정답지는 실채점에서 `mark2.sh` 전 항목(2-1~2-6) 통과가 확인된 상태다.
 
 ## 실습 목표
 
@@ -18,6 +20,15 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] 쿠키 강제 시 동작(mark 2-4), 무작위 배정·쿠키 보존(mark 2-5), KVS 동적 반영(mark 2-6)을 각각 재현한다
 - [ ] `mark2.sh`로 셀프 채점하고, 실습 종료 시 destroy까지 마친다
 
+선행 지식과 목표는 [모듈 개요](/part-4/13-cdn-function/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- CLI 플래그·출력 필드: `aws cloudfront test-function help` · `aws cloudfront-keyvaluestore put-key help`
+- Terraform 인자: [aws_cloudfront_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_function) · [aws_cloudfront_key_value_store](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_key_value_store) · [aws_cloudfront_cache_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_cache_policy) · [aws_cloudfront_response_headers_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_response_headers_policy)
+- `cloudfront-js-2.0` 런타임이 무엇을 지원하는지: [CloudFront 개발자 가이드](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ---
 
 <Steps>
@@ -25,7 +36,7 @@ import { Steps } from '@astrojs/starlight/components';
 1. **배포**
 
    ```powershell
-   cd skills-2026\set-07\task-2\module-2-cdn-function\terraform
+   cd ~\skills-2026\set-07\task-2\module-2-cdn-function\terraform
    terraform init
    terraform apply -auto-approve
    ```
@@ -146,13 +157,53 @@ import { Steps } from '@astrojs/starlight/components';
 ## 정리 (당일 필수)
 
 ```powershell
-cd skills-2026\set-07\task-2\module-2-cdn-function\terraform
+cd ~\skills-2026\set-07\task-2\module-2-cdn-function\terraform
 terraform destroy -auto-approve
 ```
 
 :::caution[과금 주의]
 CloudFront distribution은 disable→삭제 순서로 진행돼 몇 분 걸릴 수 있다(같은 서비스 기준 [02-kms-s3-cloudfront](/part-1/02-kms-s3-cloudfront/lab/) 실측 5~10분 수준). destroy 명령이 끝난 뒤 다음 작업으로 넘어간다.
 :::
+
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. 쿠키명이 `x-sp-ab` 에서 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   세 곳이다. `variables.tf` 의 `ab_cookie_name`, `cloudfront/req-fn.js`, `cloudfront/res-fn.js` 다. 두 JS 파일은 `file()` 로 그대로 읽히는 정적 코드라 변수 치환이 닿지 않는다 — `x-sp-ab` 와 `x-sp-ab-assigned` 를 직접 고친다. 캐시 정책의 쿠키 화이트리스트는 변수를 쓰므로 자동으로 따라간다. mark 2-3-A 가 화이트리스트를, 2-4-A·2-5-A 가 실제 Set-Cookie 를 본다.
+
+   </details>
+
+2. B 배정 비율이 0.3 에서 0.5 로 바뀌면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `variables.tf` 의 `ab_weight` 한 곳이다. 함수 코드는 매 실행 KVS 에서 `weight` 를 읽으므로 JS 는 그대로 두고 함수도 다시 publish 하지 않는다. mark 2-2-A 가 KVS 의 키·값을 정렬해 전부 출력하므로 이 값이 그 줄에 그대로 드러난다.
+
+   </details>
+
+3. 함수를 `DEVELOPMENT` 스테이지에 둔 채 채점하면 어느 체크가 깨지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 2-2-A 가 `describe-function --stage LIVE` 로 상태·런타임·KVS 연결을 뽑는데 LIVE 사본이 없다. 배포의 cache behavior 에도 연결되지 않아 2-3-A 의 함수 연결 줄이 비고, 2-4-A 부터 2-6-A 까지 동작 검증이 전부 무너진다.
+
+   </details>
+
+4. KVS 에 콘솔로 키를 하나 더 넣으면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 2-2-A 는 KVS 의 모든 키를 정렬해 출력하므로 여분 키가 그대로 보여 정확 일치가 깨진다. `keys_exclusive` 리소스가 다음 apply 때 여분 키를 지우지만, apply 전에 채점하면 그대로 남는다. 값 변경이 필요하면 콘솔이 아니라 `ab_weight` 같은 변수로 넣는다.
+
+   </details>
 
 ## 오답 노트 양식 (3열)
 

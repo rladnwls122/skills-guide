@@ -1,12 +1,16 @@
 ---
 title: 01. Terraform 문법 + VPC — 이론
 description: "채점 스크립트가 무엇을 보는가 관점으로 정리한 provider·variable·for_each 문법과 set-02 VPC 아키텍처."
+sidebar:
+  order: 2
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
+
+선행 지식과 학습 경로는 [모듈 개요](/part-1/01-terraform-vpc/)에.
 
 이 문서는 set-02 task-1 실측 코드를 근거로, "채점 스크립트(mark.sh)가 무엇을 보는가" 관점으로 Terraform 문법과 VPC 를 정리한다.
 
@@ -17,6 +21,8 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 ## 1. provider / versions
 
 **① 한 줄 정의** — provider 는 Terraform 이 AWS API 를 호출할 때 쓰는 플러그인이고, `required_providers` 블록으로 버전을 고정한다.
+
+provider 가 `region` 을 갖는 이유, `~>` 버전 제약 표기, `default_tags` 의 병합 규칙은 [hcl-basics 의 provider 절](/start/hcl-basics/#provider-의-리전과-버전-고정)에 있다. 여기서는 set-02 가 그 두 블록을 실제로 어떻게 채웠는지를 본다.
 
 **② 왜 필요한가 (채점 관점)** — 대회 규칙상 SW 버전은 최신 안정 버전으로 **고정**해야 한다(latest 금지). 또 리전이 틀리면 mark.sh가 리소스를 아예 못 찾아 전 항목 0점이 된다. 리전은 반드시 변수로 주입한다.
 
@@ -46,15 +52,21 @@ provider "aws" {
 
 </details>
 
-`~> 6.54` 는 6.54 이상 7.0 미만. `default_tags` 는 모든 리소스에 공통 태그를 붙여준다(리소스별 `tags` 와 병합됨).
+**④ 변형 포인트** — 당일 과제의 약 30% 가 수정된다.
 
-**④ 세트별 차이** — 세트마다 이름 prefix(`wskorea26`/`wsc2026` 등)와 리전이 다를 수 있으므로 provider 자체는 동일하되 region·prefix 를 변수로 뺀다. set-03 은 파일명이 `providers.tf`, set-02 는 `versions.tf` — 파일명은 자유, 내용이 채점 대상.
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 리전 | `terraform.tfvars` 의 `region` | `grep -rn "ap-northeast-2" *.tf` 0건 |
+| 이름 prefix (`wskorea26` → `wsc2026`) | `terraform.tfvars` 의 prefix 변수 | `grep -rn "wskorea26" *.tf` 0건 |
+| provider 최신 버전 | `versions.tf` 의 `required_providers` | `terraform init` 이 뽑은 버전이 `~>` 범위 안 |
+
+provider 블록 자체는 세트가 바뀌어도 같은 모양이다. 바뀌는 것은 그 안에 들어가는 값뿐이므로 리전과 prefix 를 변수로 빼 둔다. set-03 은 같은 내용을 `providers.tf` 에 두었다 — 파일명은 자유고 내용이 채점 대상이다.
 
 ---
 
 ## 2. variable / tfvars / locals
 
-**① 한 줄 정의** — `variable` 은 외부에서 주입 가능한 입력값, `terraform.tfvars` 는 그 값을 실제로 주입하는 파일, `locals` 는 내부 계산값이다.
+**① 한 줄 정의** — `variable` 은 외부에서 주입 가능한 입력값, `terraform.tfvars` 는 그 값을 실제로 주입하는 파일, `locals` 는 내부 계산값이다. 세 블록의 우선순위와 tfvars 자동 로드 규칙은 [hcl-basics](/start/hcl-basics/)에 있다.
 
 **② 왜 필요한가 (채점 관점)** — 대회 당일 공개 과제의 **약 30%가 수정**된다. 이름·CIDR·리전·비번호가 바뀌었을 때 tfvars 한 파일만 고치면 끝나도록 설계해야 한다. 특히 리소스 이름은 "정확 일치" 채점 항목이 많다 (예: mark 가 alias·Name 태그로 리소스를 역조회).
 
@@ -115,7 +127,16 @@ locals {
 
 핵심: **서브넷 이름을 map 의 key 로** 쓰면 이름·CIDR·AZ·tier 가 한 곳에 모이고, `for` + `if` 로 public/private 을 파생시킨다.
 
-**④ 세트별 차이** — 서브넷 개수(4 vs 6), AZ(a/b vs c/d), CIDR 이 세트마다 다르다. map(object) 구조면 tfvars 에서 map 전체를 갈아끼우는 것으로 대응된다.
+**④ 변형 포인트** — 당일 과제의 약 30% 가 수정된다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 비번호 | `terraform.tfvars` 의 `player_number` | `grep -rn "103" *.tf` 0건 |
+| 리전·VPC CIDR | `terraform.tfvars` 의 `region`·`vpc_cidr` | `terraform plan` 이 VPC 만 교체 |
+| 서브넷 개수·CIDR·AZ | `variables.tf` 의 `subnets` map | for_each 라 `vpc.tf` 무수정 |
+| 버킷 이름 규칙 | `data.tf` 의 `local.bucket_name` | 접두어·비번호 조합이 한 곳 |
+
+서브넷 4개가 6개로 늘어도 `subnets` map 에 항목을 더할 뿐 리소스 블록은 그대로다. 이름·CIDR·AZ·tier 가 map 한 곳에 모여 있기 때문이다. tfvars 로 map 전체를 갈아끼우는 것도 같은 이유로 가능하다.
 
 ---
 
@@ -123,7 +144,7 @@ locals {
 
 **① 한 줄 정의** — data source 는 "만들지 않고 조회만" 하는 블록이고, `aws_iam_policy_document` 는 IAM/KMS/버킷 정책 JSON 을 HCL 로 조립해 주는 data source 다.
 
-**② 왜 필요한가 (채점 관점)** — 계정 ID 를 하드코딩하면 지급 계정이 바뀌는 순간 정책이 전부 어긋난다. `aws_caller_identity` 로 조회한다. 정책을 heredoc JSON 으로 쓰면 따옴표·콤마 실수로 apply 가 깨지기 쉽다 — `aws_iam_policy_document` 는 `terraform validate` 단계에서 잡아준다.
+**② 왜 필요한가 (채점 관점)** — 계정 ID 를 하드코딩하면 지급 계정이 바뀌는 순간 정책이 전부 어긋난다. `aws_caller_identity` 로 조회한다. 정책을 JSON 문자열로 쓰지 않고 `aws_iam_policy_document` 로 조립하는 이유는 [hcl-basics 의 정책 JSON 설명](/start/hcl-basics/)에 있다.
 
 **③ 핵심 원리**:
 
@@ -150,13 +171,21 @@ resource "aws_iam_role" "book_lambda" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-data 소스 두 종류의 쓰임이다. `aws_caller_identity` 는 지금 자격 증명의 계정 ID 를 조회해 하드코딩을 없애고, `aws_iam_policy_document` 는 JSON 을 문자열로 쓰는 대신 HCL 로 조립해 `.json` 속성으로 내준다. 역할 블록은 그 결과를 신뢰 정책으로 받는다 — 오타가 나면 apply 가 아니라 plan 단계에서 걸린다.
+data 소스 두 종류의 쓰임이다. [`aws_caller_identity`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) 는 지금 자격 증명의 계정 ID 를 조회해 하드코딩을 없애고, [`aws_iam_policy_document`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/iam_policy_document) 는 JSON 을 문자열로 쓰는 대신 HCL 로 조립해 `.json` 속성으로 내준다. [`aws_iam_role`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) 블록은 그 결과를 신뢰 정책으로 받는다 — 오타가 나면 apply 가 아니라 plan 단계에서 걸린다.
 
 </details>
 
-`source_policy_documents = [다른문서.json]` 로 정책 문서를 상속·합성할 수 있다 (Day 2 KMS 에서 핵심).
+set-02 의 KMS 키 정책은 여기서 만든 문서를 `source_policy_documents` 로 상속해 공통 root statement 를 나눠 쓴다 — 실물은 [모듈 02 이론의 키 정책 절](/part-1/02-kms-s3-cloudfront/theory/)에 있다.
 
-**④ 세트별 차이** — set-03 은 `aws_iam_session_context` 로 "지금 apply 하는 신원"까지 조회해 KMS 관리자로 박는다(root-less 키 정책). Day 2 에서 다룬다.
+**④ 변형 포인트** — 당일 과제의 약 30% 가 수정된다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 지급 계정 ID | 고칠 곳 없음 — `aws_caller_identity` 가 조회 | `grep -rn "[0-9]\{12\}" *.tf` 0건 |
+| 신뢰하는 서비스 principal | `aws_iam_policy_document` 의 `principals` | `terraform plan` 이 정책 diff 만 표시 |
+| 유의사항이 root·`kms:*` 를 금지 | 키 정책 statement 를 개별 액션으로 전개 | [kms-basics 의 root-less 키 정책](/start/kms-basics/#1-set-03-유형-root-less-kms-키-정책) |
+
+set-03 은 같은 `aws_caller_identity` 의 계정 ID 를 KMS 키 정책의 `kms:CallerAccount` 조건에 넣어 root ARN 없이 계정 위임을 표현한다. 이 root-less 키 정책은 모듈 02 에서 다룬다.
 
 ---
 
@@ -190,7 +219,7 @@ resource "aws_route_table_association" "public" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-`for_each` 의 두 가지 입력 형태다. 위쪽은 map 을 그대로 받아 `each.key`(이름)와 `each.value.*`(속성)를 쓰고, 아래쪽은 리스트를 `toset()` 으로 감싸 받는다 — `for_each` 는 리스트를 거부하기 때문이다. `aws_subnet.this[each.key]` 처럼 키로 인스턴스를 지목하는 참조도 여기서 나온다.
+`for_each` 의 두 가지 입력 형태다. 위쪽은 [`aws_subnet`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) 이 map 을 그대로 받아 `each.key`(이름)와 `each.value.*`(속성)를 쓰고, 아래쪽 [`aws_route_table_association`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association) 은 리스트를 `toset()` 으로 감싸 받는다 — `for_each` 는 리스트를 거부하기 때문이다. `aws_subnet.this[each.key]` 처럼 키로 인스턴스를 지목하는 참조도 여기서 나온다.
 
 </details>
 
@@ -204,6 +233,8 @@ resource "aws_route_table_association" "public" {
 ## 5. VPC 아키텍처 (set-02 :badge[실측]{variant=note})
 
 **① 한 줄 정의** — `wskorea26-vpc`(172.16.0.0/16)에 AZ c/d 로 public 2 + private 2 서브넷을 두고, public 은 IGW 공용 RTB 1개, private 은 AZ별 NAT + AZ별 RTB 2개로 라우팅한다.
+
+`/16` 같은 CIDR 표기, AZ(가용 영역), IGW·NAT GW·RTB(라우트 테이블)가 각각 무엇인지는 [vpc-basics](/start/vpc-basics/)에 정의가 있다. IGW 와 NAT GW 의 역할 차이만 다시 보려면 [그 문서의 IGW와 NAT GW 절](/start/vpc-basics/#igw와-nat-gw)로 간다.
 
 **② 왜 필요한가 (채점 관점)** — mark 1-1 은 CIDR 을, **mark 1-2 는 "RTB↔서브넷 연결"과 기본 라우트의 GatewayId(IGW)·NatGatewayId(NAT)를 그대로 검사**한다. 서브넷이 엉뚱한 RTB 에 붙어 있으면 인터넷이 되더라도 감점이다.
 
@@ -268,7 +299,7 @@ resource "aws_nat_gateway" "this" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-NAT 를 AZ 별로 짝지어 만드는 부분이다. `private_az_suffix` 는 AZ 이름의 마지막 글자(c·d)를 뽑아 리소스 이름에 쓰고, `public_by_az` 는 AZ 를 키로 퍼블릭 서브넷을 찾는 역방향 map 이다. 그래서 `subnet_id` 한 줄이 "이 프라이빗 서브넷과 같은 AZ 의 퍼블릭 서브넷"을 가리킬 수 있다. `depends_on` 이 필요한 이유는 IGW 가 붙기 전에 NAT 를 만들면 실패하기 때문이다.
+[`aws_nat_gateway`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/nat_gateway) 를 AZ 별로 짝지어 만드는 부분이다. `private_az_suffix` 는 AZ 이름의 마지막 글자(c·d)를 뽑아 리소스 이름에 쓰고, `public_by_az` 는 AZ 를 키로 퍼블릭 서브넷을 찾는 역방향 map 이다. 그래서 `subnet_id` 한 줄이 "이 프라이빗 서브넷과 같은 AZ 의 퍼블릭 서브넷"을 가리킬 수 있다. `depends_on` 이 필요한 이유는 IGW 가 붙기 전에 NAT 를 만들면 실패하기 때문이다.
 
 </details>
 
@@ -370,7 +401,7 @@ NAT Gateway 는 어디에 배치해야 하며, 그 이유는?
 
 `data "aws_caller_identity" "current"` 를 선언하고 `data.aws_caller_identity.current.account_id` 로 쓴다. 보통 `locals` 에 `account_id` 로 한 번 담아 재사용한다.
 
-set-03 은 여기서 한 발 더 나가 `aws_iam_session_context` 로 "지금 apply 하는 신원"까지 조회해 KMS 관리자로 박는다(root-less 키 정책). 계정 ID 만 필요하면 `aws_caller_identity`, 배포자 역할 ARN 이 필요하면 `aws_iam_session_context` 다.
+set-03 은 이 계정 ID 를 root-less KMS 키 정책에서 한 번 더 쓴다 — 관리자 `Principal` 을 `"*"` 로 두고 `kms:CallerAccount` 조건에 계정 ID 를 넣어, `:root` 문자열 없이 "내 계정에서 온 호출"만 통과시킨다. 구조는 [kms-basics](/start/kms-basics/#1-root-less-키-정책-실물--적용된-json)에 실물 JSON 으로 있다.
 </Quiz>
 
 <Quiz title="map output 에서 값 꺼내기">

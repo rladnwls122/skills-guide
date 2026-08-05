@@ -1,6 +1,8 @@
 ---
 title: Docker 기초 (선수 학습, 약 2시간)
 description: 이미지·컨테이너·레지스트리 관계와 build→tag→push 흐름, ECR 실습을 다루는 선수 학습.
+sidebar:
+  order: 5
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
@@ -67,7 +69,7 @@ push 3단계 암기: **build → tag(레지스트리 주소 포함) → push**. 
 
 ## ③ 대회에서 어떻게 쓰이나
 
-- 대회는 로컬이 아니라 **CloudShell에서 빌드**한다. CloudShell은 디스크가 작고 세션이 초기화되므로 빌드가 빠르고 이미지가 작아야 한다.
+- 대회는 로컬이 아니라 **CloudShell에서 빌드**한다. CloudShell 은 AWS 콘솔에서 바로 여는 브라우저 셸이고 자격 증명이 콘솔 로그인 신원으로 이미 잡혀 있다 — 자세한 성질은 [AWS CLI 기초](/start/awscli-basics/)에 있다. 디스크가 작고 세션이 초기화되므로 빌드가 빠르고 이미지가 작아야 한다.
 :::danger[베이스 이미지 선택이 채점을 좌우한다]
 과제가 지정한 베이스(예: 특정 태그)를 안 쓰면 감점, 큰 이미지는 pull 지연으로 헬스체크 채점에 늦는다.
 :::

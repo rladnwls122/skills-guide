@@ -1,19 +1,34 @@
 ---
 title: 2과제 유형별 아키텍처 패턴 1장 요약 — 오토스케일링 · 로깅 · 스트리밍
 description: 2과제 유형 3·4는 실습 기준으로, 유형 5는 아키텍처와 채점 항목 대조 기준으로 도식·연결 고리·채점 상태를 정리한다.
+sidebar:
+  order: 2
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 > 문서 유형: explanation
 
-유형 3·4는 실습까지, 유형 5는 아키텍처 이해와 채점 항목 대조까지 한다(배포는 [Lab](/part-4/10-scaling-logging-streaming/lab/)에서 선택). 각 유형은 ① 도식 ② 언제 나오나 ③ 핵심 연결 고리 ④ 채점이 보는 상태 ⑤ 퀴즈 순서다.
+선행 지식과 학습 경로는 [모듈 개요](/part-4/10-scaling-logging-streaming/)에.
+
+유형 3·4는 실습까지, 유형 5는 아키텍처 이해와 채점 항목 대조까지 한다(배포는 [Lab](/part-4/10-scaling-logging-streaming/lab/)에서 선택). 각 유형은 ① 도식 ② 언제 나오나 ③ 핵심 연결 고리 ④ 채점이 보는 상태 ⑤ 변형 포인트 ⑥ 퀴즈 순서다. `유형 3 변형` 절만 ④ 가 고정 이름·값이고, 절 전체가 두 세트를 대조하는 변형 축이라 별도의 변형 포인트를 두지 않는다.
+
+이 문서가 다루는 네 절:
+
+- **유형 3 — 이벤트 기반 오토스케일링** · set-07 task-2 module-3 — SQS 큐 길이가 KEDA 로 파드를, Karpenter 로 노드를 늘리는 2단 스케일링.
+- **유형 3 변형 — Fargate 컨트롤러 + SQS** · set-08 task-2 module-4 — 같은 체인에서 컨트롤러만 Fargate 로 올리고 파라미터를 뒤집은 구성.
+- **유형 4 — 컨테이너 로깅 파이프라인** · set-07 task-2 module-4 — 앱 stdout 을 OTel Collector 가 걷어 Loki 에 넣고 Grafana 가 읽는 경로.
+- **유형 5 — 스트리밍** · set-02 task-2 module-2·module-4 — Kinesis + Flink Studio 노트북 갈래와 MSK + Lambda 컨슈머 갈래.
 
 ---
 
 ## 유형 3 — 이벤트 기반 오토스케일링 (SQS → KEDA → Karpenter)
 
+큐에 쌓인 메시지 수 하나로 파드와 노드를 함께 늘리고 줄이는 패턴이다.
+
 실측 근거: set-07 task-2 module-3 (ap-northeast-2, skm- 접두어) — 2026-07-31 실채점에서 `mark3.sh` 전 항목(3-1~3-7) 통과 확정
+
+HPA·KEDA·Karpenter 가 각각 무엇을 늘리는지는 [autoscaling-basics](/start/autoscaling-basics/)에, SQS 의 가시성 제한 시간은 [serverless-basics 의 SQS 절](/start/serverless-basics/#5-sqs--가시성-제한-시간이-핵심이다)에 있다.
 
 ### ① 도식
 
@@ -51,10 +66,10 @@ flowchart LR
 ### ③ 핵심 연결 고리
 
 1. **queueLength 5 → 메시지 100건이면 목표 Pod 20이지만 max 5로 캡** — 그래서 채점 기대가 "Pod ≥ 5".
-2. **Pod requests 500m × 5 = 2.5 vCPU > t3.medium allocatable ~1.9 vCPU** → 한 대에 다 못 들어가 Pending 발생 → Karpenter가 2대째를 띄운다. 채점 기대 "Node ≥ 2"는 이 계산에서 나온다. requests를 줄이면 노드가 안 늘어나 오답.
+2. **Pod requests 500m × 5 = 2.5 vCPU > t3.medium allocatable ~1.9 vCPU** → 한 대에 다 못 들어가 Pending 발생 → Karpenter가 2대째를 띄운다. 채점 기대 "Node ≥ 2"는 이 계산에서 나온다. requests를 줄이면 노드가 안 늘어나 오답. 노드 수를 정하는 것이 Pod 개수가 아니라 `requests` 합이라는 원리는 [autoscaling-basics 의 해당 절](/start/autoscaling-basics/#노드-수는-pod-수가-아니라-requests-합이-정한다)에 있다.
 
 :::danger[스케일인 시간 예산 150초 — 어느 값도 늘리지 않는다]
-HPA behavior `scaleDown.stabilizationWindowSeconds`(기본 300초 → **15초**) + `policies: Percent 100/15s`(이건 이미 기본값이라 명시만 하는 것) + NodePool `consolidateAfter: 60s`가 한 쌍. purge를 HPA sync(~15초)가 감지해 ~35초에 Pod 1, consolidateAfter 60초 뒤 ~140초에 노드 1로 수렴한다(실채점 확정). 기본값 300이면 Pod 축소만 5분이라 150초 창을 구조적으로 못 맞춘다. ScaledObject에 `pollingInterval`은 두지 않는다 — `minReplicaCount ≥ 1`이면 1→N 스케일링을 HPA가 자기 sync 주기로 돌리므로 이 값이 감지 속도를 바꾸지 못한다(당일 변경으로 min=0이 되면 재도입).
+HPA behavior `scaleDown.stabilizationWindowSeconds`(기본 300초 → **15초**) + `policies: Percent 100/15s`(이건 이미 기본값이라 명시만 하는 것) + NodePool `consolidateAfter: 60s`가 한 쌍. 이 세 값이 왜 합산으로 움직이는지는 [autoscaling-basics 의 수렴 시간 절](/start/autoscaling-basics/#수렴-시간은-타이머-세-개의-합이다)에 있다. purge를 HPA sync(~15초)가 감지해 ~35초에 Pod 1, consolidateAfter 60초 뒤 ~140초에 노드 1로 수렴한다(실채점 확정). 기본값 300이면 Pod 축소만 5분이라 150초 창을 구조적으로 못 맞춘다. ScaledObject에 `pollingInterval`은 두지 않는다 — `minReplicaCount ≥ 1`이면 1→N 스케일링을 HPA가 자기 sync 주기로 돌리므로 이 값이 감지 속도를 바꾸지 못한다(당일 변경으로 min=0이 되면 재도입).
 :::
 
 :::caution[이 시간 요건은 과제지에 없다 — 채점 스크립트에만 있다]
@@ -63,21 +78,36 @@ HPA behavior `scaleDown.stabilizationWindowSeconds`(기본 300초 → **15초**)
 여유가 없다는 점도 함께 안다. 환경에 따라 Karpenter 통합과 EC2 종료가 150초를 넘겨 `Final Pods 1 / Final Nodes 2`로 끝나는 경우가 보고됐고(`seq 1 60`으로 늘리면 정상 수렴), 반복 횟수 상향이 요청된 상태다([정정 내역](/reference/errata/)). 상향 전까지는 **150초를 기준으로 맞추고**, 채점 직전 노드가 이미 1대인 상태에서 시작한다.
 :::
 
-4. **`identityOwner: operator`** — SQS 조회 자격증명을 keda-operator SA의 IRSA에서 가져온다. 앱 Pod의 권한과 무관.
-5. **Karpenter 디스커버리 태그**: 서브넷은 `karpenter.sh/discovery: skm-eks-cluster` 태그(terraform이 부착), SG는 `aws:eks:cluster-name` 태그로 찾는다. 태그가 없으면 NodeClass가 서브넷/SG를 못 찾아 노드가 안 뜬다.
-6. **NodePool taint `dedicated=app:NoSchedule`** + Deployment toleration + nodeSelector — 앱만 Karpenter 노드에, addon(KEDA·Karpenter 자신·coredns)은 addon 노드그룹에 격리.
+3. **`identityOwner: operator`** — SQS 조회 자격증명을 keda-operator SA의 IRSA에서 가져온다. 앱 Pod의 권한과 무관.
+4. **Karpenter 디스커버리 태그**: EC2NodeClass의 `selectorTerms`가 서브넷은 `karpenter.sh/discovery: skm-eks-cluster` 태그(terraform이 부착), SG는 `aws:eks:cluster-name` 태그로 찾는다. 태그가 없으면 NodeClass가 서브넷/SG를 못 찾아 노드가 안 뜬다. 노드에 붙는 `karpenter.sh/nodepool` 라벨은 Karpenter가 프로비저닝을 마친 뒤 붙이는 결과값이라 디스커버리 입력이 아니고, 서브넷의 `kubernetes.io/role/internal-elb` 태그는 LBC가 내부 ALB 서브넷을 고를 때만 쓴다.
+5. **NodePool taint `dedicated=app:NoSchedule`** + Deployment toleration + nodeSelector — 앱만 Karpenter 노드에, addon(KEDA·Karpenter 자신·coredns)은 addon 노드그룹에 격리.
 
 ### ④ 채점이 보는 상태
 
 - 스케일아웃: 메시지 100건 주입 → 3분 관찰 → **Max Ready Pods ≥ 5 / Max App Nodes ≥ 2**.
 - 스케일인: purge → 3분 관찰 → **Final Pods 1 / Final Nodes 1** (대기 최대 2.5분).
-- **Deployment env는 리터럴 정확 3개만** (`AWS_REGION`, `SQS_QUEUE_URL`, `PROCESSING_TIME`) — 채점이 name=value로 정확 비교. valueFrom·추가 env 금지.
+- **Deployment env는 리터럴 정확 3개만** — `AWS_REGION`, `SQS_QUEUE_URL`, `PROCESSING_TIME`. 채점은 컨테이너 스펙의 name=value 쌍을 정확 비교한다. `valueFrom`이나 `envFrom`으로 바꾸면 스펙에 값 자체가 없어 불일치로 잡히고, 개수가 3개를 넘어도 불일치다.
 - 이름 정확 일치: `skm-order-queue`, `skm-eks-cluster`, `order-processor`, `order-scaler`, `skm-app-nodepool`, `skm-app-nodeclass`.
 - **addon 노드 1대(t3.medium) 용량이 빠듯** — coredns 2 + KEDA 3 + Karpenter 1. Karpenter requests를 0.5 vCPU/512Mi로 낮춰 설치한다.
 - **Karpenter는 `--set replicas=1`로 설치한다** — 차트 기본 2 + required podAntiAffinity(hostname) + 자기 NodePool 노드를 배제하는 nodeAffinity 때문에, 채점이 1/1/1로 고정한 addon 노드 1대에선 두 번째 Pod가 앉을 자리가 구조적으로 없어 `helm --wait`가 영원히 안 끝난다. 행 상태에서 중단하면 release가 `pending-upgrade`로 잠겨 재-upgrade가 막힌다 — `helm uninstall karpenter -n kube-system` 후 재설치.
 - **KEDA Pod가 Pending이면 차트 tolerations 스키마부터** — addon 노드가 taint돼 있어 toleration 필요. 차트 버전에 따라 키가 바뀌므로 `helm show values kedacore/keda | grep -A3 tolerations`로 확인.
 
-### ⑤ 퀴즈
+### ⑤ 변형 포인트
+
+세트가 바뀌어도 SQS → KEDA → Karpenter 체인은 그대로 남고, 이름·수치·시간 예산이 움직인다. set-08 module-4 에서 실제로 갈린 축은 `유형 3 변형` 절의 대조표에 있다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 접두어·리전 | ScaledObject 의 `queueURL`, Deployment env `SQS_QUEUE_URL`·`AWS_REGION` | 이름 6종 정확 일치 |
+| `queueLength` · `maxReplicaCount` | ScaledObject `order-scaler` | Max Ready Pods 기대치 |
+| Pod `requests` | Deployment `order-processor` | Max App Nodes 기대치 |
+| 스케일인 제한 시간 | HPA `scaleDown.stabilizationWindowSeconds`, NodePool `consolidateAfter` | `mark3.sh` 대기 루프 `seq 1 30` |
+| 클러스터 이름 | 서브넷 `karpenter.sh/discovery` 태그 값, EC2NodeClass `selectorTerms` | Karpenter 노드 생성 여부 |
+| `minReplicaCount` | ScaledObject | 0 이면 `pollingInterval` 필수 |
+
+`minReplicaCount` 행이 가장 위험하다. 이 값이 1 이상이면 `pollingInterval` 이 감지 속도를 바꾸지 못해 지우는 것이 정답이고, 0 이면 KEDA 오퍼레이터가 직접 폴링하므로 반드시 둬야 한다. 세트를 옮길 때 `minReplicaCount` 부터 읽는다.
+
+### ⑥ 퀴즈
 
 <Quiz title="Node ≥ 2 가 나오는 계산">
 채점 기대 "Max App Nodes ≥ 2"는 어떤 숫자 계산에서 나오나?
@@ -113,33 +143,6 @@ KEDA가 `skm-order-queue`의 큐 길이를 폴링할 때 쓰는 자격증명은?
   > 그 노드의 모든 Pod가 SQS 권한을 얻는다. 최소권한 위반이며 IRSA를 쓰는 이유가 사라진다.
 
 SQS 조회 자격증명은 keda-operator SA의 IRSA에서 가져온다. 앱 Pod의 권한과는 무관하다.
-</Quiz>
-
-<Quiz title="Karpenter 디스커버리 태그">
-Karpenter가 Pending Pod가 있는데도 노드를 아예 안 띄운다. 태그 관점에서 확인할 것을 **모두** 고르시오.
-
-- [x] 서브넷의 `karpenter.sh/discovery: skm-eks-cluster` 태그
-- [x] 보안 그룹의 `aws:eks:cluster-name` 태그
-- [ ] 프로비저닝될 노드의 `karpenter.sh/nodepool` 라벨
-  > 이건 Karpenter가 노드를 만든 **뒤에** 붙이는 결과 라벨이다. 디스커버리 입력이 아니다.
-- [ ] 서브넷의 `kubernetes.io/role/internal-elb` 태그
-  > LBC가 내부 ALB 서브넷을 고를 때 쓰는 태그다. Karpenter의 NodeClass 디스커버리와는 무관하다.
-
-NodeClass의 `selectorTerms`가 이 태그들로 서브넷·SG를 찾는다. 태그가 없으면 NodeClass가 대상을 못 찾아 노드가 생성되지 않는다. 서브넷 태그는 terraform이 부착한다.
-</Quiz>
-
-<Quiz title="Deployment env 정확 3개">
-Deployment `order-processor`에 configMapRef나 valueFrom으로 env를 하나 더 얹으면?
-
-- [x] 채점이 env를 name=value로 정확 비교하므로 리터럴 3개(`AWS_REGION`, `SQS_QUEUE_URL`, `PROCESSING_TIME`) 외에 무엇이든 추가되면 오답이다
-- [ ] `AWS_REGION`을 valueFrom의 fieldRef로 바꿔도 최종 값이 같으니 통과한다
-  > 비교 대상은 컨테이너 스펙의 리터럴 name=value다. valueFrom은 값이 스펙에 없으므로 불일치로 잡힌다.
-- [ ] 추가된 env는 비교 대상 밖이라 무시되고 3개만 대조된다
-  > 정확 비교이므로 개수 초과도 불일치다.
-- [ ] Pod가 정상 기동하면 스케일링 채점만 통과하면 되므로 env는 영향이 없다
-  > env는 스케일링과 별개의 채점 항목이다.
-
-리터럴 3개만 둔다. valueFrom·envFrom·추가 env 모두 금지다. 이름도 정확 일치 대상이다: `skm-order-queue`, `skm-eks-cluster`, `order-processor`, `order-scaler`, `skm-app-nodepool`, `skm-app-nodeclass`.
 </Quiz>
 
 <QuizResults confetti />
@@ -229,6 +232,8 @@ set-07에서는 `pollingInterval`을 **지우는 것**이 정답이었다. `minR
 | Karpenter | ns `karpenter` / Deployment `karpenter` / NodePool `skills-sqs-nodepool` / EC2NodeClass `skills-sqs-nodeclass` |
 | 버전 | Karpenter 1.x · KEDA 2.x |
 
+이 표의 값이 곧 변형 축이다. 세트가 바뀌면 리전과 접두어가 먼저 바뀌고, 그다음 ScaledObject 의 `minReplicaCount`·`pollingInterval`·`cooldownPeriod`·`queueLength` 네 수치가 바뀐다. 이름은 Fargate 프로파일 정의·NodePool·EC2NodeClass·워커 Deployment 네 곳에서 고치고, 수치는 ScaledObject 한 파일에서 고친다. 확인은 채점 항목이 대신한다 — 4-2 가 세 ServiceAccount 의 `eks.amazonaws.com/role-arn` annotation 을, 4-4 가 ScaledObject YAML 전문을, 4-5 가 NodePool 의 `name`·`labels`·`nodeClassRef`·`requirements`·`consolidationPolicy` 다섯 필드를 뽑아 본다.
+
 ### ⑤ 퀴즈
 
 <Quiz title="pollingInterval을 지워야 하나 둬야 하나">
@@ -279,6 +284,8 @@ set-07은 같은 문제를 "채점이 1/1/1로 고정한 addon 노드그룹"으�
 
 ## 유형 4 — 컨테이너 로깅 파이프라인 (OTel → Loki → Grafana)
 
+앱이 stdout 에 찍은 JSON 로그를 노드 로그 파일에서 걷어 Loki 에 넣고, Grafana 대시보드가 레벨별로 집계하는 패턴이다.
+
 근거: set-07 task-2 module-4 (ap-northeast-1, o11y- 접두어) — **정답지 구현은 미착수**다. 아래는 과제지·채점지(`mark4.sh`) 기반 설계안이라, 이 유형만은 수치·차트 버전이 실측 전이다.
 
 ### ① 도식
@@ -320,9 +327,9 @@ flowchart LR
 
 1. **제공 Dockerfile 결함** — flask 미설치 + requirements.txt 없음 → 그대로 빌드하면 CrashLoop. **자체 Dockerfile로 빌드하되 제공 app.py는 수정 금지.** (대회 당일 제공본이 수정돼 있으면 제공본 우선.)
 2. **filelog `container` 파서 체인**: `/var/log/pods/*/*/*.log` 수집 → container 파서가 CRI 포맷(타임스탬프/스트림 접두어)을 분해하고 **파일 경로에서 k8s.namespace.name/pod.name/pod.uid를 리소스 속성으로 추출** → **body는 앱이 찍은 원본 JSON 한 줄 그대로** 유지. 본문을 가공하면 Loki에서 `| json` 파싱이 깨진다.
-3. **Loki OTLP 인제스트**: exporter `otlphttp` → `http://o11y-loki...:3100/otlp`. Loki 3.x가 `k8s.namespace.name` 리소스 속성을 인덱스 라벨 `k8s_namespace_name`으로 **자동 승격** — 채점 LogQL `{k8s_namespace_name="o11y"}`와 정확히 맞물린다.
+3. **Loki OTLP 인제스트**: exporter `otlphttp` → `http://o11y-loki...:3100/otlp`. Loki 3.x가 `k8s.namespace.name` 리소스 속성을 인덱스 라벨 `k8s_namespace_name`으로 **자동 승격** — 채점 LogQL `{k8s_namespace_name="o11y"}`와 정확히 맞물린다. 승격 대상은 리소스 속성뿐이고 로그 속성은 승격되지 않으므로, body에서 필드를 더 뽑아도 인덱스 라벨은 늘지 않는다. 대신 body 원본이 훼손돼 `| json` 파싱이 깨진다.
 4. **자기 로그 exclude** — 콜렉터 자신의 로그(`monitoring_o11y-otel*`)를 수집에서 제외해 루프 방지.
-5. **ALB/TG는 terraform으로 이름 고정 + TargetGroupBinding으로 Pod 연결.** TGB는 CRD라 **LBC 설치 이후에만 apply 가능** — 순서 의존.
+5. **ALB/TG는 terraform으로 이름 고정 + TargetGroupBinding으로 Pod 연결.** TGB는 CRD라 **LBC 설치 이후에만 apply 가능** — 순서 의존. 두 방식을 고르는 기준은 [loadbalancer-basics 의 판단 표](/start/loadbalancer-basics/#5-5-판단-표)에 있다.
 6. **대시보드 쿼리**: `sum by (level) (...)` + legendFormat `{{level}}` — 범례가 INFO/WARN/ERROR로 떠야 한다. level 값은 **대문자 ERROR**.
 
 ### ④ 채점이 보는 상태
@@ -341,7 +348,7 @@ flowchart LR
 :::
 
 :::caution[No Data 패널이 하나라도 있으면 오답]
-채점 전 `/log?level=info`, `/log?level=warn`, `/log?level=error`를 각각 호출해 3레벨 데이터를 미리 만든다.
+채점 전 `/log?level=info`, `/log?level=warn`, `/log?level=error`를 각각 호출해 3레벨 데이터를 미리 만든다. 그 레벨의 로그가 한 번도 생성된 적이 없으면 패널의 시간 범위를 늘려도 데이터가 나오지 않는다. 패널을 지워 회피할 수도 없다 — Log Overview는 3패널 요구라 삭제하면 패널 누락으로 오답이다.
 :::
 
 - 범례가 `{level="ERROR"}` 형태면 오답 — legendFormat `{{level}}` 유지.

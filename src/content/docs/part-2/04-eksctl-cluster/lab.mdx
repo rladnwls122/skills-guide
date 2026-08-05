@@ -1,6 +1,8 @@
 ---
 title: 04. 실습 — set-02 클러스터 생성
 description: "terraform output 치환부터 eksctl create cluster, mark 5-1~5-3 셀프 검증까지의 실습."
+sidebar:
+  order: 3
 ---
 
 > 문서 유형: tutorial
@@ -14,13 +16,98 @@ description: "terraform output 치환부터 eksctl create cluster, mark 5-1~5-3 
 - [ ] mark 5-1 ~ 5-3 채점 명령을 직접 실행해 기대 출력과 대조
 - [ ] (실패 대비) 부분 복구 명령 4종을 알고 있다
 
-전제: PART-1에서 `set-02/task-1/terraform` 이 apply 되어 있고 `.env.ps1` 이 존재한다.
-없다면 `terraform apply -var "player_number=<비번호>"` 후 README 배포 순서 1)의 영속화 블록을 실행.
+선행 지식과 목표는 [모듈 개요](/part-2/04-eksctl-cluster/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- ClusterConfig 필드: `eksctl utils schema > schema.json` 뒤 `jq -r '.definitions.ClusterConfig.properties | keys[]' schema.json`, 브라우저는 [schema.eksctl.io](https://schema.eksctl.io/)
+- CLI 플래그·출력 필드: `aws eks describe-cluster help` · `aws eks describe-nodegroup help`
+- 노드 배치를 보는 YAML 필드: `kubectl explain pod.spec.nodeSelector` · `kubectl explain node.metadata.labels`
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
+## 0. 사전 준비 — 정답지 클론과 변수 영속화
+
+정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 이 가이드의 정답지 경로는 전부 **클론 루트 `~\skills-2026`** 기준이다. 다른 위치에 클론했다면 아래 `cd` 경로만 본인 것으로 바꾼다.
+
+이 실습은 정답지의 `set-02\task-1\terraform` 을 **통째로** apply 한 상태에서 시작한다. [01 실습](/part-1/01-terraform-vpc/lab/)에서 직접 쓴 VPC 만으로는 안 된다 — 뒤의 렌더가 보안 그룹·KMS 키·IAM 정책 ARN 까지 요구하고, 그 값들은 정답지 tf 의 `security.tf`·`kms.tf`·`iam.tf` 에서 나오기 때문이다.
+
+```powershell
+$env:AWS_DEFAULT_REGION = "ap-northeast-2"
+$env:NUM = "103"                   # 본인 비번호로 교체
+cd ~\skills-2026\set-02\task-1\terraform
+terraform init
+terraform apply -var "player_number=$env:NUM"
+```
+
+apply 가 실패하면 [01 실습의 apply 실패 세 갈래](/part-1/01-terraform-vpc/lab/)를 먼저 본다.
+
+### `.env.ps1` 영속화 블록
+
+apply 가 끝나면 output 을 환경 변수로 읽고, 같은 값을 파일로 박아 둔다. 이 실습과 [05](/part-2/05-k8s-workloads-alb/lab/)·[07](/part-2/07-full-deploy-set02/lab/)이 이 파일 하나로 변수를 복원한다. cwd 는 `terraform` 이다.
+
+```powershell
+terraform output -json | Set-Content ..\outputs.json
+
+$env:ACCOUNT_ID            = terraform output -raw account_id
+$env:VPC_ID                = terraform output -raw vpc_id
+$env:PRIV_SUBNET_C         = (terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-c'
+$env:PRIV_SUBNET_D         = (terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-d'
+$env:CLUSTER_EXTRA_SG_ID   = terraform output -raw cluster_extra_sg_id
+$env:NODE_SG_ID            = terraform output -raw node_sg_id
+$env:EKS_KMS_ARN           = terraform output -raw eks_kms_arn
+$env:BOOK_APP_POLICY_ARN   = terraform output -raw book_app_policy_arn
+$env:LBC_POLICY_ARN        = terraform output -raw lbc_policy_arn
+$env:FLUENT_BIT_POLICY_ARN = terraform output -raw fluent_bit_policy_arn
+$env:ECR                   = terraform output -raw ecr_repository_url
+$env:APP_TG                = terraform output -raw app_target_group_arn
+$env:GRAFANA_TG            = terraform output -raw grafana_target_group_arn
+$env:BUCKET                = terraform output -raw s3_bucket_name
+$env:ALB_DNS               = terraform output -raw book_alb_dns
+$env:GRAFANA_ALB_DNS       = terraform output -raw grafana_alb_dns
+$env:CF                    = terraform output -raw cloudfront_domain
+$env:GRAFANA_ADMIN_USER     = terraform output -raw grafana_admin_user
+$env:GRAFANA_ADMIN_PASSWORD = terraform output -raw grafana_admin_password
+
+@"
+`$env:AWS_DEFAULT_REGION = "ap-northeast-2"
+`$env:NUM                 = "$env:NUM"
+`$env:ACCOUNT_ID          = "$env:ACCOUNT_ID"
+`$env:VPC_ID              = "$env:VPC_ID"
+`$env:PRIV_SUBNET_C       = "$env:PRIV_SUBNET_C"
+`$env:PRIV_SUBNET_D       = "$env:PRIV_SUBNET_D"
+`$env:CLUSTER_EXTRA_SG_ID = "$env:CLUSTER_EXTRA_SG_ID"
+`$env:NODE_SG_ID          = "$env:NODE_SG_ID"
+`$env:EKS_KMS_ARN         = "$env:EKS_KMS_ARN"
+`$env:BOOK_APP_POLICY_ARN = "$env:BOOK_APP_POLICY_ARN"
+`$env:LBC_POLICY_ARN      = "$env:LBC_POLICY_ARN"
+`$env:FLUENT_BIT_POLICY_ARN = "$env:FLUENT_BIT_POLICY_ARN"
+`$env:ECR                 = "$env:ECR"
+`$env:APP_TG              = "$env:APP_TG"
+`$env:GRAFANA_TG          = "$env:GRAFANA_TG"
+`$env:BUCKET              = "$env:BUCKET"
+`$env:ALB_DNS             = "$env:ALB_DNS"
+`$env:GRAFANA_ALB_DNS     = "$env:GRAFANA_ALB_DNS"
+`$env:CF                  = "$env:CF"
+`$env:GRAFANA_ADMIN_USER  = "$env:GRAFANA_ADMIN_USER"
+`$env:GRAFANA_ADMIN_PASSWORD = '$env:GRAFANA_ADMIN_PASSWORD'
+"@ | Set-Content ..\.env.ps1
+
+. ..\.env.ps1
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+앞 절반은 `terraform output` 을 환경 변수로 읽어 지금 셸에 올린다. 뒷 절반의 here-string 이 그 값들을 `set-02\task-1\.env.ps1` 로 굳힌다. 백틱 `` `$ `` 는 "지금 확장하지 말고 `$env:...` 라는 글자 그대로 파일에 쓰라"는 표시이고, 큰따옴표 안의 `$env:VPC_ID` 는 반대로 지금 값으로 바뀐다. 마지막 줄만 큰따옴표가 아니라 작은따옴표인 것은 Grafana 비밀번호에 `$` 가 들어가기 때문이다.
+
+</details>
+
+**검증**: `terraform output` 이 에러 없이 뜨고 `..\.env.ps1` 이 생겼으면 된다. 새 터미널로 이어서 할 땐 `set-02\task-1` 에서 `. .\.env.ps1` 한 줄만 다시 실행한다.
 
 ## 1. 환경변수 로드 + 렌더
 
 ```powershell
-cd C:\Users\kryuk\practice\skills-2026\set-02\task-1
+cd ~\skills-2026\set-02\task-1
 . .\.env.ps1                      # terraform output 영속 파일
 
 cd eksctl
@@ -63,6 +150,18 @@ eksctl create cluster -f cluster.rendered.yaml
 ```
 
 대기 중 CloudFormation 콘솔에서 `eksctl-wskorea26-cluster-cluster` → `-addon-...` → `-nodegroup-...` 스택 순서를 관찰해 둔다(트러블슈팅 감각).
+
+:::danger[생성 실패 후 같은 이름으로 재시도할 때]
+`eksctl create cluster` 가 실패하면 CloudFormation 스택이 `ROLLBACK_COMPLETE` 로 남는다. 이 상태의 스택은 갱신이 안 되므로, 같은 이름으로 다시 만들면 `AlreadyExistsException` 이나 `stack ... is in ROLLBACK_COMPLETE state` 로 즉시 막힌다. 지우고 다시 만든다.
+
+```powershell
+aws cloudformation describe-stacks `
+  --query "Stacks[?starts_with(StackName,'eksctl-wskorea26-cluster')].[StackName,StackStatus]" --output text
+eksctl delete cluster --name wskorea26-cluster --disable-nodegroup-eviction --wait
+```
+
+`eksctl delete` 가 남은 스택까지 지운다. 그래도 스택이 남으면 콘솔에서 해당 스택을 직접 삭제한 뒤 재시도한다. 삭제 확인 없이 `create` 를 다시 던지면 또 20분을 버린다.
+:::
 
 ```powershell
 aws eks update-kubeconfig --region ap-northeast-2 --name wskorea26-cluster
@@ -159,4 +258,46 @@ eksctl create addon -f cluster.rendered.yaml                                    
 eksctl delete cluster -f cluster.rendered.yaml --disable-nodegroup-eviction
 # terraform 리소스(VPC 등)는 PART-2 전체 종료 전까지 유지 가능 — NAT 시간당 과금은 인지할 것
 ```
+
+## 7. 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. 클러스터 이름이 `wskorea26-cluster` 에서 다른 값으로 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   파일 안의 리터럴은 `eksctl/cluster.yaml` 의 `metadata.name` 한 곳뿐이다. `terraform/variables.tf` 의 `cluster_name` 은 선언만 있고 어느 리소스도 참조하지 않는다 — `grep -rn "var.cluster_name" *.tf` 가 0건이다. 나머지는 명령 인자다: `aws eks update-kubeconfig --name` 과 LBC helm 의 `--set clusterName`. mark 5-1-A 부터 5-4-A 까지 전부 이 이름으로 클러스터를 찾는다.
+
+   </details>
+
+2. EKS 버전 요구가 `1.35` 에서 `1.34` 로 바뀌면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `cluster.yaml` 의 `version` 한 곳이다. 값에 따옴표를 빼면 YAML 이 숫자로 읽어 `1.34` 가 소수로 파싱된다. mark 5-1-A 는 `wskorea26-cluster 1.35` 처럼 이름과 버전을 한 줄로 비교하므로 문자열이 그대로 맞아야 한다.
+
+   </details>
+
+3. 노드그룹을 addon·app 둘에서 셋으로 늘리라면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `cluster.yaml` 의 `managedNodeGroups` 에 항목을 하나 더 넣고 `labels`·`tags.Name`·`instanceName` 을 과제지 이름대로 채운다. `vpc.subnets` 와 `iam.serviceAccounts` 는 그대로 둔다 — 노드그룹이 같은 프라이빗 서브넷 두 개를 공유하기 때문이다. 필드 이름이 막히면 `eksctl utils schema` 출력이나 [schema.eksctl.io](https://schema.eksctl.io/)를 열고, 찾는 순서는 [검색 가이드](/reference/search-guide/)에 있다.
+
+   </details>
+
+4. `addonsConfig.disableDefaultAddons` 를 빼면 어느 체크가 흔들리나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 5-4-A 다. 이 항목은 kube-system 파드가 올라간 노드의 `node-type` 라벨을 뽑아 중복을 지우고 출력한다. 기대값은 `addon` 한 줄인데, 기본 애드온이 설치되면 metrics-server 가 app 노드에 스케줄돼 `app` 이 함께 나온다. 예외로 빠지는 것은 `aws-node` 와 `kube-proxy` 둘뿐이다.
+
+   </details>
+
+막히면 [트러블슈팅](/reference/troubleshooting/), 그날을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 돌린다.
 

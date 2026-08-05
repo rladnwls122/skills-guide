@@ -1,6 +1,8 @@
 ---
 title: 파괴/복구 실습 — 12 시나리오
 description: set-02 스택을 12가지 방식으로 고의로 망가뜨리고 확인 명령→원인→조치 순서로 자력 복구하는 드릴.
+sidebar:
+  order: 3
 ---
 
 > 문서 유형: how-to
@@ -16,6 +18,16 @@ description: set-02 스택을 12가지 방식으로 고의로 망가뜨리고 �
 :::danger[실패 처리 조건]
 - **AI를 열었으면** 그 시나리오는 실패다. 대회장에서 못 쓰는 도구다.
 - 복구 순서는 반드시 **확인 명령 → 원인 → 조치**. 확인 없이 고치면 복구에 성공해도 실패 처리.
+:::
+
+선행 지식과 목표는 [모듈 개요](/part-6/16-break-fix/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- 증상별 확인 명령: [트러블슈팅](/reference/troubleshooting/)
+- YAML 필드가 맞는지: `kubectl explain deployment.spec.template.spec.containers` · `kubectl explain pod.spec.nodeSelector`
+- CLI 플래그·출력 필드: `aws elbv2 describe-target-health help` · `aws ec2 authorize-security-group-ingress help`
+- Terraform 쪽 원복: [aws_cloudfront_distribution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_distribution) · [aws_lb_listener_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_listener_rule)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
 :::
 
 ## 시나리오 표
@@ -52,6 +64,37 @@ description: set-02 스택을 12가지 방식으로 고의로 망가뜨리고 �
 - **12개 중 8개 이상**을 AI 없이, 목표 시간 내에, 확인→원인→조치 순서로 복구하면 통과 — 그중 4개 이상은 troubleshooting.md도 안 보고.
 - 8개 미만이면 실패 항목만 다음날 재도전.
 
+## 변형 셀프 체크
+
+시나리오 표의 고장은 사람이 낸 실수다. 같은 자리가 당일 과제의 **값 변경 요구**로 나오면 복구가 아니라 수정이 된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. 시나리오 ③ 의 커스텀 헤더 값이 고장이 아니라 과제지가 바꾼 요구라면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `terraform/variables.tf` 의 `origin_verify_value` 한 곳이다. `cloudfront.tf` 의 `custom_header` 와 `alb.tf` 의 리스너 규칙 두 개가 같은 변수를 참조한다. mark 7-2-A 가 이 값을 두 줄로, 8-4-A 가 헤더 이름과 짝지어 본다. 복구와 달리 CloudFront 전파를 기다린 뒤 검증한다.
+
+   </details>
+
+2. 시나리오 ⑥ 이 라벨 **값** 오타가 아니라 라벨 **키** 자체가 `node-type` 에서 바뀐 요구라면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   네 곳이다. `eksctl/cluster.yaml` 의 노드그룹 `labels`, 앱 deployment 의 `nodeSelector`, coredns 애드온의 `configurationValues`, LBC helm 의 `--set nodeSelector...` 다. mark 5-4-A 는 노드의 라벨 키를 jsonpath 로 직접 읽으므로 한 곳만 빠져도 그 자리가 빈 줄로 나온다.
+
+   </details>
+
+3. 시나리오 ⑤ 가 env 삭제가 아니라 env 이름이 `TABLE_NAME` 에서 바뀐 요구라면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `terraform/lambda.tf` 의 `environment` 와 `lambda/index.py` 의 `os.environ` 참조 두 곳을 같은 이름으로 맞춘다. 한쪽만 고치면 함수가 `KeyError` 로 죽는다. mark 6-1-A 는 환경 변수를 이름으로 지목해 뽑으므로 과제지 표기와 글자까지 같아야 한다.
+
+   </details>
+
 ## 회고 양식
 
 ```
@@ -63,6 +106,8 @@ description: set-02 스택을 12가지 방식으로 고의로 망가뜨리고 �
 - 정상 출력 vs 고장 출력에서 새로 외운 차이:
 ```
 
-:::caution[종료 후]
-스택 destroy 잊지 말 것 (README의 과금 절차).
+:::caution[종료 후 — 과금]
+이 드릴은 set-02 1과제 스택을 **켜 둔 채로** 돈다. EKS 컨트롤 플레인·NAT 게이트웨이·ALB 2대·CloudFront 가 전부 시간당 과금이라, 12개 시나리오를 하루에 다 못 끝냈어도 그날 안에 지운다.
+
+정리 순서는 [07 실습 ⑩](/part-2/07-full-deploy-set02/lab/)과 같다 — helm → `eksctl delete cluster` → DynamoDB 삭제방지 해제 → `terraform destroy`. 지운 뒤 [잔존 리소스 점검](/reference/cleanup-check/)을 돌려 빈 출력을 확인한다.
 :::

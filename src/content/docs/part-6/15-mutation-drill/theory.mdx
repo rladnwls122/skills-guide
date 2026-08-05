@@ -1,11 +1,15 @@
 ---
 title: 변동 대응 이론 — 판단 원칙과 방법론
 description: 30% 변동 과제지에 대응할 때의 판단 원칙 3가지와 이름이 숨는 위치, 기계 치환 + 사람 검증 방법론.
+sidebar:
+  order: 2
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 > 문서 유형: explanation
+
+선행 지식과 학습 경로는 [모듈 개요](/part-6/15-mutation-drill/)에.
 
 이 PART는 적용이 전부다. 이론은 판단 원칙만 짧게.
 
@@ -57,6 +61,7 @@ grep -rn '옛이름' .                                      # 사람이 0건 확
 
 - 접두어 단위(`wskorea26` 전체)와 개별 이름 단위(경로가 바뀐 것)를 구분해서 돌린다.
 - 바이너리·`.terraform/`은 제외 (`--exclude-dir=.terraform`).
+- `grep`·`sed`·`xargs` 의 옵션이 헷갈리면 [shell-basics](/start/shell-basics/)에 쓰임이 정리돼 있다.
 
 :::caution[grep 0건이 곧 정답은 아니다]
 tfvars는 sed에 걸리지만 **의미 확인** 필수 — CIDR·타입 변동은 이름 치환으로 안 잡힌다. 접두어가 다 바뀌었는데 CIDR이 옛 값 그대로면 grep은 0건을 내면서도 틀린 상태다.

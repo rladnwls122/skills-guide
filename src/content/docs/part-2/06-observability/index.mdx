@@ -1,6 +1,8 @@
 ---
 title: 06. 관측성 — Fluent Bit + kube-prometheus-stack + Grafana (Day 6)
 description: "Day 6 모듈 개요 — 로그 파이프라인, log_to_metrics, Grafana provisioning, 알람 6종의 학습 목표. 1과제 후보 세 편이 모두 요구하는 스택이다."
+sidebar:
+  order: 1
 ---
 
 import { FileTree, LinkButton } from '@astrojs/starlight/components';
@@ -47,6 +49,9 @@ set-02 만 도구 선택이 자유롭고 수동 채점이다. set-03·set-07 은
 - Helm `install`/`upgrade --install`과 values 오버라이드 — [k8s-basics](/start/k8s-basics/)
 - 라벨 셀렉터 — sidecar가 `grafana_dashboard=1` 라벨로 대시보드를 찾는다 — [k8s-basics](/start/k8s-basics/)
 - 파이프·`grep`·`jq`로 로그에서 필요한 줄만 뽑는 원라이너 — [shell-basics](/start/shell-basics/)
+- Prometheus 는 `/metrics` 를 긁어 가는 pull 방식이고, PodMonitor 가 그 대상을 선언한다 — [observability-basics](/start/observability-basics/)
+- exporter 는 메트릭을 낼 줄 모르는 대상을 대신 노출해 주는 중개자 — [observability-basics](/start/observability-basics/)
+- counter 는 `rate()` 로, histogram 은 `histogram_quantile()` 로 읽는다 — [observability-basics](/start/observability-basics/)
 
 막히는 항목이 있으면 그 링크를 먼저 읽는다. 아니면 바로 다음 파일로 간다.
 
@@ -56,7 +61,7 @@ set-02 만 도구 선택이 자유롭고 수동 채점이다. set-03·set-07 은
 
 ## 참고 경로
 
-전부 `C:\Users\kryuk\practice\` 아래.
+정답지 저장소를 홈 아래(`~`)에 클론한 기준이다.
 
 <FileTree>
 

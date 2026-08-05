@@ -1,6 +1,8 @@
 ---
 title: 03. 컨테이너 + Lambda + DynamoDB — 실습
 description: "Dockerfile·ECR·DynamoDB·Lambda 를 직접 작성하고 invoke 로 응답을 검증하는 실습."
+sidebar:
+  order: 3
 ---
 
 import { Steps } from '@astrojs/starlight/components';
@@ -20,7 +22,18 @@ import { Steps } from '@astrojs/starlight/components';
 - [ ] 테스트 데이터로 최신순·키 순서·비ASCII·400·빈배열을 실제 응답으로 검증
 - [ ] 삭제방지 해제 → destroy 순서 체득
 
+선행 지식과 목표는 [모듈 개요](/part-1/03-container-lambda-dynamodb/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- Terraform 인자: [aws_ecr_repository](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_repository) · [aws_dynamodb_table](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/dynamodb_table) · [aws_lambda_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) · [aws_cloudwatch_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group)
+- CLI 플래그·출력 필드: `aws ecr describe-image-scan-findings help` · `aws dynamodb describe-table help` · `aws lambda invoke help`
+- 실행역할 3-statement 에 넣을 액션 이름: [Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) 의 DynamoDB·KMS 페이지
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
 ## 사전 준비
+
+정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 정답지 경로는 클론 루트 `~\skills-2026` 기준이다.
 
 ```powershell
 mkdir my-app-lab; cd my-app-lab
@@ -42,15 +55,20 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
    - 바이너리: `book` 을 `/book` 으로 755 복사
    - 포트·진입점: EXPOSE 8080, ENTRYPOINT
 
-   실제 book 바이너리가 없으므로 로컬 검증용 더미:
+   실제 book 바이너리가 없으므로 로컬 검증용 더미를 만든다. 줄 끝은 **LF** 여야 한다.
 
    ```powershell
-   '#!/bin/sh' , 'date "+%Y-%m-%d %H:%M:%S %Z"; sleep 3600' | Set-Content -NoNewline book
+   $dummy = "#!/bin/sh`ndate `"+%Y-%m-%d %H:%M:%S %Z`"; sleep 3600`n"
+   [IO.File]::WriteAllText("$PWD\book", $dummy)
    ```
+
+   :::caution[CRLF 함정]
+   Windows 기본 도구(`Set-Content`·메모장)는 줄 끝에 CR 을 붙인다. 셔뱅이 `#!/bin/sh\r` 이 되면 컨테이너가 `no such file or directory` 로 죽는다 — 실패 원인이 셔뱅이라는 표시가 어디에도 안 나와서 찾기 어렵다. 위처럼 `WriteAllText` 로 쓰거나 CloudShell 에서 직접 만든다. 실행 권한은 Dockerfile 의 `COPY --chmod=755` 가 붙이므로 Windows 쪽에서 신경 쓸 것이 없다.
+   :::
 
 2. **빌드·타임존 검증 (Docker 가능 환경 — CloudShell 권장)**
 
-   대회 조건 그대로 연습하려면 기본 CloudShell(인터넷 O, docker 내장, amd64)에 Dockerfile+book 만 올려 빌드한다:
+   대회 조건 그대로 연습하려면 기본 CloudShell(인터넷 O, docker 내장, amd64)에 Dockerfile+book 만 올려 빌드한다. 업로드는 CloudShell 우측 상단 **Actions → Upload file** 이고, 올린 파일은 홈(`~`)에 떨어진다.
 
    ```bash
    docker build -t book-test .
@@ -69,7 +87,9 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
 4. **push & 스캔 확인 (CloudShell)**
 
    ```bash
-   ECR="$ACCOUNT_ID.dkr.ecr.ap-northeast-2.amazonaws.com/wskorea26-book-repo"
+   # 리포지토리 URI 는 계정 ID 를 조립하지 말고 조회해서 받는다
+   ECR=$(aws ecr describe-repositories --repository-names wskorea26-book-repo \
+     --query 'repositories[0].repositoryUri' --output text)
    aws ecr get-login-password | docker login --username AWS --password-stdin "${ECR%%/*}"
    docker build -t "$ECR:stable" .
    docker push "$ECR:stable"              # stable 만! latest 추가 push 금지
@@ -85,7 +105,7 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
 
-   이미지를 올리고 스캔 결과까지 확인한다. `${ECR%%/*}` 는 리포지토리 경로를 잘라 레지스트리 주소만 남기는 셸 문법이라 로그인 대상이 된다. `wait image-scan-complete` 로 스캔이 끝나기를 기다린 뒤 심각도 집계를 보고, 마지막 `describe-images` 로 태그가 `stable` 하나뿐인지 확인한다 — `latest` 가 함께 붙으면 감점이다.
+   이미지를 올리고 스캔 결과까지 확인한다. 첫 줄은 리포지토리 URI 를 계정 ID 로 조립하는 대신 `describe-repositories` 로 받아 온다 — 계정 ID 를 따로 알 필요가 없고 오타도 안 난다. `${ECR%%/*}` 는 리포지토리 경로를 잘라 레지스트리 주소만 남기는 셸 문법이라 로그인 대상이 된다. `wait image-scan-complete` 로 스캔이 끝나기를 기다린 뒤 심각도 집계를 보고, 마지막 `describe-images` 로 태그가 `stable` 하나뿐인지 확인한다 — `latest` 가 함께 붙으면 감점이다.
 
    </details>
 
@@ -170,11 +190,11 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
 7. **정답과 diff**
 
    ```powershell
-   git diff --no-index .\Dockerfile   C:\Users\kryuk\practice\skills-2026\set-02\task-1\app\Dockerfile
-   git diff --no-index .\dynamodb.tf  C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\dynamodb.tf
-   git diff --no-index .\ecr.tf       C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\ecr.tf
-   git diff --no-index .\lambda.tf    C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\lambda.tf
-   git diff --no-index .\lambda\index.py C:\Users\kryuk\practice\skills-2026\set-02\task-1\terraform\lambda\index.py
+   git diff --no-index .\Dockerfile   $HOME\skills-2026\set-02\task-1\app\Dockerfile
+   git diff --no-index .\dynamodb.tf  $HOME\skills-2026\set-02\task-1\terraform\dynamodb.tf
+   git diff --no-index .\ecr.tf       $HOME\skills-2026\set-02\task-1\terraform\ecr.tf
+   git diff --no-index .\lambda.tf    $HOME\skills-2026\set-02\task-1\terraform\lambda.tf
+   git diff --no-index .\lambda\index.py $HOME\skills-2026\set-02\task-1\terraform\lambda\index.py
    ```
 
    <details class="diagram-note">
@@ -243,4 +263,46 @@ aws ecr describe-repositories --repository-names wskorea26-book-repo 2>&1 # Repo
 </details>
 
 CMK 는 PendingDeletion 7일 대기 — 정상. CloudShell 홈의 이미지/파일은 과금 대상이 아니므로 방치해도 되지만, 대회 습관상 `docker image prune -af` 로 정리한다.
+
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. GSI 이름이 `concert_name-created_at-index` 에서 다른 값으로 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   두 곳이다. `dynamodb.tf` 의 `global_secondary_index.name` 과 `lambda.tf` 의 `INDEX_NAME` 환경 변수다. `INDEX_NAME` 은 변수가 아니라 리터럴이라 한쪽만 고치면 Query 가 `ValidationException` 으로 죽는다. `grep -rn "concert_name-created_at-index" .` 로 두 건이 다 잡히는지 본다.
+
+   </details>
+
+2. Lambda 런타임 요구가 `python3.14` 에서 `python3.13` 으로 바뀌면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `variables.tf` 의 `lambda_runtime` 한 곳이다. `lambda.tf` 는 그 변수를 참조만 한다. mark 6-1-A 는 함수 이름·런타임·`TABLE_NAME` 세 값을 한 줄로 뽑아 정확히 비교하므로 런타임 문자열이 하나라도 다르면 그 항목이 통째로 실패한다.
+
+   </details>
+
+3. 조회 결과를 최신순이 아니라 오래된 순으로 내라면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `lambda/index.py` 의 Query 인자 `ScanIndexForward` 를 `True` 로 바꾼다. 테이블·GSI·실행역할은 그대로 둔다 — 정렬 방향은 인덱스 구조가 아니라 조회 옵션이기 때문이다. 인자 이름이 막히면 `aws dynamodb query help` 나 boto3 문서를 열고, 찾는 순서는 [검색 가이드](/reference/search-guide/)에 있다.
+
+   </details>
+
+4. 이미지를 `stable` 대신 `latest` 태그로 올리면 어느 체크가 깨지나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 3-1-A 다. 이 항목은 `--image-ids imageTag=stable` 로 이미지를 지목해 태그 목록과 스캔 결과를 뽑는다. `stable` 이 없으면 조회부터 실패하고, `stable` 에 `latest` 를 덧붙이면 태그 목록이 두 개로 나와 기대 출력과 어긋난다.
+
+   </details>
+
+`apply` 가 실패하면 [01 실습의 apply 실패 세 갈래](/part-1/01-terraform-vpc/lab/)를 먼저 본다. 증상별 확인 명령은 [트러블슈팅](/reference/troubleshooting/), 실습을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 돌린다.
 

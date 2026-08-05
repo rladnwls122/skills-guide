@@ -1,0 +1,274 @@
+---
+title: 실전 문서 검색 가이드
+description: 대회장에서 모르는 인자·필드·플래그를 공식 문서와 로컬 명령으로 찾아내는 진입 경로, 사이트별 검색 요령, 속도 훈련 드릴.
+---
+
+> 문서 유형: reference
+
+대회장은 AI 도구를 쓸 수 없고 공식 문서는 볼 수 있다([대회 운영 규칙](/reference/competition-rules/)). 모르는 인자 하나를 3분에 찾느냐 20분에 찾느냐가 점수로 직결된다.
+
+열어야 할 사이트의 목록은 [모듈 ↔ skills-2026 경로 매핑](/reference/links/)의 "공식 문서" 절에 있다. 이 문서는 그 사이트들에서 **무엇을 어떤 순서로 찾는가**를 다룬다.
+
+## 막힌 값의 종류로 진입한다
+
+모르는 값을 만나면 서비스 이름이 아니라 **값의 종류**로 판단한다.
+
+| 막힌 것 | 1순위 | 2순위 | 인터넷 |
+|---|---|---|---|
+| HCL 리소스 인자·반환 속성 | Terraform Registry 리소스 페이지 | `terraform providers schema -json` | 1순위만 |
+| Terraform 블록 문법·메타 인자 | Terraform 언어 문서 | `terraform -help <명령>` | 1순위만 |
+| AWS CLI 플래그·출력 필드 | `aws <서비스> <명령> help` | AWS CLI 명령 레퍼런스 | 불필요 |
+| 쿠버네티스·CRD YAML 필드 | `kubectl explain <경로>` | Kubernetes API 레퍼런스 · 프로젝트 문서 | 불필요(클러스터 연결은 필요) |
+| helm 차트 values 키 | `helm show values <차트>` | ArtifactHub 차트 페이지 | 차트 내려받기에만 |
+| eksctl ClusterConfig 필드 | `eksctl utils schema` | schema.eksctl.io | 불필요 |
+| IAM 액션·리소스·조건 키 | Service Authorization Reference | IAM 정책 평가 로직 문서 | 필요 |
+
+### HCL 리소스 인자 — Terraform Registry
+
+URL 패턴이 고정이다. 리소스 타입 이름에서 `aws_` 를 떼고 붙인다.
+
+```
+https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/<이름>
+```
+
+| 리소스 타입 | 문서 주소 끝부분 |
+|---|---|
+| `aws_lb_target_group` | `/resources/lb_target_group` |
+| `aws_wafv2_web_acl` | `/resources/wafv2_web_acl` |
+| `aws_cloudfront_distribution` | `/resources/cloudfront_distribution` |
+| `aws_vpclattice_service_network` | `/resources/vpclattice_service_network` |
+| `aws_docdb_cluster` | `/resources/docdb_cluster` |
+
+`data` 블록은 경로가 다르다. `data "aws_cloudfront_cache_policy"` 는 `/data-sources/cloudfront_cache_policy` 다. 리소스 쪽만 뒤지다 "그런 인자 없다"고 결론 내리는 실수가 여기서 난다.
+
+주소창에 직접 친다. Registry 상단의 전역 검색창은 프로바이더·모듈·리소스를 섞어 내놓아 느리다.
+
+페이지에 들어간 뒤의 순서는 이렇다.
+
+1. Ctrl+F 로 인자 이름을 친다. 페이지 안 Argument Reference 가 인자의 정본이다.
+2. 중첩 블록은 `### <이름> Block` 소제목으로 따로 있다. `aws_wafv2_web_acl` 의 `rate_based_statement` 는 최상위 인자 목록에 한 줄, 상세는 별도 소제목에 있다.
+3. Example Usage 를 먼저 본다. 어떤 인자가 함께 와야 하는지가 산문 설명보다 빠르게 보인다. Lambda 를 타깃으로 붙이는 `aws_lb_target_group` 예시는 `target_type = "lambda"` 하나로 `port`·`protocol`·`vpc_id` 가 전부 빠진다는 것을 보여준다.
+4. Attribute Reference 는 다른 리소스에서 참조할 값(`arn`·`id`)의 목록이다. `terraform plan` 이 `This object does not have an attribute named ...` 를 낼 때 여기를 본다.
+
+:::caution[버전이 다르면 인자도 다르다]
+URL 의 `latest` 는 2026-08-04 기준 AWS provider 6.57.1 을 가리킨다. 내 코드가 쓰는 버전은 `terraform version` 이 함께 찍는다(`+ provider registry.terraform.io/hashicorp/aws v6.57.1`). 버전이 다르면 페이지 상단 버전 드롭다운에서 그 버전을 고른다.
+:::
+
+### AWS CLI 플래그 — `aws ... help`
+
+`help` 출력은 로컬 파일에서 나온다. 인터넷이 끊긴 CloudShell 에서도 답한다.
+
+```bash
+aws eks describe-cluster help
+aws cloudfront test-function help
+```
+
+찾는 플래그를 알면 잘라 본다. 페이저를 끄지 않으면 화면이 멈춘다.
+
+```bash
+export AWS_PAGER=""
+aws cloudfront test-function help | grep -n -A4 -e "--if-match"
+```
+
+- 명령 이름 자체가 기억나지 않으면 `aws cloudfront help` 로 그 서비스의 명령 목록을 훑는다.
+- mark 스크립트가 쓰는 `--query` 는 JMESPath 다. 표현식이 안 먹으면 `--output json` 으로 원본 구조부터 확인한다.
+- 브라우저로 보는 같은 내용은 [AWS CLI 명령 레퍼런스](https://docs.aws.amazon.com/cli/latest/reference/)다. 서비스·명령이 URL 에 그대로 들어간다 — [eks describe-cluster](https://docs.aws.amazon.com/cli/latest/reference/eks/describe-cluster.html), [cloudfront test-function](https://docs.aws.amazon.com/cli/latest/reference/cloudfront/test-function.html).
+
+### 쿠버네티스·CRD 필드 — `kubectl explain`
+
+YAML 필드를 찾는 가장 빠른 수단이다. 스키마를 API 서버에서 받아오므로 인터넷은 필요 없고 **클러스터 연결은 있어야** 한다.
+
+```bash
+kubectl explain deployment.spec.template.spec.containers
+kubectl explain deployment.spec.template.spec.containers --recursive
+```
+
+`--recursive` 는 한 단계만 더 편다(`kubectl explain --help` 의 설명). 더 깊은 필드는 경로를 이어 붙여 내려간다.
+
+이 명령이 결정적인 이유는 **CRD 도 똑같이 설명한다**는 점이다. TargetGroupBinding·ScaledObject·NodePool 은 kubernetes.io 에 없다. CRD 를 적용한 클러스터에서는 `kubectl explain` 이 답한다.
+
+```bash
+kubectl explain targetgroupbinding.spec
+kubectl explain scaledobject.spec.triggers
+kubectl explain nodepool.spec.disruption
+```
+
+리소스 이름이나 `apiVersion` 이 기억나지 않으면 목록부터 본다.
+
+```bash
+kubectl api-resources | grep -i targetgroup
+kubectl explain deployment --api-version=apps/v1
+```
+
+과제에 나오는 CRD 의 `apiVersion` 은 이렇다.
+
+| 리소스 | apiVersion |
+|---|---|
+| TargetGroupBinding | `elbv2.k8s.aws/v1beta1` |
+| ScaledObject · TriggerAuthentication | `keda.sh/v1alpha1` |
+| NodePool | `karpenter.sh/v1` |
+| EC2NodeClass | `karpenter.k8s.aws/v1` |
+| PodMonitor · PrometheusRule | `monitoring.coreos.com/v1` |
+
+내장 리소스의 정본은 [Kubernetes API 레퍼런스](https://kubernetes.io/docs/reference/kubernetes-api/)다([Deployment v1](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/) 같은 페이지가 리소스마다 하나씩 있다). CRD 는 만든 프로젝트 문서를 본다 — [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/targetgroupbinding/targetgroupbinding/), [KEDA Scalers](https://keda.sh/docs/latest/scalers/), [Karpenter NodePool](https://karpenter.sh/docs/concepts/nodepools/), [prometheus-operator API](https://prometheus-operator.dev/docs/api-reference/api/).
+
+ALB Ingress 어노테이션(`alb.ingress.kubernetes.io/listen-ports` 등)은 `kubectl explain` 이 못 잡는다. 어노테이션은 스키마가 아니라 문자열이다 — [Ingress annotations 문서](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/ingress/annotations/)에서 Ctrl+F 로 찾는다.
+
+### helm 차트 values — `helm show values`
+
+차트의 기본 values 를 그대로 뽑아 파일로 저장하고 자른다.
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm show values prometheus-community/kube-prometheus-stack > kps.yaml
+grep -n -A5 adminPassword kps.yaml
+```
+
+`kube-prometheus-stack` 의 기본 values 는 5,982줄이다(2026-08-04 실측). 눈으로 훑지 않고 키워드로 자른다.
+
+- 어느 하위 트리에 있는지 모르면 `grep -n` 으로 줄 번호만 뽑고 `sed -n '4470,4500p' kps.yaml` 로 그 근처를 연다. YAML 들여쓰기가 곧 키 경로다.
+- 차트 버전을 고정해 뽑는다. `helm show values eks/aws-load-balancer-controller --version 3.4.3`
+- 쓸 수 있는 버전 목록은 `helm search repo eks/aws-load-balancer-controller --versions` 다.
+- OCI 차트도 같은 명령이 먹는다. `helm show values oci://public.ecr.aws/karpenter/karpenter --version 1.14.0`
+
+:::caution[차트 메이저가 바뀌면 키가 움직인다]
+`aws-load-balancer-controller` 는 1.x 와 3.x 가 함께 살아 있다. 정답지도 세트마다 다르다 — set-07 1과제는 `--version 1.13.4`, set-07 2과제는 `--version 3.4.3` 이다. 블로그에서 베낀 `--set` 키가 안 먹으면 차트 버전부터 맞춘다.
+:::
+
+브라우저로 볼 때는 ArtifactHub 를 쓴다. Default Values 탭에서 키를 검색할 수 있고, Versions 로 과거 버전의 values 를 볼 수 있다.
+
+| 차트 | ArtifactHub 경로 (`https://artifacthub.io` 뒤) |
+|---|---|
+| aws-load-balancer-controller | `/packages/helm/aws/aws-load-balancer-controller` |
+| kube-prometheus-stack | `/packages/helm/prometheus-community/kube-prometheus-stack` |
+| keda | `/packages/helm/kedacore/keda` |
+| karpenter | `/packages/helm/aws-karpenter/karpenter` |
+| fluent-bit | `/packages/helm/fluent/fluent-bit` |
+
+:::caution[같은 이름의 차트가 여럿이다]
+ArtifactHub 에서 `karpenter` 를 검색하면 GCP·Linode 프로바이더 등 다른 저장소의 동명 차트가 함께 나온다. 과제가 쓰는 정본은 저장소 URL 이 `oci://public.ecr.aws/karpenter/karpenter` 인 `aws-karpenter` 다. 이름이 아니라 **저장소 URL** 을 보고 고른다.
+:::
+
+### eksctl ClusterConfig 필드 — `eksctl utils schema`
+
+ClusterConfig 의 JSON Schema 를 로컬에서 통째로 뽑는다. 인터넷이 필요 없다.
+
+```bash
+eksctl utils schema > schema.json
+jq -r '.definitions.ClusterConfig.properties | keys[]' schema.json
+jq -r '.definitions.ManagedNodeGroup.properties | keys[]' schema.json
+jq '.definitions.ManagedNodeGroup.properties.volumeKmsKeyID' schema.json
+```
+
+`definitions` 아래를 타입 이름으로 내려간다. `ClusterConfig` → `managedNodeGroups` → `ManagedNodeGroup` → `iam` 순이다. 노드그룹 볼륨 암호화(`volumeEncrypted`·`volumeKmsKeyID`)처럼 이름이 애매한 필드를 `keys[]` 한 번으로 확인할 수 있다.
+
+브라우저로 보는 같은 스키마는 [schema.eksctl.io](https://schema.eksctl.io/)다. `eksctl.io/usage/schema/` 로 들어가면 이 주소로 넘어온다.
+
+### IAM 액션·조건 키 — Service Authorization Reference
+
+정책의 `Action`·`Resource`·`Condition` 에 무엇을 쓸 수 있는지의 정본이다. [서비스별 액션·리소스·조건 키](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) 목차에서 서비스를 고르면 페이지 하나가 열린다 — [S3](https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazons3.html), [KMS](https://docs.aws.amazon.com/service-authorization/latest/reference/list_awskeymanagementservice.html).
+
+페이지는 표 3개다. Actions(액션 이름과 그 액션이 받는 리소스 타입), Resource types(ARN 형식), Condition keys 다. root-less KMS 키 정책처럼 액션을 좁혀야 하는 항목에서 쓴다.
+
+권한 오류는 진입점이 다르다. `AccessDenied` 가 났을 때는 [정책 평가 로직](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html)으로 간다 — 명시적 Deny·SCP·리소스 정책 중 어디서 막혔는지의 판단 순서를 준다.
+
+## 과제를 받고 5분 안에 열어 둘 탭
+
+과제지를 정독하기 전에 연다. 막힌 뒤에 검색으로 여는 시간이 아깝다.
+
+**세 과제 공통 3개**
+
+1. [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) — 리소스 목록 페이지를 열어 둔다
+2. [AWS CLI 명령 레퍼런스](https://docs.aws.amazon.com/cli/latest/reference/)
+3. 이 사이트의 [명령 치트시트](/reference/cheatsheet/)
+
+**1과제 — VPC·KMS·S3·CloudFront·EKS 통합 배포**
+
+4. [schema.eksctl.io](https://schema.eksctl.io/) — ClusterConfig
+5. [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/ingress/annotations/) — Ingress 어노테이션과 TargetGroupBinding
+6. [kube-prometheus-stack](https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack) — Grafana·Prometheus values 키
+7. [Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) — KMS 키 정책의 액션 좁히기
+
+**2과제 — 모듈 주제로 고른다**
+
+세트가 확정되면 [모듈 지도](/reference/links/)에서 4개 모듈의 주제를 먼저 확인한다. 같은 번호라도 세트마다 주제가 다르다.
+
+| 모듈 주제 | 추가로 여는 탭 |
+|---|---|
+| DynamoDB NoSQL (set-07 1모듈) | Registry `dynamodb_table` · `lambda_event_source_mapping` |
+| CDN Function (set-07 2모듈) | [CloudFront 개발자 가이드](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/) · `aws cloudfront test-function help` |
+| KEDA + Karpenter (set-07 3모듈) | [KEDA Scalers](https://keda.sh/docs/latest/scalers/) · [Karpenter NodePool](https://karpenter.sh/docs/concepts/nodepools/) |
+| OTel + Loki 로깅 (set-07 4모듈) | ArtifactHub `grafana-community/loki` · [LogQL](https://grafana.com/docs/loki/latest/query/) |
+| DocumentDB (set-08 1모듈) | Registry `docdb_cluster` · `docdb_cluster_instance` |
+| VPC Lattice (set-08 2모듈) | Registry `vpclattice_service_network` 및 같은 접두사 리소스 7종 |
+| 이벤트 자동복구 (set-02·08 3모듈) | Registry `cloudwatch_event_rule` · `cloudtrail` · `config_config_rule` |
+| Fargate + SQS 스케일링 (set-08 4모듈) | [KEDA aws-sqs 스케일러](https://keda.sh/docs/latest/scalers/aws-sqs/) · Karpenter |
+| Kinesis·Flink·MSK (set-02 2·4모듈) | AWS 개발자 가이드 + Registry `kinesis_stream` · `msk_cluster` |
+
+**3과제 — 부하·운영**
+
+[k6](https://grafana.com/docs/k6/latest/) · [PromQL](https://prometheus.io/docs/prometheus/latest/querying/basics/) · Karpenter NodePool · `kubectl explain hpa.spec.behavior`
+
+## 사이트별 검색 요령
+
+| 사이트 | 잘 되는 방식 | 잘 안 되는 방식 |
+|---|---|---|
+| Terraform Registry | 리소스 페이지 주소를 직접 입력한 뒤 Ctrl+F | 상단 전역 검색 — 프로바이더·모듈이 섞인다 |
+| docs.aws.amazon.com | 구글에 `site:docs.aws.amazon.com <영문 키워드>` | 사이트 내부 검색 |
+| kubernetes.io | 필드 이름을 그대로 구글 검색 | 개념어로 된 질문 문장 |
+| ArtifactHub | 저장소 이름까지 넣어 검색 후 저장소 URL 확인 | 차트 이름만 검색 |
+| GitHub 이슈 | 에러 메시지 원문을 그대로 붙여넣기 | 직접 요약한 문장 |
+
+영어 키워드는 두 가지로만 조합한다.
+
+- **인자·필드를 찾을 때**는 `리소스명 + 인자명`. `aws_wafv2_web_acl rate_based_statement` 처럼 쓴다. 한국어를 섞지 않는다.
+- **에러를 찾을 때**는 메시지를 그대로 붙인다. 계정 ID·리소스명 같은 내 환경 값만 지운다.
+- 한 번에 안 나오면 범위를 좁히는 단어를 **하나만** 더한다(`eksctl`·`helm`·`karpenter`). 문장으로 늘리면 결과가 나빠진다.
+
+문서에 쓰인 이름과 코드에 쓰는 이름이 다를 때가 있다. KEDA 의 SQS 스케일러는 문서 주소가 `/scalers/aws-sqs/` 인데 매니페스트에 적는 트리거 타입은 `aws-sqs-queue` 다. 검색은 문서 쪽 표기로, 코드는 문서 본문의 예제 표기로 맞춘다.
+
+## 인터넷이 막혔거나 느릴 때
+
+| 찾는 것 | 로컬 명령 |
+|---|---|
+| Terraform 리소스의 전체 인자 목록 | `terraform providers schema -json` + jq |
+| Terraform 명령 옵션 | `terraform -help <명령>` |
+| AWS CLI 플래그 | `aws <서비스> <명령> help` |
+| 쿠버네티스·CRD 필드 | `kubectl explain <경로>` |
+| 클러스터가 아는 리소스 종류 | `kubectl api-resources` |
+| helm 차트 values | `helm show values <차트> --version <버전>` |
+| eksctl ClusterConfig | `eksctl utils schema` |
+
+`terraform providers schema -json` 은 **`terraform init` 을 마친 디렉터리**에서만 돈다. 인자 목록은 이렇게 뽑는다.
+
+```bash
+terraform providers schema -json > schema.json
+jq -r '.provider_schemas["registry.terraform.io/hashicorp/aws"].resource_schemas.aws_lb_target_group.block.attributes | keys[]' schema.json
+jq -r '.provider_schemas["registry.terraform.io/hashicorp/aws"].resource_schemas.aws_lb_target_group.block.block_types | keys[]' schema.json
+```
+
+`attributes` 가 단일 인자, `block_types` 가 중첩 블록(`health_check`·`stickiness`)이다.
+
+:::note[로컬 스키마의 한계]
+로컬 스키마에는 Example Usage 가 없다. 인자 **이름**이 기억나지 않을 때는 가장 빠르고, 인자들을 어떻게 조합하는지 모를 때는 Registry 를 열어야 한다.
+:::
+
+## 훈련 드릴
+
+타이머를 켜고 제한 시간 안에 답을 찾는다. 값을 외우는 훈련이 아니라 **경로를 손에 붙이는** 훈련이다. 전부 과제에 실제로 나오는 인자다.
+
+| # | 제한 | 찾을 것 | 어디서 |
+|---|---|---|---|
+| 1 | 3분 | `aws_lb_target_group` 으로 Lambda 를 타깃에 붙일 때 필요한 인자와, 반대로 **쓰면 안 되는** 인자 | Registry `lb_target_group` Example Usage |
+| 2 | 3분 | ALB 가 Lambda 를 호출하게 하는 `aws_lambda_permission` 의 `principal` 값 | Registry `lambda_permission` |
+| 3 | 5분 | `aws_wafv2_web_acl` 의 Rate 기반 규칙에서 요청 수 상한과 집계 시간창을 정하는 인자 이름·기본값 | Registry `wafv2_web_acl` 의 `rate_based_statement` 블록 |
+| 4 | 3분 | `aws_cloudfront_distribution` 에서 AWS 관리형 CachingOptimized 정책을 붙이는 인자 이름과, 그 ID 를 코드에서 얻는 data 소스 이름 | Registry `cloudfront_distribution` + `/data-sources/cloudfront_cache_policy` |
+| 5 | 4분 | KEDA `aws-sqs-queue` 트리거의 metadata 키 3개와 큐 길이 기본값 | keda.sh Scalers |
+| 6 | 3분 | Karpenter NodePool 에서 유휴 노드를 60초 뒤 반환시키는 필드 2개 | `kubectl explain nodepool.spec.disruption` |
+| 7 | 5분 | `kube-prometheus-stack` values 에서 Grafana 관리자 비밀번호 키와, Helm 릴리스 밖의 PodMonitor 를 탐지하게 만드는 키 | `helm show values` + `grep -n` |
+| 8 | 4분 | eksctl managed 노드그룹의 루트 볼륨을 CMK 로 암호화하는 필드 2개 | `eksctl utils schema` |
+| 9 | 3분 | `TargetGroupBinding` 의 `spec` 필드 전부와 각 필드의 필수 여부 | `kubectl explain targetgroupbinding.spec` |
+| 10 | 3분 | `aws cloudfront test-function` 의 필수 플래그 3개와 `--if-match` 에 넣을 값을 얻는 명령 | `aws cloudfront test-function help` |
+
+드릴을 마칠 때마다 **답을 어느 페이지 어느 절에서 찾았는지**까지 함께 적는다. 같은 값을 두 번째 찾을 때 걸린 시간이 절반 아래로 줄지 않으면 경로가 아직 안 붙은 것이다.

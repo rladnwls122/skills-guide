@@ -1,6 +1,8 @@
 ---
 title: 07. 실습 — set-02 1과제 완주 런북 (배포 10단계)
 description: "배포 10단계를 런북 없이 완주하고 CloudFront curl 시나리오와 mark.sh 로 검증하는 실습."
+sidebar:
+  order: 3
 ---
 
 > 문서 유형: tutorial
@@ -14,7 +16,16 @@ description: "배포 10단계를 런북 없이 완주하고 CloudFront curl 시�
 - [ ] CloudShell VPC Environment에서 mark.sh 실행, **80% 이상** 득점
 - [ ] 정리 절차까지 완료 (과금 0 확인)
 
-작업 루트: `C:\Users\kryuk\practice\skills-2026\set-02\task-1` (이하 상대 경로)
+선행 지식과 목표는 [모듈 개요](/part-2/07-full-deploy-set02/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- Terraform 인자: [aws_cloudfront_distribution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_distribution) · [aws_lb_listener_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_listener_rule) · [aws_lambda_permission](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_permission)
+- helm values 키와 CRD 필드: `helm show values prometheus-community/kube-prometheus-stack` · `kubectl explain targetgroupbinding.spec`
+- CLI 플래그·출력 필드: `aws cloudfront list-distributions help` · `aws cloudfront wait help`
+- 과제를 받고 5분 안에 열어 둘 탭 목록도 [실전 문서 검색 가이드](/reference/search-guide/)에 있다
+:::
+
+작업 루트: `~\skills-2026\set-02\task-1` (이하 상대 경로). 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다 — 다른 위치에 클론했다면 `~\skills-2026` 만 본인 경로로 바꾼다.
 제공자료(`book`, `index.html`, `main.jpeg`)는 `..\..\shared\provided\task-1\` — 수정 금지.
 
 ---
@@ -36,10 +47,7 @@ terraform apply -var "player_number=$env:NUM"
 
 </details>
 
-이어서 원본 README 배포 순서 1)의 **`.env.ps1` 영속화 블록**을 그대로 실행한다
-(ACCOUNT_ID, VPC_ID, PRIV_SUBNET_C/D, CLUSTER_EXTRA_SG_ID, NODE_SG_ID, EKS_KMS_ARN,
-BOOK_APP/LBC/FLUENT_BIT_POLICY_ARN, ECR, APP_TG, GRAFANA_TG, BUCKET, ALB_DNS, GRAFANA_ALB_DNS, CF
-→ `..\.env.ps1` 저장 후 `. ..\.env.ps1`).
+이어서 [04 실습의 `.env.ps1` 영속화 블록](/part-2/04-eksctl-cluster/lab/)을 그대로 실행한다. 변수 21종(ACCOUNT_ID, VPC_ID, PRIV_SUBNET_C/D, CLUSTER_EXTRA_SG_ID, NODE_SG_ID, EKS_KMS_ARN, BOOK_APP/LBC/FLUENT_BIT_POLICY_ARN, ECR, APP_TG, GRAFANA_TG, BUCKET, ALB_DNS, GRAFANA_ALB_DNS, CF, GRAFANA_ADMIN_USER/PASSWORD 등)이 `..\.env.ps1` 로 저장되고, 이어지는 ②~⑨ 가 그 파일 하나로 변수를 복원한다.
 
 **검증**: `terraform output` 에러 없음, `.env.ps1` 존재. 새 터미널에선 `. .\.env.ps1`만 재실행.
 
@@ -112,7 +120,9 @@ aws elbv2 wait target-in-service --target-group-arn "$env:APP_TG"
 ## ⑥ 모니터링 (kube-prometheus-stack + Grafana)
 
 :::danger[따옴표 함정]
-Grafana 비번 `$korea26!!` 는 PowerShell **작은따옴표**로만 쓴다. 큰따옴표면 `$korea26` 이 빈 변수로 확장돼 비번이 틀리고 mark 10 이 전멸한다.
+Grafana 비번 `$korea26!!` 는 set-02 과제지가 지정한 값이다(`set-02/task-1/terraform/variables.tf` 의 `grafana_admin_password` 기본값). 세트마다 다르므로 다른 세트를 풀 때는 [06 실습의 세트별 계정 표](/part-2/06-observability/lab/)를 본다.
+
+PowerShell 에서는 **작은따옴표**로만 쓴다. 큰따옴표면 `$korea26` 이 빈 변수로 확장돼 비번이 틀리고 mark 10 이 전멸한다.
 :::
 
 ```powershell
@@ -189,6 +199,12 @@ CloudFront 가 배포 완료될 때까지 기다린 뒤 경로별 기대값을 �
 
 콘솔에서 VPC Environment 생성: **Subnet `wskorea26-priv-subnet-d` + SG `wskorea26-vpc-environment-sg`** (채점 항목 0). 파일 업로드가 안 되므로 mark.sh는 **heredoc 붙여넣기**:
 
+:::danger[`rm -rf ~/.aws` 는 되돌릴 수 없다]
+다음 블록의 첫 줄은 그 셸의 자격증명 설정을 통째로 지운다. 실행하기 **전에** 액세스 키 ID 와 시크릿 액세스 키를 손에 들고 있어야 한다 — 시크릿 키는 발급 화면을 벗어나면 다시 볼 수 없고, 없으면 IAM 에서 새 키를 만들어야 한다. 지운 뒤 `aws configure` 를 못 채우면 채점 셸에서 아무 명령도 안 나간다.
+
+CloudShell 홈은 세션마다 초기화되므로 이 삭제가 본 PC 의 `~/.aws` 를 건드리지는 않는다. 그래도 명령을 본 PC 터미널에 잘못 붙여넣지 않도록 셸을 먼저 확인한다.
+:::
+
 ```bash
 rm -rf ~/.aws && aws configure          # default region: ap-northeast-2
 cat > ~/mark.sh <<'MARKEOF'
@@ -256,9 +272,60 @@ cd terraform; terraform destroy -var "player_number=$env:NUM"
 - [ ] 10-1~10-4 Grafana 수동 확인
 - [ ] **합계 80%+**
 
+막히면 [트러블슈팅](/reference/troubleshooting/), ⑩ 정리 뒤에는 [잔존 리소스 점검](/reference/cleanup-check/)으로 과금 0 을 확인한다.
+
 ## 마무리 훈련 (Day 8 반복)
 
 1. theory.md의 정답 도식을 보지 않고 백지에 그린다 — 화살표마다 인증 방식(OAC/커스텀 헤더/SG/IRSA) 주석까지. 5분 컷.
 2. 10단계를 순서만 백지에 쓴다 (각 단계 한 줄 이유 포함).
 3. 함정 표를 가리고 8개 이상 복기.
+
+## 변형 셀프 체크
+
+당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다. 이 모듈은 통합 배포라 값 하나가 여러 컴포넌트에 걸친다.
+
+1. 비번호가 `103` 에서 `217` 로 바뀌면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `terraform.tfvars` 의 `player_number` 한 곳과, 셸의 `$env:NUM` 이다. 버킷 이름 `wskorea26-concert-bucket-<비번호>` 와 Grafana 계정 `skills-<비번호>-admin` 이 여기서 파생된다. `$env:NUM` 이 어긋나면 마지막 `terraform destroy -var "player_number=$env:NUM"` 이 다른 이름의 리소스를 지우려 든다.
+
+   </details>
+
+2. CloudFront 에 `/admin*` 경로를 ALB 로 보내라면 어디를 고치고, 어디를 그대로 두나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `cloudfront.tf` 에 `ordered_cache_behavior` 를 하나 더 쓴다. 오리진 두 개·OAC·버킷 정책·ALB 리스너 규칙은 그대로 둔다 — 새 경로도 같은 ALB 오리진을 재사용하기 때문이다. mark 8-3-A 는 `/book*` 을 지목해 조회하므로 기존 항목은 그대로 통과한다. 인자 이름이 막히면 [검색 가이드](/reference/search-guide/)를 거쳐 `aws_cloudfront_distribution` 문서를 연다.
+
+   </details>
+
+3. ALB 이름이 `wskorea26-book-alb` 에서 바뀌면 어디까지 영향이 가나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark.sh 는 맨 앞에서 이 이름으로 ALB ARN·DNS·리스너 ARN 을 얻는다. 이름이 다르면 mark 7-1-A·7-2-A 가 조회부터 실패하고, 오리진 도메인을 비교하는 8-2-A 도 어긋난다. 고칠 곳은 `variables.tf` 의 `book_alb_name` 한 곳이다.
+
+   </details>
+
+4. Grafana 비밀번호가 과제지에서 바뀌면 어느 체크가 걸리나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 10-1 이다. 이 항목은 수동 채점이라 스크립트가 접속 URL 과 계정만 찍고 채점자가 직접 로그인한다. 로그인이 안 되면 Monitoring 3.5점을 통째로 잃는다. 고칠 곳은 `variables.tf` 의 `grafana_admin_password` 와 helm values 이고, PowerShell 에서는 `$` 가 든 값을 작은따옴표로만 쓴다.
+
+   </details>
+
+5. 커스텀 헤더 두 개 중 `wskorea26-s3-access` 가 불필요해 보여 지우면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   mark 8-4-A 는 배포의 모든 오리진에서 커스텀 헤더를 이름·값 쌍으로 전부 뽑아 두 줄을 기대한다. 하나를 지우면 한 줄만 나와 정확 일치가 깨진다. 값은 `variables.tf` 의 `origin_verify_header`·`s3_access_header` 에 있고, 중복돼 보여도 과제지 요구 그대로 둔다.
+
+   </details>
 

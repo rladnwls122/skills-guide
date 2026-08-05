@@ -1,6 +1,8 @@
 ---
 title: EKS 기초 (선수 학습, 약 1시간 30분)
 description: 관리형 컨트롤 플레인과 데이터 플레인의 경계, IRSA와 Pod Identity, VPC CNI의 IP 할당 방식, ALB로 들어오는 외부 트래픽 경로를 정리한 선수 학습.
+sidebar:
+  order: 12
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
@@ -25,6 +27,8 @@ import { Steps, LinkButton } from '@astrojs/starlight/components';
 | 노드그룹 | 같은 설정의 워커 노드 묶음. 관리형 노드그룹은 AMI 갱신·드레인을 AWS가 맡는다 |
 | 애드온 | VPC CNI·CoreDNS·kube-proxy 등 클러스터 필수 구성 요소. EKS가 버전을 관리한다 |
 | OIDC 공급자 | 클러스터가 발급하는 토큰을 IAM이 신뢰하게 만드는 연결 고리. IRSA의 전제 |
+
+**OIDC** 는 OpenID Connect 의 약어다. 어떤 시스템이 발급한 토큰을 다른 시스템이 "이 발급자가 서명한 것이 맞다"고 검증하고 받아들이게 하는 표준이다. EKS 에서는 클러스터가 토큰 발급자가 되고 IAM 이 그 발급자를 신뢰하는 쪽이 된다. 계정에 OIDC 공급자를 등록한다는 것은 그 신뢰 관계를 한 번 맺어 둔다는 뜻이다.
 
 EKS는 쿠버네티스 컨트롤 플레인을 AWS가 대신 운영하는 서비스다. **책임 경계가 곧 장애 경계**다 — API 서버가 응답하지 않으면 AWS 문제이고, 파드가 뜨지 않으면 거의 항상 계정 쪽 문제(IAM·서브넷·IP·이미지)다.
 
@@ -158,7 +162,12 @@ AWS VPC CNI는 오버레이 네트워크를 만들지 않는다. 노드에 보�
 - 장점: 보안 그룹·VPC 흐름 로그·NACL이 파드 트래픽에 그대로 적용되고, 캡슐화 오버헤드가 없다
 - 대가: 파드 하나가 서브넷 IP 하나를 먹는다. `/24` 서브넷 하나로는 파드 수백 개를 못 버틴다
 
-노드당 파드 상한은 EKS 최적화 AMI 기준 `(ENI 수 × (ENI당 IP 수 − 1)) + 2` 로 정해진다. `+ 2` 는 파드 IP 를 쓰지 않는 VPC CNI 와 `kube-proxy` 몫이다. `t3.medium` 은 ENI 3개 × IP 6개라 `3 × 5 + 2 = 17` 개이고, 이 상한은 CPU·메모리가 남아 있어도 적용된다.
+노드당 파드 상한은 EKS 최적화 AMI 기준 `(ENI 수 × (ENI당 IP 수 − 1)) + 2` 로 정해진다. 식의 두 상수는 각각 이유가 있다.
+
+- **`− 1`** — ENI 마다 첫 프라이빗 IP 는 그 ENI 자신의 주소로 잡힌다. 노드가 네트워크에서 자기를 가리키는 데 쓰는 주소라 파드에 나눠 줄 수 없다. ENI 하나당 파드에 줄 수 있는 IP 가 하나씩 줄어드는 이유다.
+- **`+ 2`** — VPC CNI 와 `kube-proxy` 는 노드의 네트워크를 그대로 쓰는 파드라 별도 IP 를 먹지 않는다. 그래서 상한에서 두 자리를 되돌려 준다.
+
+`t3.medium` 은 ENI 3개 × IP 6개라 `3 × 5 + 2 = 17` 개이고, 이 상한은 CPU·메모리가 남아 있어도 적용된다.
 
 IP가 부족할 때 쓰는 수단은 두 가지다.
 
@@ -308,9 +317,9 @@ Ingress 를 만들었는데 `kubectl get ingress` 의 `ADDRESS` 가 계속 비�
 
 ## ⑦ 다음 단계
 
-모듈 04에서 `eksctl` 로 클러스터를 세우고, 모듈 05에서 워크로드와 ALB를 올린다.
+모듈 04에서 `eksctl` 로 클러스터를 세우고, 모듈 05에서 워크로드와 ALB를 올린다. 그 뒤 모듈 06 이 전제하는 관측성 기초가 다음 순서다.
 
-<LinkButton href="/start/awscli-basics/" icon="right-arrow">다음 선수 학습 — AWS CLI 기초</LinkButton>
+<LinkButton href="/start/observability-basics/" icon="right-arrow">다음 선수 학습 — 관측성 기초</LinkButton>
 <LinkButton href="/part-2/04-eksctl-cluster/" variant="minimal">PART 2 — EKS Core</LinkButton>
 
 ## 공식 문서

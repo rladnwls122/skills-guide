@@ -1,6 +1,8 @@
 ---
 title: IAM 기초 (선수 학습, 약 1시간)
 description: 사용자·역할·정책 JSON과 AssumeRole 흐름, 대회에서 root 사용이 금지인 이유를 정리한 선수 학습.
+sidebar:
+  order: 2
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
@@ -16,6 +18,34 @@ import { Steps, LinkButton } from '@astrojs/starlight/components';
 - [ ] root 상시 사용이 왜 금지인지 대회 관점에서 설명할 수 있다
 
 ## ② 핵심 개념
+
+### ARN — 리소스를 가리키는 이름
+
+IAM 정책은 대상을 전부 ARN 으로 적는다. **ARN(Amazon Resource Name)** 은 AWS 리소스 하나를 가리키는 고유 이름이고, 콜론으로 끊긴 여섯 칸으로 이뤄진다.
+
+```
+arn:partition:service:region:account:resource
+```
+
+| 칸 | 담는 값 | 예 |
+|---|---|---|
+| `partition` | 어느 AWS 파티션인가 | `aws` · `aws-cn` · `aws-us-gov` |
+| `service` | 서비스 이름 | `s3` · `iam` · `kms` |
+| `region` | 리전 코드 | `ap-northeast-1` |
+| `account` | 12자리 계정 ID | `123456789012` |
+| `resource` | 리소스 종류와 이름 | `user/skills-admin` · `role/deployer` · `my-bucket/*` |
+
+칸이 비어도 콜론은 그대로 남는다. IAM 은 리전에 매이지 않으므로 `region` 이 비고, S3 버킷 이름은 전역에서 고유하므로 `region` 과 `account` 가 둘 다 빈다. 그래서 버킷 ARN 은 `arn:aws:s3:::my-bucket` 처럼 콜론이 연달아 셋 나온다.
+
+`arn:aws:iam::<계정ID>:root` 는 뜻이 따로 굳은 관용 표기다. root 사용자 한 명이 아니라 **그 계정 전체**를 가리킨다. 이 값을 신뢰 정책에 쓰면 "누가 이 역할을 맡을지는 그 계정의 IAM 이 정하라"고 판단을 넘긴 것이고, 실제 허용 여부는 그 계정의 신원 기반 정책이 결정한다.
+
+### Principal — 정책이 대상으로 삼는 신원
+
+`Principal` 은 **정책이 대상으로 삼는 신원**이다. 값으로 들어가는 것은 네 가지다 — IAM 사용자, IAM 역할, 계정 전체, 그리고 `ec2.amazonaws.com` 같은 AWS 서비스다.
+
+`Principal` 은 **리소스 기반 정책에만 있는 요소**다. 신원 기반 정책은 이미 특정 사용자나 역할에 붙어 있어서 대상이 정해져 있고, 리소스 기반 정책은 리소스 쪽에 붙어 있으므로 "누구에게"를 정책 안에 따로 적어야 한다. 역할의 신뢰 정책과 KMS 키 정책이 리소스 기반 정책이고, 그래서 둘 다 `Principal` 을 가진다.
+
+### 용어표
 
 | 용어 | 한 줄 정의 |
 |---|---|
@@ -89,7 +119,7 @@ sequenceDiagram
 :::
 
 - **생성자 = 채점자 신원**: EKS 클러스터를 만든 IAM 신원만 기본 kubectl 접근을 가진다. 채점 스크립트(mark.sh)가 도는 신원과 생성 신원이 다르면 채점 자체가 실패한다. 처음부터 IAM 사용자 하나로 통일하는 습관이 곧 점수다.
-- 이 내용은 **PART-3 모듈 08(IAM 심화)** — IRSA, aws-auth, KMS 키 정책 — 의 기반이다.
+- 이 문서의 내용이 **PART-3 모듈 08(IAM 심화)** 의 기반이 된다. 그 모듈은 여기서 다룬 신뢰 정책·권한 정책 위에 IRSA, aws-auth, KMS 키 정책을 얹는다.
 
 ## ④ 미니 실습 (15분, 과금 없음)
 
@@ -197,7 +227,9 @@ EC2 안의 SDK 가 액세스 키 없이 자격 증명을 얻는 경로다. 먼�
 - **인스턴스 프로파일**은 역할을 EC2에 붙이기 위한 껍데기다. 콘솔은 자동으로 만들지만 CLI·Terraform에서는 `aws_iam_instance_profile` 을 따로 만들어야 한다.
 - IMDSv2는 `PUT` 으로 받은 토큰을 헤더에 실어야 응답한다. SSRF 취약점으로 자격 증명이 새는 경로를 막기 위한 설계이고, 신규 인스턴스의 기본값이다.
 
-파드에서 IMDS로 노드 역할 자격 증명을 훔쳐 쓰는 것을 막으려면 홉 제한을 1로 두고 IRSA를 쓴다.
+IMDS 응답이 인스턴스 안에서 몇 단계까지 전달되는지를 정하는 값이 **홉 제한**이다. 1로 두면 인스턴스 본체까지만 닿고, 그 위에서 도는 컨테이너는 `169.254.169.254` 에 닿지 못한다.
+
+쿠버네티스는 컨테이너를 담는 최소 실행 단위를 **파드**, 파드가 실제로 도는 EC2 인스턴스를 **노드**라고 부른다. 파드가 IMDS 로 노드 역할의 자격 증명을 훔쳐 쓰는 것을 막으려면 홉 제한을 1 로 두고 **IRSA** 를 쓴다. IRSA 는 파드마다 IAM 역할을 따로 붙이는 EKS 기능이고, 동작 원리는 [EKS 기초](/start/eks-basics/)에서 다룬다.
 
 ### 교차 계정 접근
 
@@ -211,7 +243,7 @@ EC2 안의 SDK 가 액세스 키 없이 자격 증명을 얻는 경로다. 먼�
 
 양쪽이 다 있어야 성립한다. 계정 B의 신뢰 정책에 `:root` 를 쓰는 것은 "계정 A의 IAM 관리자에게 위임한다"는 뜻이고, 실제로 누가 맡을지는 계정 A의 신원 기반 정책이 정한다.
 
-제3자에게 역할을 열어 줄 때는 `sts:ExternalId` 조건을 건다. 대리인 혼동(confused deputy) — 같은 서비스를 쓰는 다른 고객이 역할 ARN만 알고 맡아 버리는 문제 — 를 막는다.
+제3자에게 역할을 열어 줄 때는 `sts:ExternalId` 조건을 건다. 이 조건이 막는 것이 **대리인 혼동**(confused deputy)이다. 같은 서비스를 쓰는 다른 고객이 역할 ARN 만 알아내 그 역할을 맡아 버리는 문제인데, 양쪽만 아는 External ID 를 함께 요구하면 ARN 을 알아도 맡지 못한다.
 
 ### 세션 정책으로 권한 좁히기
 
@@ -316,7 +348,7 @@ EC2 인스턴스의 호스트에서는 `aws sts get-caller-identity` 가 정상�
 
 모듈 08에서 IRSA·aws-auth·KMS 키 정책으로 심화한다.
 
-<LinkButton href="/start/kms-basics/" icon="right-arrow">다음 선수 학습 — KMS 기초</LinkButton>
+<LinkButton href="/start/s3-basics/" icon="right-arrow">다음 선수 학습 — S3 기초</LinkButton>
 <LinkButton href="/part-3/08-private-eks-iam/" variant="minimal">PART 3 — Hard Mode</LinkButton>
 
 ## 공식 문서

@@ -2,7 +2,7 @@
 
 전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드 — Astro Starlight 문서 사이트.
 
-**사이트: Vercel [https://skills-2026-learn-module.vercel.app/](https://skills-2026-learn-module.vercel.app/)**
+**사이트: Vercel [https://skills-learn.zenru.net/](https://skills-learn.zenru.net/) (임시 비밀번호: user / bruh1004pass)**
 
 - 콘텐츠: `src/content/docs/` (시작 / part-1~6 / reference)
 - 디자인: [starlight-theme-exquisitus](https://github.com/anaxite/starlight-theme-exquisitus) — 팔레트·서체는 테마가 전담

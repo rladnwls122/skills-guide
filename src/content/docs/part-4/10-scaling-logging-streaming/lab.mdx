@@ -9,7 +9,16 @@ import { Steps } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
-정답지: `skills-2026/set-07/task-2/` — 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 경로는 클론 루트 `~\skills-2026` 기준이다. terraform은 본 PC(PowerShell), 클러스터/헬름/이미지 빌드는 CloudShell(Docker 내장)에서 한다 — 채점과 같은 셸이라 클러스터 생성자 신원 = 채점 신원이 자동 일치한다. 상세 명령 전문은 각 모듈 README 런북에 있다. 이 랩은 순서·검증·함정에 집중한다.
+정답지: `skills-2026/set-07/task-2/` — 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 경로는 클론 루트 `~\skills-2026` 기준이다.
+
+**손으로 쓰는 것과 가져다 쓰는 것을 먼저 갈라 둔다.**
+
+| | 이 랩에서 |
+|---|---|
+| 그대로 쓴다 | 정답지의 terraform, `k8s/` 매니페스트(namespace·NodePool·ScaledObject), helm 차트 values, 제공 `app.py`·`worker.py` |
+| 직접 쓴다 | Part B 의 `app/Dockerfile` 한 장 (제공 Dockerfile 은 flask 가 없어 CrashLoop 이다) |
+| 값만 바꾼다 | 매니페스트의 `<ECR_IMAGE>`·`<SQS_URL>` 자리, helm 설치 옵션의 버전·리소스 값 |
+ terraform은 본 PC(PowerShell), 클러스터/헬름/이미지 빌드는 CloudShell(Docker 내장)에서 한다 — 채점과 같은 셸이라 클러스터 생성자 신원 = 채점 신원이 자동 일치한다. 상세 명령 전문은 각 모듈 README 런북에 있다. 이 랩은 순서·검증·함정에 집중한다.
 
 ## 실습 목표
 
@@ -41,7 +50,13 @@ import { Steps } from '@astrojs/starlight/components';
 3. 앱 이미지 빌드/푸시 (제공 Dockerfile 그대로).
 4. **KEDA 2.20.1** 설치 — `serviceAccount.operator.create=false`(IRSA용 keda-operator 재사용) + addon taint `tolerations` 지정.
 5. **Karpenter 1.14.0** 설치(kube-system) — `--set replicas=1`(차트 기본 2는 addon 노드 1대에서 `helm --wait` 무한 대기) + `controller.resources.requests.cpu=0.5, memory=512Mi`로 낮춤(addon 노드 용량).
-6. k8s 번호 순서 apply: namespace → **NodePool 먼저** → deployment(`<ECR_IMAGE>`/`<SQS_URL>` sed 치환) → ScaledObject.
+6. k8s 번호 순서 apply: namespace → **NodePool 먼저** → deployment → ScaledObject. deployment 는 자리표시자 두 개를 치환해 넘긴다.
+
+   ```bash
+   sed -e "s|<ECR_IMAGE>|$ECR_IMAGE|" -e "s|<SQS_URL>|$SQS_URL|" k8s/20-deployment.yaml | kubectl apply -f -
+   ```
+
+   매니페스트 파일 자체는 고치지 않는다 — 값만 갈아 끼워 apply 하면 다음 회차에 원본을 그대로 다시 쓴다.
 
 </Steps>
 
@@ -105,7 +120,7 @@ kubectl get nodes -l karpenter.sh/nodepool=skm-app-nodepool   # 1대로 수렴
 
 1. **본 PC**: `module-4/terraform` apply (VPC + **이름 고정 ALB/TG** + ECR + LBC IAM) → zip 반입.
 2. **CloudShell**: `~/.o11y-env` → `eksctl create cluster`(~20분) → 노드 2대가 AZ a/c로 분산됐는지 확인.
-3. 이미지 빌드: **제공 app.py + 자체 app/Dockerfile** (제공 Dockerfile은 flask 미설치 → CrashLoop).
+3. 이미지 빌드: 제공 `app.py` 는 그대로 두고 **`app/Dockerfile` 만 직접 쓴다** — 제공 Dockerfile 은 flask 를 설치하지 않아 파드가 CrashLoop 한다. 베이스·tzdata·비루트 패턴은 [모듈 03 의 Dockerfile](/part-1/03-container-lambda-dynamodb/lab/)을 그대로 가져오고, 바뀌는 것은 의존성 설치 줄과 진입점이다.
 4. **LBC 3.4.2 설치** ← TGB CRD가 여기서 생긴다. 이후에만 TGB apply 가능.
 5. namespace/StorageClass/앱 apply + 앱 TGB.
 6. **Loki 18.5.1** (`grafana-community` 저장소 — `grafana/loki`는 GEL 전용) → svc `o11y-loki` 3100 확인.

@@ -55,7 +55,15 @@ mkdir provided
 
 1. **스펙만 보고 직접 작성 (정답지 금지)**
 
-   작성 파일: `versions.tf`, `variables.tf`(player_number 포함), `data.tf`, `kms.tf`, `s3.tf`, `cloudfront.tf`, `outputs.tf`
+   `versions.tf`·`data.tf` 는 모듈 01 과 같은 이유로 정답지에서 복사한다 — 세트가 바뀌어도 내용이 같은 부트스트랩이다.
+
+   ```powershell
+   # ── Windows PowerShell ──
+   copy $HOME\skills-2026\set-02\task-1\terraform\versions.tf .
+   copy $HOME\skills-2026\set-02\task-1\terraform\data.tf .
+   ```
+
+   직접 쓰는 파일: `variables.tf`(player_number 포함), `kms.tf`, `s3.tf`, `cloudfront.tf`, `outputs.tf`
 
    | 항목 | 스펙 (set-02 실측) |
    |---|---|
@@ -185,7 +193,7 @@ mkdir provided
 
    set-02 에는 WAF 가 없다. set-03·set-07 후보를 대비한 보너스 스텝이다 — 개념(scope·override 계층)은 [이론 7절](/part-1/02-kms-s3-cloudfront/theory/)을 먼저 읽는다. 여기서는 3번에서 만든 CloudFront 배포에 set-03 방식(관리형 규칙 그룹 없이 커스텀 매치)으로 Web ACL 을 붙인다.
 
-   작성/수정 파일: `providers.tf`(`us-east-1` alias 추가), `waf.tf`(신설)
+   작성/수정 파일: 복사해 둔 `versions.tf` 에 `us-east-1` provider alias 한 블록만 더하고, `waf.tf` 를 신설한다. alias 추가는 부트스트랩 파일에서 실제로 손이 가는 유일한 자리다.
 
    | 항목 | 스펙 (set-03 실측) |
    |---|---|

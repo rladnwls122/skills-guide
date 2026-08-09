@@ -1,6 +1,6 @@
 ---
 title: 01. Terraform 문법 + VPC — 실습
-description: "정답지를 보지 않고 백지에서 VPC tf 코드를 작성해 apply·검증한 뒤 정답과 diff 하는 실습."
+description: "부트스트랩 파일은 정답지에서 가져오고 과제지에 따라 바뀌는 VPC tf 코드만 직접 작성해 apply·검증한 뒤 정답과 diff 하는 실습."
 sidebar:
   order: 3
 ---
@@ -11,7 +11,9 @@ import { Steps } from '@astrojs/starlight/components';
 
 원리와 채점 관점은 [01 이론 — Terraform 문법과 VPC 구조](/part-1/01-terraform-vpc/theory/)에 있다.
 
-**방식**: 정답지를 보지 않고 백지에서 tf 코드를 쓴다 → apply·검증 → 마지막에 `skills-2026` 정답과 diff 해서 설계 차이를 복기한다.
+**방식**: 부트스트랩 파일(`versions.tf`·`data.tf`)은 정답지에서 복사하고, **과제지에 따라 바뀌는 파일만** 백지에서 쓴다 → apply·검증 → 마지막에 `skills-2026` 정답과 diff 해서 설계 차이를 복기한다.
+
+대회에서 손이 가는 곳은 이름·대역·개수가 들어가는 파일이다. provider 고정 블록을 외워 다시 타이핑하는 것은 그 시간에 배점이 없다.
 
 ## 실습 목표
 
@@ -58,9 +60,32 @@ mkdir my-vpc-lab; cd my-vpc-lab
 
 <Steps>
 
-1. **스펙만 보고 직접 작성 (정답지 금지)**
+1. **바뀌지 않는 파일은 정답지에서 가져온다**
 
-   작성할 파일: `versions.tf`, `variables.tf`, `terraform.tfvars`, `data.tf`, `vpc.tf`, `outputs.tf`
+   `versions.tf`(provider 고정)와 `data.tf`(계정·AZ 조회)는 세트가 바뀌어도 내용이 거의 같다. 대회 당일에도 이 두 파일을 새로 쓰지 않으므로, 실습에서도 복사해 쓰고 시간을 바뀌는 쪽에 쓴다.
+
+   ```powershell
+   # ── Windows PowerShell ──
+   copy $HOME\skills-2026\set-02\task-1\terraform\versions.tf .
+   copy $HOME\skills-2026\set-02\task-1\terraform\data.tf .
+   ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   부트스트랩 두 장을 그대로 가져온다. `versions.tf` 는 Terraform 과 provider 버전 범위를, `data.tf` 는 계정 ID·가용영역처럼 어느 과제에나 필요한 조회를 담는다. 세트마다 달라지는 것은 리전 값 정도이고 그 값도 변수로 빠져 있으므로, 손으로 다시 쓸 이유가 없다.
+
+   </details>
+
+   :::note[읽기는 한 번 한다]
+   복사한 뒤 `versions.tf` 를 열어 `required_providers` 의 provider 이름과 버전 범위가 어디에 적히는지 한 번 확인한다. 대회에서 provider 버전이 지정되면 고칠 자리가 그 한 줄이다.
+   :::
+
+2. **바뀌는 파일만 스펙 보고 직접 작성 (정답지 금지)**
+
+   작성할 파일: `variables.tf`, `terraform.tfvars`, `vpc.tf`, `outputs.tf`
+
+   이 넷이 과제지에 따라 통째로 달라지는 파일이다 — 이름·대역·개수가 들어가는 곳이고, 채점이 조회하는 값도 전부 여기서 나온다.
 
    구현 스펙 (set-02 Reference01 실측):
 
@@ -79,7 +104,7 @@ mkdir my-vpc-lab; cd my-vpc-lab
    - `player_number`, `region`, `vpc_cidr` 는 변수 + tfvars 주입
    - output: `vpc_id`, `public_subnet_ids`(map), `private_subnet_ids`(map), `account_id`
 
-2. **문법 검증 → apply**
+3. **문법 검증 → apply**
 
    ```powershell
    terraform init
@@ -106,7 +131,7 @@ mkdir my-vpc-lab; cd my-vpc-lab
 
    증상별 확인 명령은 [트러블슈팅](/reference/troubleshooting/)에 있다.
 
-3. **검증 — mark.sh가 보는 방식으로**
+4. **검증 — mark.sh가 보는 방식으로**
 
    ```powershell
    $env:VPC_ID = terraform output -raw vpc_id
@@ -142,7 +167,7 @@ mkdir my-vpc-lab; cd my-vpc-lab
    # 기대: book-ngw-c → pub-subnet-c 의 ID, book-ngw-d → pub-subnet-d 의 ID
    ```
 
-4. **output 영속화**
+5. **output 영속화**
 
    ```powershell
    terraform output -json | Set-Content ..\outputs.json
@@ -163,7 +188,7 @@ mkdir my-vpc-lab; cd my-vpc-lab
 
    여기서 저장하는 변수는 세 개뿐이다 — 이 실습의 tf 가 VPC 만 만들기 때문이다. PART-2 의 `eksctl` 렌더는 보안 그룹·KMS 키·IAM 정책 ARN 까지 아홉 개를 쓰고, 그 값들은 정답지 `set-02\task-1\terraform` 을 통째로 apply 해야 나온다. 전체 목록과 저장 블록은 [04 실습의 사전 준비](/part-2/04-eksctl-cluster/lab/)에 있다.
 
-5. **정답과 diff**
+6. **정답과 diff**
 
    ```powershell
    git diff --no-index .\vpc.tf $HOME\skills-2026\set-02\task-1\terraform\vpc.tf

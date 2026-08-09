@@ -11,7 +11,7 @@ import { Steps } from '@astrojs/starlight/components';
 
 원리와 채점 관점은 [03 이론 — 컨테이너·Lambda·DynamoDB](/part-1/03-container-lambda-dynamodb/theory/)에 있다.
 
-**방식**: Dockerfile·tf·index.py 를 직접 쓴다 → apply·직접 invoke 검증 → `skills-2026` 정답과 diff. ALB 는 이 모듈 범위 밖이므로 Lambda 는 `aws lambda invoke` 로 ALB 이벤트를 흉내 내 검증한다.
+**방식**: 부트스트랩(`versions.tf`·`data.tf`)과 모듈 02 에서 이미 쓴 `kms.tf`·`variables.tf` 는 가져다 쓰고, **이 모듈에서 새로 나오는 것만** 직접 쓴다 → apply·직접 invoke 검증 → `skills-2026` 정답과 diff. ALB 는 이 모듈 범위 밖이므로 Lambda 는 `aws lambda invoke` 로 ALB 이벤트를 흉내 내 검증한다.
 
 ## 실습 목표
 
@@ -37,9 +37,20 @@ import { Steps } from '@astrojs/starlight/components';
 
 ```powershell
 mkdir my-app-lab; cd my-app-lab
+copy $HOME\skills-2026\set-02\task-1\terraform\versions.tf .
+copy $HOME\skills-2026\set-02\task-1\terraform\data.tf .
+copy ..\my-kms-lab\kms.tf .            # 모듈 02 에서 쓴 CMK 정의 — 없으면 정답지의 kms.tf
+copy ..\my-kms-lab\variables.tf .      # player_number 등 이미 만든 변수
 ```
 
-Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 이 모듈 tf 에 다시 포함시킨다 (root 위임 정책이면 충분).
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+이 모듈에서 새로 쓸 것만 남기는 준비다. `versions.tf`·`data.tf` 는 세트가 바뀌어도 같은 부트스트랩이고, `kms.tf`·`variables.tf` 는 모듈 02 에서 이미 쓴 결과물이다 — DynamoDB 가 쓸 CMK(`wskorea26-dynamodb-key`)가 그 안에 있다. 02 실습 폴더 이름이 다르면 그 자리에 본인 경로를 넣고, 폴더를 지웠으면 정답지 `set-02\task-1\terraform\kms.tf` 를 복사한다.
+
+</details>
+
+**이 모듈에서 직접 쓰는 파일**: `Dockerfile`, `ecr.tf`, `dynamodb.tf`, `lambda.tf`, `lambda\index.py`, 그리고 `outputs.tf`. 과제지가 바뀌면 이름·스펙이 함께 바뀌는 것들이다.
 
 ## 단계별 절차
 
@@ -76,12 +87,13 @@ Day 2 실습을 destroy 했다면 dynamodb 용 CMK(`wskorea26-dynamodb-key`)를 
    docker run --rm --entrypoint id book-test   # 기대: uid=10001(book) — 비루트 확인
    ```
 
-3. **tf 작성 — ECR + DynamoDB + KMS**
+3. **tf 작성 — ECR + DynamoDB (`ecr.tf`·`dynamodb.tf`)**
+
+   CMK 는 복사해 온 `kms.tf` 의 `wskorea26-dynamodb-key` 를 참조한다 — 다시 정의하지 않는다.
 
    | 리소스 | 스펙 (set-02 실측) |
    |---|---|
    | ECR | `wskorea26-book-repo`, scan_on_push, encryption_type KMS(키 미지정=aws/ecr), force_delete |
-   | CMK | `wskorea26-dynamodb-key` + alias |
    | 테이블 | `wskorea26-data-table`, PAY_PER_REQUEST, hash_key `client_id`(S), deletion_protection, attribute 3개(client_id/concert_name/created_at 전부 S), GSI `concert_name-created_at-index`(HASH concert_name + RANGE created_at, ALL), SSE-KMS(CMK), PITR |
 
 4. **push & 스캔 확인 (CloudShell)**

@@ -155,7 +155,9 @@ import { Steps } from '@astrojs/starlight/components';
 
    </details>
 
-   다음 내용을 `user-data.sh`로 저장한다 — 부팅 시 의존성 설치와 CA 번들 다운로드, systemd 유닛 등록까지 한다(앱 파일은 아직 없으므로 서비스는 등록만 하고 시작하지 않는다):
+   다음 내용을 `user-data.sh`로 저장한다 — 부팅 시 의존성 설치와 CA 번들 다운로드, systemd 유닛 등록까지 한다(앱 파일은 아직 없으므로 서비스는 등록만 하고 시작하지 않는다).
+
+   **이 스크립트는 통째로 재사용한다.** 의존성 설치·CA 번들·systemd 유닛은 과제가 바뀌어도 같은 모양이고([모듈 12](/part-4/12-vpc-lattice/lab/)의 user-data 도 이 뼈대다), 실제로 바뀌는 것은 `ExecStart` 의 스크립트 경로와 서비스 이름 두 줄뿐이다. 외워서 다시 쓰지 말고 이 블록을 복사해 그 두 줄만 고친다.
 
    ```bash title="user-data.sh"
    #!/bin/bash
@@ -273,7 +275,9 @@ import { Steps } from '@astrojs/starlight/components';
 
 9. **인덱스 생성**
 
-   `docdb_client.py`는 인덱스를 만들지 않는다. 같은 연결 패턴(URI·TLS·CA 번들)을 재사용하는 별도 스크립트를 하나 작성해서 실행한다. 로컬에서 다음을 `create_indexes.py`로 저장한다:
+   `docdb_client.py`는 인덱스를 만들지 않는다. 같은 연결 패턴(URI·TLS·CA 번들)을 재사용하는 별도 스크립트를 하나 실행한다. 로컬에서 다음을 `create_indexes.py`로 저장한다.
+
+   **접속 부분(첫 `db = ...` 줄까지)은 정형구다** — 시크릿 조회, `quote_plus` URI 조립, `replicaSet=rs0`·`retryWrites=false`, `tlsCAFile` 은 DocumentDB 라면 어느 과제에서나 같다. 이 블록을 복사해 두고, 과제지에 따라 바꾸는 것은 **아래 `create_index` 줄들과 시크릿·DB 이름**이다.
 
    ```python title="create_indexes.py"
    import json

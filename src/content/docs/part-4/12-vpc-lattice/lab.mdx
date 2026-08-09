@@ -43,7 +43,7 @@ import { Steps } from '@astrojs/starlight/components';
    aws sts get-caller-identity --query Account --output text
    ```
 
-   지급 파일 두 개를 그대로 로컬에 저장한다. 내용을 고치지 않는다 — 채점은 이 앱의 API 응답 형식을 그대로 기대한다.
+   지급 파일 두 개를 그대로 로컬에 저장한다. 내용을 고치지 않는다 — 채점은 이 앱의 API 응답 형식을 그대로 기대한다. 대회에서는 이 두 파일이 지급되므로 **읽기만 하고 타이핑하지 않는다.** 여기서는 지급 파일이 없어 아래 소스를 복사해 쓴다.
 
    ```python title="client_app.py"
    import json
@@ -305,6 +305,8 @@ import { Steps } from '@astrojs/starlight/components';
    ```
 
 8. **Client EC2 배포 (SERVICE_URL 주입)**
+
+   앞서 Service EC2 에 쓴 user-data 와 뼈대가 같다 — 그 블록을 복사해 **세 곳만** 고친다: 파일명(`client_app.py`), 유닛명(`skills-lattice-client`), 그리고 이 쪽에만 있는 `Environment=SERVICE_URL=...` 한 줄이다.
 
    ```powershell
    $clientAppSrc = Get-Content -Path client_app.py -Raw

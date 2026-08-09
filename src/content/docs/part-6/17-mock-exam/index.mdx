@@ -1,6 +1,6 @@
 ---
 title: 17. 모의 대회 — Mock Exam (일정 안에서 하루)
-description: 타이머 4시간·AI 금지의 대회 조건으로 set-02 1과제를 완주하고 봉인 변형 3건까지 처리하는 모듈 개요. 고정 일차 없음 — 2주 일정 안에서 하루를 잡는다.
+description: 타이머 4시간, 대회장과 같은 도구 구성으로 set-02 1과제를 완주하고 봉인 변형 3건까지 처리하는 모듈 개요. 고정 일차 없음 — 2주 일정 안에서 하루를 잡는다.
 sidebar:
   order: 1
 ---
@@ -9,13 +9,13 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: 개요
 
-타이머 4시간, **대회 조건 그대로**(자기 런북·저장소·AWS 공식 문서 허용, **AI·검색 금지**) set-02 1과제를 처음부터 끝까지 돈다. terraform → docker/ECR → eksctl → k8s/helm → 검증 시드 → mark.sh 셀프 채점 순이다.
+타이머 4시간, **대회 조건 그대로**(자기 런북·저장소·AWS 공식 문서·Amazon Q) set-02 1과제를 처음부터 끝까지 돈다. 평소 쓰던 학습용 AI와 검색엔진은 닫아 조건을 맞춘다. terraform → docker/ECR → eksctl → k8s/helm → 검증 시드 → mark.sh 셀프 채점 순이다.
 
 여기에 **문서에 없는 변형 3건**을 주입해 문서 밖 대응력까지 측정한다.
 
 ## 목표
 
-- [ ] 4시간 내 완주, mark.sh 자동 채점 90% 이상 (런북 기반, AI 없이)
+- [ ] 4시간 내 완주, mark.sh 자동 채점 90% 이상 (런북과 대회 도구만으로)
 - [ ] 봉인된 변형 3건(문서에 없는 신규 요구)을 콘솔·manifest·tf 혼합으로 해결
 - [ ] 착수 순서를 [timings](/reference/timings/)대로 몸이 기억함 (eksctl 20분 먼저 던지고 docker 병렬)
 - [ ] 채점 직전 리셋 체크리스트를 빠짐없이 수행
@@ -76,7 +76,7 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 
 ## 공식 문서
 
-시험 중 허용되는 것은 자기 문서와 **공식 문서뿐**이다(AI·검색 금지). 아래 5개를 미리 북마크하고, 시험 중에는 검색 대신 문서 구조로 찾는다.
+시험 중 여는 것은 자기 문서·**공식 문서**·Amazon Q다. 아래 5개를 미리 북마크하고, 시험 중에는 검색 대신 문서 구조로 찾는다 — Q의 출력을 대조할 곳도 결국 이 문서들이다.
 
 - [EKS 사용 설명서](https://docs.aws.amazon.com/eks/latest/userguide/) · [eksctl 스키마](https://eksctl.io/usage/schema/)
 - [Terraform AWS provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) · [Terraform 언어](https://developer.hashicorp.com/terraform/language)

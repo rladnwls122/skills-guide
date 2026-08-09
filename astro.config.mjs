@@ -14,6 +14,7 @@ import starlightCodeblockFullscreen from 'starlight-codeblock-fullscreen';
 import starlightLinksValidator from 'starlight-links-validator';
 import starlightThemeExquisitus from 'starlight-theme-exquisitus';
 import remarkGfm from 'remark-gfm';
+import rehypeExternalLinks from 'rehype-external-links';
 
 import mdx from '@astrojs/mdx';
 import { iconifyUrl } from './src/mermaid-icons.mjs';
@@ -74,9 +75,15 @@ export default defineConfig({
      내장 gfm 을 끄고 remark-gfm 을 singleTilde:false 로 직접 넣어 겹물결(~~)만
      취소선으로 남긴다 — 나머지 GFM 기능(표·작업 목록 등)은 그대로다. */
   site: 'https://skills-learn.zenru.net', 
+  /* 외부 링크는 새 탭으로 연다 — 공식 문서를 열어 값을 찾다가 읽던 자리를
+     잃지 않게 한다. 사이트 안 링크(`/part-1/...`)와 앵커는 대상이 아니다.
+     `rel` 은 새 탭이 원본 창을 조작하지 못하게 막는 표준 조합이다. */
   markdown: {
     gfm: false,
     remarkPlugins: [[remarkGfm, { singleTilde: false }]],
+    rehypePlugins: [
+      [rehypeExternalLinks, { target: '_blank', rel: ['noopener', 'noreferrer'] }],
+    ],
   },
   /* autoTheme 를 끈다 — 도식 색은 src/styles/mermaid-theme.css 가 CSS 변수로 낸다.
      켜두면 astro-mermaid 가 data-theme 를 지켜보다가 값이 바뀔 때마다 모든 도식의

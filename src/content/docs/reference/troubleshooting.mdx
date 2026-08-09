@@ -167,6 +167,42 @@ description: 수상 과제에서 실측한 증상별 원인 순위와 1순위 �
 - 확인: 오리진 계층 분리 — `describe-target-health` → 파드 `kubectl logs` 순
 - 조치: 타깃 복구가 먼저. 응답이 60초를 넘는 API가 있으면 ALB idle timeout 상향
 
+### Container Insights에 아무 데이터도 안 뜸
+
+- 원인 순위: ① 에이전트 역할에 CloudWatch 전송 권한 없음 ② 데몬셋이 일부 노드에 미배치 ③ 파드에 `requests` 미선언(사용률만 빔)
+- 확인:
+  ```powershell
+  kubectl -n amazon-cloudwatch get pods -o wide          # 노드 수만큼 있는지
+  kubectl -n amazon-cloudwatch logs daemonset/cloudwatch-agent --tail 50
+  kubectl -n amazon-cloudwatch describe sa cloudwatch-agent   # 실제 역할 ARN
+  ```
+- 조치: 해당 역할에 `CloudWatchAgentServerPolicy` 부착 → `kubectl -n amazon-cloudwatch rollout restart daemonset cloudwatch-agent`
+- 참고: 역할이 둘 이상이라 엉뚱한 역할을 보며 시간을 쓰기 쉽다. `describe sa` 로 **연결된 ARN을 먼저 특정**한다
+
+### `rollout restart`가 먹지 않음
+
+- 원인: 파드를 대상으로 지정했다 — 롤아웃은 데몬셋·디플로이먼트·스테이트풀셋 단위다
+- 조치: `kubectl -n <ns> rollout restart daemonset/<이름>` 처럼 컨트롤러를 지정. 파드를 새로 띄우려면 `kubectl delete pod` 다
+
+### CloudFront에서 이미지가 404
+
+- 원인 순위: ① 요청 경로와 S3 객체 키 불일치(`/images/` 접두어) ② Function을 게시하지 않음 ③ Function을 Behavior에 연결하지 않음
+- 확인: S3에서 키를 직접 조회해 실제 경로 확인 → `curl.exe -sI <cf도메인>/images/<키>`
+- 조치: Viewer Request Function에서 접두어를 제거하고 **게시(Publish) 후 해당 Behavior에 연결**. 작성만 하고 게시하지 않으면 반영되지 않는다
+
+### 파드가 Pending인데 Karpenter도 조용함
+
+- 원인 순위: ① 관리형 노드그룹만 있고 Karpenter NodePool 미적용 ② NodePool `limits.cpu` 도달 ③ Karpenter 설치 시 IAM 신뢰 관계·태그 불일치
+- 확인: `kubectl get nodepool,nodeclaim`, `kubectl -n kube-system logs deploy/karpenter --tail 50`
+- 조치: 노드그룹 desired 수를 임시 상향해 트래픽을 받고, 그 뒤 Karpenter 쪽을 고친다. 설치 자체가 어긋났으면 클러스터 재생성이 빠를 때가 있다
+- 참고: desired 상향은 임시방편이다 — 비용 축은 EC2 수의 시간 적분이므로 부하가 빠지면 되돌린다
+
+### RDS Proxy가 응답하지 않음
+
+- 원인 순위: ① 접속 지점이 VPC 밖(기본 CloudShell) ② Secrets Manager 연결·인증 방식 불일치 ③ 프록시 서브넷·SG 설정
+- 확인: `aws rds describe-db-proxies`, VPC 안(bastion·VPC CloudShell)에서 같은 명령 재시도
+- 조치: 프라이빗 서브넷 리소스는 VPC 안에서 접근한다. 인증은 프록시 클라이언트와 백엔드 유저를 `mysql_native_password` 로 맞춘다
+
 ## 파괴/복구 훈련 매핑
 
 - 모듈 16(break-fix)가 위 배포 계열 증상 12종을 고의로 재현한다 — 표가 손에 붙을 때까지.

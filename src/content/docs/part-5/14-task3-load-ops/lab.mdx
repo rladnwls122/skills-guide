@@ -93,6 +93,81 @@ kubectl get targetgroupbindings                     # 3개 모두 등록
 
 </details>
 
+## 관측 준비 (스모크 통과 직후, 트래픽 전)
+
+지표와 로그가 없으면 부하 중 조정은 추측이 된다. 배포 검증이 끝나면 트래픽 전에 수집기 두 갈래를 세운다.
+
+### Container Insights 활성화
+
+<Steps>
+
+1. **추가 기능을 설치한다**
+
+   ```powershell
+   # ── Windows PowerShell ──
+   aws eks create-addon --cluster-name <클러스터명> --addon-name amazon-cloudwatch-observability
+   kubectl -n amazon-cloudwatch get pods
+   ```
+
+   데몬셋 두 개(`cloudwatch-agent`, `fluent-bit`)가 노드 수만큼 Running이면 정상이다.
+
+2. **콘솔에서 데이터가 뜨는지 본다**
+
+   CloudWatch → Container Insights에서 클러스터·노드·파드 사용률을 연다. 파드 사용률이 비어 있으면 매니페스트의 `resources.requests` 부터 확인한다 — 사용률은 requests를 분모로 계산한다([이론](/part-5/14-task3-load-ops/theory/)의 requests 절).
+
+3. **비어 있으면 에이전트 로그를 먼저 읽는다**
+
+   ```powershell
+   kubectl -n amazon-cloudwatch logs daemonset/cloudwatch-agent --tail 50
+   ```
+
+   `AccessDenied` 가 보이면 수집은 되고 전송만 막힌 상태다. 에이전트가 쓰는 역할에 정책을 붙인다.
+
+   ```powershell
+   aws iam attach-role-policy --role-name <에이전트가 쓰는 역할> `
+     --policy-arn arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+   kubectl -n amazon-cloudwatch rollout restart daemonset cloudwatch-agent
+   ```
+
+</Steps>
+
+:::caution[역할을 잘못 짚는 실수]
+클러스터에는 노드 역할과 서비스 계정용 역할이 함께 있어 엉뚱한 역할의 정책을 보며 시간을 쓰기 쉽다. **에이전트 파드가 실제로 assume한 역할 ARN을 먼저 특정한다.**
+
+```powershell
+kubectl -n amazon-cloudwatch describe sa cloudwatch-agent   # annotation 의 role-arn
+```
+
+그리고 `rollout restart` 는 **데몬셋·디플로이먼트 단위**다. 파드를 지정하면 명령 자체가 성립하지 않는다.
+:::
+
+### WAF 로깅 활성화
+
+WAF는 로깅이 꺼진 채로 만들어진다. 켜 두지 않으면 부하 중 "정상 요청이 403"을 진단할 근거가 없다.
+
+```powershell
+# ── Windows PowerShell ──
+# 로그 그룹 이름은 반드시 aws-waf-logs- 로 시작. CLOUDFRONT 스코프는 us-east-1
+aws logs create-log-group --log-group-name aws-waf-logs-task3 --region us-east-1
+
+$acl = aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 `
+  --query 'WebACLs[0].ARN' --output text
+$lg  = aws logs describe-log-groups --log-group-name-prefix aws-waf-logs-task3 `
+  --region us-east-1 --query 'logGroups[0].arn' --output text
+
+aws wafv2 put-logging-configuration --region us-east-1 `
+  --logging-configuration "ResourceArn=$acl,LogDestinationConfigs=$lg"
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+WAF 평가 로그를 CloudWatch Logs 로 흘린다. 로그 그룹 이름의 `aws-waf-logs-` 접두어는 규칙이라 다른 이름이면 마지막 명령이 거부된다. Web ACL 과 로그 그룹을 각각 조회해 변수에 담은 뒤 둘을 연결하는 순서이고, CloudFront 에 붙은 ACL 이므로 세 명령 모두 us-east-1 이다.
+
+</details>
+
+**검증**: SQL 주입 모양의 요청을 한 번 던지고 `aws logs tail aws-waf-logs-task3 --region us-east-1 --since 2m` 에 그 요청이 잡히는지 본다. 로그가 비면 배달 권한을 확인한다.
+
 ## 사전 워밍 (트래픽 개시 5분 전)
 
 노드 프로비저닝 2~3분을 트래픽 개시 시점에서 앞으로 당긴다. 낮은 우선순위 placeholder 파드로 노드를 미리 띄우고, 트래픽이 오면 0으로 줄여 실제 파드에 자리를 내준다.
@@ -231,6 +306,26 @@ CloudWatch에서는 Container Insights(파드 CPU)와 RDS Proxy 지표(`Database
 2. **USE** — `kubectl top`(사용률), HPA 이용률과 Pending 파드·Proxy borrow latency(포화), Events와 타깃 상태(오류)로 원인 계층을 좁힌다.
 3. 좁혀진 계층에 해당하는 노브를 튜닝 노브 표에서 하나만 고른다.
 
+## 운영 대시보드 (선택 드릴)
+
+감시 루프를 터미널 세 창으로 도는 대신 한 화면으로 모으는 훈련이다. 채점 대상이 아니라 **조정 속도를 위한 도구**이므로, 부하 드릴을 두 번 이상 돌려 무엇을 보게 되는지 안 뒤에 만든다.
+
+담을 것은 부하 중 실제로 손이 가는 값들이다.
+
+| 묶음 | 패널 | 데이터 소스 |
+|---|---|---|
+| 트래픽 판정 | 2xx·4xx·5xx 개수, 응답시간 평균·최대 | ALB·타깃그룹 지표 |
+| 차단 실적 | 메서드·응답 코드·URI별 건수, 차단된 요청 | WAF 로그(Logs Insights) |
+| 자원 | 클러스터·노드·파드 CPU·메모리 사용률 | Container Insights |
+| 규모 | 레플리카 수, 노드 수 추이 | Container Insights·Karpenter 이벤트 |
+| 앱 로그 | 키워드·에러 필터 | CloudWatch Logs Insights |
+
+:::caution[남이 만든 대시보드를 그대로 쓰지 않는다]
+값이 어떤 쿼리로 계산되는지 모르면, 부하 중 숫자가 이상할 때 대시보드가 틀린 것인지 시스템이 틀린 것인지 가를 수 없다. 패널 하나를 추가할 때마다 **그 값이 어느 API·쿼리에서 나오는지** 한 줄로 적어 둔다.
+
+AI로 골격을 받는 것은 괜찮다 — 받은 뒤 쿼리를 직접 읽고 고치는 것이 조건이다([AI 기반 과제 풀이 훈련](/part-6/18-ai-assisted-drill/)).
+:::
+
 ## 튜닝 노브 표
 
 증상을 보면 **노브 하나만** 돌린다. 위 행부터 검토한다 — 아래로 갈수록 효과 대비 위험이 크다.
@@ -247,6 +342,10 @@ CloudWatch에서는 Container Insights(파드 CPU)와 RDS Proxy 지표(`Database
 | 정상 요청이 403 | WAF 콘솔(us-east-1) sampled requests | 문제 룰을 Count로 내리거나 `RuleActionOverrides` | `terraform/waf.tf` |
 | 비용 ratio 상단 초과 | 노드 수 추이 | HPA `maxReplicas`·NodePool `limits.cpu` 하향, `consolidateAfter` 단축 | `k8s/01-nodepool.yaml` |
 | 비용 ratio 하한 미달 | 노드 2대 미만 | `minReplicas` 상향 — 하한 아래는 0점 | 앱 매니페스트 HPA |
+| HPA 이용률이 `<unknown>` | `kubectl top pods` 응답 여부 | 파드에 `requests` 선언 (없으면 계산 불가) | 앱 매니페스트 `resources` |
+| Container Insights 사용률 패널이 빔 | 에이전트 로그의 `AccessDenied` | 에이전트 역할에 `CloudWatchAgentServerPolicy` 후 데몬셋 재시작 | IAM 역할 |
+| 캐시가 갱신 전 이미지를 계속 냄 | `x-cache` 헤더, 캐시 정책의 TTL | 무효화 후 short TTL 정책으로 교체 | `terraform/cloudfront.tf` |
+| 쿼리스트링이 다른데 같은 응답 | 캐시 정책의 캐시 키 구성 | 쿼리스트링을 캐시 키에 포함하거나 그 경로를 캐시 제외 | `terraform/cloudfront.tf` |
 
 무효화 명령:
 
@@ -309,6 +408,91 @@ aws cloudfront create-invalidation --distribution-id <id> --paths "/images/*"
 
 - 복구까지 걸린 시간
 - 그 사이 k6 실패율이 얼마나 올랐는지 (= 대회장에서 잃었을 availability)
+
+## 드릴 E — 환경 분리와 경로 라우팅 (추가 문항 대비)
+
+:::caution[정답지에 없는 패턴이다]
+`skills-2026/task-3` 는 앱 3종을 한 벌만 띄운다. 이 드릴의 스테이징·프로덕션 분리와 Ingress 경로 라우팅은 **2026-08 실습 강의**에서 다룬 구성이고, 협의회가 말한 "추가 문항"(추가 바이너리 배포 등)이 나왔을 때 쓸 형태다. 기본 드릴 A~D를 통과한 뒤에 한다.
+:::
+
+<Steps>
+
+1. **같은 앱을 두 환경으로 띄운다**
+
+   매니페스트를 복사해 네임스페이스와 이름만 바꾼다. 이미지·포트·헬스체크 경로는 그대로 둔다 — 바뀌는 것이 적을수록 두 환경의 차이가 원인 추적에 쓸모 있다.
+
+   ```powershell
+   # ── Windows PowerShell ──
+   kubectl create namespace staging
+   kubectl create namespace production
+   kubectl -n staging apply -f k8s/10-user.yaml
+   ```
+
+2. **프로덕션에만 붙는 것을 챙긴다**
+
+   두 환경의 차이는 셋이다 — 환경변수·시크릿 값, `ServiceAccount`, 그 서비스 계정에 붙는 IAM 권한(IRSA 또는 Pod Identity).
+
+   ```powershell
+   kubectl -n production create serviceaccount user
+   kubectl -n production annotate serviceaccount user `
+     eks.amazonaws.com/role-arn=arn:aws:iam::<계정ID>:role/<역할명>
+   # Deployment 의 spec.template.spec.serviceAccountName 에 user 를 넣고 재적용
+   ```
+
+   서비스 계정만 만들고 파드 스펙에 연결하지 않는 것이 흔한 누락이다. 파드는 뜨는데 AWS 호출만 `AccessDenied` 로 실패한다.
+
+3. **Ingress로 경로를 가른다**
+
+   ```yaml
+   # ingress.yaml — 경로 두 개 + 매칭 실패용 기본 백엔드
+   apiVersion: networking.k8s.io/v1
+   kind: Ingress
+   metadata:
+     name: app
+     annotations:
+       alb.ingress.kubernetes.io/scheme: internet-facing
+   spec:
+     ingressClassName: alb
+     defaultBackend:
+       service:
+         name: response
+         port: { number: 8080 }
+     rules:
+       - http:
+           paths:
+             - path: /staging
+               pathType: Prefix
+               backend:
+                 service:
+                   name: user-staging
+                   port: { number: 8080 }
+             - path: /production
+               pathType: Prefix
+               backend:
+                 service:
+                   name: user-production
+                   port: { number: 8080 }
+   ```
+
+   <details class="diagram-note">
+   <summary>이 블록이 하는 일</summary>
+
+   ALB 하나를 두 경로로 나눈다. `/staging` 과 `/production` 은 각각의 서비스로 가고, 둘 중 어디에도 걸리지 않는 요청은 `defaultBackend` 로 간다. 기본 백엔드가 없으면 매칭되지 않은 요청의 응답이 컨트롤러 기본값에 맡겨지므로, 어떤 코드가 나갈지 과제지가 요구한 값과 어긋날 수 있다.
+
+   </details>
+
+4. **없는 경로의 응답 코드를 확인한다**
+
+   ```powershell
+   curl.exe -s -o NUL -w "%{http_code}`n" "http://<ALB DNS>/none"     # 기대: 404
+   curl.exe -s -o NUL -w "%{http_code}`n" "http://<ALB DNS>/staging"  # 기대: 200
+   ```
+
+   기본 백엔드로 보낸 서비스가 실제로 그 코드를 내는지까지 본다 — 서비스가 없으면 404가 아니라 502·503이 나간다.
+
+</Steps>
+
+**판정**: 두 환경이 각 경로에서 응답하고, 정의되지 않은 경로가 과제지가 지정한 코드로 끝난다. 프로덕션 파드가 AWS API를 호출하는 동작(예: S3 업로드)이 권한 오류 없이 성공한다.
 
 ## 판정 기준
 

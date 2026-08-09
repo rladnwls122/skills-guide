@@ -42,6 +42,8 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 - [ ] 부하 전 구간에서 노드 2~9대 밴드 유지 (비용 ratio 0.5~3.75)
 - [ ] 부하 중 장애 10종 중 7개 이상을 확인 명령 → 조치 순서로 5분 내 복구
 - [ ] 노브 1개를 변경 → 재측정해 지표 변화를 원인과 결과로 설명한다
+- [ ] 트래픽 전에 Container Insights와 WAF 로깅을 켜고, 지표가 비면 권한부터 확인해 복구한다
+- [ ] `requests`가 스케줄링과 HPA 이용률 분모 둘에만 쓰인다는 것을 지표 변화로 설명한다
 
 ## 소요 / 일차
 
@@ -77,12 +79,12 @@ EKS + NAT GW + ALB + CloudFront + RDS Multi-AZ(db.t3.micro) + 노드 최대 9대
 
 <CardGrid>
   <Card title="theory" icon="open-book">
-    채점 4축의 구조, 스케일 리드타임, 데이터·엣지 병목, 비용 밴드 + 퀴즈.
+    채점 4축, requests·limits, 관측 계층, 스케일 리드타임, 데이터·엣지 병목, 비용 밴드 + 퀴즈.
 
     [읽기](/part-5/14-task3-load-ops/theory/)
   </Card>
   <Card title="lab" icon="rocket">
-    타임라인 드릴·k6 3단 프로파일·노브 조정 루프·부하 중 장애 대응.
+    타임라인 드릴·관측 준비·k6 3단 프로파일·노브 조정 루프·부하 중 장애 대응.
 
     [실습하기](/part-5/14-task3-load-ops/lab/)
   </Card>
@@ -99,4 +101,7 @@ EKS + NAT GW + ALB + CloudFront + RDS Multi-AZ(db.t3.micro) + 노드 최대 9대
 - [CloudFront 캐시 키 제어](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/controlling-the-cache-key.html) — 캐시 정책·TTL·무효화
 - [WAF 관리형 룰 그룹 목록](https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-list.html) — 룰별 포함 규칙과 오차단 위험
 - [CloudWatch Logs 구독 필터](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/SubscriptionFilters.html) — 협의회가 예시로 든 추가 문제(로그 적재 → Firehose → S3)의 연결 지점
+- [Container Insights on EKS](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-setup-EKS-addon.html) — 추가 기능 설치와 데몬셋 구성
+- [WAF 로깅](https://docs.aws.amazon.com/waf/latest/developerguide/logging.html) — 로그 그룹 이름 규칙과 대상별 차이
+- [Application Signals 지원 언어](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-Application-Signals.html) — 자동 계측 가능 범위
 - [k6 문서](https://grafana.com/docs/k6/latest/) — options·threshold·stage 문법

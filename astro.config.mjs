@@ -137,7 +137,13 @@ export default defineConfig({
       { tag: 'link', attrs: { rel: 'stylesheet', href: iconifyUrl('mdi', 'css', '&color=%238ab') } },
       { tag: 'script', content: splitViewRestore },
     ],
-    components: { SiteTitle: './src/components/SiteTitle.astro' },
+    /* 목차 오버라이드 둘은 starlight-quiz 의 것을 감싼 것이다 — 배지를 목차
+       패널에서만 감춘다(본문 제목에는 그대로 남는다). 파일 안 주석 참고. */
+    components: {
+      SiteTitle: './src/components/SiteTitle.astro',
+      TableOfContents: './src/components/TableOfContents.astro',
+      MobileTableOfContents: './src/components/MobileTableOfContents.astro',
+    },
     plugins: [
       starlightThemeExquisitus(),
       starlightQuiz(),

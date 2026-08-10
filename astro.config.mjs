@@ -127,6 +127,7 @@ export default defineConfig({
       './src/styles/sidebar-toggle.css',
       './src/styles/layout.css',
       './src/styles/scrollbar.css',
+      './src/styles/codeblock-fullscreen.css',
       './src/styles/landing.css',
     ],
     /* subgraph 라벨의 <span class='icon--logos--*'> 를 정의하는 CSS.

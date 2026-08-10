@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
@@ -38,10 +38,20 @@ import { Steps } from '@astrojs/starlight/components';
    VPC Lattice 는 **Service Network 와 VPC 를 연결한 시간**과 **Service 가 처리한 트래픽(GB)** 양쪽에 과금한다. EC2 두 대도 함께 돈다. 실습을 끝내면 [정리 (당일 필수)](#정리-당일-필수) 절차를 그날 안에 반드시 돌린다 — 만들어 두고 자면 하루치가 그대로 청구된다.
    :::
 
-   ```powershell
-   $env:AWS_DEFAULT_REGION = "ap-northeast-1"
-   aws sts get-caller-identity --query Account --output text
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $env:AWS_DEFAULT_REGION = "ap-northeast-1"
+     aws sts get-caller-identity --query Account --output text
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     export AWS_DEFAULT_REGION=ap-northeast-1
+     aws sts get-caller-identity --query Account --output text
+     ```
+     </TabItem>
+   </Tabs>
 
    지급 파일 두 개를 그대로 로컬에 저장한다. 내용을 고치지 않는다 — 채점은 이 앱의 API 응답 형식을 그대로 기대한다. 대회에서는 이 두 파일이 지급되므로 **읽기만 하고 타이핑하지 않는다.** 여기서는 지급 파일이 없어 아래 소스를 복사해 쓴다.
 
@@ -142,20 +152,40 @@ import { Steps } from '@astrojs/starlight/components';
 
    서브넷 CIDR·AZ는 채점 대상이 아니다 — VPC CIDR만 고정값이다.
 
-   ```powershell
-   $CLIENT_VPC_ID = aws ec2 create-vpc --cidr-block 10.61.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=skills-lattice-client-vpc}]' --query "Vpc.VpcId" --output text
-   $SERVICE_VPC_ID = aws ec2 create-vpc --cidr-block 10.62.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=skills-lattice-service-vpc}]' --query "Vpc.VpcId" --output text
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $CLIENT_VPC_ID = aws ec2 create-vpc --cidr-block 10.61.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=skills-lattice-client-vpc}]' --query "Vpc.VpcId" --output text
+     $SERVICE_VPC_ID = aws ec2 create-vpc --cidr-block 10.62.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=skills-lattice-service-vpc}]' --query "Vpc.VpcId" --output text
 
-   $CLIENT_SUBNET_ID = aws ec2 create-subnet --vpc-id $CLIENT_VPC_ID --cidr-block 10.61.1.0/24 --availability-zone ap-northeast-1a --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=skills-lattice-client-subnet}]' --query "Subnet.SubnetId" --output text
-   $SERVICE_SUBNET_ID = aws ec2 create-subnet --vpc-id $SERVICE_VPC_ID --cidr-block 10.62.1.0/24 --availability-zone ap-northeast-1a --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=skills-lattice-service-subnet}]' --query "Subnet.SubnetId" --output text
-   aws ec2 modify-subnet-attribute --subnet-id $CLIENT_SUBNET_ID --map-public-ip-on-launch
+     $CLIENT_SUBNET_ID = aws ec2 create-subnet --vpc-id $CLIENT_VPC_ID --cidr-block 10.61.1.0/24 --availability-zone ap-northeast-1a --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=skills-lattice-client-subnet}]' --query "Subnet.SubnetId" --output text
+     $SERVICE_SUBNET_ID = aws ec2 create-subnet --vpc-id $SERVICE_VPC_ID --cidr-block 10.62.1.0/24 --availability-zone ap-northeast-1a --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=skills-lattice-service-subnet}]' --query "Subnet.SubnetId" --output text
+     aws ec2 modify-subnet-attribute --subnet-id $CLIENT_SUBNET_ID --map-public-ip-on-launch
 
-   # Client VPC만 인터넷이 필요하다 — Service VPC는 IGW를 만들지 않는다 (NAT도 불필요)
-   $IGW_ID = aws ec2 create-internet-gateway --tag-specifications 'ResourceType=internet-gateway,Tags=[{Key=Name,Value=skills-lattice-igw}]' --query "InternetGateway.InternetGatewayId" --output text
-   aws ec2 attach-internet-gateway --vpc-id $CLIENT_VPC_ID --internet-gateway-id $IGW_ID
-   $CLIENT_RTB_ID = aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$CLIENT_VPC_ID" "Name=association.main,Values=true" --query "RouteTables[0].RouteTableId" --output text
-   aws ec2 create-route --route-table-id $CLIENT_RTB_ID --destination-cidr-block 0.0.0.0/0 --gateway-id $IGW_ID
-   ```
+     # Client VPC만 인터넷이 필요하다 — Service VPC는 IGW를 만들지 않는다 (NAT도 불필요)
+     $IGW_ID = aws ec2 create-internet-gateway --tag-specifications 'ResourceType=internet-gateway,Tags=[{Key=Name,Value=skills-lattice-igw}]' --query "InternetGateway.InternetGatewayId" --output text
+     aws ec2 attach-internet-gateway --vpc-id $CLIENT_VPC_ID --internet-gateway-id $IGW_ID
+     $CLIENT_RTB_ID = aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$CLIENT_VPC_ID" "Name=association.main,Values=true" --query "RouteTables[0].RouteTableId" --output text
+     aws ec2 create-route --route-table-id $CLIENT_RTB_ID --destination-cidr-block 0.0.0.0/0 --gateway-id $IGW_ID
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     CLIENT_VPC_ID=$(aws ec2 create-vpc --cidr-block 10.61.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=skills-lattice-client-vpc}]' --query 'Vpc.VpcId' --output text)
+     SERVICE_VPC_ID=$(aws ec2 create-vpc --cidr-block 10.62.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=skills-lattice-service-vpc}]' --query 'Vpc.VpcId' --output text)
+
+     CLIENT_SUBNET_ID=$(aws ec2 create-subnet --vpc-id "$CLIENT_VPC_ID" --cidr-block 10.61.1.0/24 --availability-zone ap-northeast-1a --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=skills-lattice-client-subnet}]' --query 'Subnet.SubnetId' --output text)
+     SERVICE_SUBNET_ID=$(aws ec2 create-subnet --vpc-id "$SERVICE_VPC_ID" --cidr-block 10.62.1.0/24 --availability-zone ap-northeast-1a --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=skills-lattice-service-subnet}]' --query 'Subnet.SubnetId' --output text)
+     aws ec2 modify-subnet-attribute --subnet-id "$CLIENT_SUBNET_ID" --map-public-ip-on-launch
+
+     # Client VPC만 인터넷이 필요하다 — Service VPC는 IGW를 만들지 않는다 (NAT도 불필요)
+     IGW_ID=$(aws ec2 create-internet-gateway --tag-specifications 'ResourceType=internet-gateway,Tags=[{Key=Name,Value=skills-lattice-igw}]' --query 'InternetGateway.InternetGatewayId' --output text)
+     aws ec2 attach-internet-gateway --vpc-id "$CLIENT_VPC_ID" --internet-gateway-id "$IGW_ID"
+     CLIENT_RTB_ID=$(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$CLIENT_VPC_ID" "Name=association.main,Values=true" --query 'RouteTables[0].RouteTableId' --output text)
+     aws ec2 create-route --route-table-id "$CLIENT_RTB_ID" --destination-cidr-block 0.0.0.0/0 --gateway-id "$IGW_ID"
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -166,28 +196,57 @@ import { Steps } from '@astrojs/starlight/components';
 
    검증:
 
-   ```powershell
-   aws ec2 describe-vpcs --filters "Name=tag:Name,Values=skills-lattice-client-vpc,skills-lattice-service-vpc" --query "Vpcs[].{Name:Tags[?Key=='Name'].Value|[0],Cidr:CidrBlock,State:State}" --output table
-   # 기대: 10.61.0.0/16 · 10.62.0.0/16 두 줄, 둘 다 available
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     aws ec2 describe-vpcs --filters "Name=tag:Name,Values=skills-lattice-client-vpc,skills-lattice-service-vpc" --query "Vpcs[].{Name:Tags[?Key=='Name'].Value|[0],Cidr:CidrBlock,State:State}" --output table
+     # 기대: 10.61.0.0/16 · 10.62.0.0/16 두 줄, 둘 다 available
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     aws ec2 describe-vpcs --filters "Name=tag:Name,Values=skills-lattice-client-vpc,skills-lattice-service-vpc" --query "Vpcs[].{Name:Tags[?Key=='Name'].Value|[0],Cidr:CidrBlock,State:State}" --output table
+     # 기대: 10.61.0.0/16 · 10.62.0.0/16 두 줄, 둘 다 available
+     ```
+     </TabItem>
+   </Tabs>
 
 3. **보안 그룹 3개**
 
    Client EC2용·Service EC2용·VPC Association용 — 이름은 채점 대상이 아니지만 이 실습에서는 다음 셋으로 고정한다.
 
-   ```powershell
-   $CLIENT_SG_ID = aws ec2 create-security-group --group-name skills-lattice-client-sg --description "client EC2 inbound 80" --vpc-id $CLIENT_VPC_ID --query "GroupId" --output text
-   aws ec2 authorize-security-group-ingress --group-id $CLIENT_SG_ID --protocol tcp --port 80 --cidr 0.0.0.0/0
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $CLIENT_SG_ID = aws ec2 create-security-group --group-name skills-lattice-client-sg --description "client EC2 inbound 80" --vpc-id $CLIENT_VPC_ID --query "GroupId" --output text
+     aws ec2 authorize-security-group-ingress --group-id $CLIENT_SG_ID --protocol tcp --port 80 --cidr 0.0.0.0/0
 
-   # 관리형 프리픽스 리스트 조회 — 하드코딩 금지, 계정·리전마다 pl-... 값이 다르다
-   $LATTICE_PL_ID = aws ec2 describe-managed-prefix-lists --filters "Name=prefix-list-name,Values=com.amazonaws.ap-northeast-1.vpc-lattice" --query "PrefixLists[0].PrefixListId" --output text
-   $SERVICE_SG_ID = aws ec2 create-security-group --group-name skills-lattice-service-sg --description "service EC2 inbound 8080 from vpc-lattice prefix list only" --vpc-id $SERVICE_VPC_ID --query "GroupId" --output text
-   # 프리픽스 리스트 소스는 단순 --cidr 옵션으로 못 넣는다 — --ip-permissions 구조 필수
-   aws ec2 authorize-security-group-ingress --group-id $SERVICE_SG_ID --ip-permissions "IpProtocol=tcp,FromPort=8080,ToPort=8080,PrefixListIds=[{PrefixListId=$LATTICE_PL_ID}]"
+     # 관리형 프리픽스 리스트 조회 — 하드코딩 금지, 계정·리전마다 pl-... 값이 다르다
+     $LATTICE_PL_ID = aws ec2 describe-managed-prefix-lists --filters "Name=prefix-list-name,Values=com.amazonaws.ap-northeast-1.vpc-lattice" --query "PrefixLists[0].PrefixListId" --output text
+     $SERVICE_SG_ID = aws ec2 create-security-group --group-name skills-lattice-service-sg --description "service EC2 inbound 8080 from vpc-lattice prefix list only" --vpc-id $SERVICE_VPC_ID --query "GroupId" --output text
+     # 프리픽스 리스트 소스는 단순 --cidr 옵션으로 못 넣는다 — --ip-permissions 구조 필수
+     aws ec2 authorize-security-group-ingress --group-id $SERVICE_SG_ID --ip-permissions "IpProtocol=tcp,FromPort=8080,ToPort=8080,PrefixListIds=[{PrefixListId=$LATTICE_PL_ID}]"
 
-   $ASSOC_SG_ID = aws ec2 create-security-group --group-name skills-lattice-assoc-sg --description "service network vpc association inbound 80 from client vpc" --vpc-id $CLIENT_VPC_ID --query "GroupId" --output text
-   aws ec2 authorize-security-group-ingress --group-id $ASSOC_SG_ID --protocol tcp --port 80 --cidr 10.61.0.0/16
-   ```
+     $ASSOC_SG_ID = aws ec2 create-security-group --group-name skills-lattice-assoc-sg --description "service network vpc association inbound 80 from client vpc" --vpc-id $CLIENT_VPC_ID --query "GroupId" --output text
+     aws ec2 authorize-security-group-ingress --group-id $ASSOC_SG_ID --protocol tcp --port 80 --cidr 10.61.0.0/16
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     CLIENT_SG_ID=$(aws ec2 create-security-group --group-name skills-lattice-client-sg --description "client EC2 inbound 80" --vpc-id "$CLIENT_VPC_ID" --query GroupId --output text)
+     aws ec2 authorize-security-group-ingress --group-id "$CLIENT_SG_ID" --protocol tcp --port 80 --cidr 0.0.0.0/0
+
+     # 관리형 프리픽스 리스트 조회 — 하드코딩 금지, 계정·리전마다 pl-... 값이 다르다
+     LATTICE_PL_ID=$(aws ec2 describe-managed-prefix-lists --filters "Name=prefix-list-name,Values=com.amazonaws.ap-northeast-1.vpc-lattice" --query 'PrefixLists[0].PrefixListId' --output text)
+     SERVICE_SG_ID=$(aws ec2 create-security-group --group-name skills-lattice-service-sg --description "service EC2 inbound 8080 from vpc-lattice prefix list only" --vpc-id "$SERVICE_VPC_ID" --query GroupId --output text)
+     # 프리픽스 리스트 소스는 단순 --cidr 옵션으로 못 넣는다 — --ip-permissions 구조 필수
+     aws ec2 authorize-security-group-ingress --group-id "$SERVICE_SG_ID" --ip-permissions "IpProtocol=tcp,FromPort=8080,ToPort=8080,PrefixListIds=[{PrefixListId=$LATTICE_PL_ID}]"
+
+     ASSOC_SG_ID=$(aws ec2 create-security-group --group-name skills-lattice-assoc-sg --description "service network vpc association inbound 80 from client vpc" --vpc-id "$CLIENT_VPC_ID" --query GroupId --output text)
+     aws ec2 authorize-security-group-ingress --group-id "$ASSOC_SG_ID" --protocol tcp --port 80 --cidr 10.61.0.0/16
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -200,36 +259,72 @@ import { Steps } from '@astrojs/starlight/components';
 
    Amazon Linux 2023은 `python3`이 기본 설치돼 있다 — 패키지 설치 없이 지급 앱을 그대로 systemd로 띄운다.
 
-   ```powershell
-   $AMI_ID = aws ssm get-parameters --names "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64" --query "Parameters[0].Value" --output text
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $AMI_ID = aws ssm get-parameters --names "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64" --query "Parameters[0].Value" --output text
 
-   $serviceAppSrc = Get-Content -Path service_app.py -Raw
-   $serviceUserData = @"
-   #!/bin/bash
-   mkdir -p /opt/app
-   cat > /opt/app/service_app.py <<'PYEOF'
-   $serviceAppSrc
-   PYEOF
-   cat > /etc/systemd/system/skills-lattice-service.service <<'UNITEOF'
-   [Unit]
-   Description=skills-lattice service app
-   After=network.target
+     $serviceAppSrc = Get-Content -Path service_app.py -Raw
+     $serviceUserData = @"
+     #!/bin/bash
+     mkdir -p /opt/app
+     cat > /opt/app/service_app.py <<'PYEOF'
+     $serviceAppSrc
+     PYEOF
+     cat > /etc/systemd/system/skills-lattice-service.service <<'UNITEOF'
+     [Unit]
+     Description=skills-lattice service app
+     After=network.target
 
-   [Service]
-   ExecStart=/usr/bin/python3 /opt/app/service_app.py
-   Restart=always
+     [Service]
+     ExecStart=/usr/bin/python3 /opt/app/service_app.py
+     Restart=always
 
-   [Install]
-   WantedBy=multi-user.target
-   UNITEOF
-   systemctl daemon-reload
-   systemctl enable --now skills-lattice-service.service
-   "@
-   $serviceUserData | Set-Content -Path service-userdata.sh
+     [Install]
+     WantedBy=multi-user.target
+     UNITEOF
+     systemctl daemon-reload
+     systemctl enable --now skills-lattice-service.service
+     "@
+     $serviceUserData | Set-Content -Path service-userdata.sh
 
-   $SERVICE_INSTANCE_ID = aws ec2 run-instances --image-id $AMI_ID --instance-type t3.micro --subnet-id $SERVICE_SUBNET_ID --security-group-ids $SERVICE_SG_ID --no-associate-public-ip-address --user-data file://service-userdata.sh --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=skills-lattice-service-ec2}]' --query "Instances[0].InstanceId" --output text
-   aws ec2 wait instance-running --instance-ids $SERVICE_INSTANCE_ID
-   ```
+     $SERVICE_INSTANCE_ID = aws ec2 run-instances --image-id $AMI_ID --instance-type t3.micro --subnet-id $SERVICE_SUBNET_ID --security-group-ids $SERVICE_SG_ID --no-associate-public-ip-address --user-data file://service-userdata.sh --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=skills-lattice-service-ec2}]' --query "Instances[0].InstanceId" --output text
+     aws ec2 wait instance-running --instance-ids $SERVICE_INSTANCE_ID
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     AMI_ID=$(aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 --query 'Parameters[0].Value' --output text)
+
+     {
+       echo '#!/bin/bash'
+       echo 'mkdir -p /opt/app'
+       echo "cat > /opt/app/service_app.py <<'PYEOF'"
+       cat service_app.py
+       echo 'PYEOF'
+       cat <<'TAILEOF'
+     cat > /etc/systemd/system/skills-lattice-service.service <<'UNITEOF'
+     [Unit]
+     Description=skills-lattice service app
+     After=network.target
+
+     [Service]
+     ExecStart=/usr/bin/python3 /opt/app/service_app.py
+     Restart=always
+
+     [Install]
+     WantedBy=multi-user.target
+     UNITEOF
+     systemctl daemon-reload
+     systemctl enable --now skills-lattice-service.service
+     TAILEOF
+     } > service-userdata.sh
+
+     SERVICE_INSTANCE_ID=$(aws ec2 run-instances --image-id "$AMI_ID" --instance-type t3.micro --subnet-id "$SERVICE_SUBNET_ID" --security-group-ids "$SERVICE_SG_ID" --no-associate-public-ip-address --user-data file://service-userdata.sh --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=skills-lattice-service-ec2}]' --query 'Instances[0].InstanceId' --output text)
+     aws ec2 wait instance-running --instance-ids "$SERVICE_INSTANCE_ID"
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -244,13 +339,26 @@ import { Steps } from '@astrojs/starlight/components';
 
    Service를 먼저 만들어야 `dnsEntry.domainName`이 생긴다 — 이 값이 8단계 Client EC2의 `SERVICE_URL`이다.
 
-   ```powershell
-   $SERVICE_NETWORK_ID = aws vpc-lattice create-service-network --name skills-lattice-sn --query "id" --output text
-   $SERVICE_ID = aws vpc-lattice create-service --name skills-lattice-order-service --query "id" --output text
-   $SERVICE_DNS = aws vpc-lattice get-service --service-identifier $SERVICE_ID --query "dnsEntry.domainName" --output text
-   "SERVICE_DNS=$SERVICE_DNS"
-   # 기대: 값이 비어 있지 않아야 한다 (None이면 아직 전파 전 — 잠시 후 재조회)
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $SERVICE_NETWORK_ID = aws vpc-lattice create-service-network --name skills-lattice-sn --query "id" --output text
+     $SERVICE_ID = aws vpc-lattice create-service --name skills-lattice-order-service --query "id" --output text
+     $SERVICE_DNS = aws vpc-lattice get-service --service-identifier $SERVICE_ID --query "dnsEntry.domainName" --output text
+     "SERVICE_DNS=$SERVICE_DNS"
+     # 기대: 값이 비어 있지 않아야 한다 (None이면 아직 전파 전 — 잠시 후 재조회)
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     SERVICE_NETWORK_ID=$(aws vpc-lattice create-service-network --name skills-lattice-sn --query id --output text)
+     SERVICE_ID=$(aws vpc-lattice create-service --name skills-lattice-order-service --query id --output text)
+     SERVICE_DNS=$(aws vpc-lattice get-service --service-identifier "$SERVICE_ID" --query 'dnsEntry.domainName' --output text)
+     echo "SERVICE_DNS=$SERVICE_DNS"
+     # 기대: 값이 비어 있지 않아야 한다 (None이면 아직 전파 전 — 잠시 후 재조회)
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -265,15 +373,32 @@ import { Steps } from '@astrojs/starlight/components';
    `--config`·`--default-action`은 중첩 JSON이라 CLI 버전마다 필드가 미세하게 늘어날 수 있다. 실행 전 `aws vpc-lattice create-target-group help`로 구조를 한 번 확인하는 습관을 들인다.
    :::
 
-   ```powershell
-   $tgConfig = '{"port":8080,"protocol":"HTTP","vpcIdentifier":"__SERVICE_VPC_ID__","healthCheck":{"enabled":true,"protocol":"HTTP","path":"/health"}}' -replace '__SERVICE_VPC_ID__', $SERVICE_VPC_ID
-   $TARGET_GROUP_ID = aws vpc-lattice create-target-group --name skills-lattice-order-tg --type INSTANCE --config $tgConfig --query "id" --output text
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $tgConfig = '{"port":8080,"protocol":"HTTP","vpcIdentifier":"__SERVICE_VPC_ID__","healthCheck":{"enabled":true,"protocol":"HTTP","path":"/health"}}' -replace '__SERVICE_VPC_ID__', $SERVICE_VPC_ID
+     $TARGET_GROUP_ID = aws vpc-lattice create-target-group --name skills-lattice-order-tg --type INSTANCE --config $tgConfig --query "id" --output text
 
-   aws vpc-lattice register-targets --target-group-identifier $TARGET_GROUP_ID --targets Id=$SERVICE_INSTANCE_ID,Port=8080
+     aws vpc-lattice register-targets --target-group-identifier $TARGET_GROUP_ID --targets Id=$SERVICE_INSTANCE_ID,Port=8080
 
-   $listenerAction = '{"forward":{"targetGroups":[{"targetGroupIdentifier":"__TG_ID__","weight":100}]}}' -replace '__TG_ID__', $TARGET_GROUP_ID
-   $LISTENER_ID = aws vpc-lattice create-listener --service-identifier $SERVICE_ID --name skills-lattice-http-listener --protocol HTTP --port 80 --default-action $listenerAction --query "id" --output text
-   ```
+     $listenerAction = '{"forward":{"targetGroups":[{"targetGroupIdentifier":"__TG_ID__","weight":100}]}}' -replace '__TG_ID__', $TARGET_GROUP_ID
+     $LISTENER_ID = aws vpc-lattice create-listener --service-identifier $SERVICE_ID --name skills-lattice-http-listener --protocol HTTP --port 80 --default-action $listenerAction --query "id" --output text
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     TG_CONFIG=$(jq -nc --arg vpc "$SERVICE_VPC_ID" \
+       '{port:8080, protocol:"HTTP", vpcIdentifier:$vpc, healthCheck:{enabled:true, protocol:"HTTP", path:"/health"}}')
+     TARGET_GROUP_ID=$(aws vpc-lattice create-target-group --name skills-lattice-order-tg --type INSTANCE --config "$TG_CONFIG" --query id --output text)
+
+     aws vpc-lattice register-targets --target-group-identifier "$TARGET_GROUP_ID" --targets "Id=$SERVICE_INSTANCE_ID,Port=8080"
+
+     LISTENER_ACTION=$(jq -nc --arg tg "$TARGET_GROUP_ID" \
+       '{forward:{targetGroups:[{targetGroupIdentifier:$tg, weight:100}]}}')
+     LISTENER_ID=$(aws vpc-lattice create-listener --service-identifier "$SERVICE_ID" --name skills-lattice-http-listener --protocol HTTP --port 80 --default-action "$LISTENER_ACTION" --query id --output text)
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -284,61 +409,129 @@ import { Steps } from '@astrojs/starlight/components';
 
    Target이 `HEALTHY`가 되기까지 헬스 체크 몇 차례가 필요하다 — 3단계에서 이미 `skills-lattice-service-sg`를 프리픽스 리스트로 열어뒀으므로 자동으로 진행된다.
 
-   ```powershell
-   aws vpc-lattice list-targets --target-group-identifier $TARGET_GROUP_ID --query "items[].[id,status]" --output table
-   # 처음엔 INITIAL — 1~2분 후 HEALTHY
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     aws vpc-lattice list-targets --target-group-identifier $TARGET_GROUP_ID --query "items[].[id,status]" --output table
+     # 처음엔 INITIAL — 1~2분 후 HEALTHY
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     aws vpc-lattice list-targets --target-group-identifier "$TARGET_GROUP_ID" --query 'items[].[id,status]' --output table
+     # 처음엔 INITIAL — 1~2분 후 HEALTHY
+     ```
+     </TabItem>
+   </Tabs>
 
 7. **Service Network Service Association + Client VPC Association**
 
-   ```powershell
-   aws vpc-lattice create-service-network-service-association --service-network-identifier $SERVICE_NETWORK_ID --service-identifier $SERVICE_ID
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     aws vpc-lattice create-service-network-service-association --service-network-identifier $SERVICE_NETWORK_ID --service-identifier $SERVICE_ID
 
-   $VPC_ASSOC_ID = aws vpc-lattice create-service-network-vpc-association --service-network-identifier $SERVICE_NETWORK_ID --vpc-identifier $CLIENT_VPC_ID --security-group-ids $ASSOC_SG_ID --query "id" --output text
-   ```
+     $VPC_ASSOC_ID = aws vpc-lattice create-service-network-vpc-association --service-network-identifier $SERVICE_NETWORK_ID --vpc-identifier $CLIENT_VPC_ID --security-group-ids $ASSOC_SG_ID --query "id" --output text
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     aws vpc-lattice create-service-network-service-association --service-network-identifier "$SERVICE_NETWORK_ID" --service-identifier "$SERVICE_ID"
+
+     VPC_ASSOC_ID=$(aws vpc-lattice create-service-network-vpc-association --service-network-identifier "$SERVICE_NETWORK_ID" --vpc-identifier "$CLIENT_VPC_ID" --security-group-ids "$ASSOC_SG_ID" --query id --output text)
+     ```
+     </TabItem>
+   </Tabs>
 
    Service VPC는 Association하지 않는다 — Target Group의 `vpcIdentifier`로만 연결된다([이론](/part-4/12-vpc-lattice/theory/) 참고). ACTIVE 전환까지 1~2분 걸린다.
 
-   ```powershell
-   aws vpc-lattice get-service-network-vpc-association --service-network-vpc-association-identifier $VPC_ASSOC_ID --query "{Status:status,SecurityGroupIds:securityGroupIds}" --output table
-   # 기대: status ACTIVE, SecurityGroupIds 에 $ASSOC_SG_ID 포함
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     aws vpc-lattice get-service-network-vpc-association --service-network-vpc-association-identifier $VPC_ASSOC_ID --query "{Status:status,SecurityGroupIds:securityGroupIds}" --output table
+     # 기대: status ACTIVE, SecurityGroupIds 에 $ASSOC_SG_ID 포함
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     aws vpc-lattice get-service-network-vpc-association --service-network-vpc-association-identifier "$VPC_ASSOC_ID" --query '{Status:status,SecurityGroupIds:securityGroupIds}' --output table
+     # 기대: status ACTIVE, SecurityGroupIds 에 $ASSOC_SG_ID 포함
+     ```
+     </TabItem>
+   </Tabs>
 
 8. **Client EC2 배포 (SERVICE_URL 주입)**
 
    앞서 Service EC2 에 쓴 user-data 와 뼈대가 같다 — 그 블록을 복사해 **세 곳만** 고친다: 파일명(`client_app.py`), 유닛명(`skills-lattice-client`), 그리고 이 쪽에만 있는 `Environment=SERVICE_URL=...` 한 줄이다.
 
-   ```powershell
-   $clientAppSrc = Get-Content -Path client_app.py -Raw
-   $clientUserData = @"
-   #!/bin/bash
-   mkdir -p /opt/app
-   cat > /opt/app/client_app.py <<'PYEOF'
-   $clientAppSrc
-   PYEOF
-   cat > /etc/systemd/system/skills-lattice-client.service <<'UNITEOF'
-   [Unit]
-   Description=skills-lattice client app
-   After=network.target
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $clientAppSrc = Get-Content -Path client_app.py -Raw
+     $clientUserData = @"
+     #!/bin/bash
+     mkdir -p /opt/app
+     cat > /opt/app/client_app.py <<'PYEOF'
+     $clientAppSrc
+     PYEOF
+     cat > /etc/systemd/system/skills-lattice-client.service <<'UNITEOF'
+     [Unit]
+     Description=skills-lattice client app
+     After=network.target
 
-   [Service]
-   Environment=SERVICE_URL=http://$SERVICE_DNS
-   ExecStart=/usr/bin/python3 /opt/app/client_app.py
-   Restart=always
+     [Service]
+     Environment=SERVICE_URL=http://$SERVICE_DNS
+     ExecStart=/usr/bin/python3 /opt/app/client_app.py
+     Restart=always
 
-   [Install]
-   WantedBy=multi-user.target
-   UNITEOF
-   systemctl daemon-reload
-   systemctl enable --now skills-lattice-client.service
-   "@
-   $clientUserData | Set-Content -Path client-userdata.sh
+     [Install]
+     WantedBy=multi-user.target
+     UNITEOF
+     systemctl daemon-reload
+     systemctl enable --now skills-lattice-client.service
+     "@
+     $clientUserData | Set-Content -Path client-userdata.sh
 
-   $CLIENT_INSTANCE_ID = aws ec2 run-instances --image-id $AMI_ID --instance-type t3.micro --subnet-id $CLIENT_SUBNET_ID --security-group-ids $CLIENT_SG_ID --associate-public-ip-address --user-data file://client-userdata.sh --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=skills-lattice-client-ec2}]' --query "Instances[0].InstanceId" --output text
-   aws ec2 wait instance-running --instance-ids $CLIENT_INSTANCE_ID
-   $CLIENT_PUBLIC_IP = aws ec2 describe-instances --instance-ids $CLIENT_INSTANCE_ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text
-   "CLIENT_PUBLIC_IP=$CLIENT_PUBLIC_IP"
-   ```
+     $CLIENT_INSTANCE_ID = aws ec2 run-instances --image-id $AMI_ID --instance-type t3.micro --subnet-id $CLIENT_SUBNET_ID --security-group-ids $CLIENT_SG_ID --associate-public-ip-address --user-data file://client-userdata.sh --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=skills-lattice-client-ec2}]' --query "Instances[0].InstanceId" --output text
+     aws ec2 wait instance-running --instance-ids $CLIENT_INSTANCE_ID
+     $CLIENT_PUBLIC_IP = aws ec2 describe-instances --instance-ids $CLIENT_INSTANCE_ID --query "Reservations[0].Instances[0].PublicIpAddress" --output text
+     "CLIENT_PUBLIC_IP=$CLIENT_PUBLIC_IP"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     {
+       echo '#!/bin/bash'
+       echo 'mkdir -p /opt/app'
+       echo "cat > /opt/app/client_app.py <<'PYEOF'"
+       cat client_app.py
+       echo 'PYEOF'
+       cat <<TAILEOF
+     cat > /etc/systemd/system/skills-lattice-client.service <<'UNITEOF'
+     [Unit]
+     Description=skills-lattice client app
+     After=network.target
+
+     [Service]
+     Environment=SERVICE_URL=http://$SERVICE_DNS
+     ExecStart=/usr/bin/python3 /opt/app/client_app.py
+     Restart=always
+
+     [Install]
+     WantedBy=multi-user.target
+     UNITEOF
+     systemctl daemon-reload
+     systemctl enable --now skills-lattice-client.service
+     TAILEOF
+     } > client-userdata.sh
+
+     CLIENT_INSTANCE_ID=$(aws ec2 run-instances --image-id "$AMI_ID" --instance-type t3.micro --subnet-id "$CLIENT_SUBNET_ID" --security-group-ids "$CLIENT_SG_ID" --associate-public-ip-address --user-data file://client-userdata.sh --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=skills-lattice-client-ec2}]' --query 'Instances[0].InstanceId' --output text)
+     aws ec2 wait instance-running --instance-ids "$CLIENT_INSTANCE_ID"
+     CLIENT_PUBLIC_IP=$(aws ec2 describe-instances --instance-ids "$CLIENT_INSTANCE_ID" --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+     echo "CLIENT_PUBLIC_IP=$CLIENT_PUBLIC_IP"
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -355,31 +548,62 @@ import { Steps } from '@astrojs/starlight/components';
 
    cloud-init이 끝나고 systemd가 뜨기까지 잠시 기다린다.
 
-   ```powershell
-   Start-Sleep 30
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Start-Sleep 30
 
-   # [2-2] Client EC2 헬스
-   curl.exe -s -w "`nhttp_code=%{http_code}`n" "http://$CLIENT_PUBLIC_IP/health"
-   # 기대: {"status": "ok", "app": "client"}  http_code=200
+     # [2-2] Client EC2 헬스
+     curl.exe -s -w "`nhttp_code=%{http_code}`n" "http://$CLIENT_PUBLIC_IP/health"
+     # 기대: {"status": "ok", "app": "client"}  http_code=200
 
-   # [2-3] Service Network / Service / VPC Association / Service Association 상태
-   aws vpc-lattice list-service-networks --query "items[?name=='skills-lattice-sn'].[name,id]" --output table
-   aws vpc-lattice list-services --query "items[?name=='skills-lattice-order-service'].[name,id,status]" --output table
-   aws vpc-lattice list-service-network-vpc-associations --service-network-identifier $SERVICE_NETWORK_ID --query "items[].[vpcId,status]" --output table
-   aws vpc-lattice list-service-network-service-associations --service-network-identifier $SERVICE_NETWORK_ID --query "items[].[serviceId,status]" --output table
-   # 기대: 전부 ACTIVE
+     # [2-3] Service Network / Service / VPC Association / Service Association 상태
+     aws vpc-lattice list-service-networks --query "items[?name=='skills-lattice-sn'].[name,id]" --output table
+     aws vpc-lattice list-services --query "items[?name=='skills-lattice-order-service'].[name,id,status]" --output table
+     aws vpc-lattice list-service-network-vpc-associations --service-network-identifier $SERVICE_NETWORK_ID --query "items[].[vpcId,status]" --output table
+     aws vpc-lattice list-service-network-service-associations --service-network-identifier $SERVICE_NETWORK_ID --query "items[].[serviceId,status]" --output table
+     # 기대: 전부 ACTIVE
 
-   # [2-4] Target Group / Target / Listener / Service EC2 SG 인바운드 원문
-   aws vpc-lattice list-target-groups --query "items[?name=='skills-lattice-order-tg'].[name,id,type,port,protocol]" --output table
-   aws vpc-lattice list-targets --target-group-identifier $TARGET_GROUP_ID --query "items[].[id,status]" --output table
-   aws vpc-lattice list-listeners --service-identifier $SERVICE_ID --query "items[?name=='skills-lattice-http-listener'].[name,port,protocol]" --output table
-   aws ec2 describe-security-groups --group-ids $SERVICE_SG_ID --query "SecurityGroups[].IpPermissions" --output json
-   # 기대: Target HEALTHY, Listener HTTP/80, IpPermissions 의 IpRanges 는 빈 배열([]) · PrefixListIds 에 pl-... 하나만
+     # [2-4] Target Group / Target / Listener / Service EC2 SG 인바운드 원문
+     aws vpc-lattice list-target-groups --query "items[?name=='skills-lattice-order-tg'].[name,id,type,port,protocol]" --output table
+     aws vpc-lattice list-targets --target-group-identifier $TARGET_GROUP_ID --query "items[].[id,status]" --output table
+     aws vpc-lattice list-listeners --service-identifier $SERVICE_ID --query "items[?name=='skills-lattice-http-listener'].[name,port,protocol]" --output table
+     aws ec2 describe-security-groups --group-ids $SERVICE_SG_ID --query "SecurityGroups[].IpPermissions" --output json
+     # 기대: Target HEALTHY, Listener HTTP/80, IpPermissions 의 IpRanges 는 빈 배열([]) · PrefixListIds 에 pl-... 하나만
 
-   # [2-5] End-to-End
-   curl.exe -s -w "`nhttp_code=%{http_code}`n" "http://$CLIENT_PUBLIC_IP/v1/client/orders?id=1001"
-   # 기대: {"client": "ok", "service": {"order_id": "1001", "via": "vpc-lattice"}}  http_code=200
-   ```
+     # [2-5] End-to-End
+     curl.exe -s -w "`nhttp_code=%{http_code}`n" "http://$CLIENT_PUBLIC_IP/v1/client/orders?id=1001"
+     # 기대: {"client": "ok", "service": {"order_id": "1001", "via": "vpc-lattice"}}  http_code=200
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     sleep 30
+
+     # [2-2] Client EC2 헬스
+     curl -s -w "\nhttp_code=%{http_code}\n" "http://$CLIENT_PUBLIC_IP/health"
+     # 기대: {"status": "ok", "app": "client"}  http_code=200
+
+     # [2-3] Service Network / Service / VPC Association / Service Association 상태
+     aws vpc-lattice list-service-networks --query "items[?name=='skills-lattice-sn'].[name,id]" --output table
+     aws vpc-lattice list-services --query "items[?name=='skills-lattice-order-service'].[name,id,status]" --output table
+     aws vpc-lattice list-service-network-vpc-associations --service-network-identifier "$SERVICE_NETWORK_ID" --query 'items[].[vpcId,status]' --output table
+     aws vpc-lattice list-service-network-service-associations --service-network-identifier "$SERVICE_NETWORK_ID" --query 'items[].[serviceId,status]' --output table
+     # 기대: 전부 ACTIVE
+
+     # [2-4] Target Group / Target / Listener / Service EC2 SG 인바운드 원문
+     aws vpc-lattice list-target-groups --query "items[?name=='skills-lattice-order-tg'].[name,id,type,port,protocol]" --output table
+     aws vpc-lattice list-targets --target-group-identifier "$TARGET_GROUP_ID" --query 'items[].[id,status]' --output table
+     aws vpc-lattice list-listeners --service-identifier "$SERVICE_ID" --query "items[?name=='skills-lattice-http-listener'].[name,port,protocol]" --output table
+     aws ec2 describe-security-groups --group-ids "$SERVICE_SG_ID" --query 'SecurityGroups[].IpPermissions' --output json
+     # 기대: Target HEALTHY, Listener HTTP/80, IpPermissions 의 IpRanges 는 빈 배열([]) · PrefixListIds 에 pl-... 하나만
+
+     # [2-5] End-to-End
+     curl -s -w "\nhttp_code=%{http_code}\n" "http://$CLIENT_PUBLIC_IP/v1/client/orders?id=1001"
+     # 기대: {"client": "ok", "service": {"order_id": "1001", "via": "vpc-lattice"}}  http_code=200
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -413,57 +637,114 @@ import { Steps } from '@astrojs/starlight/components';
 VPC Lattice는 **Service Network VPC Association 시간당 + Service 처리량(GB)** 과금이 겹친다. 실습 종료 즉시 이어지는 순서(의존 역순)로 정리한다. 셸을 새로 열었다면 변수는 이름으로 다시 조회한다.
 :::
 
-```powershell
-$env:AWS_DEFAULT_REGION = "ap-northeast-1"
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $env:AWS_DEFAULT_REGION = "ap-northeast-1"
 
-# 1) Lattice — Listener → Target → Target Group → Association → Service → Service Network
-$SERVICE_ID = aws vpc-lattice list-services --query "items[?name=='skills-lattice-order-service'].id | [0]" --output text
-$TARGET_GROUP_ID = aws vpc-lattice list-target-groups --query "items[?name=='skills-lattice-order-tg'].id | [0]" --output text
-$SERVICE_NETWORK_ID = aws vpc-lattice list-service-networks --query "items[?name=='skills-lattice-sn'].id | [0]" --output text
+  # 1) Lattice — Listener → Target → Target Group → Association → Service → Service Network
+  $SERVICE_ID = aws vpc-lattice list-services --query "items[?name=='skills-lattice-order-service'].id | [0]" --output text
+  $TARGET_GROUP_ID = aws vpc-lattice list-target-groups --query "items[?name=='skills-lattice-order-tg'].id | [0]" --output text
+  $SERVICE_NETWORK_ID = aws vpc-lattice list-service-networks --query "items[?name=='skills-lattice-sn'].id | [0]" --output text
 
-$LISTENER_ID = aws vpc-lattice list-listeners --service-identifier $SERVICE_ID --query "items[?name=='skills-lattice-http-listener'].id | [0]" --output text
-aws vpc-lattice delete-listener --service-identifier $SERVICE_ID --listener-identifier $LISTENER_ID
+  $LISTENER_ID = aws vpc-lattice list-listeners --service-identifier $SERVICE_ID --query "items[?name=='skills-lattice-http-listener'].id | [0]" --output text
+  aws vpc-lattice delete-listener --service-identifier $SERVICE_ID --listener-identifier $LISTENER_ID
 
-$SERVICE_INSTANCE_ID = aws ec2 describe-instances --filters "Name=tag:Name,Values=skills-lattice-service-ec2" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].InstanceId" --output text
-aws vpc-lattice deregister-targets --target-group-identifier $TARGET_GROUP_ID --targets Id=$SERVICE_INSTANCE_ID
-Start-Sleep 15
-aws vpc-lattice delete-target-group --target-group-identifier $TARGET_GROUP_ID
+  $SERVICE_INSTANCE_ID = aws ec2 describe-instances --filters "Name=tag:Name,Values=skills-lattice-service-ec2" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].InstanceId" --output text
+  aws vpc-lattice deregister-targets --target-group-identifier $TARGET_GROUP_ID --targets Id=$SERVICE_INSTANCE_ID
+  Start-Sleep 15
+  aws vpc-lattice delete-target-group --target-group-identifier $TARGET_GROUP_ID
 
-$SVC_ASSOC_ID = aws vpc-lattice list-service-network-service-associations --service-network-identifier $SERVICE_NETWORK_ID --query "items[0].id" --output text
-aws vpc-lattice delete-service-network-service-association --service-network-service-association-identifier $SVC_ASSOC_ID
-aws vpc-lattice delete-service --service-identifier $SERVICE_ID
+  $SVC_ASSOC_ID = aws vpc-lattice list-service-network-service-associations --service-network-identifier $SERVICE_NETWORK_ID --query "items[0].id" --output text
+  aws vpc-lattice delete-service-network-service-association --service-network-service-association-identifier $SVC_ASSOC_ID
+  aws vpc-lattice delete-service --service-identifier $SERVICE_ID
 
-$VPC_ASSOC_ID = aws vpc-lattice list-service-network-vpc-associations --service-network-identifier $SERVICE_NETWORK_ID --query "items[0].id" --output text
-aws vpc-lattice delete-service-network-vpc-association --service-network-vpc-association-identifier $VPC_ASSOC_ID
-Start-Sleep 30
-aws vpc-lattice delete-service-network --service-network-identifier $SERVICE_NETWORK_ID
+  $VPC_ASSOC_ID = aws vpc-lattice list-service-network-vpc-associations --service-network-identifier $SERVICE_NETWORK_ID --query "items[0].id" --output text
+  aws vpc-lattice delete-service-network-vpc-association --service-network-vpc-association-identifier $VPC_ASSOC_ID
+  Start-Sleep 30
+  aws vpc-lattice delete-service-network --service-network-identifier $SERVICE_NETWORK_ID
 
-# 2) EC2 종료
-$CLIENT_VPC_ID = aws ec2 describe-vpcs --filters "Name=tag:Name,Values=skills-lattice-client-vpc" --query "Vpcs[0].VpcId" --output text
-$SERVICE_VPC_ID = aws ec2 describe-vpcs --filters "Name=tag:Name,Values=skills-lattice-service-vpc" --query "Vpcs[0].VpcId" --output text
-$INSTANCE_IDS = (aws ec2 describe-instances --filters "Name=tag:Name,Values=skills-lattice-client-ec2,skills-lattice-service-ec2" "Name=instance-state-name,Values=running" --query "Reservations[].Instances[].InstanceId" --output text) -split '\s+'
-aws ec2 terminate-instances --instance-ids $INSTANCE_IDS
-aws ec2 wait instance-terminated --instance-ids $INSTANCE_IDS
+  # 2) EC2 종료
+  $CLIENT_VPC_ID = aws ec2 describe-vpcs --filters "Name=tag:Name,Values=skills-lattice-client-vpc" --query "Vpcs[0].VpcId" --output text
+  $SERVICE_VPC_ID = aws ec2 describe-vpcs --filters "Name=tag:Name,Values=skills-lattice-service-vpc" --query "Vpcs[0].VpcId" --output text
+  $INSTANCE_IDS = (aws ec2 describe-instances --filters "Name=tag:Name,Values=skills-lattice-client-ec2,skills-lattice-service-ec2" "Name=instance-state-name,Values=running" --query "Reservations[].Instances[].InstanceId" --output text) -split '\s+'
+  aws ec2 terminate-instances --instance-ids $INSTANCE_IDS
+  aws ec2 wait instance-terminated --instance-ids $INSTANCE_IDS
 
-# 3) 보안 그룹 (인스턴스 종료 후에만 삭제된다)
-foreach ($sg in "skills-lattice-client-sg","skills-lattice-service-sg","skills-lattice-assoc-sg") {
-  $sgId = aws ec2 describe-security-groups --filters "Name=group-name,Values=$sg" --query "SecurityGroups[0].GroupId" --output text
-  if ($sgId -and $sgId -ne "None") { aws ec2 delete-security-group --group-id $sgId }
-}
+  # 3) 보안 그룹 (인스턴스 종료 후에만 삭제된다)
+  foreach ($sg in "skills-lattice-client-sg","skills-lattice-service-sg","skills-lattice-assoc-sg") {
+    $sgId = aws ec2 describe-security-groups --filters "Name=group-name,Values=$sg" --query "SecurityGroups[0].GroupId" --output text
+    if ($sgId -and $sgId -ne "None") { aws ec2 delete-security-group --group-id $sgId }
+  }
 
-# 4) 서브넷 · IGW · VPC
-$CLIENT_SUBNET_ID = aws ec2 describe-subnets --filters "Name=vpc-id,Values=$CLIENT_VPC_ID" --query "Subnets[0].SubnetId" --output text
-$SERVICE_SUBNET_ID = aws ec2 describe-subnets --filters "Name=vpc-id,Values=$SERVICE_VPC_ID" --query "Subnets[0].SubnetId" --output text
-aws ec2 delete-subnet --subnet-id $CLIENT_SUBNET_ID
-aws ec2 delete-subnet --subnet-id $SERVICE_SUBNET_ID
+  # 4) 서브넷 · IGW · VPC
+  $CLIENT_SUBNET_ID = aws ec2 describe-subnets --filters "Name=vpc-id,Values=$CLIENT_VPC_ID" --query "Subnets[0].SubnetId" --output text
+  $SERVICE_SUBNET_ID = aws ec2 describe-subnets --filters "Name=vpc-id,Values=$SERVICE_VPC_ID" --query "Subnets[0].SubnetId" --output text
+  aws ec2 delete-subnet --subnet-id $CLIENT_SUBNET_ID
+  aws ec2 delete-subnet --subnet-id $SERVICE_SUBNET_ID
 
-$IGW_ID = aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$CLIENT_VPC_ID" --query "InternetGateways[0].InternetGatewayId" --output text
-aws ec2 detach-internet-gateway --internet-gateway-id $IGW_ID --vpc-id $CLIENT_VPC_ID
-aws ec2 delete-internet-gateway --internet-gateway-id $IGW_ID
+  $IGW_ID = aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$CLIENT_VPC_ID" --query "InternetGateways[0].InternetGatewayId" --output text
+  aws ec2 detach-internet-gateway --internet-gateway-id $IGW_ID --vpc-id $CLIENT_VPC_ID
+  aws ec2 delete-internet-gateway --internet-gateway-id $IGW_ID
 
-aws ec2 delete-vpc --vpc-id $CLIENT_VPC_ID
-aws ec2 delete-vpc --vpc-id $SERVICE_VPC_ID
-```
+  aws ec2 delete-vpc --vpc-id $CLIENT_VPC_ID
+  aws ec2 delete-vpc --vpc-id $SERVICE_VPC_ID
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  export AWS_DEFAULT_REGION=ap-northeast-1
+
+  # 1) Lattice — Listener → Target → Target Group → Association → Service → Service Network
+  SERVICE_ID=$(aws vpc-lattice list-services --query "items[?name=='skills-lattice-order-service'].id | [0]" --output text)
+  TARGET_GROUP_ID=$(aws vpc-lattice list-target-groups --query "items[?name=='skills-lattice-order-tg'].id | [0]" --output text)
+  SERVICE_NETWORK_ID=$(aws vpc-lattice list-service-networks --query "items[?name=='skills-lattice-sn'].id | [0]" --output text)
+
+  LISTENER_ID=$(aws vpc-lattice list-listeners --service-identifier "$SERVICE_ID" --query "items[?name=='skills-lattice-http-listener'].id | [0]" --output text)
+  aws vpc-lattice delete-listener --service-identifier "$SERVICE_ID" --listener-identifier "$LISTENER_ID"
+
+  SERVICE_INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=skills-lattice-service-ec2" "Name=instance-state-name,Values=running" --query 'Reservations[0].Instances[0].InstanceId' --output text)
+  aws vpc-lattice deregister-targets --target-group-identifier "$TARGET_GROUP_ID" --targets "Id=$SERVICE_INSTANCE_ID"
+  sleep 15
+  aws vpc-lattice delete-target-group --target-group-identifier "$TARGET_GROUP_ID"
+
+  SVC_ASSOC_ID=$(aws vpc-lattice list-service-network-service-associations --service-network-identifier "$SERVICE_NETWORK_ID" --query 'items[0].id' --output text)
+  aws vpc-lattice delete-service-network-service-association --service-network-service-association-identifier "$SVC_ASSOC_ID"
+  aws vpc-lattice delete-service --service-identifier "$SERVICE_ID"
+
+  VPC_ASSOC_ID=$(aws vpc-lattice list-service-network-vpc-associations --service-network-identifier "$SERVICE_NETWORK_ID" --query 'items[0].id' --output text)
+  aws vpc-lattice delete-service-network-vpc-association --service-network-vpc-association-identifier "$VPC_ASSOC_ID"
+  sleep 30
+  aws vpc-lattice delete-service-network --service-network-identifier "$SERVICE_NETWORK_ID"
+
+  # 2) EC2 종료
+  CLIENT_VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=skills-lattice-client-vpc" --query 'Vpcs[0].VpcId' --output text)
+  SERVICE_VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=skills-lattice-service-vpc" --query 'Vpcs[0].VpcId' --output text)
+  read -r -a INSTANCE_IDS <<< "$(aws ec2 describe-instances --filters "Name=tag:Name,Values=skills-lattice-client-ec2,skills-lattice-service-ec2" "Name=instance-state-name,Values=running" --query 'Reservations[].Instances[].InstanceId' --output text)"
+  aws ec2 terminate-instances --instance-ids "${INSTANCE_IDS[@]}"
+  aws ec2 wait instance-terminated --instance-ids "${INSTANCE_IDS[@]}"
+
+  # 3) 보안 그룹 (인스턴스 종료 후에만 삭제된다)
+  for sg in skills-lattice-client-sg skills-lattice-service-sg skills-lattice-assoc-sg; do
+    sgId=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=$sg" --query 'SecurityGroups[0].GroupId' --output text)
+    if [ -n "$sgId" ] && [ "$sgId" != "None" ]; then aws ec2 delete-security-group --group-id "$sgId"; fi
+  done
+
+  # 4) 서브넷 · IGW · VPC
+  CLIENT_SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$CLIENT_VPC_ID" --query 'Subnets[0].SubnetId' --output text)
+  SERVICE_SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$SERVICE_VPC_ID" --query 'Subnets[0].SubnetId' --output text)
+  aws ec2 delete-subnet --subnet-id "$CLIENT_SUBNET_ID"
+  aws ec2 delete-subnet --subnet-id "$SERVICE_SUBNET_ID"
+
+  IGW_ID=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$CLIENT_VPC_ID" --query 'InternetGateways[0].InternetGatewayId' --output text)
+  aws ec2 detach-internet-gateway --internet-gateway-id "$IGW_ID" --vpc-id "$CLIENT_VPC_ID"
+  aws ec2 delete-internet-gateway --internet-gateway-id "$IGW_ID"
+
+  aws ec2 delete-vpc --vpc-id "$CLIENT_VPC_ID"
+  aws ec2 delete-vpc --vpc-id "$SERVICE_VPC_ID"
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>

@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
@@ -38,11 +38,24 @@ import { Steps } from '@astrojs/starlight/components';
 
 명령 안에서는 두 가지로 쓴다. `cd` 는 PowerShell 이 직접 처리하므로 `cd ~\skills-2026\...` 가 그대로 통하고, `git`·`scp` 처럼 외부 프로그램에 경로를 **인자로** 넘길 때는 `$HOME\skills-2026\...` 을 쓴다. 외부 프로그램은 `~` 를 홈으로 풀어 주지 않는다. 클론 위치를 다르게 잡았다면 그 자리에 본인 경로를 넣는다.
 
-```powershell
-terraform version    # >= 1.6
-aws sts get-caller-identity   # 자격증명 확인
-mkdir my-vpc-lab; cd my-vpc-lab
-```
+리눅스·CloudShell 에서는 `~` 를 셸이 인자 자리에서도 풀어 주므로 `~/skills-2026/...` 이 어디서나 통한다. 아래 코드 블록은 전부 두 셸 탭으로 되어 있고, 한 번 고른 탭은 사이트 전체에서 유지된다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  terraform version    # >= 1.6
+  aws sts get-caller-identity   # 자격증명 확인
+  mkdir my-vpc-lab; cd my-vpc-lab
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform version    # >= 1.6
+  aws sts get-caller-identity   # 자격증명 확인
+  mkdir my-vpc-lab && cd my-vpc-lab
+  ```
+  </TabItem>
+</Tabs>
 
 `get-caller-identity` 의 기대 출력은 필드 세 개다.
 
@@ -64,11 +77,20 @@ mkdir my-vpc-lab; cd my-vpc-lab
 
    `versions.tf`(provider 고정)와 `data.tf`(계정·AZ 조회)는 세트가 바뀌어도 내용이 거의 같다. 대회 당일에도 이 두 파일을 새로 쓰지 않으므로, 실습에서도 복사해 쓰고 시간을 바뀌는 쪽에 쓴다.
 
-   ```powershell
-   # ── Windows PowerShell ──
-   copy $HOME\skills-2026\set-02\task-1\terraform\versions.tf .
-   copy $HOME\skills-2026\set-02\task-1\terraform\data.tf .
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     copy $HOME\skills-2026\set-02\task-1\terraform\versions.tf .
+     copy $HOME\skills-2026\set-02\task-1\terraform\data.tf .
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     cp ~/skills-2026/set-02/task-1/terraform/versions.tf .
+     cp ~/skills-2026/set-02/task-1/terraform/data.tf .
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -81,7 +103,7 @@ mkdir my-vpc-lab; cd my-vpc-lab
    복사한 뒤 `versions.tf` 를 열어 `required_providers` 의 provider 이름과 버전 범위가 어디에 적히는지 한 번 확인한다. 대회에서 provider 버전이 지정되면 고칠 자리가 그 한 줄이다.
    :::
 
-2. **바뀌는 파일만 스펙 보고 직접 작성 (정답지 금지)**
+2. **바뀌는 파일만 스펙 보고 직접 작성 (정답지 최대한 보지않기, Amazon Q 사용 가능)**
 
    작성할 파일: `variables.tf`, `terraform.tfvars`, `vpc.tf`, `outputs.tf`
 
@@ -101,18 +123,31 @@ mkdir my-vpc-lab; cd my-vpc-lab
 
    - 서브넷은 `map(object({cidr, az, tier}))` 변수 + `for_each` 로 생성 (복붙 4개 금지)
    - public 서브넷만 `map_public_ip_on_launch = true`
-   - `player_number`, `region`, `vpc_cidr` 는 변수 + tfvars 주입
+   - **변수화 대상 (tfvars 주입)**: `player_number`(비번호), `region`(리전), `prefix`(이름 접두사), `vpc_cidr`(VPC 대역)은 하드코딩하지 않고 변수로 빼서 주입한다.
    - output: `vpc_id`, `public_subnet_ids`(map), `private_subnet_ids`(map), `account_id`
 
 3. **문법 검증 → apply**
 
-   ```powershell
-   terraform init
-   terraform fmt -check -diff
-   terraform validate
-   terraform plan     # 리소스 수 확인: VPC1+IGW1+서브넷4+EIP2+NAT2+RTB3+route3+assoc4 = 20개
-   terraform apply
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     terraform init
+     terraform fmt -check -diff
+     terraform validate
+     terraform plan     # 리소스 수 확인: VPC1+IGW1+서브넷4+EIP2+NAT2+RTB3+route3+assoc4 = 20개
+     terraform apply
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     terraform init
+     terraform fmt -check -diff
+     terraform validate
+     terraform plan     # 리소스 수 확인: VPC1+IGW1+서브넷4+EIP2+NAT2+RTB3+route3+assoc4 = 20개
+     terraform apply
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -126,30 +161,48 @@ mkdir my-vpc-lab; cd my-vpc-lab
    **apply 가 실패하면** 세 갈래부터 본다. 뒤 모듈의 apply 실패도 같은 순서로 좁힌다.
 
    - **자격증명** — `NoCredentialProviders`·`ExpiredToken` 은 코드 문제가 아니다. `aws sts get-caller-identity` 로 확인하고 [awscli-basics](/start/awscli-basics/) 대로 다시 설정한다.
-   - **리전 불일치** — 리소스가 엉뚱한 리전에 생겼다면 `region` 변수와 셸의 `AWS_DEFAULT_REGION` 이 다른 것이다. `$env:AWS_DEFAULT_REGION = "ap-northeast-2"` 로 맞추고 다시 apply 한다.
+   - **리전 불일치** — 리소스가 엉뚱한 리전에 생겼다면 `region` 변수와 셸의 `AWS_DEFAULT_REGION` 이 다른 것이다. PowerShell 은 `$env:AWS_DEFAULT_REGION = "ap-northeast-2"`, bash 는 `export AWS_DEFAULT_REGION=ap-northeast-2` 로 맞추고 다시 apply 한다.
    - **부분 생성 후 중단** — 절반만 만들고 멈춰도 지우지 않는다. Terraform 은 state 에 기록된 리소스를 건너뛰므로 `terraform apply` 를 그대로 다시 실행하면 나머지만 만든다.
 
    증상별 확인 명령은 [트러블슈팅](/reference/troubleshooting/)에 있다.
 
 4. **검증 — mark.sh가 보는 방식으로**
 
-   ```powershell
-   $env:VPC_ID = terraform output -raw vpc_id
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $env:VPC_ID = terraform output -raw vpc_id
 
-   # (1) CIDR — mark 1-1 상당
-   aws ec2 describe-vpcs --vpc-ids $env:VPC_ID --query 'Vpcs[0].CidrBlock'
-   # 기대: "172.16.0.0/16"
+     # (1) CIDR — mark 1-1 상당
+     aws ec2 describe-vpcs --vpc-ids $env:VPC_ID --query 'Vpcs[0].CidrBlock'
+     # 기대: "172.16.0.0/16"
 
-   # (2) RTB↔서브넷 매핑 — mark 1-2 상당
-   aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$env:VPC_ID" `
-     --query 'RouteTables[].{Name:Tags[?Key==`Name`]|[0].Value, Subnets:Associations[].SubnetId, Routes:Routes[?DestinationCidrBlock==`0.0.0.0/0`].[GatewayId,NatGatewayId]}' `
-     --output json
-   ```
+     # (2) RTB↔서브넷 매핑 — mark 1-2 상당
+     aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$env:VPC_ID" `
+       --query 'RouteTables[].{Name:Tags[?Key==`Name`]|[0].Value, Subnets:Associations[].SubnetId, Routes:Routes[?DestinationCidrBlock==`0.0.0.0/0`].[GatewayId,NatGatewayId]}' `
+       --output json
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     export VPC_ID=$(terraform output -raw vpc_id)
+
+     # (1) CIDR — mark 1-1 상당
+     aws ec2 describe-vpcs --vpc-ids "$VPC_ID" --query 'Vpcs[0].CidrBlock'
+     # 기대: "172.16.0.0/16"
+
+     # (2) RTB↔서브넷 매핑 — mark 1-2 상당
+     aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$VPC_ID" \
+       --query 'RouteTables[].{Name:Tags[?Key==`Name`]|[0].Value, Subnets:Associations[].SubnetId, Routes:Routes[?DestinationCidrBlock==`0.0.0.0/0`].[GatewayId,NatGatewayId]}' \
+       --output json
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
 
-   채점이 보는 두 항목을 같은 방식으로 확인한다. (1)은 VPC CIDR 이 `172.16.0.0/16` 인지, (2)는 각 RTB 의 이름·연결된 서브넷·기본 경로 대상을 한 번에 뽑는다. `--query` 안의 역따옴표는 JMESPath 의 리터럴 표기이고, PowerShell 에서는 백틱이 줄 이음 문자라 두 문법이 한 줄에 섞인다.
+   채점이 보는 두 항목을 같은 방식으로 확인한다. (1)은 VPC CIDR 이 `172.16.0.0/16` 인지, (2)는 각 RTB 의 이름·연결된 서브넷·기본 경로 대상을 한 번에 뽑는다. `--query` 안의 역따옴표는 JMESPath 의 리터럴 표기다. 줄 이음 문자는 셸마다 다르다 — PowerShell 은 백틱, bash 는 역슬래시다. `--query` 는 작은따옴표로 감싸므로 bash 에서도 안쪽 역따옴표가 명령 치환으로 풀리지 않는다.
 
    </details>
 
@@ -160,29 +213,56 @@ mkdir my-vpc-lab; cd my-vpc-lab
    - `wskorea26-private-rtb-d`: Subnets 1개(priv-d), 기본 라우트 `NatGatewayId = nat-...`
    - Name 없는 기본 RTB 하나가 더 보이는 것은 정상 (VPC 기본 RTB, 연결 없음)
 
-   ```powershell
-   # (3) NAT 가 "public" 서브넷에 있는지
-   aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$env:VPC_ID" `
-     --query 'NatGateways[].{Name:Tags[?Key==`Name`]|[0].Value, Subnet:SubnetId}'
-   # 기대: book-ngw-c → pub-subnet-c 의 ID, book-ngw-d → pub-subnet-d 의 ID
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     # (3) NAT 가 "public" 서브넷에 있는지
+     aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$env:VPC_ID" `
+       --query 'NatGateways[].{Name:Tags[?Key==`Name`]|[0].Value, Subnet:SubnetId}'
+     # 기대: book-ngw-c → pub-subnet-c 의 ID, book-ngw-d → pub-subnet-d 의 ID
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     # (3) NAT 가 "public" 서브넷에 있는지
+     aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$VPC_ID" \
+       --query 'NatGateways[].{Name:Tags[?Key==`Name`]|[0].Value, Subnet:SubnetId}'
+     # 기대: book-ngw-c → pub-subnet-c 의 ID, book-ngw-d → pub-subnet-d 의 ID
+     ```
+     </TabItem>
+   </Tabs>
 
 5. **output 영속화**
 
-   ```powershell
-   terraform output -json | Set-Content ..\outputs.json
-   @"
-   `$env:VPC_ID = "$(terraform output -raw vpc_id)"
-   `$env:PRIV_SUBNET_C = "$((terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-c')"
-   `$env:PRIV_SUBNET_D = "$((terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-d')"
-   "@ | Set-Content ..\.env.ps1
-   . ..\.env.ps1   # 새 터미널에서도 이 한 줄로 복원
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     terraform output -json | Set-Content ..\outputs.json
+     @"
+     `$env:VPC_ID = "$(terraform output -raw vpc_id)"
+     `$env:PRIV_SUBNET_C = "$((terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-c')"
+     `$env:PRIV_SUBNET_D = "$((terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-d')"
+     "@ | Set-Content ..\.env.ps1
+     . ..\.env.ps1   # 새 터미널에서도 이 한 줄로 복원
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     terraform output -json > ../outputs.json
+     cat > ../.env.sh <<EOF
+     export VPC_ID="$(terraform output -raw vpc_id)"
+     export PRIV_SUBNET_C="$(jq -r '.private_subnet_ids.value["wskorea26-priv-subnet-c"]' ../outputs.json)"
+     export PRIV_SUBNET_D="$(jq -r '.private_subnet_ids.value["wskorea26-priv-subnet-d"]' ../outputs.json)"
+     EOF
+     source ../.env.sh   # 새 터미널에서도 이 한 줄로 복원
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
 
-   출력값을 파일 두 개로 남긴다. `outputs.json` 은 원본 보관용이고, `.env.ps1` 은 다음 터미널에서 바로 불러 쓰는 환경 변수 스크립트다. here-string 안의 백틱 `` `$ `` 이 핵심이다 — 지금 확장하지 말고 `$env:VPC_ID` 라는 글자 그대로 파일에 쓰라는 표시다.
+   출력값을 파일 두 개로 남긴다. `outputs.json` 은 원본 보관용이고, `.env.ps1`(bash 는 `.env.sh`)은 다음 터미널에서 바로 불러 쓰는 환경 변수 스크립트다. 두 셸 모두 "값은 지금 확장하고, 변수 이름은 글자 그대로 파일에 남긴다"가 요령이다. PowerShell 은 here-string 안의 백틱 `` `$ `` 이 그 표시이고, bash 는 heredoc 이 `$(...)` 만 지금 실행하고 `export VPC_ID=` 부분은 글자로 남긴다. bash 쪽 map 출력은 `ConvertFrom-Json` 대신 `jq` 로 키를 지목한다.
 
    </details>
 
@@ -190,10 +270,20 @@ mkdir my-vpc-lab; cd my-vpc-lab
 
 6. **정답과 diff**
 
-   ```powershell
-   git diff --no-index .\vpc.tf $HOME\skills-2026\set-02\task-1\terraform\vpc.tf
-   git diff --no-index .\variables.tf $HOME\skills-2026\set-02\task-1\terraform\variables.tf
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     git diff --no-index .\vpc.tf $HOME\skills-2026\set-02\task-1\terraform\vpc.tf
+     git diff --no-index .\variables.tf $HOME\skills-2026\set-02\task-1\terraform\variables.tf
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     git diff --no-index ./vpc.tf ~/skills-2026/set-02/task-1/terraform/vpc.tf
+     git diff --no-index ./variables.tf ~/skills-2026/set-02/task-1/terraform/variables.tf
+     ```
+     </TabItem>
+   </Tabs>
 
    diff 에서 확인할 관점 (기능이 같아도 설계 차이를 본다):
 
@@ -222,16 +312,28 @@ mkdir my-vpc-lab; cd my-vpc-lab
 - [ ] RTB 3개 이름 정확 일치, 서브넷 연결 4건 정확, 기본 라우트가 각각 GatewayId/NatGatewayId (mark 1-2)
 - [ ] NAT 2개가 각각 같은 AZ public 서브넷에 배치, 이름 book-ngw-c/d
 - [ ] `terraform fmt -check` 통과, `validate` 통과, 재 `plan` 시 `No changes`
-- [ ] `.env.ps1` 재실행만으로 새 터미널에서 변수 복원
+- [ ] `.env.ps1`(bash 는 `.env.sh`) 재실행만으로 새 터미널에서 변수 복원
 
 ## 정리 (destroy)
 
-```powershell
-terraform destroy   # NAT 시간당 과금 — 실습 종료 즉시, 당일 필수
-aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$env:VPC_ID" `
-  --query 'NatGateways[].State'   # deleted 확인
-aws ec2 describe-addresses --query 'Addresses[].PublicIp'   # 남은 EIP 없어야 함 (있으면 시간당 과금)
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  terraform destroy   # NAT 시간당 과금 — 실습 종료 즉시, 당일 필수
+  aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$env:VPC_ID" `
+    --query 'NatGateways[].State'   # deleted 확인
+  aws ec2 describe-addresses --query 'Addresses[].PublicIp'   # 남은 EIP 없어야 함 (있으면 시간당 과금)
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform destroy   # NAT 시간당 과금 — 실습 종료 즉시, 당일 필수
+  aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$VPC_ID" \
+    --query 'NatGateways[].State'   # deleted 확인
+  aws ec2 describe-addresses --query 'Addresses[].PublicIp'   # 남은 EIP 없어야 함 (있으면 시간당 과금)
+  ```
+  </TabItem>
+</Tabs>
 
 VPC 모듈은 의존 리소스가 없으므로 destroy 순서 고민 없이 한 번에 끝난다.
 

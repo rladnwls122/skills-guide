@@ -5,6 +5,8 @@ sidebar:
   order: 3
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 > 문서 유형: tutorial
 
 원리와 채점 관점은 [07 이론 — set-02 전체 아키텍처와 CloudFront](/part-2/07-full-deploy-set02/theory/)에 있다.
@@ -32,13 +34,26 @@ sidebar:
 
 ## ① Terraform + 변수 영속화
 
-```powershell
-$env:AWS_DEFAULT_REGION = "ap-northeast-2"
-$env:NUM = "103"                                  # 본인 비번호로 교체 (버킷/Grafana 계정에 쓰임)
-cd terraform
-terraform init
-terraform apply -var "player_number=$env:NUM"
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $env:AWS_DEFAULT_REGION = "ap-northeast-2"
+  $env:NUM = "103"                                  # 본인 비번호로 교체 (버킷/Grafana 계정에 쓰임)
+  cd terraform
+  terraform init
+  terraform apply -var "player_number=$env:NUM"
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  export AWS_DEFAULT_REGION=ap-northeast-2
+  export NUM=103                                    # 본인 비번호로 교체 (버킷/Grafana 계정에 쓰임)
+  cd terraform
+  terraform init
+  terraform apply -var "player_number=$NUM"
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
@@ -47,9 +62,9 @@ terraform apply -var "player_number=$env:NUM"
 
 </details>
 
-이어서 [04 실습의 `.env.ps1` 영속화 블록](/part-2/04-eksctl-cluster/lab/)을 그대로 실행한다. 변수 21종(ACCOUNT_ID, VPC_ID, PRIV_SUBNET_C/D, CLUSTER_EXTRA_SG_ID, NODE_SG_ID, EKS_KMS_ARN, BOOK_APP/LBC/FLUENT_BIT_POLICY_ARN, ECR, APP_TG, GRAFANA_TG, BUCKET, ALB_DNS, GRAFANA_ALB_DNS, CF, GRAFANA_ADMIN_USER/PASSWORD 등)이 `..\.env.ps1` 로 저장되고, 이어지는 ②~⑨ 가 그 파일 하나로 변수를 복원한다.
+이어서 [04 실습의 `.env.ps1` 영속화 블록](/part-2/04-eksctl-cluster/lab/)을 그대로 실행한다. 변수 21종(ACCOUNT_ID, VPC_ID, PRIV_SUBNET_C/D, CLUSTER_EXTRA_SG_ID, NODE_SG_ID, EKS_KMS_ARN, BOOK_APP/LBC/FLUENT_BIT_POLICY_ARN, ECR, APP_TG, GRAFANA_TG, BUCKET, ALB_DNS, GRAFANA_ALB_DNS, CF, GRAFANA_ADMIN_USER/PASSWORD 등)이 `..\.env.ps1`(bash 는 `../.env.sh`)로 저장되고, 이어지는 ②~⑨ 가 그 파일 하나로 변수를 복원한다.
 
-**검증**: `terraform output` 에러 없음, `.env.ps1` 존재. 새 터미널에선 `. .\.env.ps1`만 재실행.
+**검증**: `terraform output` 에러 없음, `.env.ps1`(bash 는 `.env.sh`) 존재. 새 터미널에선 `. .\.env.ps1`(bash 는 `source ./.env.sh`)만 재실행.
 
 ## ② 이미지 빌드 & push — **기본 CloudShell** (VPC CloudShell 불가 — 인터넷 없음)
 
@@ -86,9 +101,9 @@ VPC CloudShell은 홈 디렉터리가 비영속이고 업로드/다운로드 메
 
 ## ③ eksctl 클러스터 (~20분, ②와 병행 가능)
 
-04 lab의 렌더 절차 그대로: `${VAR}` 9종 `.Replace()` 치환 → **`Select-String '\$\{'` 누락 검사** → `eksctl create cluster -f cluster.rendered.yaml` → `aws eks update-kubeconfig --region ap-northeast-2 --name wskorea26-cluster`.
+04 lab의 렌더 절차 그대로: `${VAR}` 9종 치환(PowerShell `.Replace()` · bash `envsubst`) → **치환 누락 검사**(`Select-String '\$\{'` · `grep '\${'`) → `eksctl create cluster -f cluster.rendered.yaml` → `aws eks update-kubeconfig --region ap-northeast-2 --name wskorea26-cluster`.
 
-**검증**: `kubectl get nodes --show-labels | Select-String node-type` → addon 2 + app 2.
+**검증**: `kubectl get nodes --show-labels` 에서 `node-type` 을 걸러(`Select-String` · `grep`) addon 2 + app 2.
 
 ## ④ AWS Load Balancer Controller
 
@@ -98,15 +113,30 @@ VPC CloudShell은 홈 디렉터리가 비영속이고 업로드/다운로드 메
 
 ## ⑤ book 앱
 
-```powershell
-cd ..\k8s
-kubectl apply -f 00-namespaces.yaml
-kubectl apply -f app/configmap.yaml
-(Get-Content app/deployment.yaml -Raw).Replace('<ECR_REPOSITORY_URL>', $env:ECR) | kubectl apply -f -
-kubectl apply -f app/service.yaml -f app/pdb.yaml
-(Get-Content app/targetgroupbinding.yaml -Raw).Replace('<APP_TARGET_GROUP_ARN>', $env:APP_TG) | kubectl apply -f -
-aws elbv2 wait target-in-service --target-group-arn "$env:APP_TG"
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  cd ..\k8s
+  kubectl apply -f 00-namespaces.yaml
+  kubectl apply -f app/configmap.yaml
+  (Get-Content app/deployment.yaml -Raw).Replace('<ECR_REPOSITORY_URL>', $env:ECR) | kubectl apply -f -
+  kubectl apply -f app/service.yaml -f app/pdb.yaml
+  (Get-Content app/targetgroupbinding.yaml -Raw).Replace('<APP_TARGET_GROUP_ARN>', $env:APP_TG) | kubectl apply -f -
+  aws elbv2 wait target-in-service --target-group-arn "$env:APP_TG"
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  cd ../k8s
+  kubectl apply -f 00-namespaces.yaml
+  kubectl apply -f app/configmap.yaml
+  sed "s|<ECR_REPOSITORY_URL>|$ECR|" app/deployment.yaml | kubectl apply -f -
+  kubectl apply -f app/service.yaml -f app/pdb.yaml
+  sed "s|<APP_TARGET_GROUP_ARN>|$APP_TG|" app/targetgroupbinding.yaml | kubectl apply -f -
+  aws elbv2 wait target-in-service --target-group-arn "$APP_TG"
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
@@ -122,29 +152,55 @@ aws elbv2 wait target-in-service --target-group-arn "$env:APP_TG"
 :::danger[따옴표 함정]
 Grafana 비번 `$korea26!!` 는 set-02 과제지가 지정한 값이다(`set-02/task-1/terraform/variables.tf` 의 `grafana_admin_password` 기본값). 세트마다 다르므로 다른 세트를 풀 때는 [06 실습의 세트별 계정 표](/part-2/06-observability/lab/)를 본다.
 
-PowerShell 에서는 **작은따옴표**로만 쓴다. 큰따옴표면 `$korea26` 이 빈 변수로 확장돼 비번이 틀리고 mark 10 이 전멸한다.
+두 셸 모두 **작은따옴표**로만 쓴다. 큰따옴표면 `$korea26` 이 빈 변수로 확장돼 비번이 틀리고 mark 10 이 전멸한다. bash 는 작은따옴표가 `!!` 의 히스토리 확장까지 함께 막아 준다.
 :::
 
-```powershell
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts; helm repo update
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts; helm repo update
 
-# Grafana 계정 치환 — 비번 '$korea26!!'은 반드시 작은따옴표($ 확장 방지)
-(Get-Content monitoring/kube-prometheus-stack-values.yaml -Raw).
-  Replace('<GRAFANA_ADMIN_USER>', "skills-$($env:NUM)-admin").
-  Replace('<GRAFANA_ADMIN_PASSWORD>', '$korea26!!') | Set-Content "$env:TEMP\kps-values.yaml"
+  # Grafana 계정 치환 — 비번 '$korea26!!'은 반드시 작은따옴표($ 확장 방지)
+  (Get-Content monitoring/kube-prometheus-stack-values.yaml -Raw).
+    Replace('<GRAFANA_ADMIN_USER>', "skills-$($env:NUM)-admin").
+    Replace('<GRAFANA_ADMIN_PASSWORD>', '$korea26!!') | Set-Content "$env:TEMP\kps-values.yaml"
 
-helm upgrade --install wskorea26-monitoring prometheus-community/kube-prometheus-stack `
-  --version 87.5.1 -n monitoring -f "$env:TEMP\kps-values.yaml"
+  helm upgrade --install wskorea26-monitoring prometheus-community/kube-prometheus-stack `
+    --version 87.5.1 -n monitoring -f "$env:TEMP\kps-values.yaml"
 
-# 대시보드 provisioning — grafana_dashboard=1 라벨이 있어야 사이드카가 로드
-kubectl -n monitoring create configmap wskorea26-dashboard `
-  --from-file=dashboard.json=monitoring/dashboard.json
-kubectl -n monitoring label configmap wskorea26-dashboard grafana_dashboard=1
+  # 대시보드 provisioning — grafana_dashboard=1 라벨이 있어야 사이드카가 로드
+  kubectl -n monitoring create configmap wskorea26-dashboard `
+    --from-file=dashboard.json=monitoring/dashboard.json
+  kubectl -n monitoring label configmap wskorea26-dashboard grafana_dashboard=1
 
-# Grafana ALB 연결
-(Get-Content monitoring/grafana-targetgroupbinding.yaml -Raw).Replace('<GRAFANA_TARGET_GROUP_ARN>', $env:GRAFANA_TG) | kubectl apply -f -
-aws elbv2 wait target-in-service --target-group-arn "$env:GRAFANA_TG"
-```
+  # Grafana ALB 연결
+  (Get-Content monitoring/grafana-targetgroupbinding.yaml -Raw).Replace('<GRAFANA_TARGET_GROUP_ARN>', $env:GRAFANA_TG) | kubectl apply -f -
+  aws elbv2 wait target-in-service --target-group-arn "$env:GRAFANA_TG"
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts && helm repo update
+
+  # Grafana 계정 치환 — 비번 '$korea26!!'은 반드시 작은따옴표($ 확장·히스토리 확장 방지)
+  sed -e "s|<GRAFANA_ADMIN_USER>|skills-${NUM}-admin|" \
+      -e 's|<GRAFANA_ADMIN_PASSWORD>|$korea26!!|' \
+      monitoring/kube-prometheus-stack-values.yaml > /tmp/kps-values.yaml
+
+  helm upgrade --install wskorea26-monitoring prometheus-community/kube-prometheus-stack \
+    --version 87.5.1 -n monitoring -f /tmp/kps-values.yaml
+
+  # 대시보드 provisioning — grafana_dashboard=1 라벨이 있어야 사이드카가 로드
+  kubectl -n monitoring create configmap wskorea26-dashboard \
+    --from-file=dashboard.json=monitoring/dashboard.json
+  kubectl -n monitoring label configmap wskorea26-dashboard grafana_dashboard=1
+
+  # Grafana ALB 연결
+  sed "s|<GRAFANA_TARGET_GROUP_ARN>|$GRAFANA_TG|" monitoring/grafana-targetgroupbinding.yaml | kubectl apply -f -
+  aws elbv2 wait target-in-service --target-group-arn "$GRAFANA_TG"
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
@@ -158,31 +214,63 @@ aws elbv2 wait target-in-service --target-group-arn "$env:GRAFANA_TG"
 
 ## ⑦ Fluent Bit (전 노드 DaemonSet)
 
-```powershell
-kubectl apply -f monitoring/fluent-bit.yaml
-kubectl -n monitoring get ds fluent-bit
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl apply -f monitoring/fluent-bit.yaml
+  kubectl -n monitoring get ds fluent-bit
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl apply -f monitoring/fluent-bit.yaml
+  kubectl -n monitoring get ds fluent-bit
+  ```
+  </TabItem>
+</Tabs>
 
 **검증**: DESIRED = 노드 수(4). 구성 요점: tolerations `operator: Exists`(전 노드), hostPath `/var/log/containers`, **cri parser**, 로그 그룹 `/wskorea26/eks/pod-logs`(Terraform이 생성, auto_create_group false). CloudWatch Logs에 `pod-` 스트림 생성 확인.
 
 ## ⑧ 검증 시드 (CloudFront Deployed 대기 후)
 
-```powershell
-$CF_ID = aws cloudfront list-distributions `
-  --query "DistributionList.Items[?Comment=='wskorea26-concert-cf'].Id | [0]" --output text
-aws cloudfront wait distribution-deployed --id "$CF_ID"     # mark 8-1이 Deployed 검사
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $CF_ID = aws cloudfront list-distributions `
+    --query "DistributionList.Items[?Comment=='wskorea26-concert-cf'].Id | [0]" --output text
+  aws cloudfront wait distribution-deployed --id "$CF_ID"     # mark 8-1이 Deployed 검사
 
-curl.exe -o NUL -s -w "%{http_code}`n" "https://$env:CF"                 # 200
-curl.exe -o NUL -s -w "%{http_code}`n" "http://$env:CF/"                 # 301
-curl.exe -o NUL -s -w "%{size_download}`n" "https://$env:CF/main.jpeg"   # 180926
-curl.exe -o NUL -s -w "%{http_code}`n" "http://$env:ALB_DNS/book"        # 403
+  curl.exe -o NUL -s -w "%{http_code}`n" "https://$env:CF"                 # 200
+  curl.exe -o NUL -s -w "%{http_code}`n" "http://$env:CF/"                 # 301
+  curl.exe -o NUL -s -w "%{size_download}`n" "https://$env:CF/main.jpeg"   # 180926
+  curl.exe -o NUL -s -w "%{http_code}`n" "http://$env:ALB_DNS/book"        # 403
 
-curl.exe -s -X POST -H "Content-Type: application/json" `
-  -d '{"client_id":"T0001","username":"tester","email":"t@t.com","concert_name":"SEED_CON"}' `
-  "https://$env:CF/book"                                                 # {"booking_id": "..."}
-curl.exe -s "https://$env:CF/book?concert_name=SEED_CON"                 # 최신순 배열
-curl.exe -o NUL -s -w "%{http_code}`n" "https://$env:CF/book"            # 400
-```
+  curl.exe -s -X POST -H "Content-Type: application/json" `
+    -d '{"client_id":"T0001","username":"tester","email":"t@t.com","concert_name":"SEED_CON"}' `
+    "https://$env:CF/book"                                                 # {"booking_id": "..."}
+  curl.exe -s "https://$env:CF/book?concert_name=SEED_CON"                 # 최신순 배열
+  curl.exe -o NUL -s -w "%{http_code}`n" "https://$env:CF/book"            # 400
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  CF_ID=$(aws cloudfront list-distributions \
+    --query "DistributionList.Items[?Comment=='wskorea26-concert-cf'].Id | [0]" --output text)
+  aws cloudfront wait distribution-deployed --id "$CF_ID"     # mark 8-1이 Deployed 검사
+
+  curl -o /dev/null -s -w "%{http_code}\n" "https://$CF"                   # 200
+  curl -o /dev/null -s -w "%{http_code}\n" "http://$CF/"                   # 301
+  curl -o /dev/null -s -w "%{size_download}\n" "https://$CF/main.jpeg"     # 180926
+  curl -o /dev/null -s -w "%{http_code}\n" "http://$ALB_DNS/book"          # 403
+
+  curl -s -X POST -H "Content-Type: application/json" \
+    -d '{"client_id":"T0001","username":"tester","email":"t@t.com","concert_name":"SEED_CON"}' \
+    "https://$CF/book"                                                     # {"booking_id": "..."}
+  curl -s "https://$CF/book?concert_name=SEED_CON"                         # 최신순 배열
+  curl -o /dev/null -s -w "%{http_code}\n" "https://$CF/book"              # 400
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
@@ -228,13 +316,26 @@ VPC CloudShell 에는 파일 업로드 메뉴가 없으므로 heredoc 으로 채
 helm → eksctl → DynamoDB 삭제방지 해제 → `terraform destroy`. 순서를 바꾸면 destroy 가 중간에 막힌다.
 :::
 
-```powershell
-helm -n monitoring uninstall wskorea26-monitoring
-helm -n kube-system uninstall aws-load-balancer-controller
-eksctl delete cluster -f eksctl/cluster.rendered.yaml --disable-nodegroup-eviction
-aws dynamodb update-table --table-name wskorea26-data-table --no-deletion-protection-enabled
-cd terraform; terraform destroy -var "player_number=$env:NUM"
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  helm -n monitoring uninstall wskorea26-monitoring
+  helm -n kube-system uninstall aws-load-balancer-controller
+  eksctl delete cluster -f eksctl/cluster.rendered.yaml --disable-nodegroup-eviction
+  aws dynamodb update-table --table-name wskorea26-data-table --no-deletion-protection-enabled
+  cd terraform; terraform destroy -var "player_number=$env:NUM"
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  helm -n monitoring uninstall wskorea26-monitoring
+  helm -n kube-system uninstall aws-load-balancer-controller
+  eksctl delete cluster -f eksctl/cluster.rendered.yaml --disable-nodegroup-eviction
+  aws dynamodb update-table --table-name wskorea26-data-table --no-deletion-protection-enabled
+  cd terraform && terraform destroy -var "player_number=$NUM"
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
@@ -252,15 +353,15 @@ cd terraform; terraform destroy -var "player_number=$env:NUM"
 | 함정 | 증상/감점 | 대응 |
 |---|---|---|
 | VPC CloudShell에서 빌드 시도 | alpine pull 실패 (인터넷 없음) | 이미지 빌드는 **기본 CloudShell** |
-| `$korea26!!`를 큰따옴표로 | `$korea26`이 빈 변수로 확장 → 비번 틀림 (mark 10 전멸) | PowerShell **작은따옴표** `'$korea26!!'` |
-| PowerShell `curl` | Invoke-WebRequest 별칭 | **`curl.exe`** 명시 |
+| `$korea26!!`를 큰따옴표로 | `$korea26`이 빈 변수로 확장 → 비번 틀림 (mark 10 전멸) | 두 셸 모두 **작은따옴표** `'$korea26!!'` |
+| PowerShell `curl` | Invoke-WebRequest 별칭 | PowerShell 에서만 **`curl.exe`** 명시 |
 | CF Deployed 전 채점 | 8-1 실패, /book 시나리오 불안정 | `aws cloudfront wait distribution-deployed` |
 | book 바이너리/제공자료 수정 | 실격급 — 수정 금지 자료 | CF Function으로 우회 (POST /book→/v1/book) |
 | ALB 규칙 추가/삭제 | 7-2 `wskorea26-cf` 2줄 정확 일치 깨짐 | 규칙 정확히 2개 유지 |
 | 커스텀 헤더 정리 | 8-4 (X-Origin-Verify / wskorea26-s3-access 2줄) | 중복돼 보여도 제거 금지 |
 | dashboard configmap 라벨 누락 | Grafana에 대시보드 안 뜸 (10-1) | `grafana_dashboard=1` 라벨 |
 | DDB 삭제방지 해제 없이 destroy | destroy 중간 실패 | ⑩ 순서대로 |
-| 비번호 교체 누락 | 버킷/Grafana 계정 이름 불일치 | `$env:NUM` 확인 (tfvars 기본 103) |
+| 비번호 교체 누락 | 버킷/Grafana 계정 이름 불일치 | `NUM` 값 확인 (tfvars 기본 103) |
 
 ## 통과 기준 (mark 항목 요약)
 

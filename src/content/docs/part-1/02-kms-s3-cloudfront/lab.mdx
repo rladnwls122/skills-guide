@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
@@ -34,13 +34,26 @@ import { Steps } from '@astrojs/starlight/components';
 
 정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 정답지 경로는 클론 루트 `~\skills-2026` 기준이다.
 
-```powershell
-mkdir my-cdn-lab; cd my-cdn-lab
-# 업로드할 더미 정적 파일
-mkdir provided
-'<html><body>hello</body></html>' | Set-Content provided\index.html
-# 아무 jpeg 하나를 provided\main.jpeg 로 복사 (없으면 index.html 만으로 진행해도 됨)
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  mkdir my-cdn-lab; cd my-cdn-lab
+  # 업로드할 더미 정적 파일
+  mkdir provided
+  '<html><body>hello</body></html>' | Set-Content provided\index.html
+  # 아무 jpeg 하나를 provided\main.jpeg 로 복사 (없으면 index.html 만으로 진행해도 됨)
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  mkdir my-cdn-lab && cd my-cdn-lab
+  # 업로드할 더미 정적 파일
+  mkdir provided
+  echo '<html><body>hello</body></html>' > provided/index.html
+  # 아무 jpeg 하나를 provided/main.jpeg 로 복사 (없으면 index.html 만으로 진행해도 됨)
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
@@ -53,17 +66,28 @@ mkdir provided
 
 <Steps>
 
-1. **스펙만 보고 직접 작성 (정답지 금지)**
+1. **스펙만 보고 직접 작성 (정답지 최대한 보지않기, Amazon Q 사용 가능)**
 
    `versions.tf`·`data.tf` 는 모듈 01 과 같은 이유로 정답지에서 복사한다 — 세트가 바뀌어도 내용이 같은 부트스트랩이다.
 
-   ```powershell
-   # ── Windows PowerShell ──
-   copy $HOME\skills-2026\set-02\task-1\terraform\versions.tf .
-   copy $HOME\skills-2026\set-02\task-1\terraform\data.tf .
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     copy $HOME\skills-2026\set-02\task-1\terraform\versions.tf .
+     copy $HOME\skills-2026\set-02\task-1\terraform\data.tf .
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     cp ~/skills-2026/set-02/task-1/terraform/versions.tf .
+     cp ~/skills-2026/set-02/task-1/terraform/data.tf .
+     ```
+     </TabItem>
+   </Tabs>
 
-   직접 쓰는 파일: `variables.tf`(player_number 포함), `kms.tf`, `s3.tf`, `cloudfront.tf`, `outputs.tf`
+   직접 쓰는 파일: `variables.tf`, `kms.tf`, `s3.tf`, `cloudfront.tf`, `outputs.tf`
+
+   - **변수화 대상 (tfvars 주입)**: `player_number`(비번호), `region`(리전), `prefix`(이름 접두사)는 하드코딩하지 않고 변수로 주입한다. 버킷 이름의 비번호나 리소스 이름 접두사(`wskorea26`)가 이 변수들로 치환되어야 한다.
 
    | 항목 | 스펙 (set-02 실측) |
    |---|---|
@@ -102,40 +126,80 @@ mkdir provided
 
 3. **apply & 검증**
 
-   ```powershell
-   terraform init
-   terraform fmt
-   terraform validate
-   terraform apply
-   # CloudFront 배포 완료까지 수 분 소요
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     terraform init
+     terraform fmt
+     terraform validate
+     terraform apply
+     # CloudFront 배포 완료까지 수 분 소요
 
-   $BUCKET = terraform output -raw s3_bucket_name
-   $CF     = terraform output -raw cloudfront_domain
+     $BUCKET = terraform output -raw s3_bucket_name
+     $CF     = terraform output -raw cloudfront_domain
 
-   # (1) alias 역조회 — mark 방식
-   aws kms describe-key --key-id alias/wskorea26-s3-key --query 'KeyMetadata.[KeyState,KeyManager]'
-   # 기대: ["Enabled", "CUSTOMER"]
+     # (1) alias 역조회 — mark 방식
+     aws kms describe-key --key-id alias/wskorea26-s3-key --query 'KeyMetadata.[KeyState,KeyManager]'
+     # 기대: ["Enabled", "CUSTOMER"]
 
-   # (2) 퍼블릭 차단 4종 — mark 2-2
-   aws s3api get-public-access-block --bucket $BUCKET
-   # 기대: 4개 필드 모두 true
-   aws s3api get-bucket-policy-status --bucket $BUCKET --query 'PolicyStatus.IsPublic'
-   # 기대: false  (버킷 정책이 없으면 이 호출 자체가 에러 — OAC 정책이 있어야 함)
+     # (2) 퍼블릭 차단 4종 — mark 2-2
+     aws s3api get-public-access-block --bucket $BUCKET
+     # 기대: 4개 필드 모두 true
+     aws s3api get-bucket-policy-status --bucket $BUCKET --query 'PolicyStatus.IsPublic'
+     # 기대: false  (버킷 정책이 없으면 이 호출 자체가 에러 — OAC 정책이 있어야 함)
 
-   # (3) 암호화 — SSE-KMS + BucketKey
-   aws s3api get-bucket-encryption --bucket $BUCKET `
-     --query 'ServerSideEncryptionConfiguration.Rules[0]'
-   # 기대: SSEAlgorithm aws:kms + KMSMasterKeyID(s3키 ARN) + BucketKeyEnabled true
+     # (3) 암호화 — SSE-KMS + BucketKey
+     aws s3api get-bucket-encryption --bucket $BUCKET `
+       --query 'ServerSideEncryptionConfiguration.Rules[0]'
+     # 기대: SSEAlgorithm aws:kms + KMSMasterKeyID(s3키 ARN) + BucketKeyEnabled true
 
-   # (4) 객체 키 — mark 2-1
-   aws s3api list-objects-v2 --bucket $BUCKET --query 'Contents[].Key'
-   # 기대: ["web/main/index.html", "web/main/main.jpeg"]
+     # (4) 객체 키 — mark 2-1
+     aws s3api list-objects-v2 --bucket $BUCKET --query 'Contents[].Key'
+     # 기대: ["web/main/index.html", "web/main/main.jpeg"]
 
-   # (5) 접근 경로: CloudFront 만 허용
-   curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/"          # 기대: 200
-   curl.exe -s -o NUL -w "%{http_code}`n" "https://$BUCKET.s3.ap-northeast-2.amazonaws.com/web/main/index.html"  # 기대: 403
-   curl.exe -s -o NUL -w "%{http_code}`n" "http://$CF/" -L        # http → 301 후 200 (redirect-to-https)
-   ```
+     # (5) 접근 경로: CloudFront 만 허용
+     curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/"          # 기대: 200
+     curl.exe -s -o NUL -w "%{http_code}`n" "https://$BUCKET.s3.ap-northeast-2.amazonaws.com/web/main/index.html"  # 기대: 403
+     curl.exe -s -o NUL -w "%{http_code}`n" "http://$CF/" -L        # http → 301 후 200 (redirect-to-https)
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     terraform init
+     terraform fmt
+     terraform validate
+     terraform apply
+     # CloudFront 배포 완료까지 수 분 소요
+
+     BUCKET=$(terraform output -raw s3_bucket_name)
+     CF=$(terraform output -raw cloudfront_domain)
+
+     # (1) alias 역조회 — mark 방식
+     aws kms describe-key --key-id alias/wskorea26-s3-key --query 'KeyMetadata.[KeyState,KeyManager]'
+     # 기대: ["Enabled", "CUSTOMER"]
+
+     # (2) 퍼블릭 차단 4종 — mark 2-2
+     aws s3api get-public-access-block --bucket "$BUCKET"
+     # 기대: 4개 필드 모두 true
+     aws s3api get-bucket-policy-status --bucket "$BUCKET" --query 'PolicyStatus.IsPublic'
+     # 기대: false  (버킷 정책이 없으면 이 호출 자체가 에러 — OAC 정책이 있어야 함)
+
+     # (3) 암호화 — SSE-KMS + BucketKey
+     aws s3api get-bucket-encryption --bucket "$BUCKET" \
+       --query 'ServerSideEncryptionConfiguration.Rules[0]'
+     # 기대: SSEAlgorithm aws:kms + KMSMasterKeyID(s3키 ARN) + BucketKeyEnabled true
+
+     # (4) 객체 키 — mark 2-1
+     aws s3api list-objects-v2 --bucket "$BUCKET" --query 'Contents[].Key'
+     # 기대: ["web/main/index.html", "web/main/main.jpeg"]
+
+     # (5) 접근 경로: CloudFront 만 허용
+     curl -s -o /dev/null -w "%{http_code}\n" "https://$CF/"          # 기대: 200
+     curl -s -o /dev/null -w "%{http_code}\n" "https://$BUCKET.s3.ap-northeast-2.amazonaws.com/web/main/index.html"  # 기대: 403
+     curl -s -o /dev/null -w "%{http_code}\n" "http://$CF/" -L        # http → 301 후 200 (redirect-to-https)
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -146,11 +210,22 @@ mkdir provided
 
    배포 완료를 기다려야 하면 배포 ID 를 먼저 조회한다. CloudFront 배포에는 Name 태그가 없어 `comment` 로 찾는다.
 
-   ```powershell
-   $CF_ID = aws cloudfront list-distributions `
-     --query "DistributionList.Items[?Comment=='wskorea26-concert-cf'].Id | [0]" --output text
-   aws cloudfront wait distribution-deployed --id "$CF_ID"
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $CF_ID = aws cloudfront list-distributions `
+       --query "DistributionList.Items[?Comment=='wskorea26-concert-cf'].Id | [0]" --output text
+     aws cloudfront wait distribution-deployed --id "$CF_ID"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     CF_ID=$(aws cloudfront list-distributions \
+       --query "DistributionList.Items[?Comment=='wskorea26-concert-cf'].Id | [0]" --output text)
+     aws cloudfront wait distribution-deployed --id "$CF_ID"
+     ```
+     </TabItem>
+   </Tabs>
 
    기대: `$CF_ID` 가 `E` 로 시작하는 13자 안팎의 문자열. `None` 이 나오면 comment 값이 스펙과 다른 것이다.
 
@@ -163,22 +238,45 @@ mkdir provided
    - `kms:*` 없이 admin 액션을 개별 나열한 `kms_admin` 문서 작성 (lockout 검사 통과를 위해 `kms:Put*` 필수)
    - apply 후 정책 텍스트 자가 grep:
 
-   ```powershell
-   aws kms get-key-policy --key-id alias/wskorea26-s3-key --policy-name default --output text | Select-String -Pattern ':root|kms:\*'
-   # 기대: 출력 없음 (있으면 set-03 mark 실격)
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     aws kms get-key-policy --key-id alias/wskorea26-s3-key --policy-name default --output text | Select-String -Pattern ':root|kms:\*'
+     # 기대: 출력 없음 (있으면 set-03 mark 실격)
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     aws kms get-key-policy --key-id alias/wskorea26-s3-key --policy-name default --output text | grep -E ':root|kms:\*'
+     # 기대: 출력 없음 (있으면 set-03 mark 실격)
+     ```
+     </TabItem>
+   </Tabs>
 
    `kms:Put*` 를 빼고 apply 해 보면 `MalformedPolicyDocumentException: ... will prevent you from managing the key`(lockout safety check) 를 볼 수 있다.
 
 5. **정답과 diff**
 
-   ```powershell
-   git diff --no-index .\kms.tf $HOME\skills-2026\set-02\task-1\terraform\kms.tf
-   git diff --no-index .\s3.tf  $HOME\skills-2026\set-02\task-1\terraform\s3.tf
-   git diff --no-index .\cloudfront.tf $HOME\skills-2026\set-02\task-1\terraform\cloudfront.tf
-   # 심화 diff
-   git diff --no-index .\kms.tf $HOME\skills-2026\set-03\task-1\terraform\kms.tf
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     git diff --no-index .\kms.tf $HOME\skills-2026\set-02\task-1\terraform\kms.tf
+     git diff --no-index .\s3.tf  $HOME\skills-2026\set-02\task-1\terraform\s3.tf
+     git diff --no-index .\cloudfront.tf $HOME\skills-2026\set-02\task-1\terraform\cloudfront.tf
+     # 심화 diff
+     git diff --no-index .\kms.tf $HOME\skills-2026\set-03\task-1\terraform\kms.tf
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     git diff --no-index ./kms.tf ~/skills-2026/set-02/task-1/terraform/kms.tf
+     git diff --no-index ./s3.tf  ~/skills-2026/set-02/task-1/terraform/s3.tf
+     git diff --no-index ./cloudfront.tf ~/skills-2026/set-02/task-1/terraform/cloudfront.tf
+     # 심화 diff
+     git diff --no-index ./kms.tf ~/skills-2026/set-03/task-1/terraform/kms.tf
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -204,12 +302,24 @@ mkdir provided
    | Rate 규칙 | priority 3, `rate_based_statement`(`aggregate_key_type = "IP"`, `limit = 200`, `evaluation_window_sec = 60`) → block |
    | 연결 | `aws_cloudfront_distribution.cdn` 의 `web_acl_id = aws_wafv2_web_acl.this.arn` |
 
-   ```powershell
-   # 배포 전파 후 검증
-   curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/?probe=1%27%20OR%201=1--"       # SQLi 페이로드 → 403 기대
-   curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/?probe=<script>alert(1)</script>" # XSS 페이로드 → 403 기대
-   curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/"                                 # 정상 요청 → 200 기대
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     # 배포 전파 후 검증
+     curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/?probe=1%27%20OR%201=1--"       # SQLi 페이로드 → 403 기대
+     curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/?probe=<script>alert(1)</script>" # XSS 페이로드 → 403 기대
+     curl.exe -s -o NUL -w "%{http_code}`n" "https://$CF/"                                 # 정상 요청 → 200 기대
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     # 배포 전파 후 검증
+     curl -s -o /dev/null -w "%{http_code}\n" "https://$CF/?probe=1%27%20OR%201=1--"         # SQLi 페이로드 → 403 기대
+     curl -s -o /dev/null -w "%{http_code}\n" 'https://'"$CF"'/?probe=<script>alert(1)</script>' # XSS 페이로드 → 403 기대
+     curl -s -o /dev/null -w "%{http_code}\n" "https://$CF/"                                  # 정상 요청 → 200 기대
+     ```
+     </TabItem>
+   </Tabs>
 
    **오탐 대응 훈련(Count → 검증 → Block 복구)**:
 
@@ -221,11 +331,22 @@ mkdir provided
 
    정답 대조:
 
-   ```powershell
-   git diff --no-index .\waf.tf $HOME\skills-2026\set-03\task-1\terraform\waf.tf
-   # 관리형 규칙 그룹 구조를 보고 싶다면(set-07 은 이 모듈의 스펙과 다르므로 참고용)
-   git diff --no-index .\waf.tf $HOME\skills-2026\set-07\task-1\terraform\waf.tf
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     git diff --no-index .\waf.tf $HOME\skills-2026\set-03\task-1\terraform\waf.tf
+     # 관리형 규칙 그룹 구조를 보고 싶다면(set-07 은 이 모듈의 스펙과 다르므로 참고용)
+     git diff --no-index .\waf.tf $HOME\skills-2026\set-07\task-1\terraform\waf.tf
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     git diff --no-index ./waf.tf ~/skills-2026/set-03/task-1/terraform/waf.tf
+     # 관리형 규칙 그룹 구조를 보고 싶다면(set-07 은 이 모듈의 스펙과 다르므로 참고용)
+     git diff --no-index ./waf.tf ~/skills-2026/set-07/task-1/terraform/waf.tf
+     ```
+     </TabItem>
+   </Tabs>
 
 </Steps>
 
@@ -258,16 +379,35 @@ mkdir provided
 
 ## 정리 (destroy 순서)
 
-```powershell
-terraform destroy
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  terraform destroy
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform destroy
+  ```
+  </TabItem>
+</Tabs>
 
 단일 state 라 순서는 Terraform 이 처리한다(배포 disable→삭제 때문에 5~10분 소요). 확인 사항:
 
-```powershell
-aws s3api head-bucket --bucket $BUCKET 2>&1            # 404 여야 함
-aws kms describe-key --key-id alias/wskorea26-s3-key 2>&1   # NotFoundException (alias 삭제됨)
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws s3api head-bucket --bucket $BUCKET 2>&1            # 404 여야 함
+  aws kms describe-key --key-id alias/wskorea26-s3-key 2>&1   # NotFoundException (alias 삭제됨)
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws s3api head-bucket --bucket "$BUCKET" 2>&1            # 404 여야 함
+  aws kms describe-key --key-id alias/wskorea26-s3-key 2>&1   # NotFoundException (alias 삭제됨)
+  ```
+  </TabItem>
+</Tabs>
 
 :::note[실측]
 KMS 키는 즉시 삭제되지 않고 **PendingDeletion(7일)** 상태로 남는다 — 정상이며 대기 중 과금 없음. 같은 이름 키를 바로 다시 만들어도 alias 는 재사용 가능(이전 alias 는 destroy 로 삭제됨).

@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
@@ -37,29 +37,59 @@ import { Steps } from '@astrojs/starlight/components';
 
 1. **배포**
 
-   ```powershell
-   cd ~\skills-2026\set-07\task-2\module-2-cdn-function\terraform
-   terraform init
-   terraform apply -auto-approve
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     cd ~\skills-2026\set-07\task-2\module-2-cdn-function\terraform
+     terraform init
+     terraform apply -auto-approve
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     cd ~/skills-2026/set-07/task-2/module-2-cdn-function/terraform
+     terraform init
+     terraform apply -auto-approve
+     ```
+     </TabItem>
+   </Tabs>
 
    distribution 전파 대기가 대부분이다 — 실측 약 4분(NOTES.md), 넉넉히 5~7분까지 잡는다.
 
 2. **리소스 검증 — S3 · KVS · 함수**
 
-   ```powershell
-   $env:AWS_DEFAULT_REGION = "us-east-1"
-   $BUCKET = terraform output -raw bucket_name
-   $URL    = terraform output -raw landing_url
-   $DOMAIN = ([Uri]$URL).Host
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $env:AWS_DEFAULT_REGION = "us-east-1"
+     $BUCKET = terraform output -raw bucket_name
+     $URL    = terraform output -raw landing_url
+     $DOMAIN = ([Uri]$URL).Host
 
-   aws s3api list-objects-v2 --bucket $BUCKET --query "Contents[].Key" --output text
-   # 기대: version-a/index.html   version-b/index.html
+     aws s3api list-objects-v2 --bucket $BUCKET --query "Contents[].Key" --output text
+     # 기대: version-a/index.html   version-b/index.html
 
-   aws cloudfront describe-function --name skillsphone-cdn-ab-req-fn --stage LIVE --query "FunctionSummary.[Status,FunctionConfig.Runtime]" --output text
-   aws cloudfront describe-function --name skillsphone-cdn-ab-res-fn --stage LIVE --query "FunctionSummary.[Status,FunctionConfig.Runtime]" --output text
-   # 기대: 둘 다   DEPLOYED    cloudfront-js-2.0
-   ```
+     aws cloudfront describe-function --name skillsphone-cdn-ab-req-fn --stage LIVE --query "FunctionSummary.[Status,FunctionConfig.Runtime]" --output text
+     aws cloudfront describe-function --name skillsphone-cdn-ab-res-fn --stage LIVE --query "FunctionSummary.[Status,FunctionConfig.Runtime]" --output text
+     # 기대: 둘 다   DEPLOYED    cloudfront-js-2.0
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     export AWS_DEFAULT_REGION=us-east-1
+     BUCKET=$(terraform output -raw bucket_name)
+     URL=$(terraform output -raw landing_url)
+     DOMAIN=${URL#*://}; DOMAIN=${DOMAIN%%/*}
+
+     aws s3api list-objects-v2 --bucket "$BUCKET" --query 'Contents[].Key' --output text
+     # 기대: version-a/index.html   version-b/index.html
+
+     aws cloudfront describe-function --name skillsphone-cdn-ab-req-fn --stage LIVE --query 'FunctionSummary.[Status,FunctionConfig.Runtime]' --output text
+     aws cloudfront describe-function --name skillsphone-cdn-ab-res-fn --stage LIVE --query 'FunctionSummary.[Status,FunctionConfig.Runtime]' --output text
+     # 기대: 둘 다   DEPLOYED    cloudfront-js-2.0
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -70,48 +100,102 @@ import { Steps } from '@astrojs/starlight/components';
 
 3. **HTTP → HTTPS 리다이렉트 (헤더·상태 코드만)**
 
-   ```powershell
-   curl.exe -I "http://$DOMAIN/"
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     curl.exe -I "http://$DOMAIN/"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     curl -I "http://$DOMAIN/"
+     ```
+     </TabItem>
+   </Tabs>
 
    기대: 상태 코드 `301` 또는 `302` + `location: https://...` 헤더 — distribution의 `redirect-to-https` 정책.
 
 4. **쿠키 강제 시 동작** (mark 2-4-A 상당)
 
-   ```powershell
-   curl.exe -si -b "x-sp-ab=a" $URL | Select-String "version_a|version_b|set-cookie"
-   curl.exe -si -b "x-sp-ab=b" $URL | Select-String "version_a|version_b|set-cookie"
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     curl.exe -si -b "x-sp-ab=a" $URL | Select-String "version_a|version_b|set-cookie"
+     curl.exe -si -b "x-sp-ab=b" $URL | Select-String "version_a|version_b|set-cookie"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     curl -si -b "x-sp-ab=a" "$URL" | grep -Ei "version_a|version_b|set-cookie"
+     curl -si -b "x-sp-ab=b" "$URL" | grep -Ei "version_a|version_b|set-cookie"
+     ```
+     </TabItem>
+   </Tabs>
 
    기대: 각각 `version_a`/`version_b` 본문만 나오고 `set-cookie` 줄은 보이지 않는다 — 이미 배정된 쿠키라 req-fn이 `x-sp-ab-assigned` 헤더를 세우지 않고, res-fn이 그 헤더로 재발급 여부를 판단하기 때문이다.
 
 5. **무작위 배정 · 쿠키 보존** (mark 2-5-A 상당)
 
-   ```powershell
-   curl.exe -si $URL | Select-String "version_a|version_b|set-cookie"
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     curl.exe -si $URL | Select-String "version_a|version_b|set-cookie"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     curl -si "$URL" | grep -Ei "version_a|version_b|set-cookie"
+     ```
+     </TabItem>
+   </Tabs>
 
    기대: `version_a` 또는 `version_b` 중 하나 + `set-cookie: x-sp-ab=<a|b>; Path=/; Max-Age=86400`. 배정된 값을 적어 두고 같은 쿠키로 재방문한다.
 
-   ```powershell
-   $V = "a"   # 위에서 확인한 값으로 바꾼다
-   curl.exe -si -b "x-sp-ab=$V" $URL | Select-String "version_$V|set-cookie"
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $V = "a"   # 위에서 확인한 값으로 바꾼다
+     curl.exe -si -b "x-sp-ab=$V" $URL | Select-String "version_$V|set-cookie"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     V=a   # 위에서 확인한 값으로 바꾼다
+     curl -si -b "x-sp-ab=$V" "$URL" | grep -Ei "version_$V|set-cookie"
+     ```
+     </TabItem>
+   </Tabs>
 
    기대: 같은 버전 본문 + `set-cookie` 없음.
 
 6. **KVS 동적 반영** (mark 2-6-A 상당, 코드 재배포 없이)
 
-   ```powershell
-   $KVS  = aws cloudfront list-key-value-stores --query "KeyValueStoreList.Items[?Name=='skillsphone-cdn-ab-config'].ARN" --output text
-   $ETAG = aws cloudfront-keyvaluestore describe-key-value-store --kvs-arn $KVS --query ETag --output text
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $KVS  = aws cloudfront list-key-value-stores --query "KeyValueStoreList.Items[?Name=='skillsphone-cdn-ab-config'].ARN" --output text
+     $ETAG = aws cloudfront-keyvaluestore describe-key-value-store --kvs-arn $KVS --query ETag --output text
 
-   $ETAG = aws cloudfront-keyvaluestore put-key --kvs-arn $KVS --if-match $ETAG --key weight --value "1.0" --query ETag --output text
-   curl.exe -s $URL | Select-String "version_a|version_b"
-   # 기대: version_b (weight=1.0 → Math.random() < 1.0 은 항상 참) — 쿠키 없이 새 요청이어야 관찰된다
+     $ETAG = aws cloudfront-keyvaluestore put-key --kvs-arn $KVS --if-match $ETAG --key weight --value "1.0" --query ETag --output text
+     curl.exe -s $URL | Select-String "version_a|version_b"
+     # 기대: version_b (weight=1.0 → Math.random() < 1.0 은 항상 참) — 쿠키 없이 새 요청이어야 관찰된다
 
-   $ETAG = aws cloudfront-keyvaluestore put-key --kvs-arn $KVS --if-match $ETAG --key weight --value "0.3" --query ETag --output text
-   ```
+     $ETAG = aws cloudfront-keyvaluestore put-key --kvs-arn $KVS --if-match $ETAG --key weight --value "0.3" --query ETag --output text
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     KVS=$(aws cloudfront list-key-value-stores --query "KeyValueStoreList.Items[?Name=='skillsphone-cdn-ab-config'].ARN" --output text)
+     ETAG=$(aws cloudfront-keyvaluestore describe-key-value-store --kvs-arn "$KVS" --query ETag --output text)
+
+     ETAG=$(aws cloudfront-keyvaluestore put-key --kvs-arn "$KVS" --if-match "$ETAG" --key weight --value 1.0 --query ETag --output text)
+     curl -s "$URL" | grep -E "version_a|version_b"
+     # 기대: version_b (weight=1.0 → Math.random() < 1.0 은 항상 참) — 쿠키 없이 새 요청이어야 관찰된다
+
+     ETAG=$(aws cloudfront-keyvaluestore put-key --kvs-arn "$KVS" --if-match "$ETAG" --key weight --value 0.3 --query ETag --output text)
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -158,10 +242,20 @@ import { Steps } from '@astrojs/starlight/components';
 
 ## 정리 (당일 필수)
 
-```powershell
-cd ~\skills-2026\set-07\task-2\module-2-cdn-function\terraform
-terraform destroy -auto-approve
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  cd ~\skills-2026\set-07\task-2\module-2-cdn-function\terraform
+  terraform destroy -auto-approve
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  cd ~/skills-2026/set-07/task-2/module-2-cdn-function/terraform
+  terraform destroy -auto-approve
+  ```
+  </TabItem>
+</Tabs>
 
 :::caution[과금 주의]
 CloudFront distribution은 disable→삭제 순서로 진행돼 몇 분 걸릴 수 있다(같은 서비스 기준 [02-kms-s3-cloudfront](/part-1/02-kms-s3-cloudfront/lab/) 실측 5~10분 수준). destroy 명령이 끝난 뒤 다음 작업으로 넘어간다.

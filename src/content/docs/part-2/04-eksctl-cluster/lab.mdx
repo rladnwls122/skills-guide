@@ -5,6 +5,8 @@ sidebar:
   order: 3
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 > 문서 유형: tutorial
 
 원리와 채점 관점은 [04 이론 — eksctl ClusterConfig](/part-2/04-eksctl-cluster/theory/)에 있다.
@@ -31,13 +33,26 @@ sidebar:
 
 이 실습은 정답지의 `set-02\task-1\terraform` 을 **통째로** apply 한 상태에서 시작한다. [01 실습](/part-1/01-terraform-vpc/lab/)에서 직접 쓴 VPC 만으로는 안 된다 — 뒤의 렌더가 보안 그룹·KMS 키·IAM 정책 ARN 까지 요구하고, 그 값들은 정답지 tf 의 `security.tf`·`kms.tf`·`iam.tf` 에서 나오기 때문이다.
 
-```powershell
-$env:AWS_DEFAULT_REGION = "ap-northeast-2"
-$env:NUM = "103"                   # 본인 비번호로 교체
-cd ~\skills-2026\set-02\task-1\terraform
-terraform init
-terraform apply -var "player_number=$env:NUM"
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $env:AWS_DEFAULT_REGION = "ap-northeast-2"
+  $env:NUM = "103"                   # 본인 비번호로 교체
+  cd ~\skills-2026\set-02\task-1\terraform
+  terraform init
+  terraform apply -var "player_number=$env:NUM"
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  export AWS_DEFAULT_REGION=ap-northeast-2
+  export NUM=103                     # 본인 비번호로 교체
+  cd ~/skills-2026/set-02/task-1/terraform
+  terraform init
+  terraform apply -var "player_number=$NUM"
+  ```
+  </TabItem>
+</Tabs>
 
 apply 가 실패하면 [01 실습의 apply 실패 세 갈래](/part-1/01-terraform-vpc/lab/)를 먼저 본다.
 
@@ -45,103 +60,172 @@ apply 가 실패하면 [01 실습의 apply 실패 세 갈래](/part-1/01-terrafo
 
 apply 가 끝나면 output 을 환경 변수로 읽고, 같은 값을 파일로 박아 둔다. 이 실습과 [05](/part-2/05-k8s-workloads-alb/lab/)·[07](/part-2/07-full-deploy-set02/lab/)이 이 파일 하나로 변수를 복원한다. cwd 는 `terraform` 이다.
 
-```powershell
-terraform output -json | Set-Content ..\outputs.json
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  terraform output -json | Set-Content ..\outputs.json
 
-$env:ACCOUNT_ID            = terraform output -raw account_id
-$env:VPC_ID                = terraform output -raw vpc_id
-$env:PRIV_SUBNET_C         = (terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-c'
-$env:PRIV_SUBNET_D         = (terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-d'
-$env:CLUSTER_EXTRA_SG_ID   = terraform output -raw cluster_extra_sg_id
-$env:NODE_SG_ID            = terraform output -raw node_sg_id
-$env:EKS_KMS_ARN           = terraform output -raw eks_kms_arn
-$env:BOOK_APP_POLICY_ARN   = terraform output -raw book_app_policy_arn
-$env:LBC_POLICY_ARN        = terraform output -raw lbc_policy_arn
-$env:FLUENT_BIT_POLICY_ARN = terraform output -raw fluent_bit_policy_arn
-$env:ECR                   = terraform output -raw ecr_repository_url
-$env:APP_TG                = terraform output -raw app_target_group_arn
-$env:GRAFANA_TG            = terraform output -raw grafana_target_group_arn
-$env:BUCKET                = terraform output -raw s3_bucket_name
-$env:ALB_DNS               = terraform output -raw book_alb_dns
-$env:GRAFANA_ALB_DNS       = terraform output -raw grafana_alb_dns
-$env:CF                    = terraform output -raw cloudfront_domain
-$env:GRAFANA_ADMIN_USER     = terraform output -raw grafana_admin_user
-$env:GRAFANA_ADMIN_PASSWORD = terraform output -raw grafana_admin_password
+  $env:ACCOUNT_ID            = terraform output -raw account_id
+  $env:VPC_ID                = terraform output -raw vpc_id
+  $env:PRIV_SUBNET_C         = (terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-c'
+  $env:PRIV_SUBNET_D         = (terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-d'
+  $env:CLUSTER_EXTRA_SG_ID   = terraform output -raw cluster_extra_sg_id
+  $env:NODE_SG_ID            = terraform output -raw node_sg_id
+  $env:EKS_KMS_ARN           = terraform output -raw eks_kms_arn
+  $env:BOOK_APP_POLICY_ARN   = terraform output -raw book_app_policy_arn
+  $env:LBC_POLICY_ARN        = terraform output -raw lbc_policy_arn
+  $env:FLUENT_BIT_POLICY_ARN = terraform output -raw fluent_bit_policy_arn
+  $env:ECR                   = terraform output -raw ecr_repository_url
+  $env:APP_TG                = terraform output -raw app_target_group_arn
+  $env:GRAFANA_TG            = terraform output -raw grafana_target_group_arn
+  $env:BUCKET                = terraform output -raw s3_bucket_name
+  $env:ALB_DNS               = terraform output -raw book_alb_dns
+  $env:GRAFANA_ALB_DNS       = terraform output -raw grafana_alb_dns
+  $env:CF                    = terraform output -raw cloudfront_domain
+  $env:GRAFANA_ADMIN_USER     = terraform output -raw grafana_admin_user
+  $env:GRAFANA_ADMIN_PASSWORD = terraform output -raw grafana_admin_password
 
-@"
-`$env:AWS_DEFAULT_REGION = "ap-northeast-2"
-`$env:NUM                 = "$env:NUM"
-`$env:ACCOUNT_ID          = "$env:ACCOUNT_ID"
-`$env:VPC_ID              = "$env:VPC_ID"
-`$env:PRIV_SUBNET_C       = "$env:PRIV_SUBNET_C"
-`$env:PRIV_SUBNET_D       = "$env:PRIV_SUBNET_D"
-`$env:CLUSTER_EXTRA_SG_ID = "$env:CLUSTER_EXTRA_SG_ID"
-`$env:NODE_SG_ID          = "$env:NODE_SG_ID"
-`$env:EKS_KMS_ARN         = "$env:EKS_KMS_ARN"
-`$env:BOOK_APP_POLICY_ARN = "$env:BOOK_APP_POLICY_ARN"
-`$env:LBC_POLICY_ARN      = "$env:LBC_POLICY_ARN"
-`$env:FLUENT_BIT_POLICY_ARN = "$env:FLUENT_BIT_POLICY_ARN"
-`$env:ECR                 = "$env:ECR"
-`$env:APP_TG              = "$env:APP_TG"
-`$env:GRAFANA_TG          = "$env:GRAFANA_TG"
-`$env:BUCKET              = "$env:BUCKET"
-`$env:ALB_DNS             = "$env:ALB_DNS"
-`$env:GRAFANA_ALB_DNS     = "$env:GRAFANA_ALB_DNS"
-`$env:CF                  = "$env:CF"
-`$env:GRAFANA_ADMIN_USER  = "$env:GRAFANA_ADMIN_USER"
-`$env:GRAFANA_ADMIN_PASSWORD = '$env:GRAFANA_ADMIN_PASSWORD'
-"@ | Set-Content ..\.env.ps1
+  @"
+  `$env:AWS_DEFAULT_REGION = "ap-northeast-2"
+  `$env:NUM                 = "$env:NUM"
+  `$env:ACCOUNT_ID          = "$env:ACCOUNT_ID"
+  `$env:VPC_ID              = "$env:VPC_ID"
+  `$env:PRIV_SUBNET_C       = "$env:PRIV_SUBNET_C"
+  `$env:PRIV_SUBNET_D       = "$env:PRIV_SUBNET_D"
+  `$env:CLUSTER_EXTRA_SG_ID = "$env:CLUSTER_EXTRA_SG_ID"
+  `$env:NODE_SG_ID          = "$env:NODE_SG_ID"
+  `$env:EKS_KMS_ARN         = "$env:EKS_KMS_ARN"
+  `$env:BOOK_APP_POLICY_ARN = "$env:BOOK_APP_POLICY_ARN"
+  `$env:LBC_POLICY_ARN      = "$env:LBC_POLICY_ARN"
+  `$env:FLUENT_BIT_POLICY_ARN = "$env:FLUENT_BIT_POLICY_ARN"
+  `$env:ECR                 = "$env:ECR"
+  `$env:APP_TG              = "$env:APP_TG"
+  `$env:GRAFANA_TG          = "$env:GRAFANA_TG"
+  `$env:BUCKET              = "$env:BUCKET"
+  `$env:ALB_DNS             = "$env:ALB_DNS"
+  `$env:GRAFANA_ALB_DNS     = "$env:GRAFANA_ALB_DNS"
+  `$env:CF                  = "$env:CF"
+  `$env:GRAFANA_ADMIN_USER  = "$env:GRAFANA_ADMIN_USER"
+  `$env:GRAFANA_ADMIN_PASSWORD = '$env:GRAFANA_ADMIN_PASSWORD'
+  "@ | Set-Content ..\.env.ps1
 
-. ..\.env.ps1
-```
+  . ..\.env.ps1
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform output -json > ../outputs.json
+  o() { jq -r "$1" ../outputs.json; }   # outputs.json 에서 값 하나 뽑는 도우미
+
+  cat > ../.env.sh <<EOF
+  export AWS_DEFAULT_REGION=ap-northeast-2
+  export NUM="$NUM"
+  export ACCOUNT_ID="$(o '.account_id.value')"
+  export VPC_ID="$(o '.vpc_id.value')"
+  export PRIV_SUBNET_C="$(o '.private_subnet_ids.value["wskorea26-priv-subnet-c"]')"
+  export PRIV_SUBNET_D="$(o '.private_subnet_ids.value["wskorea26-priv-subnet-d"]')"
+  export CLUSTER_EXTRA_SG_ID="$(o '.cluster_extra_sg_id.value')"
+  export NODE_SG_ID="$(o '.node_sg_id.value')"
+  export EKS_KMS_ARN="$(o '.eks_kms_arn.value')"
+  export BOOK_APP_POLICY_ARN="$(o '.book_app_policy_arn.value')"
+  export LBC_POLICY_ARN="$(o '.lbc_policy_arn.value')"
+  export FLUENT_BIT_POLICY_ARN="$(o '.fluent_bit_policy_arn.value')"
+  export ECR="$(o '.ecr_repository_url.value')"
+  export APP_TG="$(o '.app_target_group_arn.value')"
+  export GRAFANA_TG="$(o '.grafana_target_group_arn.value')"
+  export BUCKET="$(o '.s3_bucket_name.value')"
+  export ALB_DNS="$(o '.book_alb_dns.value')"
+  export GRAFANA_ALB_DNS="$(o '.grafana_alb_dns.value')"
+  export CF="$(o '.cloudfront_domain.value')"
+  export GRAFANA_ADMIN_USER="$(o '.grafana_admin_user.value')"
+  export GRAFANA_ADMIN_PASSWORD='$(o '.grafana_admin_password.value')'
+  EOF
+
+  source ../.env.sh
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-앞 절반은 `terraform output` 을 환경 변수로 읽어 지금 셸에 올린다. 뒷 절반의 here-string 이 그 값들을 `set-02\task-1\.env.ps1` 로 굳힌다. 백틱 `` `$ `` 는 "지금 확장하지 말고 `$env:...` 라는 글자 그대로 파일에 쓰라"는 표시이고, 큰따옴표 안의 `$env:VPC_ID` 는 반대로 지금 값으로 바뀐다. 마지막 줄만 큰따옴표가 아니라 작은따옴표인 것은 Grafana 비밀번호에 `$` 가 들어가기 때문이다.
+`terraform output` 값을 지금 셸에 올리고, 같은 값을 파일 하나로 굳힌다. 어느 셸이든 요령은 같다 — **값은 지금 확장하고, 변수 이름은 글자 그대로 파일에 남긴다**. PowerShell 은 here-string 안의 백틱 `` `$ `` 가 "지금 확장하지 말라"는 표시이고, 큰따옴표 안의 `$env:VPC_ID` 는 반대로 지금 값으로 바뀐다. bash 는 heredoc 이 `$( )` 만 지금 실행하고 `export VPC_ID=` 부분은 글자로 남긴다. 마지막 Grafana 비밀번호 줄만 작은따옴표인 것은 비밀번호에 `$` 가 들어가서, 파일을 다시 읽을 때 그 뒤가 변수로 확장되는 것을 막기 위해서다.
 
 </details>
 
-**검증**: `terraform output` 이 에러 없이 뜨고 `..\.env.ps1` 이 생겼으면 된다. 새 터미널로 이어서 할 땐 `set-02\task-1` 에서 `. .\.env.ps1` 한 줄만 다시 실행한다.
+**검증**: `terraform output` 이 에러 없이 뜨고 `..\.env.ps1`(bash 는 `../.env.sh`)이 생겼으면 된다. 새 터미널로 이어서 할 땐 `set-02\task-1` 에서 `. .\.env.ps1`(bash 는 `source ./.env.sh`) 한 줄만 다시 실행한다.
 
 ## 1. 환경변수 로드 + 렌더
 
-```powershell
-cd ~\skills-2026\set-02\task-1
-. .\.env.ps1                      # terraform output 영속 파일
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  cd ~\skills-2026\set-02\task-1
+  . .\.env.ps1                      # terraform output 영속 파일
 
-cd eksctl
-$c = Get-Content cluster.yaml -Raw
-foreach ($v in 'VPC_ID','PRIV_SUBNET_C','PRIV_SUBNET_D','CLUSTER_EXTRA_SG_ID','NODE_SG_ID',
-               'EKS_KMS_ARN','BOOK_APP_POLICY_ARN','LBC_POLICY_ARN','FLUENT_BIT_POLICY_ARN') {
-  $c = $c.Replace('${' + $v + '}', [Environment]::GetEnvironmentVariable($v))
-}
-$c | Set-Content cluster.rendered.yaml
-```
+  cd eksctl
+  $c = Get-Content cluster.yaml -Raw
+  foreach ($v in 'VPC_ID','PRIV_SUBNET_C','PRIV_SUBNET_D','CLUSTER_EXTRA_SG_ID','NODE_SG_ID',
+                 'EKS_KMS_ARN','BOOK_APP_POLICY_ARN','LBC_POLICY_ARN','FLUENT_BIT_POLICY_ARN') {
+    $c = $c.Replace('${' + $v + '}', [Environment]::GetEnvironmentVariable($v))
+  }
+  $c | Set-Content cluster.rendered.yaml
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  cd ~/skills-2026/set-02/task-1
+  source ./.env.sh                  # terraform output 영속 파일
+
+  cd eksctl
+  envsubst '$VPC_ID $PRIV_SUBNET_C $PRIV_SUBNET_D $CLUSTER_EXTRA_SG_ID $NODE_SG_ID
+            $EKS_KMS_ARN $BOOK_APP_POLICY_ARN $LBC_POLICY_ARN $FLUENT_BIT_POLICY_ARN' \
+    < cluster.yaml > cluster.rendered.yaml
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-`cluster.yaml` 의 `${VAR}` 자리 아홉 개를 실제 값으로 바꿔 `cluster.rendered.yaml` 을 만든다. 값의 출처는 앞 모듈이 남긴 `.env.ps1` 이라 점 하나로 먼저 불러온다. PowerShell 의 `.Replace()` 는 정규식이 아니라 문자열 그대로 치환하므로 `${...}` 의 특수문자를 신경 쓰지 않아도 된다. 치환한 파일을 따로 만드는 이유는 원본을 그대로 두어 다시 렌더할 수 있게 하려는 것이다.
+`cluster.yaml` 의 `${VAR}` 자리 아홉 개를 실제 값으로 바꿔 `cluster.rendered.yaml` 을 만든다. 값의 출처는 앞 모듈이 남긴 `.env.ps1`(bash 는 `.env.sh`)이라 점 하나로 먼저 불러온다. PowerShell 은 `.Replace()` 로 문자열을 그대로 치환하므로 `${...}` 의 특수문자를 신경 쓰지 않아도 되고, bash 는 `envsubst` 에 **치환할 변수 목록을 명시**한다 — 목록을 주지 않으면 YAML 안의 다른 `$` 표기까지 건드린다. 치환한 파일을 따로 만드는 이유는 원본을 그대로 두어 다시 렌더할 수 있게 하려는 것이다.
 
 </details>
 
 **검증 — 치환 누락 grep:**
 
-```powershell
-Select-String '\$\{' cluster.rendered.yaml
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String '\$\{' cluster.rendered.yaml
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -n '\${' cluster.rendered.yaml
+  ```
+  </TabItem>
+</Tabs>
 
 :::caution[생략 금지]
-기대 출력: **아무것도 없음**. 한 줄이라도 나오면 해당 변수가 env에 없는 것 — `.env.ps1` 재확인.
+기대 출력: **아무것도 없음**. 한 줄이라도 나오면 해당 변수가 env에 없는 것 — `.env.ps1`(bash 는 `.env.sh`) 재확인.
 치환이 남은 채로 생성에 들어가면 20분을 버린다.
 :::
 
 ## 2. 클러스터 생성 (~20분)
 
-```powershell
-eksctl create cluster -f cluster.rendered.yaml
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  eksctl create cluster -f cluster.rendered.yaml
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  eksctl create cluster -f cluster.rendered.yaml
+  ```
+  </TabItem>
+</Tabs>
 
 기대 출력(말미):
 
@@ -154,46 +238,101 @@ eksctl create cluster -f cluster.rendered.yaml
 :::danger[생성 실패 후 같은 이름으로 재시도할 때]
 `eksctl create cluster` 가 실패하면 CloudFormation 스택이 `ROLLBACK_COMPLETE` 로 남는다. 이 상태의 스택은 갱신이 안 되므로, 같은 이름으로 다시 만들면 `AlreadyExistsException` 이나 `stack ... is in ROLLBACK_COMPLETE state` 로 즉시 막힌다. 지우고 다시 만든다.
 
-```powershell
-aws cloudformation describe-stacks `
-  --query "Stacks[?starts_with(StackName,'eksctl-wskorea26-cluster')].[StackName,StackStatus]" --output text
-eksctl delete cluster --name wskorea26-cluster --disable-nodegroup-eviction --wait
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws cloudformation describe-stacks `
+    --query "Stacks[?starts_with(StackName,'eksctl-wskorea26-cluster')].[StackName,StackStatus]" --output text
+  eksctl delete cluster --name wskorea26-cluster --disable-nodegroup-eviction --wait
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws cloudformation describe-stacks \
+    --query "Stacks[?starts_with(StackName,'eksctl-wskorea26-cluster')].[StackName,StackStatus]" --output text
+  eksctl delete cluster --name wskorea26-cluster --disable-nodegroup-eviction --wait
+  ```
+  </TabItem>
+</Tabs>
 
 `eksctl delete` 가 남은 스택까지 지운다. 그래도 스택이 남으면 콘솔에서 해당 스택을 직접 삭제한 뒤 재시도한다. 삭제 확인 없이 `create` 를 다시 던지면 또 20분을 버린다.
 :::
 
-```powershell
-aws eks update-kubeconfig --region ap-northeast-2 --name wskorea26-cluster
-kubectl get nodes --show-labels | Select-String node-type
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws eks update-kubeconfig --region ap-northeast-2 --name wskorea26-cluster
+  kubectl get nodes --show-labels | Select-String node-type
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws eks update-kubeconfig --region ap-northeast-2 --name wskorea26-cluster
+  kubectl get nodes --show-labels | grep node-type
+  ```
+  </TabItem>
+</Tabs>
 
 기대 출력: 노드 4개, `node-type=addon` 2 + `node-type=app` 2.
 
 ## 3. 채점 항목 셀프 검증 (mark 5-1 ~ 5-4)
 
-```powershell
-# 5-1 버전 + 로그 5종
-aws eks describe-cluster --name wskorea26-cluster --query "cluster.[name,version]" --output text
-aws eks describe-cluster --name wskorea26-cluster --query "sort(cluster.logging.clusterLogging[?enabled==``true``].types[])" --output text
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  # 5-1 버전 + 로그 5종
+  aws eks describe-cluster --name wskorea26-cluster --query "cluster.[name,version]" --output text
+  aws eks describe-cluster --name wskorea26-cluster --query "sort(cluster.logging.clusterLogging[?enabled==``true``].types[])" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  # 5-1 버전 + 로그 5종
+  aws eks describe-cluster --name wskorea26-cluster --query 'cluster.[name,version]' --output text
+  aws eks describe-cluster --name wskorea26-cluster --query 'sort(cluster.logging.clusterLogging[?enabled==`true`].types[])' --output text
+  ```
+  </TabItem>
+</Tabs>
 
 기대: `wskorea26-cluster 1.35` / `api audit authenticator controllerManager scheduler`
 
-```powershell
-# 5-2 KMS 별칭 + 서브넷 이름 (채점지 원문은 bash — CloudShell에서 그대로 실행 가능)
-aws eks describe-cluster --name wskorea26-cluster --query "cluster.encryptionConfig[0].provider.keyArn" --output text
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  # 5-2 KMS 별칭 + 서브넷 이름 (채점지 원문은 bash — CloudShell에서 그대로 실행 가능)
+  aws eks describe-cluster --name wskorea26-cluster --query "cluster.encryptionConfig[0].provider.keyArn" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  # 5-2 KMS 별칭 + 서브넷 이름 (채점지 원문이 이 형태다)
+  aws eks describe-cluster --name wskorea26-cluster --query 'cluster.encryptionConfig[0].provider.keyArn' --output text
+  ```
+  </TabItem>
+</Tabs>
 
 기대: `wskorea26-eks-key`의 ARN (별칭 역조회는 채점지 5-2-A 명령 참조).
 
-```powershell
-# 5-3 노드그룹 이름/타입/tags.Name
-foreach ($ng in 'wskorea26-addon-ng','wskorea26-app-ng') {
-  aws eks describe-nodegroup --cluster-name wskorea26-cluster --nodegroup-name $ng `
-    --query "nodegroup.[nodegroupName,instanceTypes[0],tags.Name]" --output text
-}
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  # 5-3 노드그룹 이름/타입/tags.Name
+  foreach ($ng in 'wskorea26-addon-ng','wskorea26-app-ng') {
+    aws eks describe-nodegroup --cluster-name wskorea26-cluster --nodegroup-name $ng `
+      --query "nodegroup.[nodegroupName,instanceTypes[0],tags.Name]" --output text
+  }
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  # 5-3 노드그룹 이름/타입/tags.Name
+  for ng in wskorea26-addon-ng wskorea26-app-ng; do
+    aws eks describe-nodegroup --cluster-name wskorea26-cluster --nodegroup-name "$ng" \
+      --query 'nodegroup.[nodegroupName,instanceTypes[0],tags.Name]' --output text
+  done
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
@@ -209,10 +348,20 @@ wskorea26-addon-ng      t3.medium       wskorea26-addon-node
 wskorea26-app-ng        t3.medium       wskorea26-app-node
 ```
 
-```powershell
-# 5-4 사전 점검: kube-system 파드(aws-node/kube-proxy 제외)가 전부 addon 노드인가
-kubectl get pod -n kube-system -o wide
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  # 5-4 사전 점검: kube-system 파드(aws-node/kube-proxy 제외)가 전부 addon 노드인가
+  kubectl get pod -n kube-system -o wide
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  # 5-4 사전 점검: kube-system 파드(aws-node/kube-proxy 제외)가 전부 addon 노드인가
+  kubectl get pod -n kube-system -o wide
+  ```
+  </TabItem>
+</Tabs>
 
 :::danger[mark 5-4]
 기대: coredns 2개가 addon 노드 위. `eks-pod-identity-agent`, `metrics-server`가 **보이면 안 된다**.
@@ -232,12 +381,24 @@ kubectl get pod -n kube-system -o wide
 
 **부분 복구 (생성 중단 시):**
 
-```powershell
-eksctl utils associate-iam-oidc-provider --cluster wskorea26-cluster --approve   # OIDC
-eksctl create iamserviceaccount -f cluster.rendered.yaml --approve               # IAM SA
-eksctl create nodegroup -f cluster.rendered.yaml --include=<ng-name>             # NodeGroup
-eksctl create addon -f cluster.rendered.yaml                                     # Addon
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  eksctl utils associate-iam-oidc-provider --cluster wskorea26-cluster --approve   # OIDC
+  eksctl create iamserviceaccount -f cluster.rendered.yaml --approve               # IAM SA
+  eksctl create nodegroup -f cluster.rendered.yaml --include=<ng-name>             # NodeGroup
+  eksctl create addon -f cluster.rendered.yaml                                     # Addon
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  eksctl utils associate-iam-oidc-provider --cluster wskorea26-cluster --approve   # OIDC
+  eksctl create iamserviceaccount -f cluster.rendered.yaml --approve               # IAM SA
+  eksctl create nodegroup -f cluster.rendered.yaml --include=<ng-name>             # NodeGroup
+  eksctl create addon -f cluster.rendered.yaml                                     # Addon
+  ```
+  </TabItem>
+</Tabs>
 
 ## 5. 통과 기준 (mark 대응)
 
@@ -254,10 +415,20 @@ eksctl create addon -f cluster.rendered.yaml                                    
 
 당일 종료 시:
 
-```powershell
-eksctl delete cluster -f cluster.rendered.yaml --disable-nodegroup-eviction
-# terraform 리소스(VPC 등)는 PART-2 전체 종료 전까지 유지 가능 — NAT 시간당 과금은 인지할 것
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  eksctl delete cluster -f cluster.rendered.yaml --disable-nodegroup-eviction
+  # terraform 리소스(VPC 등)는 PART-2 전체 종료 전까지 유지 가능 — NAT 시간당 과금은 인지할 것
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  eksctl delete cluster -f cluster.rendered.yaml --disable-nodegroup-eviction
+  # terraform 리소스(VPC 등)는 PART-2 전체 종료 전까지 유지 가능 — NAT 시간당 과금은 인지할 것
+  ```
+  </TabItem>
+</Tabs>
 
 ## 7. 변형 셀프 체크
 

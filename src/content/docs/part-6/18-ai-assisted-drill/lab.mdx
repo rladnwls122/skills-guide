@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: how-to
 
@@ -53,12 +53,22 @@ import { Steps } from '@astrojs/starlight/components';
 
 3. **값싼 순서로 검증한다**
 
-   ```powershell
-   # ── Windows PowerShell ──
-   terraform fmt -check
-   terraform validate
-   terraform plan
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     terraform fmt -check
+     terraform validate
+     terraform plan
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     terraform fmt -check
+     terraform validate
+     terraform plan
+     ```
+     </TabItem>
+   </Tabs>
 
    `validate` 가 통과하고 `plan` 에서 인자 오류가 나면 옛 인자명이다. Registry 문서의 인자 목록과 대조한다.
 
@@ -78,12 +88,22 @@ import { Steps } from '@astrojs/starlight/components';
 
 Deployment·Service·HPA 한 벌을 요청한다. 이 드릴의 검증은 클러스터에게 묻는다.
 
-```powershell
-# ── Windows PowerShell ──
-kubectl apply -f draft.yaml --dry-run=server
-kubectl explain hpa.spec.behavior          # 필드가 실제로 있는지
-kubectl explain deployment.spec.template.spec.containers.resources
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl apply -f draft.yaml --dry-run=server
+  kubectl explain hpa.spec.behavior          # 필드가 실제로 있는지
+  kubectl explain deployment.spec.template.spec.containers.resources
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl apply -f draft.yaml --dry-run=server
+  kubectl explain hpa.spec.behavior          # 필드가 실제로 있는지
+  kubectl explain deployment.spec.template.spec.containers.resources
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
@@ -116,10 +136,20 @@ kubectl explain deployment.spec.template.spec.containers.resources
 
    작성만 하고 게시(Publish)하지 않으면 반영되지 않는다. 연결까지 끝난 뒤에 경로를 실제로 호출해 확인한다.
 
-   ```powershell
-   curl.exe -s -o NUL -w "%{http_code}`n" "https://<cf도메인>/images/<키>"
-   curl.exe -s -o NUL -w "%{http_code}`n" "https://<cf도메인>/v1/user?email=%27%20OR%201=1--"
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     curl.exe -s -o NUL -w "%{http_code}`n" "https://<cf도메인>/images/<키>"
+     curl.exe -s -o NUL -w "%{http_code}`n" "https://<cf도메인>/v1/user?email=%27%20OR%201=1--"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     curl -s -o /dev/null -w "%{http_code}\n" "https://<cf도메인>/images/<키>"
+     curl -s -o /dev/null -w "%{http_code}\n" "https://<cf도메인>/v1/user?email=%27%20OR%201=1--"
+     ```
+     </TabItem>
+   </Tabs>
 
 4. **정상 요청이 막히지 않는지 확인한다**
 
@@ -137,10 +167,18 @@ kubectl explain deployment.spec.template.spec.containers.resources
 2. Q에게 **영향 파일 목록**을 먼저 묻는다. 그다음 각 파일의 수정 조각을 받는다.
 3. 받은 목록을 `Select-String` 으로 검증한다 — Q가 빠뜨린 파일이 있는지 본다.
 
-   ```powershell
-   # ── Windows PowerShell ──
-   Select-String -Path .\**\*.tf,.\**\*.yaml -Pattern '<옛 이름>'
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Path .\**\*.tf,.\**\*.yaml -Pattern '<옛 이름>'
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -rn '<옛 이름>' --include='*.tf' --include='*.yaml' .
+     ```
+     </TabItem>
+   </Tabs>
 
 4. 수정 후 같은 검색으로 잔여 0건을 확인하고 `plan`·`--dry-run=server` 로 닫는다.
 

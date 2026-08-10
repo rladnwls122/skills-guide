@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
@@ -35,13 +35,26 @@ import { Steps } from '@astrojs/starlight/components';
 
 정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 정답지 경로는 클론 루트 `~\skills-2026` 기준이다.
 
-```powershell
-mkdir my-app-lab; cd my-app-lab
-copy $HOME\skills-2026\set-02\task-1\terraform\versions.tf .
-copy $HOME\skills-2026\set-02\task-1\terraform\data.tf .
-copy ..\my-kms-lab\kms.tf .            # 모듈 02 에서 쓴 CMK 정의 — 없으면 정답지의 kms.tf
-copy ..\my-kms-lab\variables.tf .      # player_number 등 이미 만든 변수
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  mkdir my-app-lab; cd my-app-lab
+  copy $HOME\skills-2026\set-02\task-1\terraform\versions.tf .
+  copy $HOME\skills-2026\set-02\task-1\terraform\data.tf .
+  copy ..\my-kms-lab\kms.tf .            # 모듈 02 에서 쓴 CMK 정의 — 없으면 정답지의 kms.tf
+  copy ..\my-kms-lab\variables.tf .      # player_number 등 이미 만든 변수
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  mkdir my-app-lab && cd my-app-lab
+  cp ~/skills-2026/set-02/task-1/terraform/versions.tf .
+  cp ~/skills-2026/set-02/task-1/terraform/data.tf .
+  cp ../my-kms-lab/kms.tf .              # 모듈 02 에서 쓴 CMK 정의 — 없으면 정답지의 kms.tf
+  cp ../my-kms-lab/variables.tf .        # player_number 등 이미 만든 변수
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
@@ -56,7 +69,7 @@ copy ..\my-kms-lab\variables.tf .      # player_number 등 이미 만든 변수
 
 <Steps>
 
-1. **Dockerfile 직접 작성 (정답지 금지)**
+1. **Dockerfile 직접 작성 (정답지 최대한 보지않기, Amazon Q 사용 가능)**
 
    스펙:
 
@@ -68,13 +81,22 @@ copy ..\my-kms-lab\variables.tf .      # player_number 등 이미 만든 변수
 
    실제 book 바이너리가 없으므로 로컬 검증용 더미를 만든다. 줄 끝은 **LF** 여야 한다.
 
-   ```powershell
-   $dummy = "#!/bin/sh`ndate `"+%Y-%m-%d %H:%M:%S %Z`"; sleep 3600`n"
-   [IO.File]::WriteAllText("$PWD\book", $dummy)
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $dummy = "#!/bin/sh`ndate `"+%Y-%m-%d %H:%M:%S %Z`"; sleep 3600`n"
+     [IO.File]::WriteAllText("$PWD\book", $dummy)
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     printf '#!/bin/sh\ndate "+%%Y-%%m-%%d %%H:%%M:%%S %%Z"; sleep 3600\n' > book
+     ```
+     </TabItem>
+   </Tabs>
 
    :::caution[CRLF 함정]
-   Windows 기본 도구(`Set-Content`·메모장)는 줄 끝에 CR 을 붙인다. 셔뱅이 `#!/bin/sh\r` 이 되면 컨테이너가 `no such file or directory` 로 죽는다 — 실패 원인이 셔뱅이라는 표시가 어디에도 안 나와서 찾기 어렵다. 위처럼 `WriteAllText` 로 쓰거나 CloudShell 에서 직접 만든다. 실행 권한은 Dockerfile 의 `COPY --chmod=755` 가 붙이므로 Windows 쪽에서 신경 쓸 것이 없다.
+   리눅스·CloudShell 에서 만들면 줄 끝이 LF 라 이 함정이 없다. Windows 기본 도구(`Set-Content`·메모장)는 줄 끝에 CR 을 붙인다. 셔뱅이 `#!/bin/sh\r` 이 되면 컨테이너가 `no such file or directory` 로 죽는다 — 실패 원인이 셔뱅이라는 표시가 어디에도 안 나와서 찾기 어렵다. 위처럼 `WriteAllText` 로 쓰거나 CloudShell 에서 직접 만든다. 실행 권한은 Dockerfile 의 `COPY --chmod=755` 가 붙이므로 Windows 쪽에서 신경 쓸 것이 없다.
    :::
 
 2. **빌드·타임존 검증 (Docker 가능 환경 — CloudShell 권장)**
@@ -90,6 +112,8 @@ copy ..\my-kms-lab\variables.tf .      # player_number 등 이미 만든 변수
 3. **tf 작성 — ECR + DynamoDB (`ecr.tf`·`dynamodb.tf`)**
 
    CMK 는 복사해 온 `kms.tf` 의 `wskorea26-dynamodb-key` 를 참조한다 — 다시 정의하지 않는다.
+
+   - **변수화 대상 (tfvars 주입)**: `player_number`(비번호), `region`(리전), `prefix`(이름 접두사). ECR 리포지토리 이름, DynamoDB 테이블 이름, Lambda 함수 이름 등의 접두사(`wskorea26`)를 이 변수로 치환한다.
 
    | 리소스 | 스펙 (set-02 실측) |
    |---|---|
@@ -123,7 +147,7 @@ copy ..\my-kms-lab\variables.tf .      # player_number 등 이미 만든 변수
 
 5. **Lambda 작성 (index.py + lambda.tf)**
 
-   index.py 스펙 (정답지 금지, theory §4 의 사실 목록만 보고):
+   index.py 스펙 (정답지 최대한 보지않기, Amazon Q 사용 가능, theory §4 의 사실 목록만 보고):
 
    - env `TABLE_NAME`/`INDEX_NAME` 읽기 (하드코딩 금지)
    - `queryStringParameters` 에서 `concert_name` — 없으면 400 `{"msg": "concert_name is required"}`
@@ -143,20 +167,40 @@ copy ..\my-kms-lab\variables.tf .      # player_number 등 이미 만든 변수
 
 6. **데이터 주입 & 검증**
 
-   ```powershell
-   # Decimal 함정은 CLI put-item 은 문자열 "N" 타입이라 안 밟지만, 파이썬 스크립트로 넣을 땐 Decimal 필수
-   aws dynamodb put-item --table-name wskorea26-data-table --item '{
-     "client_id":{"S":"c1"},"concert_name":{"S":"2ND TINY_CON"},"created_at":{"S":"2026-07-25 10:00:00"},
-     "username":{"S":"akaね"},"email":{"S":"a@b.c"},"booking_id":{"S":"b1"}}'
-   aws dynamodb put-item --table-name wskorea26-data-table --item '{
-     "client_id":{"S":"c2"},"concert_name":{"S":"2ND TINY_CON"},"created_at":{"S":"2026-07-25 12:00:00"},
-     "username":{"S":"kim"},"email":{"S":"k@b.c"},"booking_id":{"S":"b2"}}'
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     # Decimal 함정은 CLI put-item 은 문자열 "N" 타입이라 안 밟지만, 파이썬 스크립트로 넣을 땐 Decimal 필수
+     aws dynamodb put-item --table-name wskorea26-data-table --item '{
+       "client_id":{"S":"c1"},"concert_name":{"S":"2ND TINY_CON"},"created_at":{"S":"2026-07-25 10:00:00"},
+       "username":{"S":"akaね"},"email":{"S":"a@b.c"},"booking_id":{"S":"b1"}}'
+     aws dynamodb put-item --table-name wskorea26-data-table --item '{
+       "client_id":{"S":"c2"},"concert_name":{"S":"2ND TINY_CON"},"created_at":{"S":"2026-07-25 12:00:00"},
+       "username":{"S":"kim"},"email":{"S":"k@b.c"},"booking_id":{"S":"b2"}}'
 
-   # (1) 정상 조회 — ALB 이벤트 흉내
-   '{"queryStringParameters":{"concert_name":"2ND%20TINY_CON"}}' | Set-Content event.json
-   aws lambda invoke --function-name wskorea26-book-lambda --payload fileb://event.json out.json
-   Get-Content out.json
-   ```
+     # (1) 정상 조회 — ALB 이벤트 흉내
+     '{"queryStringParameters":{"concert_name":"2ND%20TINY_CON"}}' | Set-Content event.json
+     aws lambda invoke --function-name wskorea26-book-lambda --payload fileb://event.json out.json
+     Get-Content out.json
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     # Decimal 함정은 CLI put-item 은 문자열 "N" 타입이라 안 밟지만, 파이썬 스크립트로 넣을 땐 Decimal 필수
+     aws dynamodb put-item --table-name wskorea26-data-table --item '{
+       "client_id":{"S":"c1"},"concert_name":{"S":"2ND TINY_CON"},"created_at":{"S":"2026-07-25 10:00:00"},
+       "username":{"S":"akaね"},"email":{"S":"a@b.c"},"booking_id":{"S":"b1"}}'
+     aws dynamodb put-item --table-name wskorea26-data-table --item '{
+       "client_id":{"S":"c2"},"concert_name":{"S":"2ND TINY_CON"},"created_at":{"S":"2026-07-25 12:00:00"},
+       "username":{"S":"kim"},"email":{"S":"k@b.c"},"booking_id":{"S":"b2"}}'
+
+     # (1) 정상 조회 — ALB 이벤트 흉내
+     echo '{"queryStringParameters":{"concert_name":"2ND%20TINY_CON"}}' > event.json
+     aws lambda invoke --function-name wskorea26-book-lambda --payload fileb://event.json out.json
+     cat out.json
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -172,25 +216,50 @@ copy ..\my-kms-lab\variables.tf .      # player_number 등 이미 만든 변수
    - 각 항목 키 순서가 username → created_at → email → booking_id → client_id → concert_name
    - `akaね` 가 이스케이프 없이 그대로 (`\u` 가 보이면 ensure_ascii 실패)
 
-   ```powershell
-   # (2) 파라미터 누락 → 400
-   '{"queryStringParameters":null}' | Set-Content event400.json
-   aws lambda invoke --function-name wskorea26-book-lambda --payload fileb://event400.json out400.json
-   # 기대: statusCode 400, body {"msg": "concert_name is required"}
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     # (2) 파라미터 누락 → 400
+     '{"queryStringParameters":null}' | Set-Content event400.json
+     aws lambda invoke --function-name wskorea26-book-lambda --payload fileb://event400.json out400.json
+     # 기대: statusCode 400, body {"msg": "concert_name is required"}
 
-   # (3) 결과 없음 → [] + 200
-   '{"queryStringParameters":{"concert_name":"NOPE"}}' | Set-Content eventempty.json
-   aws lambda invoke --function-name wskorea26-book-lambda --payload fileb://eventempty.json outempty.json
-   # 기대: statusCode 200, body "[]"
+     # (3) 결과 없음 → [] + 200
+     '{"queryStringParameters":{"concert_name":"NOPE"}}' | Set-Content eventempty.json
+     aws lambda invoke --function-name wskorea26-book-lambda --payload fileb://eventempty.json outempty.json
+     # 기대: statusCode 200, body "[]"
 
-   # (4) 테이블 상태 — mark 4-1 상당
-   aws dynamodb describe-table --table-name wskorea26-data-table `
-     --query 'Table.[DeletionProtectionEnabled, SSEDescription.SSEType, GlobalSecondaryIndexes[0].IndexName]'
-   # 기대: [true, "KMS", "concert_name-created_at-index"]
-   aws dynamodb describe-continuous-backups --table-name wskorea26-data-table `
-     --query 'ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus'
-   # 기대: "ENABLED"
-   ```
+     # (4) 테이블 상태 — mark 4-1 상당
+     aws dynamodb describe-table --table-name wskorea26-data-table `
+       --query 'Table.[DeletionProtectionEnabled, SSEDescription.SSEType, GlobalSecondaryIndexes[0].IndexName]'
+     # 기대: [true, "KMS", "concert_name-created_at-index"]
+     aws dynamodb describe-continuous-backups --table-name wskorea26-data-table `
+       --query 'ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus'
+     # 기대: "ENABLED"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     # (2) 파라미터 누락 → 400
+     echo '{"queryStringParameters":null}' > event400.json
+     aws lambda invoke --function-name wskorea26-book-lambda --payload fileb://event400.json out400.json
+     # 기대: statusCode 400, body {"msg": "concert_name is required"}
+
+     # (3) 결과 없음 → [] + 200
+     echo '{"queryStringParameters":{"concert_name":"NOPE"}}' > eventempty.json
+     aws lambda invoke --function-name wskorea26-book-lambda --payload fileb://eventempty.json outempty.json
+     # 기대: statusCode 200, body "[]"
+
+     # (4) 테이블 상태 — mark 4-1 상당
+     aws dynamodb describe-table --table-name wskorea26-data-table \
+       --query 'Table.[DeletionProtectionEnabled, SSEDescription.SSEType, GlobalSecondaryIndexes[0].IndexName]'
+     # 기대: [true, "KMS", "concert_name-created_at-index"]
+     aws dynamodb describe-continuous-backups --table-name wskorea26-data-table \
+       --query 'ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus'
+     # 기대: "ENABLED"
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -201,13 +270,26 @@ copy ..\my-kms-lab\variables.tf .      # player_number 등 이미 만든 변수
 
 7. **정답과 diff**
 
-   ```powershell
-   git diff --no-index .\Dockerfile   $HOME\skills-2026\set-02\task-1\app\Dockerfile
-   git diff --no-index .\dynamodb.tf  $HOME\skills-2026\set-02\task-1\terraform\dynamodb.tf
-   git diff --no-index .\ecr.tf       $HOME\skills-2026\set-02\task-1\terraform\ecr.tf
-   git diff --no-index .\lambda.tf    $HOME\skills-2026\set-02\task-1\terraform\lambda.tf
-   git diff --no-index .\lambda\index.py $HOME\skills-2026\set-02\task-1\terraform\lambda\index.py
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     git diff --no-index .\Dockerfile   $HOME\skills-2026\set-02\task-1\app\Dockerfile
+     git diff --no-index .\dynamodb.tf  $HOME\skills-2026\set-02\task-1\terraform\dynamodb.tf
+     git diff --no-index .\ecr.tf       $HOME\skills-2026\set-02\task-1\terraform\ecr.tf
+     git diff --no-index .\lambda.tf    $HOME\skills-2026\set-02\task-1\terraform\lambda.tf
+     git diff --no-index .\lambda\index.py $HOME\skills-2026\set-02\task-1\terraform\lambda\index.py
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     git diff --no-index ./Dockerfile   ~/skills-2026/set-02/task-1/app/Dockerfile
+     git diff --no-index ./dynamodb.tf  ~/skills-2026/set-02/task-1/terraform/dynamodb.tf
+     git diff --no-index ./ecr.tf       ~/skills-2026/set-02/task-1/terraform/ecr.tf
+     git diff --no-index ./lambda.tf    ~/skills-2026/set-02/task-1/terraform/lambda.tf
+     git diff --no-index ./lambda/index.py ~/skills-2026/set-02/task-1/terraform/lambda/index.py
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -255,17 +337,34 @@ copy ..\my-kms-lab\variables.tf .      # player_number 등 이미 만든 변수
 `deletion_protection_enabled = true` 인 채로 `terraform destroy` 하면 테이블 삭제가 실패한다 — 해제 apply 를 먼저 돌린다.
 :::
 
-```powershell
-# 1) 삭제방지 해제: dynamodb.tf 에서 deletion_protection_enabled = false 로 수정
-terraform apply        # 해제만 반영
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  # 1) 삭제방지 해제: dynamodb.tf 에서 deletion_protection_enabled = false 로 수정
+  terraform apply        # 해제만 반영
 
-# 2) 전체 삭제 (ECR 은 force_delete 로 이미지째 삭제됨)
-terraform destroy
+  # 2) 전체 삭제 (ECR 은 force_delete 로 이미지째 삭제됨)
+  terraform destroy
 
-# 3) 확인
-aws dynamodb describe-table --table-name wskorea26-data-table 2>&1        # ResourceNotFoundException
-aws ecr describe-repositories --repository-names wskorea26-book-repo 2>&1 # RepositoryNotFoundException
-```
+  # 3) 확인
+  aws dynamodb describe-table --table-name wskorea26-data-table 2>&1        # ResourceNotFoundException
+  aws ecr describe-repositories --repository-names wskorea26-book-repo 2>&1 # RepositoryNotFoundException
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  # 1) 삭제방지 해제: dynamodb.tf 에서 deletion_protection_enabled = false 로 수정
+  terraform apply        # 해제만 반영
+
+  # 2) 전체 삭제 (ECR 은 force_delete 로 이미지째 삭제됨)
+  terraform destroy
+
+  # 3) 확인
+  aws dynamodb describe-table --table-name wskorea26-data-table 2>&1        # ResourceNotFoundException
+  aws ecr describe-repositories --repository-names wskorea26-book-repo 2>&1 # RepositoryNotFoundException
+  ```
+  </TabItem>
+</Tabs>
 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>

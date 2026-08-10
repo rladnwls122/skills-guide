@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
@@ -21,10 +21,20 @@ import { Steps } from '@astrojs/starlight/components';
 
 비번호는 리소스 이름에 들어가므로 셸에 먼저 올린다. 새 터미널을 열 때마다 다시 실행한다.
 
-```powershell
-$env:NUM = "103"    # 본인 비번호로 교체
-$env:NUM            # 기대: 비번호가 그대로 출력
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $env:NUM = "103"    # 본인 비번호로 교체
+  $env:NUM            # 기대: 비번호가 그대로 출력
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  export NUM=103      # 본인 비번호로 교체
+  echo "$NUM"         # 기대: 비번호가 그대로 출력
+  ```
+  </TabItem>
+</Tabs>
 
 ## 실습 목표
 
@@ -51,25 +61,52 @@ $env:NUM            # 기대: 비번호가 그대로 출력
 
 1. **A-1. 배포**
 
-   ```powershell
-   cd ~\skills-2026\set-02\task-2\module-1-workflow\terraform
-   terraform init
-   terraform apply -var "player_number=$env:NUM"
-   terraform output -json > outputs.json
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     cd ~\skills-2026\set-02\task-2\module-1-workflow\terraform
+     terraform init
+     terraform apply -var "player_number=$env:NUM"
+     terraform output -json > outputs.json
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     cd ~/skills-2026/set-02/task-2/module-1-workflow/terraform
+     terraform init
+     terraform apply -var "player_number=$NUM"
+     terraform output -json > outputs.json
+     ```
+     </TabItem>
+   </Tabs>
 
 2. **A-2. 리소스 검증**
 
-   ```powershell
-   $NUM = $env:NUM
-   $B = "wsc2026-student-score-bucket-$NUM"
-   $env:AWS_DEFAULT_REGION = "ap-southeast-1"
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $NUM = $env:NUM
+     $B = "wsc2026-student-score-bucket-$NUM"
+     $env:AWS_DEFAULT_REGION = "ap-southeast-1"
 
-   aws dynamodb describe-table --table-name wsc2026-student-score --query "Table.[TableName,KeySchema]" --output json
-   aws lambda get-function-configuration --function-name wsc2026-student-score-function --query "[FunctionName,Runtime,Environment.Variables]" --output json
-   $SM_ARN = aws stepfunctions list-state-machines --query "stateMachines[?name=='wsc2026-student-score-workflow'].stateMachineArn" --output text
-   aws stepfunctions describe-state-machine --state-machine-arn $SM_ARN --query "[name,type]" --output text
-   ```
+     aws dynamodb describe-table --table-name wsc2026-student-score --query "Table.[TableName,KeySchema]" --output json
+     aws lambda get-function-configuration --function-name wsc2026-student-score-function --query "[FunctionName,Runtime,Environment.Variables]" --output json
+     $SM_ARN = aws stepfunctions list-state-machines --query "stateMachines[?name=='wsc2026-student-score-workflow'].stateMachineArn" --output text
+     aws stepfunctions describe-state-machine --state-machine-arn $SM_ARN --query "[name,type]" --output text
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     B="wsc2026-student-score-bucket-$NUM"
+     export AWS_DEFAULT_REGION=ap-southeast-1
+
+     aws dynamodb describe-table --table-name wsc2026-student-score --query 'Table.[TableName,KeySchema]' --output json
+     aws lambda get-function-configuration --function-name wsc2026-student-score-function --query '[FunctionName,Runtime,Environment.Variables]' --output json
+     SM_ARN=$(aws stepfunctions list-state-machines --query "stateMachines[?name=='wsc2026-student-score-workflow'].stateMachineArn" --output text)
+     aws stepfunctions describe-state-machine --state-machine-arn "$SM_ARN" --query '[name,type]' --output text
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -86,24 +123,49 @@ $env:NUM            # 기대: 비번호가 그대로 출력
 
 3. **A-3. 최종 실행 절차** (채점 직전 리셋 — 순서 엄수)
 
-   ```powershell
-   # 1) 잔여물 제거
-   aws s3 rm s3://$B/processed/ --recursive
-   aws s3 rm s3://$B/error/ --recursive
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     # 1) 잔여물 제거
+     aws s3 rm s3://$B/processed/ --recursive
+     aws s3 rm s3://$B/error/ --recursive
 
-   # 2) DynamoDB 비우기
-   $items = aws dynamodb scan --table-name wsc2026-student-score --query "Items[].{studentId:studentId,examDate:examDate}" --output json | ConvertFrom-Json
-   foreach ($i in $items) {
-     $key = ($i | ConvertTo-Json -Compress) -replace '"', '\"'
-     aws dynamodb delete-item --table-name wsc2026-student-score --key $key
-   }
+     # 2) DynamoDB 비우기
+     $items = aws dynamodb scan --table-name wsc2026-student-score --query "Items[].{studentId:studentId,examDate:examDate}" --output json | ConvertFrom-Json
+     foreach ($i in $items) {
+       $key = ($i | ConvertTo-Json -Compress) -replace '"', '\"'
+       aws dynamodb delete-item --table-name wsc2026-student-score --key $key
+     }
 
-   # 3) test.csv 정확 1회 업로드
-   aws s3 cp ..\..\provided\module1\test.csv s3://$B/input/test.csv
+     # 3) test.csv 정확 1회 업로드
+     aws s3 cp ..\..\provided\module1\test.csv s3://$B/input/test.csv
 
-   # 4) 실행 확인
-   aws stepfunctions list-executions --state-machine-arn $SM_ARN --query "executions[].[status,startDate]" --output text
-   ```
+     # 4) 실행 확인
+     aws stepfunctions list-executions --state-machine-arn $SM_ARN --query "executions[].[status,startDate]" --output text
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     # 1) 잔여물 제거
+     aws s3 rm "s3://$B/processed/" --recursive
+     aws s3 rm "s3://$B/error/" --recursive
+
+     # 2) DynamoDB 비우기
+     aws dynamodb scan --table-name wsc2026-student-score \
+       --query 'Items[].{studentId:studentId,examDate:examDate}' --output json \
+       | jq -c '.[]' \
+       | while read -r key; do
+           aws dynamodb delete-item --table-name wsc2026-student-score --key "$key"
+         done
+
+     # 3) test.csv 정확 1회 업로드
+     aws s3 cp ../../provided/module1/test.csv "s3://$B/input/test.csv"
+
+     # 4) 실행 확인
+     aws stepfunctions list-executions --state-machine-arn "$SM_ARN" --query 'executions[].[status,startDate]' --output text
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -114,19 +176,38 @@ $env:NUM            # 기대: 비번호가 그대로 출력
 
 4. **A-4. 결과 검증 + 기대 출력**
 
-   ```powershell
-   aws dynamodb get-item --table-name wsc2026-student-score --key '{\"studentId\":{\"S\":\"STU1020\"},\"examDate\":{\"S\":\"2026-05-30\"}}' --query "Item.[studentId.S,average.N,grade.S]" --output text
-   # 기대: STU1020    96.6    A   (항목이 아예 없으면 float 저장이 TypeError 로 죽은 것)
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     aws dynamodb get-item --table-name wsc2026-student-score --key '{\"studentId\":{\"S\":\"STU1020\"},\"examDate\":{\"S\":\"2026-05-30\"}}' --query "Item.[studentId.S,average.N,grade.S]" --output text
+     # 기대: STU1020    96.6    A   (항목이 아예 없으면 float 저장이 TypeError 로 죽은 것)
 
-   aws s3 ls s3://$B/
-   # 기대: PRE error/  PRE input/  PRE processed/  — 딱 3줄
+     aws s3 ls s3://$B/
+     # 기대: PRE error/  PRE input/  PRE processed/  — 딱 3줄
 
-   aws s3 ls s3://$B/processed/
-   # 기대: test.csv 한 줄만
+     aws s3 ls s3://$B/processed/
+     # 기대: test.csv 한 줄만
 
-   aws s3 ls s3://$B/error/
-   # 기대: error_*_STU2001 / STU2002 / STU2004 / unknown .json — 정확히 4개
-   ```
+     aws s3 ls s3://$B/error/
+     # 기대: error_*_STU2001 / STU2002 / STU2004 / unknown .json — 정확히 4개
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     aws dynamodb get-item --table-name wsc2026-student-score --key '{"studentId":{"S":"STU1020"},"examDate":{"S":"2026-05-30"}}' --query 'Item.[studentId.S,average.N,grade.S]' --output text
+     # 기대: STU1020    96.6    A   (항목이 아예 없으면 float 저장이 TypeError 로 죽은 것)
+
+     aws s3 ls "s3://$B/"
+     # 기대: PRE error/  PRE input/  PRE processed/  — 딱 3줄
+
+     aws s3 ls "s3://$B/processed/"
+     # 기대: test.csv 한 줄만
+
+     aws s3 ls "s3://$B/error/"
+     # 기대: error_*_STU2001 / STU2002 / STU2004 / unknown .json — 정확히 4개
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -143,7 +224,7 @@ $env:NUM            # 기대: 비번호가 그대로 출력
 - processed/·error/에 폴더 마커를 만들어두면 `s3 ls`에 0바이트 잉여 라인 → 오답. 마커는 `input/`만.
 - 평균을 float로 계산 → boto3 가 `Float types are not supported` 로 저장 거부. `decimal.Decimal` 로 계산·저장.
 - 처리 Lambda 이름은 mark에만 있다(`wsc2026-student-score-function`) — task.md만 보고 이름을 지어내면 0점.
-- PowerShell에서 JSON 인자는 `\"` 이스케이프 필수.
+- PowerShell에서 JSON 인자는 `\"` 이스케이프 필수. bash 는 작은따옴표로 감싸면 그대로 통한다.
 
 ### A-6. 통과 기준
 
@@ -159,34 +240,78 @@ $env:NUM            # 기대: 비번호가 그대로 출력
 
 1. **B-1. 배포**
 
-   ```powershell
-   cd ~\skills-2026\set-02\task-2\module-3-event\terraform
-   terraform init
-   terraform apply -var "player_number=$env:NUM"
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     cd ~\skills-2026\set-02\task-2\module-3-event\terraform
+     terraform init
+     terraform apply -var "player_number=$env:NUM"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     cd ~/skills-2026/set-02/task-2/module-3-event/terraform
+     terraform init
+     terraform apply -var "player_number=$NUM"
+     ```
+     </TabItem>
+   </Tabs>
 
    **apply 후 5~10분 대기** — CloudTrail 이벤트 전달 활성화 + Config 첫 평가. 급하면:
 
-   ```powershell
-   $env:AWS_DEFAULT_REGION = "eu-west-1"
-   aws configservice start-config-rules-evaluation --config-rule-names wsc2026-required-tags-rule wsc2026-sg-ssh-rule
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $env:AWS_DEFAULT_REGION = "eu-west-1"
+     aws configservice start-config-rules-evaluation --config-rule-names wsc2026-required-tags-rule wsc2026-sg-ssh-rule
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     export AWS_DEFAULT_REGION=eu-west-1
+     aws configservice start-config-rules-evaluation --config-rule-names wsc2026-required-tags-rule wsc2026-sg-ssh-rule
+     ```
+     </TabItem>
+   </Tabs>
 
 2. **B-2. 리소스 검증**
 
-   ```powershell
-   $env:AWS_DEFAULT_REGION = "eu-west-1"
-   $ACCOUNT_ID = aws sts get-caller-identity --query Account --output text
-   $INSTANCE_ID = aws ec2 describe-instances --filters "Name=tag:Name,Values=wsc2026-event-ec2" "Name=instance-state-name,Values=running,stopped" --query "Reservations[0].Instances[0].InstanceId" --output text
-   $SG_ID = aws ec2 describe-security-groups --filters "Name=group-name,Values=wsc2026-event-sg" --query "SecurityGroups[0].GroupId" --output text
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $env:AWS_DEFAULT_REGION = "eu-west-1"
+     $ACCOUNT_ID = aws sts get-caller-identity --query Account --output text
+     $INSTANCE_ID = aws ec2 describe-instances --filters "Name=tag:Name,Values=wsc2026-event-ec2" "Name=instance-state-name,Values=running,stopped" --query "Reservations[0].Instances[0].InstanceId" --output text
+     $SG_ID = aws ec2 describe-security-groups --filters "Name=group-name,Values=wsc2026-event-sg" --query "SecurityGroups[0].GroupId" --output text
 
-   # Lambda 4개 (mark) + 2개 (task 전용) — 전부 python3.12
-   foreach ($fn in "wsc2026-ec2-stop-remediation","wsc2026-ec2-terminate-alert","wsc2026-sg-remediation","wsc2026-tag-alert","wsc2026-role-remediation","wsc2026-ec2-type-remediation") { aws lambda get-function --function-name $fn --query "Configuration.[FunctionName,Runtime]" --output text }
-   # EventBridge 타깃
-   foreach ($rule in "wsc2026-ec2-stop-rule","wsc2026-ec2-terminate-rule") { "$rule -> $(aws events list-targets-by-rule --rule $rule --query 'Targets[0].Arn' --output text)" }
-   # Config 룰 ACTIVE
-   aws configservice describe-config-rules --config-rule-names wsc2026-sg-ssh-rule wsc2026-required-tags-rule --query "ConfigRules[*].[ConfigRuleName,ConfigRuleState]" --output text
-   ```
+     # Lambda 4개 (mark) + 2개 (task 전용) — 전부 python3.12
+     foreach ($fn in "wsc2026-ec2-stop-remediation","wsc2026-ec2-terminate-alert","wsc2026-sg-remediation","wsc2026-tag-alert","wsc2026-role-remediation","wsc2026-ec2-type-remediation") { aws lambda get-function --function-name $fn --query "Configuration.[FunctionName,Runtime]" --output text }
+     # EventBridge 타깃
+     foreach ($rule in "wsc2026-ec2-stop-rule","wsc2026-ec2-terminate-rule") { "$rule -> $(aws events list-targets-by-rule --rule $rule --query 'Targets[0].Arn' --output text)" }
+     # Config 룰 ACTIVE
+     aws configservice describe-config-rules --config-rule-names wsc2026-sg-ssh-rule wsc2026-required-tags-rule --query "ConfigRules[*].[ConfigRuleName,ConfigRuleState]" --output text
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     export AWS_DEFAULT_REGION=eu-west-1
+     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+     INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=wsc2026-event-ec2" "Name=instance-state-name,Values=running,stopped" --query 'Reservations[0].Instances[0].InstanceId' --output text)
+     SG_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=wsc2026-event-sg" --query 'SecurityGroups[0].GroupId' --output text)
+
+     # Lambda 4개 (mark) + 2개 (task 전용) — 전부 python3.12
+     for fn in wsc2026-ec2-stop-remediation wsc2026-ec2-terminate-alert wsc2026-sg-remediation wsc2026-tag-alert wsc2026-role-remediation wsc2026-ec2-type-remediation; do
+       aws lambda get-function --function-name "$fn" --query 'Configuration.[FunctionName,Runtime]' --output text
+     done
+     # EventBridge 타깃
+     for rule in wsc2026-ec2-stop-rule wsc2026-ec2-terminate-rule; do
+       echo "$rule -> $(aws events list-targets-by-rule --rule "$rule" --query 'Targets[0].Arn' --output text)"
+     done
+     # Config 룰 ACTIVE
+     aws configservice describe-config-rules --config-rule-names wsc2026-sg-ssh-rule wsc2026-required-tags-rule --query 'ConfigRules[*].[ConfigRuleName,ConfigRuleState]' --output text
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -197,19 +322,38 @@ $env:NUM            # 기대: 비번호가 그대로 출력
 
 3. **B-3. 복구 시연 + 기대 출력**
 
-   ```powershell
-   # 위반 주입: 중지 + SSH 인바운드 추가
-   aws ec2 stop-instances --instance-ids $INSTANCE_ID | Out-Null
-   aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 | Out-Null
-   Start-Sleep 90
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     # 위반 주입: 중지 + SSH 인바운드 추가
+     aws ec2 stop-instances --instance-ids $INSTANCE_ID | Out-Null
+     aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol tcp --port 22 --cidr 0.0.0.0/0 | Out-Null
+     Start-Sleep 90
 
-   "EC2 State: $(aws ec2 describe-instances --instance-ids $INSTANCE_ID --query 'Reservations[0].Instances[0].State.Name' --output text)"
-   # 기대: running
-   "SG Inbound Count: $(aws ec2 describe-security-groups --group-ids $SG_ID --query 'SecurityGroups[0].IpPermissions | length(@)' --output text)"
-   # 기대: 0
-   aws configservice get-compliance-details-by-config-rule --config-rule-name wsc2026-required-tags-rule --compliance-types NON_COMPLIANT --query "EvaluationResults[0].EvaluationResultIdentifier.EvaluationResultQualifier.ResourceId" --output text
-   # 기대: None
-   ```
+     "EC2 State: $(aws ec2 describe-instances --instance-ids $INSTANCE_ID --query 'Reservations[0].Instances[0].State.Name' --output text)"
+     # 기대: running
+     "SG Inbound Count: $(aws ec2 describe-security-groups --group-ids $SG_ID --query 'SecurityGroups[0].IpPermissions | length(@)' --output text)"
+     # 기대: 0
+     aws configservice get-compliance-details-by-config-rule --config-rule-name wsc2026-required-tags-rule --compliance-types NON_COMPLIANT --query "EvaluationResults[0].EvaluationResultIdentifier.EvaluationResultQualifier.ResourceId" --output text
+     # 기대: None
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     # 위반 주입: 중지 + SSH 인바운드 추가
+     aws ec2 stop-instances --instance-ids "$INSTANCE_ID" > /dev/null
+     aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr 0.0.0.0/0 > /dev/null
+     sleep 90
+
+     echo "EC2 State: $(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].State.Name' --output text)"
+     # 기대: running
+     echo "SG Inbound Count: $(aws ec2 describe-security-groups --group-ids "$SG_ID" --query 'SecurityGroups[0].IpPermissions | length(@)' --output text)"
+     # 기대: 0
+     aws configservice get-compliance-details-by-config-rule --config-rule-name wsc2026-required-tags-rule --compliance-types NON_COMPLIANT --query 'EvaluationResults[0].EvaluationResultIdentifier.EvaluationResultQualifier.ResourceId' --output text
+     # 기대: None
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -220,17 +364,34 @@ $env:NUM            # 기대: 비번호가 그대로 출력
 
 4. **B-4. 타입 원복 시연** (task 전용, 수동 채점 대비)
 
-   ```powershell
-   aws events disable-rule --name wsc2026-ec2-stop-rule          # 필수! 레이스 방지
-   aws ec2 stop-instances --instance-ids $INSTANCE_ID
-   aws ec2 wait instance-stopped --instance-ids $INSTANCE_ID
-   aws ec2 modify-instance-attribute --instance-id $INSTANCE_ID --instance-type t3.small
-   aws ec2 start-instances --instance-ids $INSTANCE_ID
-   Start-Sleep 180
-   aws ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].[InstanceType,State.Name]" --output text
-   # 기대: t3.micro    running   (자동 원복)
-   aws events enable-rule --name wsc2026-ec2-stop-rule
-   ```
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     aws events disable-rule --name wsc2026-ec2-stop-rule          # 필수! 레이스 방지
+     aws ec2 stop-instances --instance-ids $INSTANCE_ID
+     aws ec2 wait instance-stopped --instance-ids $INSTANCE_ID
+     aws ec2 modify-instance-attribute --instance-id $INSTANCE_ID --instance-type t3.small
+     aws ec2 start-instances --instance-ids $INSTANCE_ID
+     Start-Sleep 180
+     aws ec2 describe-instances --instance-ids $INSTANCE_ID --query "Reservations[0].Instances[0].[InstanceType,State.Name]" --output text
+     # 기대: t3.micro    running   (자동 원복)
+     aws events enable-rule --name wsc2026-ec2-stop-rule
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     aws events disable-rule --name wsc2026-ec2-stop-rule          # 필수! 레이스 방지
+     aws ec2 stop-instances --instance-ids "$INSTANCE_ID"
+     aws ec2 wait instance-stopped --instance-ids "$INSTANCE_ID"
+     aws ec2 modify-instance-attribute --instance-id "$INSTANCE_ID" --instance-type t3.small
+     aws ec2 start-instances --instance-ids "$INSTANCE_ID"
+     sleep 180
+     aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].[InstanceType,State.Name]' --output text
+     # 기대: t3.micro    running   (자동 원복)
+     aws events enable-rule --name wsc2026-ec2-stop-rule
+     ```
+     </TabItem>
+   </Tabs>
 
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
@@ -261,10 +422,20 @@ $env:NUM            # 기대: 비번호가 그대로 출력
 
 ## 정리 (당일 필수)
 
-```powershell
-cd ~\skills-2026\set-02\task-2\module-1-workflow\terraform ; terraform destroy -var "player_number=$env:NUM"
-cd ..\..\module-3-event\terraform ; terraform destroy -var "player_number=$env:NUM"
-```
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  cd ~\skills-2026\set-02\task-2\module-1-workflow\terraform ; terraform destroy -var "player_number=$env:NUM"
+  cd ..\..\module-3-event\terraform ; terraform destroy -var "player_number=$env:NUM"
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  cd ~/skills-2026/set-02/task-2/module-1-workflow/terraform && terraform destroy -var "player_number=$NUM"
+  cd ../../module-3-event/terraform && terraform destroy -var "player_number=$NUM"
+  ```
+  </TabItem>
+</Tabs>
 
 - 유형 1: destroy 전 버킷이 비어 있어야 한다(`aws s3 rm s3://$B --recursive` 후 destroy가 안전).
 

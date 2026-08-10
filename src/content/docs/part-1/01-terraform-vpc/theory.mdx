@@ -102,6 +102,25 @@ variable "subnets" {
 
 </details>
 
+이름은 전부 변수로 뺀다 — 뒤에 나올 `vpc.tf` 가 이 이름들을 참조하므로, 여기 없으면 `terraform validate` 가 "Reference to undeclared input variable" 로 막는다.
+
+```hcl title="variables.tf (이름 변수 — set-02 실측)"
+variable "vpc_name" { type = string, default = "wskorea26-vpc" }
+variable "vpc_cidr" { type = string, default = "172.16.0.0/16" }
+variable "igw_name" { type = string, default = "book-igw" }
+
+# AZ 접미사(c/d)가 붙어 book-ngw-c / book-ngw-d 가 된다
+variable "nat_name_prefix" { type = string, default = "book-ngw" }
+
+variable "public_rtb_name" { type = string, default = "wskorea26-public-rtb" }
+# AZ 접미사가 붙어 wskorea26-private-rtb-c / -d 가 된다
+variable "private_rtb_name_prefix" { type = string, default = "wskorea26-private-rtb" }
+```
+
+:::note[한 줄 표기는 읽기용이다]
+실제 파일에서는 `variable "vpc_name" { description = "..." \n type = string \n default = "..." }` 처럼 줄을 나눠 쓴다. 위는 지면을 아끼려고 한 줄로 접은 것이고, `terraform fmt` 를 돌리면 자동으로 펴진다.
+:::
+
 ```hcl title="terraform.tfvars"
 # 대회 당일 바뀌는 값만 명시 주입
 player_number = "103"
@@ -112,7 +131,6 @@ vpc_cidr      = "172.16.0.0/16"
 ```hcl title="data.tf"
 # locals 로 파생값 계산
 locals {
-  bucket_name         = "${var.bucket_name_prefix}-${var.player_number}"
   public_subnet_keys  = [for k, v in var.subnets : k if v.tier == "public"]
   private_subnet_keys = [for k, v in var.subnets : k if v.tier == "private"]
 }
@@ -121,9 +139,13 @@ locals {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-`locals` 로 파생값을 미리 계산한다. 버킷 이름은 접두어와 비번호를 이어 붙인 것이고, 나머지 둘은 `for` 표현식으로 map 을 훑어 조건에 맞는 키만 골라낸 리스트다. 리소스 블록마다 같은 필터를 되풀이하지 않고 여기서 한 번만 정의한다.
+`locals` 로 파생값을 미리 계산한다. `for` 표현식으로 map 을 훑어 조건에 맞는 키만 골라낸 리스트 둘이다. 리소스 블록마다 같은 필터를 되풀이하지 않고 여기서 한 번만 정의한다.
 
 </details>
+
+:::caution[정답지의 `data.tf` 를 그대로 복사하면 validate 가 깨진다]
+정답지 `set-02/task-1/terraform/data.tf` 에는 위 두 줄 말고도 `bucket_name`(S3 용)과 `provided_dir`(제공자료 경로)가 함께 들어 있다. **그 파일은 1과제 전체를 만드는 코드의 일부**라, VPC 만 만드는 이 모듈에 복사해 오면 선언하지 않은 `var.bucket_name_prefix` 를 참조해 `terraform validate` 가 실패한다. 이 모듈에서는 위 블록만 쓴다.
+:::
 
 핵심: **서브넷 이름을 map 의 key 로** 쓰면 이름·CIDR·AZ·tier 가 한 곳에 모이고, `for` + `if` 로 public/private 을 파생시킨다.
 
@@ -305,7 +327,29 @@ resource "aws_nat_gateway" "this" {
 
 `aws_route` 를 `aws_route_table` 의 인라인 route 블록 대신 별도 리소스로 쓰는 이유: 라우트를 나중에 추가/변경해도 RTB 자체(=연결)가 흔들리지 않는다.
 
-**④ 세트별 차이** — CIDR(172.16 vs 10.x), AZ 쌍(a/b vs c/d), 서브넷 수, NAT 개수(1개 공용 vs AZ별)가 바뀐다. 이 실측 코드는 전부 변수·locals 파생이라 tfvars 교체로 흡수된다.
+**④ 전문 — 정답지 파일을 연다**
+
+위 조각들이 실제 파일에서 어떻게 이어지는지는 정답지 원본을 본다. 클론했다면 `~/skills-2026/set-02/task-1/terraform/vpc.tf` 이고, 브라우저로는 아래 링크다.
+
+- [set-02 `vpc.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/vpc.tf) — 이 절의 리소스 전부
+- [set-02 `variables.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/variables.tf) — 이름·CIDR·서브넷 map
+- [set-02 `outputs.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/outputs.tf) — 다음 모듈이 받아 쓰는 값
+
+파일에 들어 있는 리소스는 9종이다.
+
+| 리소스 | 개수 | 만드는 방식 |
+|---|---|---|
+| `aws_vpc` · `aws_internet_gateway` | 1 · 1 | 단일 |
+| `aws_subnet` | 4 | `for_each = var.subnets` |
+| `aws_route_table.public` · `aws_route.public_igw` | 1 · 1 | 단일 (퍼블릭 2개가 같은 경로를 공유) |
+| `aws_route_table_association.public` | 2 | `toset(local.public_subnet_keys)` |
+| `aws_eip.nat` · `aws_nat_gateway` | 2 · 2 | `toset(local.private_subnet_keys)` |
+| `aws_route_table.private` · `aws_route.private_nat` | 2 · 2 | 같음 (AZ별 분리) |
+| `aws_route_table_association.private` | 2 | 같음 |
+
+합이 **20개**다. `terraform plan` 이 20 을 내지 않으면 빠뜨린 리소스가 있다는 뜻이라, 코드를 뒤지기 전에 이 수부터 센다.
+
+**⑤ 세트별 차이** — CIDR(172.16 vs 10.x), AZ 쌍(a/b vs c/d), 서브넷 수, NAT 개수(1개 공용 vs AZ별)가 바뀐다. 이 실측 코드는 전부 변수·locals 파생이라 tfvars 교체로 흡수된다.
 
 ---
 
@@ -315,7 +359,31 @@ resource "aws_nat_gateway" "this" {
 
 **② 왜 필요한가 (채점 관점)** — 대회 환경은 재시동 시 파일이 초기화되고 CloudShell 세션이 끊긴다. eksctl YAML 렌더링·kubectl 치환·채점 확인 명령이 전부 output 값을 쓴다. 매번 콘솔에서 복사하면 그만큼 작성 시간을 잃는다. bastion 에는 Terraform 을 안 올리고 `outputs.json` 만 올려 jq 로 읽는 것이 저장소 규칙이다.
 
-**③ 핵심 원리** — set-02 README 실측:
+**③ 핵심 원리** — 먼저 `outputs.tf` 로 값을 내보낸다. 단일 값은 그대로, 여러 개는 map 으로 낸다.
+
+```hcl title="outputs.tf (VPC 부분)"
+output "account_id" { value = local.account_id }
+output "region"     { value = var.region }
+output "vpc_id"     { value = aws_vpc.this.id }
+
+output "public_subnet_ids" {
+  value = { for k in local.public_subnet_keys : k => aws_subnet.this[k].id }
+}
+
+output "private_subnet_ids" {
+  description = "EKS 클러스터·노드 배치 서브넷"
+  value       = { for k in local.private_subnet_keys : k => aws_subnet.this[k].id }
+}
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+서브넷 출력을 리스트가 아니라 **이름을 키로 갖는 map** 으로 내는 것이 요점이다. 리스트로 내면 나중에 `[0]`·`[1]` 로 집어야 하는데 순서가 보장되지 않는다. map 이면 `private_subnet_ids["wskorea26-priv-subnet-c"]` 처럼 이름으로 지목하므로 서브넷이 늘거나 순서가 바뀌어도 안전하다 — 04 이후 모듈이 전부 이 방식으로 값을 꺼낸다.
+
+</details>
+
+전체 목록은 [set-02 `outputs.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/outputs.tf) 에 있다. 이 값들을 셸로 꺼내 파일에 굳히는 방법은 아래와 같다 — set-02 README 실측:
 
 <Tabs syncKey="shell">
   <TabItem label="PowerShell">

@@ -37,7 +37,7 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 <Tabs syncKey="shell">
   <TabItem label="PowerShell">
   ```powershell
-  mkdir my-cdn-lab; cd my-cdn-lab
+  cd ~; mkdir my-cdn-lab; cd my-cdn-lab
   # 업로드할 더미 정적 파일
   mkdir provided
   '<html><body>hello</body></html>' | Set-Content provided\index.html
@@ -46,7 +46,7 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
   </TabItem>
   <TabItem label="Bash (Linux/CloudShell)">
   ```bash
-  mkdir my-cdn-lab && cd my-cdn-lab
+  cd ~ && mkdir my-cdn-lab && cd my-cdn-lab
   # 업로드할 더미 정적 파일
   mkdir provided
   echo '<html><body>hello</body></html>' > provided/index.html
@@ -68,26 +68,47 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 1. **스펙만 보고 직접 작성 (정답지 최대한 보지않기, Amazon Q 사용 가능)**
 
-   `versions.tf`·`data.tf` 는 모듈 01 과 같은 이유로 정답지에서 복사한다 — 세트가 바뀌어도 내용이 같은 부트스트랩이다.
+   `versions.tf` 는 모듈 01 과 같은 이유로 정답지에서 복사한다 — 세트가 바뀌어도 내용이 같은 부트스트랩이다.
 
    <Tabs syncKey="shell">
      <TabItem label="PowerShell">
      ```powershell
      copy $HOME\skills-2026\set-02\task-1\terraform\versions.tf .
-     copy $HOME\skills-2026\set-02\task-1\terraform\data.tf .
      ```
      </TabItem>
      <TabItem label="Bash (Linux/CloudShell)">
      ```bash
      cp ~/skills-2026/set-02/task-1/terraform/versions.tf .
-     cp ~/skills-2026/set-02/task-1/terraform/data.tf .
      ```
      </TabItem>
    </Tabs>
 
+   :::caution[`data.tf` 는 복사하지 않는다]
+   정답지의 [`data.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/data.tf) 는 VPC·제공자료까지 함께 다루는 파일이라, 이 실습에 그대로 가져오면 선언하지 않은 `var.subnets` 를 참조해 `terraform validate` 가 실패한다. 이 모듈에 필요한 것은 아래뿐이다.
+
+   ```hcl title="data.tf"
+   data "aws_caller_identity" "current" {}
+
+   locals {
+     account_id  = data.aws_caller_identity.current.account_id
+     bucket_name = "${var.bucket_name_prefix}-${var.player_number}"
+   }
+   ```
+
+   `bucket_name_prefix`(기본값 `wskorea26-concert-bucket`)와 `player_number` 를 `variables.tf` 에 함께 선언해야 한다.
+   :::
+
    직접 쓰는 파일: `variables.tf`, `kms.tf`, `s3.tf`, `cloudfront.tf`, `outputs.tf`
 
-   - **변수화 대상 (tfvars 주입)**: `player_number`(비번호), `region`(리전), `prefix`(이름 접두사)는 하드코딩하지 않고 변수로 주입한다. 버킷 이름의 비번호나 리소스 이름 접두사(`wskorea26`)가 이 변수들로 치환되어야 한다.
+   :::tip[막히면 여는 순서 — 백지에서 버티는 시간은 15분이다]
+   1. **[02 이론](/part-1/02-kms-s3-cloudfront/theory/)** — 키 정책 합성·OAC·순환 참조 회피가 거기 있다.
+   2. 한 리소스에서 15분 넘게 막히면 정답지를 연다: [`kms.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/kms.tf) · [`s3.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/s3.tf) · [`cloudfront.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/cloudfront.tf). 막힌 **그 리소스만** 보고 닫는다.
+   3. 연 자리를 한 줄로 적어 둔다 — 5단계 diff 에서 다시 볼 목록이다.
+
+   첫 회차 목표는 "보지 않고 쓰기"가 아니라 **끝까지 가는 것**이다.
+   :::
+
+   - **변수화 대상 (tfvars 주입)**: `player_number`(비번호), `region`(리전), `prefix`(이름 접두사), `bucket_name_prefix`(버킷 이름 접두사, 기본값 `wskorea26-concert-bucket`)는 하드코딩하지 않고 변수로 주입한다. 버킷 이름의 비번호나 리소스 이름 접두사(`wskorea26`)가 이 변수들로 치환되어야 한다.
 
    | 항목 | 스펙 (set-02 실측) |
    |---|---|

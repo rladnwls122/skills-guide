@@ -40,19 +40,25 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 리눅스·CloudShell 에서는 `~` 를 셸이 인자 자리에서도 풀어 주므로 `~/skills-2026/...` 이 어디서나 통한다. 아래 코드 블록은 전부 두 셸 탭으로 되어 있고, 한 번 고른 탭은 사이트 전체에서 유지된다.
 
+실습 폴더는 **홈 바로 아래에 `my-vpc-lab`** 으로 만든다. 정답지(`~/skills-2026`)와 나란히 두는 것이라 이후 명령의 상대 경로가 전부 맞는다.
+
+:::danger[NAT 는 켜 둔 시간만큼 청구된다]
+이 실습은 NAT 게이트웨이 2개와 EIP 2개를 만든다. 시간당 과금이라 켜 둔 채로 자면 하룻밤에 몇 달러가 나간다. **막혀서 중단하더라도 창을 닫기 전에 [정리 (destroy)](#정리-destroy) 를 먼저 실행한다** — 코드는 남으니 다음 날 `terraform apply` 로 다시 세우면 된다.
+:::
+
 <Tabs syncKey="shell">
   <TabItem label="PowerShell">
   ```powershell
   terraform version    # >= 1.6
   aws sts get-caller-identity   # 자격증명 확인
-  mkdir my-vpc-lab; cd my-vpc-lab
+  cd ~; mkdir my-vpc-lab; cd my-vpc-lab
   ```
   </TabItem>
   <TabItem label="Bash (Linux/CloudShell)">
   ```bash
   terraform version    # >= 1.6
   aws sts get-caller-identity   # 자격증명 확인
-  mkdir my-vpc-lab && cd my-vpc-lab
+  cd ~ && mkdir my-vpc-lab && cd my-vpc-lab
   ```
   </TabItem>
 </Tabs>
@@ -75,27 +81,41 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 1. **바뀌지 않는 파일은 정답지에서 가져온다**
 
-   `versions.tf`(provider 고정)와 `data.tf`(계정·AZ 조회)는 세트가 바뀌어도 내용이 거의 같다. 대회 당일에도 이 두 파일을 새로 쓰지 않으므로, 실습에서도 복사해 쓰고 시간을 바뀌는 쪽에 쓴다.
+   `versions.tf`(provider 고정)는 세트가 바뀌어도 내용이 거의 같다. 대회 당일에도 이 파일을 새로 쓰지 않으므로, 실습에서도 복사해 쓰고 시간을 바뀌는 쪽에 쓴다.
 
    <Tabs syncKey="shell">
      <TabItem label="PowerShell">
      ```powershell
      copy $HOME\skills-2026\set-02\task-1\terraform\versions.tf .
-     copy $HOME\skills-2026\set-02\task-1\terraform\data.tf .
      ```
      </TabItem>
      <TabItem label="Bash (Linux/CloudShell)">
      ```bash
      cp ~/skills-2026/set-02/task-1/terraform/versions.tf .
-     cp ~/skills-2026/set-02/task-1/terraform/data.tf .
      ```
      </TabItem>
    </Tabs>
 
+   :::caution[`data.tf` 는 복사하지 않는다]
+   정답지의 [`data.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/data.tf) 는 1과제 **전체**를 만드는 코드의 일부다. 그 안에 S3 버킷 이름(`bucket_name`)과 제공자료 경로(`provided_dir`)가 함께 들어 있어, VPC 만 만드는 이 실습에 복사해 오면 선언하지 않은 `var.bucket_name_prefix` 를 참조해 **`terraform validate` 가 `Reference to undeclared input variable` 로 실패**한다.
+
+   이 모듈에서 필요한 것은 다음 네 줄뿐이다. `data.tf` 로 저장한다.
+
+   ```hcl title="data.tf"
+   data "aws_caller_identity" "current" {}
+
+   locals {
+     account_id          = data.aws_caller_identity.current.account_id
+     public_subnet_keys  = [for k, v in var.subnets : k if v.tier == "public"]
+     private_subnet_keys = [for k, v in var.subnets : k if v.tier == "private"]
+   }
+   ```
+   :::
+
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
 
-   부트스트랩 두 장을 그대로 가져온다. `versions.tf` 는 Terraform 과 provider 버전 범위를, `data.tf` 는 계정 ID·가용영역처럼 어느 과제에나 필요한 조회를 담는다. 세트마다 달라지는 것은 리전 값 정도이고 그 값도 변수로 빠져 있으므로, 손으로 다시 쓸 이유가 없다.
+   `aws_caller_identity` 는 지금 자격증명의 계정 ID 를 조회해 하드코딩을 없앤다. 아래 두 줄은 서브넷 map 을 훑어 퍼블릭·프라이빗 키 목록을 뽑는다 — `vpc.tf` 의 `for_each` 가 이 목록을 받는다.
 
    </details>
 
@@ -108,6 +128,16 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
    작성할 파일: `variables.tf`, `terraform.tfvars`, `vpc.tf`, `outputs.tf`
 
    이 넷이 과제지에 따라 통째로 달라지는 파일이다 — 이름·대역·개수가 들어가는 곳이고, 채점이 조회하는 값도 전부 여기서 나온다.
+
+   :::tip[막히면 여는 순서 — 백지에서 버티는 시간은 15분이다]
+   처음 쓰는 사람이 이 표만 보고 tf 를 완성하기는 어렵다. 다음 순서로 연다.
+
+   1. **[01 이론](/part-1/01-terraform-vpc/theory/)** — 리소스별 블록 모양과 `for_each`·`locals` 패턴이 거기 있다. 여기서 대부분 풀린다.
+   2. **한 리소스에서 15분 넘게 막히면 정답지를 연다.** [`vpc.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/vpc.tf) · [`variables.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/variables.tf) · [`outputs.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/outputs.tf). 막힌 **그 리소스만** 보고 창을 닫는다.
+   3. 연 자리를 한 줄로 적어 둔다(예: "NAT 를 같은 AZ public 서브넷에 넣는 매핑"). 6단계 diff 에서 다시 볼 목록이 된다.
+
+   "보지 않고 쓰기"는 두 번째 회차의 목표다. 첫 회차는 **끝까지 가는 것**이 목표다 — apply 도 못 해 보고 멈추면 배우는 것이 없다.
+   :::
 
    구현 스펙 (set-02 Reference01 실측):
 
@@ -265,6 +295,10 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
    출력값을 파일 두 개로 남긴다. `outputs.json` 은 원본 보관용이고, `.env.ps1`(bash 는 `.env.sh`)은 다음 터미널에서 바로 불러 쓰는 환경 변수 스크립트다. 두 셸 모두 "값은 지금 확장하고, 변수 이름은 글자 그대로 파일에 남긴다"가 요령이다. PowerShell 은 here-string 안의 백틱 `` `$ `` 이 그 표시이고, bash 는 heredoc 이 `$(...)` 만 지금 실행하고 `export VPC_ID=` 부분은 글자로 남긴다. bash 쪽 map 출력은 `ConvertFrom-Json` 대신 `jq` 로 키를 지목한다.
 
    </details>
+
+   :::caution[04 실습의 `.env.ps1` 과 다른 파일이다]
+   여기서 만드는 것은 `~/my-vpc-lab/../.env.ps1`, 즉 **홈 아래**의 파일이다. [04 실습](/part-2/04-eksctl-cluster/lab/)이 쓰는 것은 정답지 안 `~/skills-2026/set-02/task-1/.env.ps1` 로, 이름만 같고 담긴 변수가 다르다(3개 vs 21개). 04 로 넘어갈 때 이 파일을 다시 읽으면 변수가 모자라 렌더가 조용히 실패한다 — 각 모듈은 그 모듈이 만든 파일만 읽는다.
+   :::
 
    여기서 저장하는 변수는 세 개뿐이다 — 이 실습의 tf 가 VPC 만 만들기 때문이다. PART-2 의 `eksctl` 렌더는 보안 그룹·KMS 키·IAM 정책 ARN 까지 아홉 개를 쓰고, 그 값들은 정답지 `set-02\task-1\terraform` 을 통째로 apply 해야 나온다. 전체 목록과 저장 블록은 [04 실습의 사전 준비](/part-2/04-eksctl-cluster/lab/)에 있다.
 

@@ -22,6 +22,8 @@
 - **정답지 경로는 `~/skills-2026`**, 원격은 `https://github.com/ishs-cloud-computing/skills-2026`. 학습자는 Day 0 에서 홈 디렉터리 아래에 클론한다.
 - **set-05 는 정답의 근거가 아니라 변동 소재로만 쓴다.** 모듈 10·12 의 해당 절에 이 문장을 그대로 넣는다 — "후보 밖 세트에서 가져온 변동 소재다. 이 스펙 자체가 출제된다는 뜻이 아니라 추가 모듈이 이런 모양으로 온다는 뜻이다."
 - **커밋 메시지는 한국어**로 쓰고 본문에 무엇을 왜 바꿨는지 남긴다.
+- **각 태스크의 "변동 사실" 표를 정답지 코드로 대조한 뒤에 쓴다.** 표는 과제지 산문에서 뽑은 것이고, **산문 한 줄만 읽고 추론한 항목이 실제로 틀린 적이 있다.** Task 1 의 "NAT 삭제"가 그랬다 — 과제지 66행만 보고 판단했는데 68행이 정반대를 말하고 정답 코드에도 NAT 3개가 있었다. 어긋나면 **실측을 따르고 보고서에 남긴다.** 표를 그대로 믿고 쓰지 않는다.
+- **`grep` 잔존 패턴은 양쪽으로 검증한다.** 기준본 코드에서 여러 건이 잡히고 타깃 정답 코드에서 0건이 나와야 쓸 수 있는 패턴이다. 한쪽만 확인하면 학습자가 영원히 통과하지 못하는 기준을 준다.
 - **검증 명령은 `npm run build`** 다. `starlight-links-validator` 가 빌드에 물려 있어 끊긴 링크를 여기서 잡는다. mise 셸 통합이 없으면 `mise exec -- npm run build`.
 
 ### 공통 골격 — 12편이 모두 따르는 `lab.mdx` 구조
@@ -124,10 +126,18 @@ import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 | 서브넷 수 | 4개 (pub 2 + priv 2) | **6개 (pub 3 + priv 3)** |
 | 서브넷 이름 | `wskorea26-pub-subnet-c` 식으로 전부 나열 | `unicorn-subnet-{pub,priv}-{a,b,c}` — **중괄호를 선수가 전개** |
 | 서브넷 CIDR | 표로 지급 (`172.16.1.0/24`, `172.16.201.0/24` …) | **규칙만 지급** — 마스크 24bit, Zero Subnet 허용, "Public 이 0·1·2번째, Private 이 10·11·12번째" |
-| 프라이빗 외부 통신 | NAT Gateway 2개 + EIP 2개 | **"인터넷을 경유하지 않아야 한다"** — NAT 삭제, VPC Endpoint 로 대체 |
+| NAT | 2개 + EIP 2개 | **AZ 별 3개** — `unicorn-nat-{a,b,c}`. 라우팅 테이블도 `unicorn-rt-priv-{a,b,c}` 로 분리 |
+| VPC Endpoint | 없음 | **신설** — "App 서브넷은 이미지 다운로드·로그/메트릭 export 시 외부 인터넷을 경유하지 않아야 한다". S3 Gateway + ECR api·dkr + Logs Interface |
+| Flow Log | 없음 | **신설** |
 | 채점용 접근 | — | Private Subnet 에 `unicorn-mark` 이름의 CloudShell VPC Environment |
 
-set-07 과제지 원문 근거: `~/skills-2026/set-07/task-1/task.md` 의 53·57·63·65·66행.
+set-07 과제지 원문 근거: `~/skills-2026/set-07/task-1/task.md` 의 53·57·63·65·66·**68·69**행.
+
+:::danger[NAT 는 없어지지 않는다]
+계획 초안은 66행("외부 인터넷을 경유하지 않아야 한다")만 읽고 "NAT 삭제"로 적었다. **틀렸다.** 바로 다음 68행이 "Private 은 AZ별 `unicorn-nat-{a,b,c}` 로 인터넷에 접근하며"라고 명시하고, 정답 코드 `terraform/vpc.tf` 72~83행에 NAT 3개와 EIP 3개가 있다. 66행은 NAT 제거 요구가 아니라 **VPC Endpoint 추가 요구**다.
+
+변동 강도는 오히려 커졌다 — Endpoint 와 Flow Log 는 기준본에 블록 자체가 없는 "새로 생긴 요구"다.
+:::
 
 - [ ] **Step 1: 기준 SHA 를 기록하고 현재 파일에서 살릴 것을 추린다**
 
@@ -147,22 +157,23 @@ Global Constraints 의 공통 골격을 그대로 채운다. 모듈 01 고유 �
 - 기준본 런북 링크: `set-02/task-1/README.md`
 - 타이머: **30분**
 - 1절 차이표: 위 "변동 사실" 표를 그대로 옮긴다
-- 1절 산문에 넣을 제약 — 서브넷 마스크는 24bit 고정이고 Zero Subnet 을 허용한다. CIDR 을 표로 주지 않으므로 `10.97.0.0/24`·`10.97.1.0/24`·`10.97.2.0/24` 와 `10.97.10.0/24`·`10.97.11.0/24`·`10.97.12.0/24` 를 직접 계산해야 한다. 프라이빗 서브넷이 인터넷을 경유하면 안 되므로 NAT Gateway 를 지우고 ECR·S3·CloudWatch Logs·STS 용 VPC Endpoint 를 놓는다.
-- 2절 숨는 곳 체크리스트:
+- 1절 산문에 넣을 제약 — 서브넷 마스크는 24bit 고정이고 Zero Subnet 을 허용한다. CIDR 을 표로 주지 않으므로 `10.97.0.0/24`·`10.97.1.0/24`·`10.97.2.0/24` 와 `10.97.10.0/24`·`10.97.11.0/24`·`10.97.12.0/24` 를 직접 계산해야 한다. NAT 는 AZ 당 하나씩 3개로 늘고 라우팅 테이블도 AZ 별로 갈린다. 그 위에 VPC Endpoint 와 Flow Log 가 새 요구로 붙는다.
+- 2절 숨는 곳 체크리스트 — **아래는 초안이다. 정답지 코드로 각 항목이 사실인지 확인하고 틀린 것은 고친다.**
   ```
-  - `terraform.tfvars` 의 CIDR·AZ 목록
-  - `variables.tf` 의 `subnets` map — 4개에서 6개로. 키 이름이 AZ 를 담고 있다
-  - `vpc.tf` 의 `for_each` 대상과 라우팅 테이블 개수 — priv RTB 가 AZ 당 하나면 2개에서 3개가 된다
-  - NAT·EIP 리소스 블록과 그것을 참조하는 `aws_route` — 지우면 참조도 함께 끊어야 한다
+  - CIDR·AZ 목록이 실제로 어느 파일에 있는지 — `terraform.tfvars` 인지 `variables.tf` 의 map 인지
+  - `subnets` map — 4개에서 6개로. 키 이름이 AZ 를 담고 있다
+  - `vpc.tf` 의 `for_each` 대상 — RTB 개수가 자동 확장되는지 손으로 늘려야 하는지
+  - NAT·EIP 리소스와 그것을 참조하는 `aws_route` — 개수가 2에서 3으로
+  - VPC Endpoint 와 Flow Log 는 기준본에 블록이 아예 없다. 새로 써야 한다
   - `outputs.tf` 의 서브넷 ID 출력 — 개수가 바뀐다
   - 뒤 모듈이 읽는 `.env.ps1` / `.env.sh` 생성 블록
   ```
 - 3절 통과 기준:
-  1. `grep -rn --exclude-dir=.terraform -E "172\.16|wskorea26" .` 가 0건
-  2. `terraform plan` 이 `aws_subnet` 6개, `aws_route_table` 4개(public 1 + private 3), `aws_nat_gateway` 0개, `aws_vpc_endpoint` 4개 이상을 낸다
+  1. 잔존 `grep` — **패턴을 양쪽으로 검증한다.** 기준본에서 여러 건이 잡히고 정답 코드에서 0건이 나오는 패턴이어야 한다. `wskorea26` 단독처럼 모듈 밖 이름까지 잡는 패턴은 0건이 원리적으로 불가능하므로 쓰지 않는다
+  2. `terraform plan` 이 `aws_subnet` 6개, `aws_route_table` 4개(public 1 + private 3), `aws_nat_gateway` 3개, `aws_vpc_endpoint` 4개, `aws_flow_log` 1개를 낸다
   3. 대응표는 `~/skills-2026/set-07/task-1/mark.md` 의 VPC 절 항목으로 채운다
 - 4절 diff 대상: `~/skills-2026/set-07/task-1/terraform/`
-- 5절: set-07 은 fully-private 라 배포 비용이 크다. `:::danger` 로 NAT·EKS 경고를 남기고 "이 모듈만 따로 배포할 필요는 없다"고 적는다
+- 5절: 기준본 set-02 의 NAT 2개와 set-07 의 NAT 3개·Interface Endpoint·EKS 가 모두 시간당 과금이다. `:::danger` 로 그 취지의 경고를 남기고 "이 모듈만 따로 배포할 필요는 없다"고 적는다
 
 - [ ] **Step 3: 빌드로 검증한다**
 

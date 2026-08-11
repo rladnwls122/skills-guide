@@ -1,419 +1,242 @@
 ---
-title: 01. Terraform 문법 + VPC — 실습
-description: "부트스트랩 파일은 정답지에서 가져오고 과제지에 따라 바뀌는 VPC tf 코드만 직접 작성해 apply·검증한 뒤 정답과 diff 하는 실습."
+title: 01. Terraform 문법 + VPC — 변동 이행 실습
+description: "set-02 VPC 구성을 set-07 요구로 이행하고 grep·plan 으로 판정하는 실습."
 sidebar:
   order: 3
 ---
 
-import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
 원리와 채점 관점은 [01 이론 — Terraform 문법과 VPC 구조](/part-1/01-terraform-vpc/theory/)에 있다.
 
-**방식**: 부트스트랩 파일(`versions.tf`·`data.tf`)은 정답지에서 복사하고, **과제지에 따라 바뀌는 파일만** 백지에서 쓴다 → apply·검증 → 마지막에 `skills-2026` 정답과 diff 해서 설계 차이를 복기한다.
+**방식**: set-02 의 1과제 Terraform 구성이 서 있는 상태에서 시작한다. set-07 변동 과제지를 읽고 **절차 안내 없이 직접** 고친 뒤, 통과 기준으로 스스로 판정한다. 막히면 실전 참조를 연다.
 
-대회에서 손이 가는 곳은 이름·대역·개수가 들어가는 파일이다. provider 고정 블록을 외워 다시 타이핑하는 것은 그 시간에 배점이 없다.
+대회 당일 과제지는 30% 범위에서 바뀐 채로 나온다. 손이 필요한 능력은 VPC 를 처음부터 다시 쓰는 속도가 아니라, 바뀐 요구를 읽고 기존 코드에서 고칠 자리를 찾아내는 능력이다.
 
 ## 실습 목표
 
-- [ ] set-02 VPC 스펙을 변수화된 tf 코드로 직접 작성 (vpc/subnet/igw/nat/rtb)
-- [ ] `terraform fmt` / `validate` / `plan` / `apply` 사이클을 몸에 붙이기
-- [ ] AWS CLI 로 RTB↔서브넷 매핑을 직접 검증 (채점 스크립트 mark.sh와 같은 방식)
-- [ ] output → outputs.json → .env 영속화
-- [ ] 당일 destroy 로 NAT 과금 차단
+- [ ] `10.97.0.0/16` 과 3 AZ·6 서브넷 요구를 반영한다 — CIDR 은 표가 아니라 규칙으로 주어지므로 직접 계산한다
+- [ ] `unicorn-*` 이름 체계로 VPC·IGW·NAT·라우트 테이블을 이행한다
+- [ ] VPC Endpoint 와 VPC Flow Log 를 새로 놓는다 — set-02 에 블록 자체가 없는 요구다
+- [ ] 옛 값 `grep` 잔존 0건을 만든다
+- [ ] `terraform plan` 의 리소스 개수·이름이 변동 스펙과 일치한다
 
 선행 지식과 목표는 [모듈 개요](/part-1/01-terraform-vpc/)에.
 
 :::note[실전 참조 — 막히면 여는 곳]
-- Terraform 인자: [aws_vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc) · [aws_subnet](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) · [aws_nat_gateway](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/nat_gateway) · [aws_route_table](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table)
+- Terraform 인자: [aws_subnet](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) · [aws_route_table](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table) · [aws_vpc_endpoint](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_endpoint) · [aws_flow_log](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/flow_log)
 - 인자 이름만 기억나지 않을 때: `terraform providers schema -json` (`terraform init` 을 마친 디렉터리에서)
-- 검증 명령의 플래그·출력 필드: `aws ec2 describe-route-tables help` · `aws ec2 describe-nat-gateways help`
+- AZ 이름이 실제로 있는지: `aws ec2 describe-availability-zones --query 'AvailabilityZones[].ZoneName'`
+- 검증 명령의 플래그·출력 필드: `aws ec2 describe-vpc-endpoints help` · `aws ec2 describe-flow-logs help`
 - 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
 :::
 
-## 사전 준비
+## 0. 기준본 세우기
 
-정답지 저장소를 아직 안 받았다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 저장소는 **홈 디렉터리 아래**에 받는다 — 이 가이드의 정답지 경로는 전부 클론 루트 `~\skills-2026` 기준이다.
+set-02 의 1과제 Terraform 구성이 필요하다. 절차는 정답지 레포 런북에 있다 — [set-02/task-1/README.md](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/README.md).
 
-명령 안에서는 두 가지로 쓴다. `cd` 는 PowerShell 이 직접 처리하므로 `cd ~\skills-2026\...` 가 그대로 통하고, `git`·`scp` 처럼 외부 프로그램에 경로를 **인자로** 넘길 때는 `$HOME\skills-2026\...` 을 쓴다. 외부 프로그램은 `~` 를 홈으로 풀어 주지 않는다. 클론 위치를 다르게 잡았다면 그 자리에 본인 경로를 넣는다.
+정답지를 아직 안 받았다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 저장소는 **홈 디렉터리 아래**에 받는다 — 이 가이드의 경로는 전부 클론 루트 `~/skills-2026` 기준이다. PowerShell 에서 `cd` 는 `~` 를 직접 처리하지만, `Copy-Item`·`git` 처럼 외부 프로그램에 경로를 **인자로** 넘길 때는 `$HOME` 을 쓴다. 리눅스·CloudShell 은 `~` 가 인자 자리에서도 풀린다.
 
-리눅스·CloudShell 에서는 `~` 를 셸이 인자 자리에서도 풀어 주므로 `~/skills-2026/...` 이 어디서나 통한다. 아래 코드 블록은 전부 두 셸 탭으로 되어 있고, 한 번 고른 탭은 사이트 전체에서 유지된다.
-
-실습 폴더는 **홈 바로 아래에 `my-vpc-lab`** 으로 만든다. 정답지(`~/skills-2026`)와 나란히 두는 것이라 이후 명령의 상대 경로가 전부 맞는다.
-
-:::danger[NAT 는 켜 둔 시간만큼 청구된다]
-이 실습은 NAT 게이트웨이 2개와 EIP 2개를 만든다. 시간당 과금이라 켜 둔 채로 자면 하룻밤에 몇 달러가 나간다. **막혀서 중단하더라도 창을 닫기 전에 [정리 (destroy)](#정리-destroy) 를 먼저 실행한다** — 코드는 남으니 다음 날 `terraform apply` 로 다시 세우면 된다.
-:::
+정답지를 직접 고치지 않도록 작업 사본을 뜨고 선 상태를 확인한다.
 
 <Tabs syncKey="shell">
   <TabItem label="PowerShell">
   ```powershell
-  terraform version    # >= 1.6
-  aws sts get-caller-identity   # 자격증명 확인
-  cd ~; mkdir my-vpc-lab; cd my-vpc-lab
+  Copy-Item -Recurse $HOME\skills-2026\set-02\task-1\terraform $HOME\set07-lab
+  cd ~\set07-lab
+  terraform version              # >= 1.6
+  aws sts get-caller-identity    # 자격증명 확인
+  terraform init
   ```
   </TabItem>
   <TabItem label="Bash (Linux/CloudShell)">
   ```bash
-  terraform version    # >= 1.6
-  aws sts get-caller-identity   # 자격증명 확인
-  cd ~ && mkdir my-vpc-lab && cd my-vpc-lab
+  cp -r ~/skills-2026/set-02/task-1/terraform ~/set07-lab
+  cd ~/set07-lab
+  terraform version              # >= 1.6
+  aws sts get-caller-identity    # 자격증명 확인
+  terraform init
   ```
   </TabItem>
 </Tabs>
 
-`get-caller-identity` 의 기대 출력은 필드 세 개다.
+`Unable to locate credentials` 나 `ExpiredToken` 이 나오면 코드를 고치기 전에 자격증명부터 잡는다 — [awscli-basics](/start/awscli-basics/)의 `aws configure` 절차를 다시 밟는다.
 
-```json
-{
-    "UserId": "AIDAEXAMPLE...",
-    "Account": "123456789012",
-    "Arn": "arn:aws:iam::123456789012:user/skills"
-}
-```
+:::tip[코드만 있어도 된다]
+이 실습의 통과 기준은 `plan` 까지다. 배포하지 않고 정답지 코드를 작업 사본으로 복사한 상태에서 시작해도 3절까지 전부 판정된다.
+:::
 
-`Unable to locate credentials` 나 `ExpiredToken` 이 나오면 코드를 쓰기 전에 자격증명부터 잡는다 — [awscli-basics](/start/awscli-basics/)의 `aws configure` 절차를 다시 밟는다.
+## 1. 변동 과제지
 
-## 단계별 절차
+set-07 요구다. **정답 코드를 먼저 열지 않는다.**
+
+| 항목 | set-02 (기준본) | set-07 (변동) |
+|---|---|---|
+| VPC CIDR | `172.16.0.0/16` | `10.97.0.0/16` |
+| VPC 이름 | `wskorea26-vpc` | `unicorn-vpc` |
+| AZ | 2개 (c, d) | 3개 (a, b, c) |
+| 서브넷 수 | 4개 (public 2 + private 2) | 6개 (public 3 + private 3) |
+| 서브넷 이름 | `wskorea26-pub-subnet-c` 식으로 전부 나열 | `unicorn-subnet-{pub,priv}-{a,b,c}` |
+| 서브넷 CIDR | 표로 지급 | 규칙만 지급 |
+| IGW | `book-igw` | `unicorn-igw` |
+| 퍼블릭 RTB | `wskorea26-public-rtb` 1개 | `unicorn-rt-pub` 1개 |
+| NAT | `book-ngw-{c,d}` 2개 + EIP 2개 | `unicorn-nat-{a,b,c}` 3개 + EIP 3개 |
+| 프라이빗 RTB | `wskorea26-private-rtb-{c,d}` 2개 | `unicorn-rt-priv-{a,b,c}` 3개 |
+| VPC Endpoint | 없음 | S3 Gateway + `ecr.api`·`ecr.dkr`·`logs` Interface |
+| VPC Flow Log | 없음 | 활성화 |
+| 채점용 SG | `wskorea26-vpc-environment-sg` | `unicorn-mark-sg` |
+
+과제지 유의사항 10 에 따라 중괄호는 동일 패턴의 축약 표기다. `unicorn-subnet-{pub,priv}-{a,b,c}` 는 선수가 여섯 개 이름으로 전개해서 쓴다.
+
+서브넷 마스크는 24bit 고정이고 Zero Subnet 을 허용한다. CIDR 을 표로 주지 않고 배정 규칙만 준다 — VPC CIDR 기준으로 Public 이 0·1·2번째, Private 이 10·11·12번째다. 여섯 개 대역을 직접 계산해서 넣는다.
+
+<details>
+<summary>계산 결과 확인</summary>
+
+Public 은 `10.97.0.0/24` · `10.97.1.0/24` · `10.97.2.0/24`, Private 은 `10.97.10.0/24` · `10.97.11.0/24` · `10.97.12.0/24` 다. Zero Subnet 허용이 `10.97.0.0/24` 를 쓸 수 있다는 뜻이라 0번째부터 세기 시작한다.
+
+</details>
+
+프라이빗 서브넷은 AZ별 NAT 게이트웨이 `unicorn-nat-{a,b,c}` 로 인터넷에 나간다. 여기에 조건이 하나 더 붙는다 — App 이 도는 서브넷은 컨테이너 이미지 다운로드와 로그·메트릭 export 때 외부 인터넷을 경유하면 안 된다. NAT 를 지우는 것이 아니라, 그 트래픽만 VPC 안에서 끝나도록 S3 Gateway Endpoint 와 `ecr.api`·`ecr.dkr`·`logs` Interface Endpoint 를 놓고 private DNS 로 해석되게 만든다. VPC Flow Log 도 함께 켠다.
+
+## 2. 이행 (타이머 30분)
+
+타이머를 걸고 시작한다. 아래는 절차가 아니라 **놓치기 쉬운 자리 목록**이다.
+
+- `terraform.tfvars` — `vpc_cidr` 한 줄만 있다. **AZ 목록은 여기 없다.** tfvars 만 치환하고 끝내면 AZ 가 c·d 로 남는다
+- `variables.tf` 의 `subnets` map — 4개에서 6개로. map key 가 곧 서브넷 이름이고, `az` 필드가 AZ 를 담는다
+- `variables.tf` 의 이름 변수 — `vpc_name` · `igw_name` · `nat_name_prefix` · `public_rtb_name` · `private_rtb_name_prefix`. 접두어 체계 자체가 바뀐다 (`wskorea26-private-rtb` → `unicorn-rt-priv`)
+- `variables.tf` 의 `environment_sg_name` — 채점용 CloudShell VPC Environment 가 붙을 보안 그룹 이름이다. 네트워크 표 밖에 있어 잘 넘어간다
+- `vpc.tf` 의 `local.private_az_suffix` — `substr(v.az, -1, 1)` 로 AZ 끝 글자를 뽑아 NAT·RTB 이름 뒤에 붙인다. AZ 를 바꾸면 접미사가 따라오므로 **고칠 자리가 아니다**. 여기를 건드리면 이름이 틀어진다
+- NAT·EIP·프라이빗 RTB 의 개수 — 전부 `for_each = toset(local.private_subnet_keys)` 다. 서브넷을 늘리면 2개에서 3개로 자동으로 따라온다. 고치는 자리가 아니라 `plan` 에서 세는 자리다
+- VPC Endpoint 와 Flow Log — set-02 에 리소스 블록 자체가 없다. Gateway Endpoint 는 프라이빗 RTB 의 ID 목록을, Interface Endpoint 는 서브넷 ID 목록과 보안 그룹을 받는다. Flow Log 는 로그 그룹과 IAM 역할이 함께 필요하다
+- `outputs.tf` 의 `private_subnet_ids` · `public_subnet_ids` — map key 가 서브넷 이름이라 출력 개수와 **키 문자열이 통째로** 바뀐다
+- 뒤 모듈이 읽는 `.env.ps1` / `.env.sh` 생성 블록 — set-02 런북 §1 이 `wskorea26-priv-subnet-c` 를 키로 직접 지목한다. 키 이름이 바뀌고 개수가 셋이 된다
+
+## 3. 통과 기준
 
 <Steps>
 
-1. **바뀌지 않는 파일은 정답지에서 가져온다**
-
-   `versions.tf`(provider 고정)는 세트가 바뀌어도 내용이 거의 같다. 대회 당일에도 이 파일을 새로 쓰지 않으므로, 실습에서도 복사해 쓰고 시간을 바뀌는 쪽에 쓴다.
+1. **잔존 검사** — 옛 VPC 값(`172.16` · `wskorea26-vpc` · `wskorea26-pub*` · `wskorea26-priv*` · `book-igw` · `book-ngw`)이 0건
 
    <Tabs syncKey="shell">
      <TabItem label="PowerShell">
      ```powershell
-     copy $HOME\skills-2026\set-02\task-1\terraform\versions.tf .
+     Get-ChildItem -File -Include *.tf,*.tfvars -Recurse |
+       Where-Object { $_.FullName -notmatch '\.terraform' } |
+       Select-String -Pattern '172\.16|wskorea26-(vpc|pub|priv)|book-(igw|ngw)'
      ```
      </TabItem>
      <TabItem label="Bash (Linux/CloudShell)">
      ```bash
-     cp ~/skills-2026/set-02/task-1/terraform/versions.tf .
+     grep -rnE '172\.16|wskorea26-(vpc|pub|priv)|book-(igw|ngw)' \
+       --include='*.tf' --include='*.tfvars' --exclude-dir=.terraform .
      ```
      </TabItem>
    </Tabs>
 
-   :::caution[`data.tf` 는 복사하지 않는다]
-   정답지의 [`data.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/data.tf) 는 1과제 **전체**를 만드는 코드의 일부다. 그 안에 S3 버킷 이름(`bucket_name`)과 제공자료 경로(`provided_dir`)가 함께 들어 있어, VPC 만 만드는 이 실습에 복사해 오면 선언하지 않은 `var.bucket_name_prefix` 를 참조해 **`terraform validate` 가 `Reference to undeclared input variable` 로 실패**한다.
+   주석도 함께 잡힌다. 주석에 남은 옛 이름은 다음 사람이 읽는 문서라 같이 고친다.
 
-   이 모듈에서 필요한 것은 다음 네 줄뿐이다. `data.tf` 로 저장한다.
-
-   ```hcl title="data.tf"
-   data "aws_caller_identity" "current" {}
-
-   locals {
-     account_id          = data.aws_caller_identity.current.account_id
-     public_subnet_keys  = [for k, v in var.subnets : k if v.tier == "public"]
-     private_subnet_keys = [for k, v in var.subnets : k if v.tier == "private"]
-   }
-   ```
-   :::
-
-   <details class="diagram-note">
-   <summary>이 블록이 하는 일</summary>
-
-   `aws_caller_identity` 는 지금 자격증명의 계정 ID 를 조회해 하드코딩을 없앤다. 아래 두 줄은 서브넷 map 을 훑어 퍼블릭·프라이빗 키 목록을 뽑는다 — `vpc.tf` 의 `for_each` 가 이 목록을 받는다.
-
-   </details>
-
-   :::note[읽기는 한 번 한다]
-   복사한 뒤 `versions.tf` 를 열어 `required_providers` 의 provider 이름과 버전 범위가 어디에 적히는지 한 번 확인한다. 대회에서 provider 버전이 지정되면 고칠 자리가 그 한 줄이다.
-   :::
-
-2. **바뀌는 파일만 스펙 보고 직접 작성 (정답지 최대한 보지않기, Amazon Q 사용 가능)**
-
-   작성할 파일: `variables.tf`, `terraform.tfvars`, `vpc.tf`, `outputs.tf`
-
-   이 넷이 과제지에 따라 통째로 달라지는 파일이다 — 이름·대역·개수가 들어가는 곳이고, 채점이 조회하는 값도 전부 여기서 나온다.
-
-   :::tip[막히면 여는 순서 — 백지에서 버티는 시간은 15분이다]
-   처음 쓰는 사람이 이 표만 보고 tf 를 완성하기는 어렵다. 다음 순서로 연다.
-
-   1. **[01 이론](/part-1/01-terraform-vpc/theory/)** — 리소스별 블록 모양과 `for_each`·`locals` 패턴이 거기 있다. 여기서 대부분 풀린다.
-   2. **한 리소스에서 15분 넘게 막히면 정답지를 연다.** [`vpc.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/vpc.tf) · [`variables.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/variables.tf) · [`outputs.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/terraform/outputs.tf). 막힌 **그 리소스만** 보고 창을 닫는다.
-   3. 연 자리를 한 줄로 적어 둔다(예: "NAT 를 같은 AZ public 서브넷에 넣는 매핑"). 6단계 diff 에서 다시 볼 목록이 된다.
-
-   "보지 않고 쓰기"는 두 번째 회차의 목표다. 첫 회차는 **끝까지 가는 것**이 목표다 — apply 도 못 해 보고 멈추면 배우는 것이 없다.
-   :::
-
-   구현 스펙 (set-02 Reference01 실측):
-
-   | 항목 | 값 |
-   |---|---|
-   | VPC | `wskorea26-vpc`, `172.16.0.0/16`, DNS support/hostnames 활성 |
-   | 서브넷 | `wskorea26-pub-subnet-c` 172.16.1.0/24 (2c), `wskorea26-pub-subnet-d` 172.16.2.0/24 (2d), `wskorea26-priv-subnet-c` 172.16.201.0/24 (2c), `wskorea26-priv-subnet-d` 172.16.202.0/24 (2d) |
-   | IGW | `book-igw` |
-   | NAT | `book-ngw-c`(pub-subnet-c 안), `book-ngw-d`(pub-subnet-d 안) + EIP 각 1 |
-   | RTB | `wskorea26-public-rtb`(0.0.0.0/0→IGW, pub 2개 연결), `wskorea26-private-rtb-c`(→ngw-c, priv-c 연결), `wskorea26-private-rtb-d`(→ngw-d, priv-d 연결) |
-
-   필수 제약:
-
-   - 서브넷은 `map(object({cidr, az, tier}))` 변수 + `for_each` 로 생성 (복붙 4개 금지)
-   - public 서브넷만 `map_public_ip_on_launch = true`
-   - **변수화 대상 (tfvars 주입)**: `player_number`(비번호), `region`(리전), `prefix`(이름 접두사), `vpc_cidr`(VPC 대역)은 하드코딩하지 않고 변수로 빼서 주입한다.
-   - output: `vpc_id`, `public_subnet_ids`(map), `private_subnet_ids`(map), `account_id`
-
-3. **문법 검증 → apply**
+2. **`terraform validate` + `plan`** — 리소스 타입별 개수를 센다
 
    <Tabs syncKey="shell">
      <TabItem label="PowerShell">
      ```powershell
-     terraform init
      terraform fmt -check -diff
      terraform validate
-     terraform plan     # 리소스 수 확인: VPC1+IGW1+서브넷4+EIP2+NAT2+RTB3+route3+assoc4 = 20개
-     terraform apply
+     terraform plan -no-color |
+       Select-String -Pattern '^  # (aws_subnet|aws_route_table|aws_nat_gateway|aws_vpc_endpoint|aws_flow_log)\.' |
+       ForEach-Object { ($_.Line -split '\s+')[2] -replace '\[.*$' } |
+       Group-Object | Select-Object Count, Name
      ```
      </TabItem>
      <TabItem label="Bash (Linux/CloudShell)">
      ```bash
-     terraform init
      terraform fmt -check -diff
      terraform validate
-     terraform plan     # 리소스 수 확인: VPC1+IGW1+서브넷4+EIP2+NAT2+RTB3+route3+assoc4 = 20개
-     terraform apply
+     terraform plan -no-color |
+       grep -E '^  # (aws_subnet|aws_route_table|aws_nat_gateway|aws_vpc_endpoint|aws_flow_log)\.' |
+       awk '{print $2}' | sed 's/\[.*//' | sort | uniq -c
      ```
      </TabItem>
    </Tabs>
 
-   <details class="diagram-note">
-   <summary>이 블록이 하는 일</summary>
+   기대 개수:
 
-   apply 전 4단계 점검이다. `fmt -check -diff` 는 서식이 어긋난 곳을 보여 주고, `validate` 는 문법과 참조를 검사하며, `plan` 은 실제로 만들 리소스 수를 낸다. 20개라는 수를 미리 세어 두면 plan 출력만 보고 빠뜨린 리소스를 찾을 수 있다.
+   | 리소스 주소 | 기준본 | 이행 후 |
+   |---|---|---|
+   | `aws_subnet.this` | 4 | 6 |
+   | `aws_route_table.public` | 1 | 1 |
+   | `aws_route_table.private` | 2 | 3 |
+   | `aws_nat_gateway.this` | 2 | 3 |
+   | `aws_vpc_endpoint.s3` | 0 | 1 |
+   | `aws_vpc_endpoint.interface` | 0 | 3 |
+   | `aws_flow_log.this` | 0 | 1 |
 
-   </details>
-
-   기대: `Apply complete! Resources: 20 added` (NAT 생성으로 2~3분 소요).
-
-   **apply 가 실패하면** 세 갈래부터 본다. 뒤 모듈의 apply 실패도 같은 순서로 좁힌다.
-
-   - **자격증명** — `NoCredentialProviders`·`ExpiredToken` 은 코드 문제가 아니다. `aws sts get-caller-identity` 로 확인하고 [awscli-basics](/start/awscli-basics/) 대로 다시 설정한다.
-   - **리전 불일치** — 리소스가 엉뚱한 리전에 생겼다면 `region` 변수와 셸의 `AWS_DEFAULT_REGION` 이 다른 것이다. PowerShell 은 `$env:AWS_DEFAULT_REGION = "ap-northeast-2"`, bash 는 `export AWS_DEFAULT_REGION=ap-northeast-2` 로 맞추고 다시 apply 한다.
-   - **부분 생성 후 중단** — 절반만 만들고 멈춰도 지우지 않는다. Terraform 은 state 에 기록된 리소스를 건너뛰므로 `terraform apply` 를 그대로 다시 실행하면 나머지만 만든다.
-
-   증상별 확인 명령은 [트러블슈팅](/reference/troubleshooting/)에 있다.
-
-4. **검증 — mark.sh가 보는 방식으로**
-
-   <Tabs syncKey="shell">
-     <TabItem label="PowerShell">
-     ```powershell
-     $env:VPC_ID = terraform output -raw vpc_id
-
-     # (1) CIDR — mark 1-1 상당
-     aws ec2 describe-vpcs --vpc-ids $env:VPC_ID --query 'Vpcs[0].CidrBlock'
-     # 기대: "172.16.0.0/16"
-
-     # (2) RTB↔서브넷 매핑 — mark 1-2 상당
-     aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$env:VPC_ID" `
-       --query 'RouteTables[].{Name:Tags[?Key==`Name`]|[0].Value, Subnets:Associations[].SubnetId, Routes:Routes[?DestinationCidrBlock==`0.0.0.0/0`].[GatewayId,NatGatewayId]}' `
-       --output json
-     ```
-     </TabItem>
-     <TabItem label="Bash (Linux/CloudShell)">
-     ```bash
-     export VPC_ID=$(terraform output -raw vpc_id)
-
-     # (1) CIDR — mark 1-1 상당
-     aws ec2 describe-vpcs --vpc-ids "$VPC_ID" --query 'Vpcs[0].CidrBlock'
-     # 기대: "172.16.0.0/16"
-
-     # (2) RTB↔서브넷 매핑 — mark 1-2 상당
-     aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$VPC_ID" \
-       --query 'RouteTables[].{Name:Tags[?Key==`Name`]|[0].Value, Subnets:Associations[].SubnetId, Routes:Routes[?DestinationCidrBlock==`0.0.0.0/0`].[GatewayId,NatGatewayId]}' \
-       --output json
-     ```
-     </TabItem>
-   </Tabs>
-
-   <details class="diagram-note">
-   <summary>이 블록이 하는 일</summary>
-
-   채점이 보는 두 항목을 같은 방식으로 확인한다. (1)은 VPC CIDR 이 `172.16.0.0/16` 인지, (2)는 각 RTB 의 이름·연결된 서브넷·기본 경로 대상을 한 번에 뽑는다. `--query` 안의 역따옴표는 JMESPath 의 리터럴 표기다. 줄 이음 문자는 셸마다 다르다 — PowerShell 은 백틱, bash 는 역슬래시다. `--query` 는 작은따옴표로 감싸므로 bash 에서도 안쪽 역따옴표가 명령 치환으로 풀리지 않는다.
-
-   </details>
-
-   기대 출력 (요지):
-
-   - `wskorea26-public-rtb`: Subnets 2개, 기본 라우트 `GatewayId = igw-...`
-   - `wskorea26-private-rtb-c`: Subnets 1개(priv-c), 기본 라우트 `NatGatewayId = nat-...`
-   - `wskorea26-private-rtb-d`: Subnets 1개(priv-d), 기본 라우트 `NatGatewayId = nat-...`
-   - Name 없는 기본 RTB 하나가 더 보이는 것은 정상 (VPC 기본 RTB, 연결 없음)
-
-   <Tabs syncKey="shell">
-     <TabItem label="PowerShell">
-     ```powershell
-     # (3) NAT 가 "public" 서브넷에 있는지
-     aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$env:VPC_ID" `
-       --query 'NatGateways[].{Name:Tags[?Key==`Name`]|[0].Value, Subnet:SubnetId}'
-     # 기대: book-ngw-c → pub-subnet-c 의 ID, book-ngw-d → pub-subnet-d 의 ID
-     ```
-     </TabItem>
-     <TabItem label="Bash (Linux/CloudShell)">
-     ```bash
-     # (3) NAT 가 "public" 서브넷에 있는지
-     aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$VPC_ID" \
-       --query 'NatGateways[].{Name:Tags[?Key==`Name`]|[0].Value, Subnet:SubnetId}'
-     # 기대: book-ngw-c → pub-subnet-c 의 ID, book-ngw-d → pub-subnet-d 의 ID
-     ```
-     </TabItem>
-   </Tabs>
-
-5. **output 영속화**
-
-   <Tabs syncKey="shell">
-     <TabItem label="PowerShell">
-     ```powershell
-     terraform output -json | Set-Content ..\outputs.json
-     @"
-     `$env:VPC_ID = "$(terraform output -raw vpc_id)"
-     `$env:PRIV_SUBNET_C = "$((terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-c')"
-     `$env:PRIV_SUBNET_D = "$((terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-d')"
-     "@ | Set-Content ..\.env.ps1
-     . ..\.env.ps1   # 새 터미널에서도 이 한 줄로 복원
-     ```
-     </TabItem>
-     <TabItem label="Bash (Linux/CloudShell)">
-     ```bash
-     terraform output -json > ../outputs.json
-     cat > ../.env.sh <<EOF
-     export VPC_ID="$(terraform output -raw vpc_id)"
-     export PRIV_SUBNET_C="$(jq -r '.private_subnet_ids.value["wskorea26-priv-subnet-c"]' ../outputs.json)"
-     export PRIV_SUBNET_D="$(jq -r '.private_subnet_ids.value["wskorea26-priv-subnet-d"]' ../outputs.json)"
-     EOF
-     source ../.env.sh   # 새 터미널에서도 이 한 줄로 복원
-     ```
-     </TabItem>
-   </Tabs>
-
-   <details class="diagram-note">
-   <summary>이 블록이 하는 일</summary>
-
-   출력값을 파일 두 개로 남긴다. `outputs.json` 은 원본 보관용이고, `.env.ps1`(bash 는 `.env.sh`)은 다음 터미널에서 바로 불러 쓰는 환경 변수 스크립트다. 두 셸 모두 "값은 지금 확장하고, 변수 이름은 글자 그대로 파일에 남긴다"가 요령이다. PowerShell 은 here-string 안의 백틱 `` `$ `` 이 그 표시이고, bash 는 heredoc 이 `$(...)` 만 지금 실행하고 `export VPC_ID=` 부분은 글자로 남긴다. bash 쪽 map 출력은 `ConvertFrom-Json` 대신 `jq` 로 키를 지목한다.
-
-   </details>
-
-   :::caution[04 실습의 `.env.ps1` 과 다른 파일이다]
-   여기서 만드는 것은 `~/my-vpc-lab/../.env.ps1`, 즉 **홈 아래**의 파일이다. [04 실습](/part-2/04-eksctl-cluster/lab/)이 쓰는 것은 정답지 안 `~/skills-2026/set-02/task-1/.env.ps1` 로, 이름만 같고 담긴 변수가 다르다(3개 vs 21개). 04 로 넘어갈 때 이 파일을 다시 읽으면 변수가 모자라 렌더가 조용히 실패한다 — 각 모듈은 그 모듈이 만든 파일만 읽는다.
-   :::
-
-   여기서 저장하는 변수는 세 개뿐이다 — 이 실습의 tf 가 VPC 만 만들기 때문이다. PART-2 의 `eksctl` 렌더는 보안 그룹·KMS 키·IAM 정책 ARN 까지 아홉 개를 쓰고, 그 값들은 정답지 `set-02\task-1\terraform` 을 통째로 apply 해야 나온다. 전체 목록과 저장 블록은 [04 실습의 사전 준비](/part-2/04-eksctl-cluster/lab/)에 있다.
-
-6. **정답과 diff**
-
-   <Tabs syncKey="shell">
-     <TabItem label="PowerShell">
-     ```powershell
-     git diff --no-index .\vpc.tf $HOME\skills-2026\set-02\task-1\terraform\vpc.tf
-     git diff --no-index .\variables.tf $HOME\skills-2026\set-02\task-1\terraform\variables.tf
-     ```
-     </TabItem>
-     <TabItem label="Bash (Linux/CloudShell)">
-     ```bash
-     git diff --no-index ./vpc.tf ~/skills-2026/set-02/task-1/terraform/vpc.tf
-     git diff --no-index ./variables.tf ~/skills-2026/set-02/task-1/terraform/variables.tf
-     ```
-     </TabItem>
-   </Tabs>
-
-   diff 에서 확인할 관점 (기능이 같아도 설계 차이를 본다):
-
-   - 서브넷 이름을 map **key** 로 썼는가 (정답 방식) vs 별도 name 필드
-   - NAT 배치를 `public_by_az` locals 매핑으로 풀었는가 vs 하드코딩 인덱스
-   - `aws_route` 를 별도 리소스로 뺐는가 vs 인라인 route 블록
-   - 이름이 `기본값 + tfvars` 구조인가 vs 리소스에 직접 리터럴
+3. **채점 항목 대응표** — [set-07 채점지](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/mark.md)의 1-1-A · 1-2-A · 1-3-A 를 열고 표를 직접 채운다
 
 </Steps>
 
-## :badge[함정]{variant=danger} 목록
+| mark 항목 | 채점이 조회하는 것 | 내 코드에서 이 값을 만드는 자리 |
+|---|---|---|
+| 1-1-A | VPC CIDR 과 서브넷 6개의 CIDR | |
+| 1-2-A | RTB 이름 · 기본 라우트 대상 · 연결 서브넷 수 | |
+| 1-3-A | VPC Endpoint 의 ServiceName 과 Flow Log 개수 | |
 
-| 함정 | 증상 / 결과 |
-|---|---|
-| private 서브넷을 public RTB 에 연결 | 인터넷은 되지만 **mark 1-2 실격** — 채점은 매핑을 본다 |
-| NAT 를 private 서브넷에 배치 | NAT 가 인터넷에 못 나감, private 아웃바운드 전멸 |
-| `aws_eip` 에 `domain = "vpc"` 누락 | 구버전 스타일 경고/실패 |
-| NAT 에 `depends_on = [aws_internet_gateway.this]` 누락 | 간헐적 생성 실패 (IGW 없는 상태에서 NAT 프로비저닝) |
-| for_each 에 list 직접 전달 | `The given "for_each" argument value is unsuitable` — `toset()` 필요 |
-| Name 태그 오타 | 이름 정확 일치 채점 항목 전부 실패. 변수 default 를 과제지에서 복사해 넣기 |
-| 리전 미변수화 / 오리전 apply | mark.sh가 리소스를 못 찾음 — 전 항목 0점 |
+<details>
+<summary>답 확인</summary>
 
-## 통과 기준 (mark 항목 연결)
+| mark 항목 | 채점이 조회하는 것 | 내 코드에서 이 값을 만드는 자리 |
+|---|---|---|
+| 1-1-A | VPC CIDR 과 서브넷 6개의 CIDR | `variables.tf` 의 `vpc_cidr` 기본값과 `subnets` map 의 `cidr` 필드 여섯 줄 |
+| 1-2-A | RTB 이름 · 기본 라우트 대상 · 연결 서브넷 수 | `variables.tf` 의 `public_rtb_name`·`private_rtb_name_prefix`, `vpc.tf` 의 `aws_route.public_igw`·`aws_route.private_nat`·`aws_route_table_association` |
+| 1-3-A | VPC Endpoint 의 ServiceName 과 Flow Log 개수 | 새로 만든 `aws_vpc_endpoint` 네 개의 `service_name` 과 `aws_flow_log` 한 개 |
 
-- [ ] VPC CIDR = 172.16.0.0/16 (mark 1-1)
-- [ ] RTB 3개 이름 정확 일치, 서브넷 연결 4건 정확, 기본 라우트가 각각 GatewayId/NatGatewayId (mark 1-2)
-- [ ] NAT 2개가 각각 같은 AZ public 서브넷에 배치, 이름 book-ngw-c/d
-- [ ] `terraform fmt -check` 통과, `validate` 통과, 재 `plan` 시 `No changes`
-- [ ] `.env.ps1`(bash 는 `.env.sh`) 재실행만으로 새 터미널에서 변수 복원
+1-2-A 는 `Name` 태그가 `unicorn-rt-*` 인 라우트 테이블만 필터로 뽑는다. 이름이 어긋나면 조회 자체가 비어서 나온다. 퍼블릭 RTB 의 연결 서브넷 수는 3, 프라이빗 RTB 는 각각 1 이다.
 
-## 정리 (destroy)
+1-3-A 는 `s3` · `ecr.api` · `ecr.dkr` 세 ServiceName 이 출력에 포함되고 Flow Log 가 1 이상이면 득점한다. `logs` Interface Endpoint 는 채점이 직접 세지 않지만, 로그·메트릭 export 가 인터넷을 경유하지 않아야 한다는 요구를 만족시키는 쪽이다.
+
+</details>
+
+## 4. 복기
+
+set-07 정답 코드와 diff 한다. 정답 경로는 `~/skills-2026/set-07/task-1/terraform/` 이다.
 
 <Tabs syncKey="shell">
   <TabItem label="PowerShell">
   ```powershell
-  terraform destroy   # NAT 시간당 과금 — 실습 종료 즉시, 당일 필수
-  aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$env:VPC_ID" `
-    --query 'NatGateways[].State'   # deleted 확인
-  aws ec2 describe-addresses --query 'Addresses[].PublicIp'   # 남은 EIP 없어야 함 (있으면 시간당 과금)
+  git diff --no-index .\variables.tf $HOME\skills-2026\set-07\task-1\terraform\variables.tf
+  git diff --no-index .\vpc.tf $HOME\skills-2026\set-07\task-1\terraform\vpc.tf
   ```
   </TabItem>
   <TabItem label="Bash (Linux/CloudShell)">
   ```bash
-  terraform destroy   # NAT 시간당 과금 — 실습 종료 즉시, 당일 필수
-  aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$VPC_ID" \
-    --query 'NatGateways[].State'   # deleted 확인
-  aws ec2 describe-addresses --query 'Addresses[].PublicIp'   # 남은 EIP 없어야 함 (있으면 시간당 과금)
+  git diff --no-index ./variables.tf ~/skills-2026/set-07/task-1/terraform/variables.tf
+  git diff --no-index ./vpc.tf ~/skills-2026/set-07/task-1/terraform/vpc.tf
   ```
   </TabItem>
 </Tabs>
 
-VPC 모듈은 의존 리소스가 없으므로 destroy 순서 고민 없이 한 번에 끝난다.
+`endpoints.tf` 와 `flowlog.tf` 는 기준본에 짝이 없으므로 diff 대신 통째로 읽는다.
 
-:::caution[과금 주의]
-EIP 가 남았는지 마지막으로 꼭 확인한다 — 남아 있으면 시간당 과금이다.
+놓친 것을 세 갈래로 분류한다.
+
+- **값만 바뀐 것** — CIDR·이름 문자열. 변수 기본값 한 줄로 끝나는 자리다
+- **구조가 바뀐 것** — AZ 2개에서 3개, 서브넷 4개에서 6개. `for_each` 가 이미 개수를 따라가게 돼 있어 map 항목만 늘리면 되는지, 아니면 손으로 늘려야 하는 자리가 남았는지 확인한다
+- **새로 생긴 요구** — VPC Endpoint 와 Flow Log. 기준본에 리소스 블록이 없어 "고칠 자리"를 찾는 방식으로는 나오지 않는다. 과제지를 문장 단위로 읽어야 잡히는 종류다
+
+정답이 `aws_subnet` 에 붙인 `kubernetes.io/role/elb`·`kubernetes.io/cluster/<이름>` 태그도 같이 본다. AWS Load Balancer Controller 의 서브넷 자동 디스커버리가 이 태그를 읽는다 — PART-2 로 넘어갈 때 걸리는 자리다.
+
+## 5. 배포 확인 (선택)
+
+여유가 있을 때만 한다. 배포했다면 [set-07 채점 스크립트](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/mark.sh)를 CloudShell VPC Environment `unicorn-mark` 에서 실행해 1-1-A ~ 1-3-A 를 확인한다.
+
+:::danger[이 모듈만 따로 배포할 필요는 없다]
+기준본 set-02 의 NAT 게이트웨이 2개와 EIP 2개, 이행본 set-07 의 NAT 3개·Interface Endpoint 3종(AZ 3개면 ENI 9개)·EKS 클러스터가 전부 **시간당 과금**이다. 이 실습의 통과 판정은 3절의 `grep` 과 `plan` 으로 끝나므로 배포하지 않아도 된다.
+
+그래도 배포했다면 창을 닫기 전에 `terraform destroy` 를 먼저 실행하고, `aws ec2 describe-addresses --query 'Addresses[].PublicIp'` 로 EIP 가 남지 않았는지 확인한다. 코드는 남으니 다음 날 다시 세우면 된다.
 :::
 
-## 변형 셀프 체크
-
-당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
-
-1. VPC CIDR 이 `172.16.0.0/16` 에서 `10.20.0.0/16` 으로 바뀌면 무엇을 고치나?
-
-   <details>
-   <summary>답 확인</summary>
-
-   `terraform.tfvars` 의 `vpc_cidr` 과 `variables.tf` 의 `subnets` map 네 줄이다. 서브넷 대역은 VPC 대역 안에 들어가야 하므로 함께 바뀐다. `vpc.tf` 는 전부 변수 참조라 손대지 않는다 — `grep -n "172.16" vpc.tf` 가 0건이면 하드코딩이 없는 것이다.
-
-   </details>
-
-2. 서브넷을 AZ 2개에서 3개로 늘리라면 어디를 고치고, 어디를 그대로 두나?
-
-   <details>
-   <summary>답 확인</summary>
-
-   고칠 곳은 `variables.tf` 의 `subnets` map 하나다. public·private 항목을 AZ 하나만큼 더 넣는다. `vpc.tf` 는 그대로 둔다 — 서브넷·EIP·NAT·프라이빗 RTB·라우트·연결이 전부 `for_each` 와 `local.public_by_az` 파생이라 항목 수를 따라간다. AZ 이름이 실제로 있는지는 `aws ec2 describe-availability-zones --query 'AvailabilityZones[].ZoneName'` 로 확인하고, 인자 이름이 막히면 [검색 가이드](/reference/search-guide/)의 Registry 동선을 탄다.
-
-   </details>
-
-3. `wskorea26-priv-subnet-c` 를 실수로 `wskorea26-public-rtb` 에 연결하면 채점의 어느 항목이 깨지나?
-
-   <details>
-   <summary>답 확인</summary>
-
-   mark 1-2-A 다. 이 항목은 서브넷 ID 로 라우트 테이블을 역조회해 **이름 문자열**을 출력하고 기대값과 정확히 비교한다. 인터넷이 되는지는 보지 않으므로 통신이 멀쩡해도 실격이다. mark 1-1-A 는 CIDR 만 보므로 영향이 없다.
-
-   </details>
-
-4. NAT 게이트웨이 이름을 `book-ngw-c` 대신 `ngw-c` 로 만들면 mark 가 잡나?
-
-   <details>
-   <summary>답 확인</summary>
-
-   mark 1-2-A 는 프라이빗 RTB 의 기본 라우트에서 `NatGatewayId` 만 뽑으므로 NAT 이름을 비교하지 않는다. 반대로 VPC·서브넷·라우트 테이블은 전부 `Name` 태그로 조회하므로 그쪽 오타는 조회 자체가 실패한다. 이름 규칙은 과제지 요구이므로 `variables.tf` 의 `nat_name_prefix` 를 과제지대로 맞춘다.
-
-   </details>
-
 막히면 [트러블슈팅](/reference/troubleshooting/), 실습을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 한 번 돌린다.
-

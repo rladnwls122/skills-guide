@@ -7,7 +7,8 @@ paths:
 
 핵심만:
 
-- 한 문서에 Diátaxis 유형을 섞지 않는다. `theory` = explanation, `lab` = tutorial(PART-5 는 how-to), `index` = 개요, `reference/*` = reference, `start/*` = explanation.
+- 한 문서에 Diátaxis 유형을 섞지 않는다. `theory` = explanation, `lab` = tutorial(PART-5~6 은 how-to), `part-N/console-deploy` = how-to, `index` = 개요, `reference/*` = reference, `start/*` = explanation.
+- **유일한 예외 — theory 의 접이식 실행 블록.** 개념 절 끝에 `<details class="build-step">` 를 붙여 그 절의 리소스를 띄우게 할 수 있다. 조건은 둘이다: 기본 상태가 접힘일 것(`open` 금지), 블록 안이 실행 명령·기대 출력·안 나올 때 볼 곳 한 줄 셋으로 제한될 것. 과금 리소스를 띄우면 블록 첫 줄에 비용을 적고 문서 끝에 정리 절을 둔다. 근거는 `style.mdx` A 절.
 - frontmatter·import 다음 본문 첫 줄에 `> 문서 유형: ...` 을 둔다. 값은 `explanation` · `tutorial` · `how-to` · `reference` · `개요` 다섯 중 하나.
 - Starlight 가 frontmatter 의 `title` 을 제목으로 렌더한다. 본문에 H1 을 따로 쓰지 않는다.
 - 용어는 `style.mdx` 의 표준화 표를 따른다. 같은 개념을 두 가지로 표기하지 않는다.

@@ -16,6 +16,12 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 블록 구조·참조 주소·의존성 그래프처럼 **HCL 을 읽는 법 자체**는 [hcl-basics](/start/hcl-basics/) 로 옮겼다. `resource "aws_vpc" "this"` 의 라벨 두 개가 각각 무엇인지 헷갈리면 그 문서를 먼저 본다.
 
+:::tip[읽으면서 띄운다]
+각 절 끝에 **지금 띄우기** 블록이 접혀 있다. 열고 따라오면 절마다 set-02 기준본이 한 조각씩 쌓여, 6절에서 완성된다. 블록을 열지 않고 읽어도 문서는 그대로 이어진다.
+
+1~4절은 `terraform console` 과 `plan` 으로 값만 확인한다 — **과금 0원**이다. 실제 생성은 5절부터이고 그 블록에 비용을 적어 두었다. 끝나면 문서 맨 아래 [정리](#정리--이-문서에서-띄운-것-지우기)를 반드시 돌린다.
+:::
+
 ---
 
 ## 1. provider / versions
@@ -61,6 +67,34 @@ provider "aws" {
 | provider 최신 버전 | `versions.tf` 의 `required_providers` | `terraform init` 이 뽑은 버전이 `~>` 범위 안 |
 
 provider 블록 자체는 세트가 바뀌어도 같은 모양이다. 바뀌는 것은 그 안에 들어가는 값뿐이므로 리전과 prefix 를 변수로 빼 둔다. set-03 은 같은 내용을 `providers.tf` 에 두었다 — 파일명은 자유고 내용이 채점 대상이다.
+
+<details class="build-step">
+<summary>지금 띄우기 — 작업 사본과 provider 내려받기</summary>
+
+정답지를 아직 안 받았다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 정답지를 직접 고치지 않도록 작업 사본을 뜬다. 이 디렉터리는 [01 실습](/part-1/01-terraform-vpc/lab/)이 그대로 이어 쓴다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Copy-Item -Recurse $HOME\skills-2026\set-02\task-1\terraform $HOME\set07-lab
+  cd ~\set07-lab
+  terraform init
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  cp -r ~/skills-2026/set-02/task-1/terraform ~/set07-lab
+  cd ~/set07-lab
+  terraform init
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `Terraform has been successfully initialized!` 와 함께 `Installing hashicorp/aws v...` 줄이 나온다. 그 버전이 `versions.tf` 의 `required_providers` 범위 안이다.
+
+`Unable to locate credentials` 나 `ExpiredToken` 이면 [awscli-basics](/start/awscli-basics/)의 `aws configure` 를 다시 밟는다.
+
+</details>
 
 ---
 
@@ -160,6 +194,29 @@ locals {
 
 서브넷 4개가 6개로 늘어도 `subnets` map 에 항목을 더할 뿐 리소스 블록은 그대로다. 이름·CIDR·AZ·tier 가 map 한 곳에 모여 있기 때문이다. tfvars 로 map 전체를 갈아끼우는 것도 같은 이유로 가능하다.
 
+<details class="build-step">
+<summary>지금 띄우기 — 변수와 locals 값 확인</summary>
+
+`terraform console` 은 아무것도 만들지 않고 값만 평가한다. 위에서 읽은 변수·locals 가 실제로 무엇이 되는지 본다.
+
+```bash
+terraform console
+```
+
+프롬프트가 뜨면 한 줄씩 넣는다.
+
+```hcl
+var.vpc_cidr
+var.subnets
+local.public_subnet_keys
+```
+
+기대: `var.vpc_cidr` 이 `"172.16.0.0/16"`, `var.subnets` 가 키 4개짜리 map, `local.public_subnet_keys` 가 퍼블릭 서브넷 키 2개짜리 tuple 로 나온다. `exit` 로 빠져나온다.
+
+`local.public_subnet_keys` 가 빈 tuple 이면 `subnets` map 의 `tier` 값이 `public` 이 아닌 것이다.
+
+</details>
+
 ---
 
 ## 3. data source / aws_iam_policy_document
@@ -209,6 +266,25 @@ set-02 의 KMS 키 정책은 여기서 만든 문서를 `source_policy_documents
 
 set-03 은 같은 `aws_caller_identity` 의 계정 ID 를 KMS 키 정책의 `kms:CallerAccount` 조건에 넣어 root ARN 없이 계정 위임을 표현한다. 이 root-less 키 정책은 모듈 02 에서 다룬다.
 
+<details class="build-step">
+<summary>지금 띄우기 — data source 가 실제로 무엇을 받아오나</summary>
+
+data source 는 리소스를 만들지 않고 **읽는다**. console 이 이것을 즉시 평가한다.
+
+```bash
+terraform console
+```
+
+```hcl
+data.aws_caller_identity.current.account_id
+```
+
+기대: 지금 자격증명의 12자리 계정 ID 가 문자열로 나온다. `aws sts get-caller-identity --query Account --output text` 의 출력과 같아야 한다.
+
+`NoCredentialProviders` 가 나오면 코드가 아니라 자격증명 문제다 — [awscli-basics](/start/awscli-basics/).
+
+</details>
+
 ---
 
 ## 4. for_each
@@ -249,6 +325,32 @@ resource "aws_route_table_association" "public" {
 - 참조는 `aws_subnet.this["wskorea26-priv-subnet-c"].id` 식.
 
 **④ 세트별 차이** — 없음. 모든 세트에서 서브넷·NAT·RTB 는 이 패턴이다.
+
+<details class="build-step">
+<summary>지금 띄우기 — `for_each` 가 몇 개로 펼쳐지나</summary>
+
+`plan` 은 만들지 않고 계획만 낸다. `for_each` 한 블록이 리소스 몇 개가 되는지 여기서 센다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  terraform plan -no-color |
+    Select-String -Pattern '^  # aws_subnet\.' |
+    Measure-Object | Select-Object -ExpandProperty Count
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform plan -no-color | grep -c '^  # aws_subnet\.'
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `4`. `subnets` map 의 키 개수와 같다. 계획 전체는 `Plan: 20 to add` 로 끝난다.
+
+수가 다르면 `subnets` map 을 먼저 센다. `toset()` 없이 list 에 `for_each` 를 걸면 계획 자체가 실패한다.
+
+</details>
 
 ---
 
@@ -351,6 +453,42 @@ resource "aws_nat_gateway" "this" {
 
 **⑤ 세트별 차이** — CIDR(172.16 vs 10.x), AZ 쌍(a/b vs c/d), 서브넷 수, NAT 개수(1개 공용 vs AZ별)가 바뀐다. 이 실측 코드는 전부 변수·locals 파생이라 tfvars 교체로 흡수된다.
 
+<details class="build-step">
+<summary>지금 띄우기 — VPC 를 실제로 만든다 (과금 시작)</summary>
+
+:::danger[여기서 비용이 붙는다]
+NAT 게이트웨이 2개와 Elastic IP 2개가 **시간당 과금**된다. 서울 리전 NAT 는 개당 시간당 약 0.059 USD 로, 두 개를 하루 8시간 켜 두면 약 1 USD 다. 데이터 처리 요금은 별도다. 이 문서를 끝내면 맨 아래 [정리](#정리--이-문서에서-띄운-것-지우기)를 반드시 돌린다.
+:::
+
+```bash
+terraform apply
+```
+
+기대: `Apply complete! Resources: 20 added.` NAT 생성 때문에 2~3분 걸린다.
+
+실제로 섰는지는 AWS 쪽에 물어서 확인한다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws ec2 describe-vpcs --filters "Name=tag:Name,Values=wskorea26-vpc" --query 'Vpcs[].CidrBlock' --output text
+  aws ec2 describe-nat-gateways --query 'NatGateways[?State==`available`].Tags[?Key==`Name`].Value' --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws ec2 describe-vpcs --filters "Name=tag:Name,Values=wskorea26-vpc" --query 'Vpcs[].CidrBlock' --output text
+  aws ec2 describe-nat-gateways --query 'NatGateways[?State==`available`].Tags[?Key==`Name`].Value' --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 첫 명령이 `172.16.0.0/16`, 둘째가 `book-ngw-c` 와 `book-ngw-d`.
+
+`apply` 가 중간에 멈춰도 만든 것을 지우지 않는다. state 에 기록된 것은 건너뛰므로 `terraform apply` 를 그대로 다시 돌리면 나머지만 만든다.
+
+</details>
+
 ---
 
 ## 6. output → .env 영속화
@@ -415,6 +553,57 @@ output "private_subnet_ids" {
 map output 은 `-json` + jq/ConvertFrom-Json, 단일 문자열은 `-raw` 를 쓴다.
 
 **④ 세트별 차이** — output 목록만 다르다(세트가 쓰는 서비스에 따라). "output 으로 뽑고 .env 로 영속화" 패턴 자체는 전 세트 공통.
+
+<details class="build-step">
+<summary>지금 띄우기 — output 을 꺼내 `.env` 로 굳힌다</summary>
+
+`output` 은 apply 가 끝난 뒤에만 값이 있다. 5절을 마친 상태에서 실행한다.
+
+```bash
+terraform output
+terraform output -json private_subnet_ids
+```
+
+기대: `vpc_id` · `public_subnet_ids` · `private_subnet_ids` · `account_id` 네 개가 나오고, 두 번째 명령이 서브넷 이름을 키로 갖는 JSON 객체를 낸다.
+
+`No outputs found` 면 apply 를 안 했거나 다른 디렉터리에 있는 것이다. `terraform output` 은 state 를 읽지 코드를 읽지 않는다.
+
+</details>
+
+---
+
+## 정리 — 이 문서에서 띄운 것 지우기
+
+5절에서 `apply` 를 했다면 창을 닫기 전에 반드시 돌린다. NAT 게이트웨이와 Elastic IP 는 쓰지 않아도 시간당 과금된다.
+
+```bash
+terraform destroy
+```
+
+기대: `Destroy complete! Resources: 20 destroyed.`
+
+Elastic IP 는 NAT 가 사라져도 계정에 남아 요금이 붙는 일이 있다. 한 번 더 확인한다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws ec2 describe-addresses --query 'Addresses[].PublicIp' --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws ec2 describe-addresses --query 'Addresses[].PublicIp' --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 빈 출력.
+
+:::note[실습을 이어서 할 거라면]
+[01 실습](/part-1/01-terraform-vpc/lab/)은 이 코드를 그대로 이어 쓴다. 바로 이어서 한다면 `destroy` 는 실습을 마친 뒤에 한 번만 돌린다. 코드는 `~/set07-lab` 에 남으므로 지웠어도 다음 날 `terraform apply` 로 다시 세우면 된다.
+:::
+
+계정 전체에 남은 것은 [잔존 리소스 점검](/reference/cleanup-check/)이 훑는다.
 
 ---
 

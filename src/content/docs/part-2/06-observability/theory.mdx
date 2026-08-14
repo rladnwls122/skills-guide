@@ -6,10 +6,15 @@ sidebar:
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
 선행 지식과 학습 경로는 [모듈 개요](/part-2/06-observability/)에.
+
+:::tip[읽으면서 확인한다]
+주제 2 와 주제 4 끝에 **지금 확인하기** 블록이 접혀 있다. 정답지 파일을 읽고 차트를 렌더해 볼 뿐이라 **과금이 0원**이고 클러스터도 자격증명도 필요 없다. 블록을 열지 않고 읽어도 문서는 그대로 이어진다.
+:::
 
 대회 관측성 요구는 항상 같은 세 줄기다.
 
@@ -144,6 +149,44 @@ Fluent Bit 파드 한 개가 노드에서 무엇을 붙들고 있는지다. 노�
 
 Lua 를 몇 개로 나눌지도 세트마다 다르다. set-03 은 드롭·변환(`prepare.lua`)과 형식 조립(`format.lua`)을 나누고 Reference02 형식("LEVEL 5자 패딩 + 키 순서 고정 JSON 문자열")을 만든다. set-07 은 `reshape.lua` 하나로 5키를 재구성한다(`timestamp` ISO8601Z, `status_code` 정수화). `/health` 드롭 분기는 어느 쪽이든 남긴다 — 채점이 CloudWatch 에서 0건을 확인한다.
 
+<details class="build-step">
+<summary>지금 확인하기 — 수집 범위가 세트마다 어떻게 다른가</summary>
+
+위 표의 첫 줄이 실제 파일에서 어떻게 생겼는지 두 세트를 나란히 본다. **정답지 파일을 읽기만 하므로 클러스터도 자격증명도 필요 없고 과금도 없다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String -Pattern 'Path +/var/log|Exclude_Path|log_group_name' `
+    -Path $HOME\skills-2026\set-02\task-1\k8s\monitoring\fluent-bit.yaml,
+          $HOME\skills-2026\set-07\task-1\k8s\logging\fluent-bit.yaml
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -nE 'Path +/var/log|Exclude_Path|log_group_name' \
+    ~/skills-2026/set-02/task-1/k8s/monitoring/fluent-bit.yaml \
+    ~/skills-2026/set-07/task-1/k8s/logging/fluent-bit.yaml
+  ```
+  </TabItem>
+</Tabs>
+
+기대: set-02 는 세 줄, set-07 은 두 줄이 나온다. :badge[실측]{variant=note}
+
+| | set-02 | set-07 |
+|---|---|---|
+| 수집 경로 | `*.log` — **전부** | `*_unicorn_*.log` — 네임스페이스 하나만 |
+| 제외 경로 | `fluent-bit*.log` — 자기 로그를 뺀다 | 없다 |
+| 로그 그룹 | `/wskorea26/eks/pod-logs` | `/unicorn/eks/book-app` |
+
+**set-02 가 `Exclude_Path` 를 두는 이유가 여기서 보인다.** 전부 수집하면 Fluent Bit 자신의 로그도 걸려 들어가고, 그것을 다시 전송하면서 또 로그가 생기는 되먹임이 생긴다. set-07 은 애초에 앱 네임스페이스만 보므로 그 문제가 없다.
+
+파일 이름이 `<파드>_<네임스페이스>_<컨테이너>-<id>.log` 라는 규칙 하나가 이 차이를 만든다. **네임스페이스를 바꾸라는 요구가 오면 이 경로가 따라온다** — 그리고 로그 그룹 이름도 함께다.
+
+경로가 안 보이면 정답지 클론 위치가 다른 것이다 — [Day 0 §4 저장소 클론](/start/#4-저장소-클론)의 경로를 확인한다.
+
+</details>
+
 ---
 
 ## 주제 3. log_to_metrics — 앱이 /metrics를 안 줄 때 (set-03 패턴)
@@ -243,6 +286,62 @@ set-03 실측: 제공 바이너리에 `/delay` 엔드포인트가 없어(404, µ
 
 - set-03: Grafana `Service type LoadBalancer`(NLB, admin/`Skills$#$@!`), EKS 관리형이라 kubeControllerManager/Scheduler/Etcd/Proxy 수집 비활성, Alertmanager `clusterDomain: wsc2026.skills.local`(커스텀 도메인과 정합).
 - set-07: Grafana를 internal ALB + TargetGroupBinding으로 노출, admin 계정이 선수등번호 기반(`skills$NUM`).
+
+<details class="build-step">
+<summary>지금 확인하기 — values 한 줄이 매니페스트 어디에 박히나</summary>
+
+`nodeSelector` 를 values 에 적으면 그것이 실제로 몇 군데에 들어가는지 본다. `helm template` 은 렌더만 하고 클러스터에 보내지 않으므로 **클러스터도 자격증명도 필요 없고 과금도 0** 이다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+  helm repo update
+  helm template kps prometheus-community/kube-prometheus-stack -n monitoring `
+    --set prometheus.prometheusSpec.nodeSelector."node-type"=addon |
+    Select-String -Pattern 'node-type'
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+  helm repo update
+  helm template kps prometheus-community/kube-prometheus-stack -n monitoring \
+    --set prometheus.prometheusSpec.nodeSelector."node-type"=addon | grep -n 'node-type'
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `node-type: addon` 이 **한 곳에만** 나온다 — Prometheus 리소스 안이다.
+
+요점은 나오지 **않는** 곳이다. Grafana·Operator·kube-state-metrics·node-exporter 는 각자 자기 `nodeSelector` 키를 따로 갖는다. **`prometheus.prometheusSpec` 아래에 적은 값은 Prometheus 에만 간다.** 그래서 "모니터링을 전부 addon 노드에" 라는 요구는 values 한 줄로 끝나지 않고 컴포넌트마다 적어야 한다.
+
+`--set` 에서 키 이름에 하이픈이 있어 `."node-type"` 처럼 따옴표로 감싼 것도 함께 본다. 감싸지 않으면 helm 이 점을 경로 구분자로 읽어 엉뚱한 곳에 넣는다.
+
+`Error: repo prometheus-community not found` 면 `helm repo add` 를 안 한 것이다.
+
+</details>
+
+### set-07 은 저장소가 바뀐다 — 04 가 그것을 가능하게 했다 :badge[실측]{variant=note}
+
+[set-07 `kube-prometheus-stack-values.yaml`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/k8s/monitoring/kube-prometheus-stack-values.yaml)을 set-02 와 나란히 놓으면 이렇다.
+
+| 항목 | set-02 | set-07 |
+|---|---|---|
+| release 이름 | `wskorea26-monitoring` | `unicorn-monitoring` |
+| 노드 라벨 키 | `node-type: addon` | `unicorn: addon` |
+| Alertmanager | `enabled: false` | 끄지 않는다 |
+| Prometheus 저장소 | `emptyDir` | **PVC — CMK 암호화 StorageClass** |
+| 로그 수집기 위치 | `monitoring` 네임스페이스 | **`logging` 으로 분리** |
+| 추가 수집기 | 없음 | CloudWatch Exporter |
+
+**저장소 줄이 이 모듈에서 가장 중요한 연결이다.** set-02 가 `emptyDir` 을 쓰는 것은 취향이 아니라 제약이었다 — EBS CSI 드라이버를 깔면 노드마다 DaemonSet 이 뜨고, 그것이 앱 노드에 뜬 `kube-system` 파드가 되어 set-02 의 노드 배치 검사를 위반한다. 그래서 애드온을 못 깔고, 못 깔았으니 PVC 를 못 쓴다.
+
+set-07 에는 그 검사가 없다. [04](/part-2/04-eksctl-cluster/theory/)에서 EBS CSI 드라이버를 애드온으로 넣었고, **그래서 여기서 Prometheus 가 디스크를 갖는다.** 두 모듈 떨어진 결정 하나가 여기까지 온다.
+
+Alertmanager 도 같은 구조다. set-02 가 끈 이유는 "필요 없어서"가 아니라 `nodeSelector` 없는 StatefulSet 이 앱 노드로 갈 수 있어서였다. 제약이 사라지면 끌 이유도 사라진다.
+
+**이 절에서 가져갈 것은 "왜 껐는가"를 묻는 습관이다.** 기준본이 무언가를 안 하고 있으면 그것은 대개 금지가 아니라 그 세트의 제약이다. 제약이 바뀌면 선택도 바뀐다.
 
 ---
 

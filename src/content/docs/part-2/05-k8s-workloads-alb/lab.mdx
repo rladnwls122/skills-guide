@@ -37,46 +37,46 @@ import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 
 ## 0. 기준본 세우기
 
-set-02 의 워크로드가 뜬 상태에서 시작한다.
-
 [04 실습](/part-2/04-eksctl-cluster/lab/)의 클러스터가 떠 있어야 하고, 같은 문서의 `.env.ps1`(bash 는 `.env.sh`)이 있어야 한다. 이 실습이 쓰는 `VPC_ID`·`ECR`·`APP_TG`·`ALB_DNS` 가 전부 그 파일에서 온다.
 
-### 정답지 런북을 그대로 따른다
+### PART-2 의 기준본은 파일이지 떠 있는 것이 아니다
 
-[**set-02 `task-1/README.md`**](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/README.md) 의 다음 단계를 순서대로 실행한다.
+PART-1 은 매 모듈이 기준본을 **띄워 놓고** 시작했다. PART-2 는 다르다.
+
+04 를 이행까지 마쳤다면 지금 클러스터는 set-07 형태다 — 노드 라벨이 `unicorn` 이고 파드 자격증명이 Pod Identity 다. 여기에 set-02 워크로드를 그대로 올리면 **뜨지 않는다.** 노드 라벨이 안 맞아 `Pending` 이 되고, eksctl 이 IRSA 로 만들어 주던 서비스 계정도 이 클러스터엔 없다.
+
+클러스터를 기준본으로 되돌리는 데는 20분과 실비가 또 든다. 그래서 PART-2 에서는 **기준본을 "올려 둔 상태"가 아니라 "읽는 대상"으로 삼는다.**
 
 <Steps>
 
-1. **`4) AWS Load Balancer Controller`** — helm 으로 addon 노드에 설치한다. `serviceAccount.create=false` 가 왜 필요한지는 [05 이론 3절](/part-2/05-k8s-workloads-alb/theory/)의 확인 블록이 숫자로 보여 준다.
+1. **기준본은 [set-02 `k8s/`](https://github.com/ishs-cloud-computing/skills-2026/tree/main/set-02/task-1/k8s) 파일들이다.** 이것이 1절 표의 왼쪽 열이고, 2절에서 고칠 원본이다
 
-2. **`5) k8s manifest 렌더 & 일괄 apply`** — `${VAR}` 를 치환해 `rendered/` 를 만들고 순서대로 적용한 뒤 타깃이 healthy 가 될 때까지 기다린다.
+2. **클러스터에 실제로 올라가는 것은 5절의 이행본 하나뿐이다.** 6·7절의 복구와 진단도 그 위에서 한다
 
 </Steps>
 
-원본 매니페스트는 [set-02 `k8s/`](https://github.com/ishs-cloud-computing/skills-2026/tree/main/set-02/task-1/k8s)에서 바로 볼 수 있다.
+**이 차이가 훈련을 약하게 만들지는 않는다.** 대회 당일에도 앞 계층은 이미 자기 손으로 만든 상태이고, 새로 받는 것은 과제지와 바꿔야 할 파일이다.
 
-### 섰는지 확인한다
+### 지금 클러스터가 이행을 받을 준비가 됐나 확인한다
 
 <Tabs syncKey="shell">
   <TabItem label="PowerShell">
   ```powershell
-  kubectl get pod -n wskorea26 -o wide
-  aws elbv2 describe-target-health --target-group-arn $env:APP_TG `
-    --query "TargetHealthDescriptions[].TargetHealth.State" --output text
+  kubectl get nodes -L unicorn
+  kubectl get ns
   ```
   </TabItem>
   <TabItem label="Bash (Linux/CloudShell)">
   ```bash
-  kubectl get pod -n wskorea26 -o wide
-  aws elbv2 describe-target-health --target-group-arn "$APP_TG" \
-    --query "TargetHealthDescriptions[].TargetHealth.State" --output text
+  kubectl get nodes -L unicorn
+  kubectl get ns
   ```
   </TabItem>
 </Tabs>
 
-기대: 파드 2개가 `Running` 이고 둘 다 app 노드 위에 있다. 타깃 상태는 `healthy healthy` 다.
+기대: 노드 4개에 `UNICORN` 열이 `app` 2개와 `addon` 2개로 채워져 있다. 네임스페이스 목록에는 아직 `unicorn` 이 없다 — 이 실습이 만든다.
 
-`initial` 이면 아직 헬스체크 중이라 잠시 뒤 다시 본다. 빈 출력이면 TargetGroupBinding 이 적용되지 않았거나 LBC 가 안 떠 있는 것이다.
+`UNICORN` 열이 비어 있으면 04 의 이행을 안 마친 것이다. [04 실습 5절](/part-2/04-eksctl-cluster/lab/)로 돌아간다.
 
 ### 이행할 사본을 뜬다
 
@@ -94,6 +94,8 @@ set-02 의 워크로드가 뜬 상태에서 시작한다.
   ```
   </TabItem>
 </Tabs>
+
+AWS Load Balancer Controller 는 아직 안 깔았다면 지금 깐다. 절차는 [set-02 `task-1/README.md`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/README.md) 의 `4) AWS Load Balancer Controller` 인데, **`--set clusterName` 과 `--set nodeSelector` 는 지금 클러스터 값으로 바꿔 넣는다.** `serviceAccount` 관련 옵션도 이 클러스터가 Pod Identity 를 쓰므로 그대로일 수 없다 — 무엇을 바꿔야 하는지는 [05 이론 3절](/part-2/05-k8s-workloads-alb/theory/)의 확인 블록이 숫자로 보여 준다.
 
 :::danger[과금이 이어진다]
 04 의 클러스터와 01 의 NAT 게이트웨이가 계속 과금 중이다. 여기에 ALB 두 개가 더해진다. 6·7절이 배포된 상태를 전제하므로 이 실습은 배포까지 간다. 끝나면 8절 정리를 반드시 돌린다.

@@ -21,6 +21,10 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 - [ ] `curl.exe -I`로 HTTP→HTTPS 리다이렉트의 상태 코드·헤더를 확인한다
 - [ ] 쿠키 강제 시 동작(mark 2-4), 무작위 배정·쿠키 보존(mark 2-5), KVS 동적 반영(mark 2-6)을 각각 재현한다
 - [ ] `mark2.sh`로 셀프 채점하고, 실습 종료 시 destroy까지 마친다
+- [ ] (이행) 무작위 배정을 **결정적 배정**으로 바꾸고, 그것이 왜 채점 가능성 요구인지 안다
+- [ ] 목록을 정확 일치로 보는 채점에서 **여분 키를 지우는** 장치를 쓴다
+- [ ] "코드를 고쳤다"와 "서비스가 그 코드를 쓴다" 사이의 발행 단계를 확인한다
+- [ ] **로그가 없는 실행 환경**에서 격리 실행으로 함수와 배선을 가른다
 
 선행 지식과 목표는 [모듈 개요](/part-4/13-cdn-function/)에.
 
@@ -240,7 +244,257 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 - [ ] 첫 방문 무작위 배정 + Set-Cookie(`Path=/; Max-Age=86400`), 재방문 시 유지 + Set-Cookie 없음 (mark 2-5)
 - [ ] `weight` 변경이 재배포 없이 즉시 반영 (mark 2-6)
 
-## 정리 (당일 필수)
+## 이행 — 무작위를 결정적으로 바꾼다 :badge[자체 제작]{variant=caution}
+
+기준본이 선 상태에서 시작한다.
+
+:::caution[이 변동은 실제 과제가 아니다]
+CDN Function 을 다루는 것은 후보 중 set-07 하나뿐이라 **이행할 짝이 없다.**
+
+그래서 이 변동은 **직접 만든 것**이다. 다만 요구 자체는 현실적이고, 기전은 기준본 코드에 이미 있는 제약 안에서만 쓴다 — 새 서비스를 끌어오지 않는다.
+
+"이렇게 바뀔 것"이라는 예측이 아니라 **같은 스택으로 풀 수 있는 다른 요구**를 훈련용으로 만든 것이다.
+:::
+
+### 변동 과제지
+
+| 항목 | 기준본 (set-07) | 변동 |
+|---|---|---|
+| 버전 배정 기준 | 무작위 + 저장된 비율 | **요청 속성에서 계산한 값** |
+| 재방문 일관성 | 쿠키로 고정 | **쿠키 없이도 같은 사용자는 같은 버전** |
+| 저장소 키 | 비율 하나 + 경로 둘 | **구간 수 + 구간별 경로** |
+| 응답 쪽 함수 | 쿠키를 내려 준다 | **배정 결과를 응답 헤더로 노출** |
+
+#### 요구에서 파생되는 것
+
+**"쿠키 없이도 일관"** 이 이 이행의 전부다.
+
+기준본은 무작위로 배정하고 그 결과를 쿠키에 적어 다음 방문에 재사용한다. 쿠키를 못 쓰면 그 방법이 사라진다. **매 요청마다 같은 답이 나오는 계산**이 필요해진다.
+
+여기서 `Math.random()` 이 문제가 된다. 같은 사용자가 두 번 오면 다른 답이 나오므로 요구를 못 만족한다. **무작위를 지우고 요청 자체에서 값을 뽑아야 한다.**
+
+그리고 이것이 채점 쪽에도 영향을 준다. 무작위가 있으면 채점이 **결정적으로 확인할 수 없다** — 기준본이 여러 번 호출해 분포를 보는 방식을 쓰는 이유다. 결정적 배정으로 바꾸면 같은 요청은 항상 같은 결과라 한 번만 확인하면 된다.
+
+**"구간 수 + 구간별 경로"** 는 저장소 키 구조가 바뀐다는 뜻이다. 비율 하나로 두 갈래를 나누던 것이, 구간을 몇 개로 나눌지와 각 구간이 어디로 갈지를 따로 적는 형태가 된다. **키 목록이 정확 일치로 검사되므로 여분 키가 남으면 안 된다.**
+
+### 이행 (타이머 25분)
+
+타이머를 걸고 시작한다. 아래는 **스스로 답해야 할 질문 목록**이다.
+
+- 요청에서 사용자를 구분할 수 있는 속성은 무엇이 있나. 그중 **매번 같은 값**인 것은 무엇인가
+- 그 값을 구간 번호로 바꾸는 계산을 어떻게 만드나. 실행 환경에 해시 함수가 있나
+- 저장소 키를 몇 개로 두나. 구간 수가 바뀌면 키가 몇 개 늘어나나
+- 여분 키가 남지 않게 하는 장치는 기준본에 이미 있나
+- 응답 쪽 함수가 배정 결과를 알려면 요청 쪽에서 무엇을 넘겨야 하나. 기준본이 쓰던 방식을 그대로 쓸 수 있나
+- 저장소 조회는 몇 번 하나. 기준본 주석이 경고한 제약이 여기에도 걸리나
+
+**마지막 질문을 건너뛰지 않는다.** 기준본 코드의 주석이 실행 환경의 제약 둘을 이미 적어 두었다 — 조회를 한꺼번에 하지 말 것, 그리고 함수 인자 안에서 대기하지 말 것. 구간이 늘면 조회도 늘어난다.
+
+### 통과 기준
+
+<Steps>
+
+1. **무작위가 사라졌나**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'Math.random' -Path .\cloudfront\*.js
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -n 'Math.random' cloudfront/*.js
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **출력 없음.** 남아 있으면 같은 요청이 다른 답을 내므로 요구를 못 만족한다.
+
+2. **같은 요청이 항상 같은 결과를 내나**
+
+   같은 조건으로 여러 번 호출해 결과가 전부 같은지 본다. 하나라도 다르면 배정이 아직 결정적이지 않다.
+
+   **이것이 이 이행의 핵심 검증이다.** 기준본에서는 분포를 봤지만 여기서는 **일치**를 본다.
+
+3. **저장소 키가 정확히 요구된 것만 있나**
+
+   ```bash
+   aws cloudfront-keyvaluestore list-keys --kvs-arn <kvs-arn>
+   ```
+
+   기대: 요구된 키만. 옛 키가 남아 있으면 6-1 이 그 경우다.
+
+4. **함수가 LIVE 에 있나**
+
+   ```bash
+   aws cloudfront describe-function --name <함수명> --stage LIVE
+   ```
+
+   기대: 최신 코드가 조회된다. `NoSuchFunctionExists` 면 6-2 다.
+
+</Steps>
+
+### 복기
+
+정답지의 `req-fn.js` 주석을 다시 읽는다. **실행 환경의 제약이 코드가 아니라 주석에 적혀 있다** — 그 둘을 지켰는지 확인한다.
+
+---
+
+## 6. 과제지 오독 복구
+
+배포까지 했는데 값이 다르다. 판정 축은 셋이다.
+
+| 판정 | 무엇으로 아나 | 비용 |
+|---|---|---|
+| 즉시 수정 | 저장소 값만 바꾸면 된다 | 초 — **재배포 없이 반영** |
+| 발행 누락 | 코드는 맞는데 서비스가 옛 것을 본다 | 초 — 다만 못 찾으면 오래 |
+| 재현 불가 | 채점이 확인할 수 없다 | 코드를 다시 설계 |
+
+### 6-1. 저장소에 옛 키가 남았다
+
+**상황.** 새 키 구조로 바꿨는데 기준본의 키가 함께 남아 있다. 동작은 한다.
+
+**판정.**
+
+```bash
+aws cloudfront-keyvaluestore list-keys --kvs-arn <kvs-arn>
+```
+
+기대: 요구된 키만. **채점이 키 목록을 정확 일치로 검사하므로 여분 키 하나가 항목 하나를 깎는다.**
+
+**복구.** 정답지가 이미 장치를 갖고 있다 — 키를 **배타적으로 관리**하는 리소스를 쓰면 선언에 없는 키가 자동으로 사라진다. 그것을 쓰고 있는지 확인한다.
+
+**교훈.** **"추가"와 "이것만"은 다른 요구다.** 목록을 정확 일치로 보는 채점에서는 지우는 쪽이 더 중요하다. [08](/part-3/08-private-eks-iam/lab/)·[09](/part-4/09-serverless-event/lab/)의 삭제 판단과 같은 계열이고, 여기서는 **도구가 대신 해 주는 장치가 있다**는 점이 다르다.
+
+### 6-2. 코드는 고쳤는데 서비스가 옛 것을 본다
+
+**상황.** 함수 코드를 고치고 배포했는데 동작이 안 바뀐다. 코드를 몇 번을 봐도 맞다.
+
+**판정.** 함수는 단계가 둘이다. 각각 조회해 본다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws cloudfront describe-function --name <함수명> --stage DEVELOPMENT --query "FunctionSummary.FunctionMetadata.[Stage,FunctionARN]" --output text
+  aws cloudfront describe-function --name <함수명> --stage LIVE --query "FunctionSummary.FunctionMetadata.[Stage,FunctionARN]" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws cloudfront describe-function --name <함수명> --stage DEVELOPMENT --query 'FunctionSummary.FunctionMetadata.[Stage,FunctionARN]' --output text
+  aws cloudfront describe-function --name <함수명> --stage LIVE --query 'FunctionSummary.FunctionMetadata.[Stage,FunctionARN]' --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 둘 다 나온다. **LIVE 쪽이 없거나 옛 코드면 발행이 안 된 것이다.**
+
+**복구.** 발행 설정을 켜고 다시 적용한다. 초 단위다.
+
+**파급.** 그리고 **캐시가 남아 있으면 바로 안 보인다.** 배포가 전파되고 캐시가 만료되기를 기다리거나 무효화를 건다.
+
+**교훈.** **"만들었다"와 "서비스가 쓴다" 사이에 한 단계가 더 있다.** 코드를 의심하기 전에 그 코드가 실제로 실행되는 자리에 있는지부터 본다. 로그가 없는 실행 환경에서는 이 확인이 특히 중요하다.
+
+### 6-3. 배정을 무작위로 남겨 뒀다
+
+**상황.** 저장소 키 구조는 새로 바꿨는데 배정 계산은 기준본의 무작위를 그대로 뒀다. 호출해 보면 두 버전이 다 나오니 동작하는 것처럼 보인다.
+
+**판정.** 같은 조건으로 여러 번 호출한다. **결과가 달라지면 요구를 못 만족한 것이다.**
+
+동작 자체는 정상이라 에러가 없다. **도구도 채점도 "틀렸다"고 말해 주지 않고, 그냥 확인이 안 될 뿐이다.**
+
+**복구.** 배정 계산을 다시 설계한다. 값 교체가 아니라 코드 구조가 바뀐다.
+
+**교훈.** **재현 가능성이 요구인 경우가 있다.** "같은 입력에 같은 출력"은 기능 요구가 아니라 **채점 가능성 요구**다. 무작위가 들어간 자리를 만나면 "채점이 이것을 어떻게 확인하나"를 먼저 묻는다 — 확인할 방법이 없으면 그 무작위는 요구가 아니다.
+
+## 7. 장애 진단
+
+정상으로 선 상태에서 일부러 고장을 내고 증상만 보고 좁혀 간다. **주입 명령과 복구 명령이 짝으로 있다.**
+
+이 실행 환경에는 **로그가 없다.** 그래서 진단이 다른 모듈과 다르다 — 안을 들여다보는 대신 **입력을 바꿔 가며 밖에서 좁힌다.**
+
+### 7-1. 함수가 아예 안 도는 것 같다
+
+**주입.** 배포에서 함수 연결을 뗀다. 지우기 전에 현재 설정을 받아 둔다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws cloudfront get-distribution-config --id <dist-id> --output json | Set-Content $HOME\cf-config-backup.json
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws cloudfront get-distribution-config --id <dist-id> --output json > ~/cf-config-backup.json
+  ```
+  </TabItem>
+</Tabs>
+
+연결 해제는 콘솔의 동작(behavior) 편집에서 함수 연결을 비우는 것이 가장 짧다.
+
+**증상.** 요청이 원래 경로로 그대로 간다. 재작성도 안 되고 응답 헤더도 안 붙는다. **오류는 없다.**
+
+**좁히는 순서.** 밖에서 안으로, 가능성을 하나씩 지운다.
+
+<Steps>
+
+1. **함수를 격리해서 돌려 본다** — `aws cloudfront test-function` 으로 이벤트를 직접 넣어 본다. **여기서 결과가 정상이면 함수는 맞고 연결이 문제다.** 로그가 없는 환경에서 이것이 로그를 대신한다
+
+2. **배포에 연결돼 있나** — 배포 설정에서 해당 동작의 함수 연결을 본다. 비어 있으면 여기가 원인이다
+
+3. **어느 단계에 연결됐나** — 요청 쪽과 응답 쪽은 자리가 다르다. 반대쪽에 걸면 원하는 시점에 안 돈다
+
+4. **전파가 끝났나** — 설정을 바꾼 직후면 아직 옛 설정이 서비스될 수 있다
+
+</Steps>
+
+**1번이 이 모듈의 핵심 도구다.** 함수를 격리해서 돌리면 "함수가 틀렸나 배선이 틀렸나"가 한 번에 갈린다. 로그가 없다고 진단이 불가능한 것이 아니라 **격리 실행이 그 자리를 맡는다.**
+
+**복구.** 받아 둔 설정으로 되돌리거나 코드를 다시 적용한다.
+
+### 7-2. 저장소 값을 못 읽는다
+
+**주입.** 저장소에서 키 하나를 지운다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws cloudfront-keyvaluestore list-keys --kvs-arn <kvs-arn>
+  aws cloudfront-keyvaluestore delete-key --kvs-arn <kvs-arn> --key <키> --if-match <etag>
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws cloudfront-keyvaluestore list-keys --kvs-arn <kvs-arn>
+  aws cloudfront-keyvaluestore delete-key --kvs-arn <kvs-arn> --key <키> --if-match <etag>
+  ```
+  </TabItem>
+</Tabs>
+
+**증상.** 재작성이 안 되고 요청이 원래 경로로 간다. 7-1 과 겉보기 증상이 같다.
+
+**좁히는 순서.**
+
+<Steps>
+
+1. **함수를 격리해서 돌려 본다** — 7-1 과 같은 첫 단계다. 여기서 실패하면 **연결이 아니라 함수 안의 문제**다. 이 갈림이 두 고장을 나눈다
+
+2. **키가 실제로 있나** — 저장소의 키 목록을 조회한다. 없으면 여기가 원인이다
+
+3. **함수가 저장소를 볼 수 있나** — 함수와 저장소의 연결이 선언돼 있는지 본다. 키가 있어도 연결이 없으면 못 읽는다
+
+4. **실패했을 때 어떻게 되나** — 기준본 코드는 조회 실패를 잡아 **원본 요청을 그대로 통과**시킨다. 그래서 오류가 아니라 "아무 일도 안 일어남"으로 보인다
+
+</Steps>
+
+4번이 이 고장이 조용한 이유다. **예외를 삼키는 코드는 실패를 정상처럼 보이게 한다.** 기준본이 그렇게 만든 것은 서비스를 죽이지 않기 위해서지만, 진단할 때는 그 성질을 알고 있어야 한다.
+
+**복구.** 키를 다시 넣거나 코드를 다시 적용한다. 배타 관리 리소스를 쓰고 있으면 재적용으로 복원된다.
+
+**교훈.** **로그가 없는 실행 환경의 진단은 "격리 실행"과 "입력 바꾸기" 둘로 한다.** 그리고 예외를 삼키는 코드가 있으면 실패가 침묵으로 나타난다는 것을 계산에 넣는다.
+
+## 8. 정리 (당일 필수)
 
 <Tabs syncKey="shell">
   <TabItem label="PowerShell">
@@ -259,55 +513,3 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 :::caution[과금 주의]
 CloudFront distribution은 disable→삭제 순서로 진행돼 몇 분 걸릴 수 있다(같은 서비스 기준 [02-kms-s3-cloudfront](/part-1/02-kms-s3-cloudfront/lab/) 실측 5~10분 수준). destroy 명령이 끝난 뒤 다음 작업으로 넘어간다.
-:::
-
-## 변형 셀프 체크
-
-당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
-
-1. 쿠키명이 `x-sp-ab` 에서 바뀌면 무엇을 고치나?
-
-   <details>
-   <summary>답 확인</summary>
-
-   세 곳이다. `variables.tf` 의 `ab_cookie_name`, `cloudfront/req-fn.js`, `cloudfront/res-fn.js` 다. 두 JS 파일은 `file()` 로 그대로 읽히는 정적 코드라 변수 치환이 닿지 않는다 — `x-sp-ab` 와 `x-sp-ab-assigned` 를 직접 고친다. 캐시 정책의 쿠키 화이트리스트는 변수를 쓰므로 자동으로 따라간다. mark 2-3-A 가 화이트리스트를, 2-4-A·2-5-A 가 실제 Set-Cookie 를 본다.
-
-   </details>
-
-2. B 배정 비율이 0.3 에서 0.5 로 바뀌면 어디를 고치고, 어디를 그대로 두나?
-
-   <details>
-   <summary>답 확인</summary>
-
-   `variables.tf` 의 `ab_weight` 한 곳이다. 함수 코드는 매 실행 KVS 에서 `weight` 를 읽으므로 JS 는 그대로 두고 함수도 다시 publish 하지 않는다. mark 2-2-A 가 KVS 의 키·값을 정렬해 전부 출력하므로 이 값이 그 줄에 그대로 드러난다.
-
-   </details>
-
-3. 함수를 `DEVELOPMENT` 스테이지에 둔 채 채점하면 어느 체크가 깨지나?
-
-   <details>
-   <summary>답 확인</summary>
-
-   mark 2-2-A 가 `describe-function --stage LIVE` 로 상태·런타임·KVS 연결을 뽑는데 LIVE 사본이 없다. 배포의 cache behavior 에도 연결되지 않아 2-3-A 의 함수 연결 줄이 비고, 2-4-A 부터 2-6-A 까지 동작 검증이 전부 무너진다.
-
-   </details>
-
-4. KVS 에 콘솔로 키를 하나 더 넣으면?
-
-   <details>
-   <summary>답 확인</summary>
-
-   mark 2-2-A 는 KVS 의 모든 키를 정렬해 출력하므로 여분 키가 그대로 보여 정확 일치가 깨진다. `keys_exclusive` 리소스가 다음 apply 때 여분 키를 지우지만, apply 전에 채점하면 그대로 남는다. 값 변경이 필요하면 콘솔이 아니라 `ab_weight` 같은 변수로 넣는다.
-
-   </details>
-
-## 오답 노트 양식 (3열)
-
-```
-| 증상 | 원인 | 다음에 칠 명령 |
-|---|---|---|
-| 전 요청 503 + FunctionThrottledError | await가 함수 인자 자리에 있음(js-2.0 SyntaxError) | aws cloudfront test-function --stage LIVE --if-match <ETag> --name skillsphone-cdn-ab-req-fn --event-object fileb://e.json |
-```
-
-- 런북 밖에서 10분+ 소모한 항목을 한 행으로 기록한다.
-- 작성 후 실패 항목을 [트러블슈팅](/reference/troubleshooting/)에 자기 언어로 추가한다.

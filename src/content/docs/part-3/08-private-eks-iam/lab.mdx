@@ -1,318 +1,596 @@
 ---
-title: 08. 실습 — Audit Role 이중 평가 재현 + Private EKS 드릴
-description: "ExternalId audit role 의 assume 성공·실패를 재현하고 private 엔드포인트를 점검하는 실습."
+title: 08. Private EKS + IAM — 변동 이행 실습
+description: "set-07 의 닫힌 클러스터와 감사 역할을 set-03 요구로 이행하고, 배포 뒤 오독 복구와 장애 진단까지 가는 실습."
 sidebar:
   order: 3
 ---
 
-import { Steps } from '@astrojs/starlight/components';
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
 원리와 채점 관점은 [08 이론 — Fully-Private EKS 운용과 IAM 심화](/part-3/08-private-eks-iam/theory/)에 있다.
 
-실습 A는 IAM만 사용(무료, 클러스터 불필요) — 반드시 수행.
-실습 B는 PART-2 클러스터가 떠 있을 때 수행하는 private 운용 드릴.
+**방식**: 여기서는 **기준본이 set-07 이고 타깃이 set-03 이다.** PART-1·2 와 방향이 반대다. 두 세트 다 1과제 수상 후보이고 둘 다 닫힌 클러스터를 쓰므로, 갈리는 것은 값이 아니라 **같은 문제를 푸는 방식**이다.
 
-## 목표 체크박스
+이 모듈의 이행에는 다른 데 없는 종류가 하나 있다. **요구가 사라지는 것**이다. 만들라는 것은 과제지에 적혀 있지만 **없어진 요구는 어디에도 안 적혀 있다.**
 
-- [ ] `:root` trust + ExternalId 조건의 audit role을 CLI로 생성
-- [ ] 권한 없는 사용자로 assume **실패**(trust 통과해도 identity policy에서 거부) 재현
-- [ ] 권한 있는 사용자로 ExternalId 없이 assume **실패**, ExternalId 붙여 **성공** 재현
-- [ ] assume한 세션으로 허용 액션 성공 / 미허용 액션 거부 확인
-- [ ] (B) private 엔드포인트 상태 확인·재차단 명령 수행
-- [ ] (B) VPC CloudShell(또는 bastion) 멱등 셋업 블록 1회 왕복
-- [ ] (B) CoreDNS 커스텀 도메인 양쪽 적용 확인
+## 실습 목표
+
+- [ ] 신뢰 정책과 호출자 권한이 **둘 다** 있어야 역할을 맡을 수 있다는 것을 실패 재현으로 확인한다
+- [ ] 작업 호스트를 손으로 만드는 방식과 코드로 관리하는 방식의 차이를 안다
+- [ ] taint 가 붙은 노드그룹에 앱을 올리려면 무엇이 짝으로 필요한지 찾는다
+- [ ] 노드 부트스트랩에서만 바뀌는 값이 왜 노드그룹 교체인지 판정한다
+- [ ] **기준본에 있던 것을 지우는 판단**을 한다 — 남기면 불필요 리소스 감점이다
+- [ ] 닫힌 클러스터에서 통신이 막힐 때 SSM → DNS → 엔드포인트 → 보안 그룹 순으로 좁힌다
 
 선행 지식과 목표는 [모듈 개요](/part-3/08-private-eks-iam/)에.
 
 :::note[실전 참조 — 막히면 여는 곳]
 - IAM 액션·조건 키(`sts:AssumeRole`·`sts:ExternalId`): [Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html)
 - `AccessDenied` 가 어디서 났는지 판정: [정책 평가 로직](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html)
-- CLI 플래그·출력 필드: `aws sts assume-role help` · `aws eks update-cluster-config help`
-- 같은 역할을 코드로 옮길 때: [aws_iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role)
+- eksctl 필드: `eksctl utils schema` — `taints` 와 `overrideBootstrapCommand` 를 찾는다
+- Terraform 인자: [aws_instance](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance) · [aws_iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role)
+- 리소스를 변수로 켜고 끄는 법: [count 와 조건 표현식](https://developer.hashicorp.com/terraform/language/meta-arguments/count)
 - 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
 :::
 
----
+## 0. 기준본 세우기
 
-## 실습 A. Audit Role — assume 성공/실패 양쪽 재현
+기준본은 set-07 이다. **이 절의 앞부분은 클러스터 없이, 무료로 된다.**
 
-셸: 본 PC bash (admin 자격증명). `NUM`은 선수등번호 가정.
+### 0-1. 감사 역할이 어떻게 동작하는지 손으로 확인한다
 
-<Steps>
-
-1. **A-1) 역할 생성** (`:root` trust + ExternalId + 3600초)
-
-   ```bash
-   export NUM=00
-   ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-   EXT_ID="unicorn-audit-2026$NUM"
-
-   cat > /tmp/audit-trust.json <<EOF
-   {
-     "Version": "2012-10-17",
-     "Statement": [{
-       "Effect": "Allow",
-       "Principal": { "AWS": "arn:aws:iam::$ACCOUNT_ID:root" },
-       "Action": "sts:AssumeRole",
-       "Condition": { "StringEquals": { "sts:ExternalId": "$EXT_ID" } }
-     }]
-   }
-   EOF
-   aws iam create-role --role-name lab-audit-role \
-     --assume-role-policy-document file:///tmp/audit-trust.json \
-     --max-session-duration 3600
-
-   # 권한: 좁힐 수 있는 것(eks:DescribeCluster)은 분리, ec2:DescribeVpcs는 ARN 미지원이라 "*" 불가피
-   cat > /tmp/audit-policy.json <<EOF
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       { "Sid": "DescribeVpcs", "Effect": "Allow", "Action": "ec2:DescribeVpcs", "Resource": "*" },
-       { "Sid": "DescribeCluster", "Effect": "Allow", "Action": "eks:DescribeCluster",
-         "Resource": "arn:aws:eks:ap-northeast-2:$ACCOUNT_ID:cluster/*" }
-     ]
-   }
-   EOF
-   aws iam put-role-policy --role-name lab-audit-role --policy-name lab-audit-policy \
-     --policy-document file:///tmp/audit-policy.json
-   ROLE_ARN="arn:aws:iam::$ACCOUNT_ID:role/lab-audit-role"
-   ```
-
-   <details class="diagram-note">
-   <summary>이 블록이 하는 일</summary>
-
-   감사용 역할을 CLI 로 만든다. 신뢰 정책의 Principal 이 계정 root 라 계정 안 누구나 후보가 되지만, `sts:ExternalId` 조건이 그 값을 아는 호출만 통과시킨다. 권한 정책은 두 구문으로 나뉜다 — `eks:DescribeCluster` 는 리소스를 클러스터 ARN 으로 좁혔고, `ec2:DescribeVpcs` 는 리소스 수준 권한을 지원하지 않아 `"*"` 가 불가피하다. 좁힐 수 있는 것만 좁힌 형태가 최소권한 판정을 통과한다.
-
-   </details>
-
-2. **A-2) 실패 케이스 1 — 호출자 identity policy 부재** (이중 평가)
-
-   ```bash
-   # 정책이 하나도 없는 사용자 생성
-   aws iam create-user --user-name lab-no-perm
-   read -r AK SK <<< $(aws iam create-access-key --user-name lab-no-perm \
-     --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text)
-
-   # 그 사용자로 assume 시도 — trust는 :root라 계정 내 전원이 '후보'지만…
-   AWS_ACCESS_KEY_ID=$AK AWS_SECRET_ACCESS_KEY=$SK AWS_SESSION_TOKEN= \
-     aws sts assume-role --role-arn "$ROLE_ARN" --role-session-name lab --external-id "$EXT_ID"
-   ```
-
-   <details class="diagram-note">
-   <summary>이 블록이 하는 일</summary>
-
-   첫 번째 실패 케이스를 만든다. 정책이 하나도 없는 사용자를 만들고 그 자격 증명으로 assume 을 시도한다. 신뢰 정책이 root 라 "후보"이긴 하지만 호출자 쪽에 `sts:AssumeRole` 권한이 없어 거부된다 — root 신뢰가 권한 부여가 아니라는 증거다.
-
-   </details>
-
-   **기대 출력**: `AccessDenied ... not authorized to perform: sts:AssumeRole`
-   → **trust policy AND 호출자 identity-based sts:AssumeRole 둘 다 필요**. `:root` trust는 권한 부여가 아니다.
-
-   ```bash
-   # 사용자에게 sts:AssumeRole만 부여하면 통과하는지 확인
-   aws iam put-user-policy --user-name lab-no-perm --policy-name allow-assume \
-     --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Resource\":\"$ROLE_ARN\"}]}"
-   sleep 10   # IAM 전파
-   AWS_ACCESS_KEY_ID=$AK AWS_SECRET_ACCESS_KEY=$SK AWS_SESSION_TOKEN= \
-     aws sts assume-role --role-arn "$ROLE_ARN" --role-session-name lab --external-id "$EXT_ID" \
-     --query 'AssumedRoleUser.Arn'
-   # 기대: "arn:aws:sts::<acct>:assumed-role/lab-audit-role/lab"  ← 성공
-   ```
-
-   <details class="diagram-note">
-   <summary>이 블록이 하는 일</summary>
-
-   같은 사용자에게 `sts:AssumeRole` 만 붙이면 통과하는지 확인한다. `sleep 10` 이 필요한 이유는 IAM 변경이 즉시 전파되지 않기 때문이다. 성공하면 `assumed-role/lab-audit-role/lab` 형태의 ARN 이 나온다 — 앞의 실패와 이 성공의 차이가 정확히 호출자 정책 한 줄이다.
-
-   </details>
-
-3. **A-3) 실패 케이스 2 — ExternalId 누락/불일치** (admin 호출자여도 실패)
-
-   ```bash
-   aws sts assume-role --role-arn "$ROLE_ARN" --role-session-name lab 2>&1 | grep -oE AccessDenied
-   # 기대: AccessDenied   (mark 9-2 첫 검사와 동일 패턴)
-   aws sts assume-role --role-arn "$ROLE_ARN" --role-session-name lab --external-id wrong-id 2>&1 | grep -oE AccessDenied
-   # 기대: AccessDenied   (문자열 정확 일치 — 대회에선 player_number와 채점 export number 일치 필수)
-   ```
-
-4. **A-4) 성공 케이스 + 세션 권한 경계 확인**
-
-   ```bash
-   read -r AK SK TK < <(aws sts assume-role --role-arn "$ROLE_ARN" --role-session-name lab \
-     --external-id "$EXT_ID" \
-     --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text)
-   export AWS_ACCESS_KEY_ID=$AK AWS_SECRET_ACCESS_KEY=$SK AWS_SESSION_TOKEN=$TK
-
-   aws sts get-caller-identity --query Arn --output text
-   # 기대: arn:aws:sts::<acct>:assumed-role/lab-audit-role/lab
-   aws ec2 describe-vpcs --query 'Vpcs[0].VpcId' --output text
-   # 기대: vpc-xxxx (허용 액션 성공)
-   aws ec2 describe-instances 2>&1 | grep -oE 'AccessDenied|UnauthorizedOperation'
-   # 기대: UnauthorizedOperation (미허용 액션 거부 — 최소권한 확인)
-
-   unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-   ```
-
-   <details class="diagram-note">
-   <summary>이 블록이 하는 일</summary>
-
-   발급받은 임시 자격 증명으로 권한 경계를 확인한다. 세 값을 환경 변수로 내보내면 이후 호출이 그 세션 신원으로 나간다. `describe-vpcs` 는 허용돼 있어 성공하고 `describe-instances` 는 없어서 `UnauthorizedOperation` 이 난다. 마지막 `unset` 을 빠뜨리면 이후 명령이 계속 이 제한된 세션으로 나가므로 반드시 되돌린다.
-
-   </details>
-
-</Steps>
-
----
-
-## 실습 B. Private EKS 운용 드릴 (PART-2 클러스터 필요)
+set-07 의 Audit Role 이 기준본의 일부다. 그것이 왜 그렇게 생겼는지는 만들어 보고 **실패시켜 봐야** 안다. IAM 만 쓰므로 과금이 없다.
 
 <Steps>
 
-1. **B-1) 엔드포인트 상태 확인·재차단**
+1. **역할을 만든다** — 계정 안 누구나 후보가 되되, 약속된 문자열을 아는 호출만 통과시킨다
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $env:NUM = "00"
+     $acct = aws sts get-caller-identity --query Account --output text
+     $ext  = "unicorn-audit-2026$env:NUM"
+
+     @"
+     {"Version":"2012-10-17","Statement":[{
+       "Effect":"Allow",
+       "Principal":{"AWS":"arn:aws:iam::${acct}:root"},
+       "Action":"sts:AssumeRole",
+       "Condition":{"StringEquals":{"sts:ExternalId":"$ext"}}}]}
+     "@ | Set-Content $HOME\audit-trust.json
+
+     aws iam create-role --role-name lab-audit-role `
+       --assume-role-policy-document file://$HOME/audit-trust.json `
+       --max-session-duration 3600
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     export NUM=00
+     acct=$(aws sts get-caller-identity --query Account --output text)
+     ext="unicorn-audit-2026$NUM"
+
+     cat > ~/audit-trust.json <<EOF
+     {"Version":"2012-10-17","Statement":[{
+       "Effect":"Allow",
+       "Principal":{"AWS":"arn:aws:iam::${acct}:root"},
+       "Action":"sts:AssumeRole",
+       "Condition":{"StringEquals":{"sts:ExternalId":"$ext"}}}]}
+     EOF
+
+     aws iam create-role --role-name lab-audit-role \
+       --assume-role-policy-document file://$HOME/audit-trust.json \
+       --max-session-duration 3600
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: 역할 JSON 이 돌아온다.
+
+2. **권한 없는 사용자로 맡아 본다** — 신뢰 정책이 계정 root 라 "후보"이긴 하다
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     aws iam create-user --user-name lab-no-perm
+     $k = aws iam create-access-key --user-name lab-no-perm --query "AccessKey.[AccessKeyId,SecretAccessKey]" --output text
+     $ak, $sk = $k -split "`t"
+     $arn = "arn:aws:iam::${acct}:role/lab-audit-role"
+
+     $env:AWS_ACCESS_KEY_ID = $ak; $env:AWS_SECRET_ACCESS_KEY = $sk; $env:AWS_SESSION_TOKEN = $null
+     aws sts assume-role --role-arn $arn --role-session-name lab --external-id $ext
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     aws iam create-user --user-name lab-no-perm
+     read -r ak sk < <(aws iam create-access-key --user-name lab-no-perm \
+       --query 'AccessKey.[AccessKeyId,SecretAccessKey]' --output text)
+     arn="arn:aws:iam::${acct}:role/lab-audit-role"
+
+     AWS_ACCESS_KEY_ID=$ak AWS_SECRET_ACCESS_KEY=$sk AWS_SESSION_TOKEN= \
+       aws sts assume-role --role-arn "$arn" --role-session-name lab --external-id "$ext"
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **거부된다.** `not authorized to perform: sts:AssumeRole` 이 나온다.
+
+   **여기가 이 절의 핵심이다.** 신뢰 정책이 계정 root 를 허용해도 그것만으로는 못 맡는다. **호출자 쪽에도 `sts:AssumeRole` 권한이 있어야 한다.** root 신뢰는 "후보 자격"이지 권한 부여가 아니다.
+
+3. **호출자에게 권한을 주고, 약속된 문자열 없이 맡아 본다**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $env:AWS_ACCESS_KEY_ID = $null; $env:AWS_SECRET_ACCESS_KEY = $null
+     aws iam put-user-policy --user-name lab-no-perm --policy-name allow-assume `
+       --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Resource\":\"$arn\"}]}"
+
+     $env:AWS_ACCESS_KEY_ID = $ak; $env:AWS_SECRET_ACCESS_KEY = $sk
+     aws sts assume-role --role-arn $arn --role-session-name lab
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     aws iam put-user-policy --user-name lab-no-perm --policy-name allow-assume \
+       --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"sts:AssumeRole\",\"Resource\":\"$arn\"}]}"
+
+     AWS_ACCESS_KEY_ID=$ak AWS_SECRET_ACCESS_KEY=$sk AWS_SESSION_TOKEN= \
+       aws sts assume-role --role-arn "$arn" --role-session-name lab
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **여전히 거부된다.** 이번엔 이유가 다르다 — 조건절을 만족하지 못했다.
+
+   권한 전파에 몇 초가 걸린다. 바로 안 되면 잠시 뒤 다시 한다.
+
+4. **약속된 문자열을 붙여 맡는다**
 
    ```bash
-   aws eks describe-cluster --name <cluster> \
-     --query 'cluster.resourcesVpcConfig.[endpointPublicAccess,endpointPrivateAccess]'
-   # 기대: [false, true] — true로 남았으면(생성 중단 등):
-   aws eks update-cluster-config --name <cluster> --resources-vpc-config endpointPublicAccess=false
-   # 전환에 수 분 소요, status ACTIVE 복귀 후 재확인
+   aws sts assume-role --role-arn "$arn" --role-session-name lab --external-id "$ext"
    ```
 
-   <details class="diagram-note">
-   <summary>이 블록이 하는 일</summary>
-
-   퍼블릭 엔드포인트가 열린 채 남았는지 확인하고 닫는다. 기대값은 `[false, true]` — 퍼블릭은 꺼지고 프라이빗만 켜진 상태다. `update-cluster-config` 는 즉시 반영되지 않고 클러스터가 `ACTIVE` 로 돌아온 뒤에 다시 확인해야 한다.
-
-   </details>
-
-2. **B-2) VPC CloudShell 멱등 셋업 왕복**
-
-   콘솔 CloudShell → Actions → Create VPC environment → 과제 VPC/프라이빗 서브넷/mark-sg 선택.
-   아래 블록을 통째로 실행하고, **세션을 끊었다가 재접속해 같은 블록을 다시 실행**해 1~2분 내 복구되는지 체감한다.
-
-   ```bash
-   aws configure   # 배포와 같은 신원 (생성자=채점 신원 원칙)
-   sudo curl -sLo /usr/local/bin/kubectl "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && sudo chmod +x /usr/local/bin/kubectl
-   curl -sL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-   BUCKET=<과제 버킷>
-   mkdir -p ~/work && cd ~/work
-   aws s3 cp "s3://$BUCKET/_transfer/outputs.json" .   # 본 PC에서 미리 업로드해둔 릴레이
-   aws eks update-kubeconfig --name <cluster> --region ap-northeast-2
-   kubectl get nodes   # 기대: 노드 목록 (private API 접근 성공)
-   ```
-
-   <details class="diagram-note">
-   <summary>이 블록이 하는 일</summary>
-
-   VPC CloudShell 을 매번 다시 세우는 멱등 블록이다. 홈 디렉터리가 세션마다 사라지므로 자격증명 설정·도구 설치·파일 수신을 한 덩어리로 만들어 둔다. 파일은 업로드 UI 가 없어 S3 `_transfer/` 를 릴레이로 쓴다. 마지막 `kubectl get nodes` 가 성공하면 프라이빗 API 에 붙은 것이다.
-
-   </details>
-
-3. **B-3) CoreDNS 커스텀 도메인 양쪽 확인**
-
-   ```bash
-   # kubelet clusterDomain (nodeadm NodeConfig가 적용된 노드)
-   NODE=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
-   kubectl get --raw "/api/v1/nodes/$NODE/proxy/configz" | jq -r .kubeletconfig.clusterDomain
-   # 기대: wsc2026.skills.local
-   # Corefile
-   kubectl -n kube-system get configmap coredns -o jsonpath='{.data.Corefile}' | grep skills.local
-   # 기대: wsc2026.skills.local 존 라인
-   # 실동작
-   kubectl run dns-test --rm -it --restart=Never --image=busybox \
-     -- nslookup kubernetes.default.svc.wsc2026.skills.local
-   # 기대: 해석 성공. 한쪽만 적용돼 있으면 여기서 실패한다.
-   ```
-
-   <details class="diagram-note">
-   <summary>이 블록이 하는 일</summary>
-
-   커스텀 DNS 도메인이 양쪽에 적용됐는지 세 지점에서 본다. 첫째는 노드 kubelet 의 `clusterDomain`, 둘째는 CoreDNS 의 Corefile, 셋째는 실제 이름 해석이다. 한쪽만 적용돼 있으면 앞의 두 조회는 통과해도 마지막 `nslookup` 에서 실패한다 — 그래서 세 번째가 진짜 확인이다.
-
-   </details>
+   기대: 임시 자격증명 세 값이 나온다.
 
 </Steps>
 
-## 프라이빗 EKS·IAM :badge[함정]{variant=danger}
+**두 번의 거부가 서로 다른 곳에서 났다는 것**이 이 절에서 가져갈 것이다. 하나는 호출자 권한에서, 하나는 신뢰 정책 조건에서다. `AccessDenied` 라는 같은 글자를 보고 어느 쪽인지 가르는 것이 7절의 훈련으로 이어진다.
 
-- **`:root` trust를 "전원 허용"으로 오해**: A-2에서 재현했듯 호출자 identity policy가 없으면 실패. 반대로, 계정에 admin 사용자가 많으면 그들 모두 assume 가능하다는 뜻이기도 하다.
-- **ExternalId 불일치**: apply 시 `player_number`와 채점 셸 export `number`가 한 글자라도 다르면 9-1 문자열 비교·9-2 assume 모두 실패. 당일 등번호 확정 즉시 tfvars 반영 → apply.
-- **IAM 전파 지연**: put-user-policy 직후 assume이 실패할 수 있다 — 10초쯤 기다렸다 재시도.
-- **`kms:Decrypt` 등 요구 목록 외 권한 추가**: 수동 채점에서 최소권한 위반으로 읽힐 리스크. 꼭 필요하면 키 ARN 하나로 한정 + sid 명시.
-- **퍼블릭 엔드포인트 잔존**: eksctl 중단 시 열린 채 남는다 — B-1을 습관화.
-- **eks/eks-auth Endpoint 생성**: Pod Identity가 깨진다(theory 주제 1). 만들지 않는다.
-- **VPC CloudShell 비영속**: 홈 삭제 + 업로드 UI 없음. 셋업 블록을 멱등하게 유지하고 파일은 전부 S3 릴레이로. 채점 전 `_transfer/` 삭제(버킷이 채점 대상).
-- **coredns addon 업데이트**: Corefile 초기화 → B-3 재확인.
+정리는 8절에서 함께 한다.
 
-## 통과 기준
+### 0-2. 클러스터 쪽 기준본
 
-- [ ] A-2 실패(identity policy 부재) / A-3 실패(ExternalId) / A-4 성공+권한 경계, 세 가지 출력 모두 기대와 일치
-- [ ] B-1에서 `[false, true]` 확인 (또는 재차단 수행)
-- [ ] B-2 재접속 후 셋업 블록 재실행으로 kubectl 복구
-- [ ] B-3 kubelet·Corefile·nslookup 3중 확인 통과
+[PART-2](/part-2/07-full-deploy-set02/lab/)에서 만든 set-07 클러스터가 떠 있으면 그것이 기준본이다. 없으면 **5절부터가 안 되고 0~4절은 그대로 된다.**
 
-## 정리
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $c = aws eks list-clusters --query "clusters[0]" --output text
+  aws eks describe-cluster --name $c --query "cluster.resourcesVpcConfig.[endpointPublicAccess, endpointPrivateAccess]" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  c=$(aws eks list-clusters --query "clusters[0]" --output text)
+  aws eks describe-cluster --name "$c" --query "cluster.resourcesVpcConfig.[endpointPublicAccess, endpointPrivateAccess]" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `False True`. 다른 값이면 닫힌 클러스터가 아니다 — [08 이론 주제 1](/part-3/08-private-eks-iam/theory/)의 확인 블록이 네 조합을 설명한다.
+
+## 1. 변동 과제지
+
+set-03 요구다. **정답 코드를 먼저 열지 않는다.**
+
+| 항목 | set-07 (기준본) | set-03 (변동) |
+|---|---|---|
+| 클러스터 이름 | `unicorn-eks-cluster` | `wsc2026-eks-cluster` |
+| 엔드포인트 | 닫힘 | 닫힘 (같다) |
+| 작업 호스트 | 절차대로 직접 만들고 **직접 지운다** | **구성에 포함하고 스위치로 켜고 끈다** |
+| 노드 라벨 키 | `unicorn` | `wsc2026/node` |
+| 노드 라벨 값 | `app` · `addon` | `application` · `addon` |
+| 앱 노드그룹 | 제약 없음 | **앱 외에는 스케줄되지 않게 막는다** |
+| 클러스터 내부 도메인 | 기본 | **지정된 도메인으로 바꾼다** |
+| KMS 키 정책 | 계정 root 에 위임 | **root 를 쓰지 않는다** |
+| 감사 역할 | 요구 있음 | **요구 없음** |
+
+### 요구에서 파생되는 것
+
+**"스위치로 켜고 끈다"** 가 첫째다. 작업 호스트를 구성 안에 두면 지우는 것이 배포 절차의 일부가 된다. 손으로 만든 것은 손으로 지워야 하고 대회 막판에 그것을 기억하기 어렵다. 리소스 하나를 조건부로 만드는 방법을 찾는다.
+
+**"앱 외에는 스케줄되지 않게"** 는 노드 쪽만 고쳐서는 안 된다. 막는 설정과 통과하는 설정이 짝이고, 한쪽만 하면 **앱 자신도 못 올라간다.**
+
+**"클러스터 내부 도메인을 바꾼다"** 는 두 군데를 건드린다. 노드가 부팅할 때 받는 설정과, 이름을 해석해 주는 컴포넌트의 설정이다. 둘이 어긋나면 이름 해석이 조용히 실패한다.
+
+**"감사 역할 요구 없음"** 이 이 모듈에서 가장 놓치기 쉽다. 과제지에는 만들라는 말만 있고 **지우라는 말은 없다.** 기준본에 있던 것을 그대로 두면 요구되지 않은 리소스가 남는다.
+
+## 2. 이행 (타이머 30분)
+
+타이머를 걸고 시작한다. 아래는 절차가 아니라 **스스로 답해야 할 질문 목록**이다.
+
+- Terraform 리소스를 변수 하나로 만들거나 안 만들게 하는 메타 인자는 무엇인가. 그 리소스를 참조하는 다른 곳은 어떻게 쓰나
+- 노드에 스케줄을 막는 필드 이름과, 그것을 통과하는 워크로드 쪽 필드 이름은 각각 무엇인가
+- 노드 부팅 시 설정을 바꾸는 eksctl 필드는 무엇인가. `eksctl utils schema` 로 찾을 수 있나
+- 이름 해석 컴포넌트의 설정은 어디에 있나. 애드온 설정인가 별도 매니페스트인가
+- 키 정책에서 root 를 빼면 관리 액션은 누가 갖나. 다 빼면 키가 잠기는데 그것을 막는 장치는 무엇인가
+- 기준본에서 **지워야 할 것**의 목록은 무엇인가. 감사 역할 말고 또 있나
+
+**마지막 질문에 시간을 쓴다.** 지울 것을 찾는 유일한 방법은 기준본과 과제지를 항목 단위로 대조하는 것이다.
+
+## 3. 통과 기준
+
+클러스터 없이 판정되는 것만 여기 있다.
+
+<Steps>
+
+1. **옛 이름 잔존 0건**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'unicorn' -Path .\*.tf,.\eksctl\*.yaml
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -rnE 'unicorn' *.tf eksctl/*.yaml
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **출력 없음.**
+
+2. **지워야 할 것이 실제로 빠졌나**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'audit|ExternalId|external_id' -Path .\*.tf
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -rniE 'audit|externalid|external_id' *.tf
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **출력 없음.** 하나라도 나오면 요구되지 않은 리소스가 남은 것이다.
+
+3. **Terraform 이 계획을 낸다**
+
+   ```bash
+   terraform init -upgrade
+   terraform validate
+   terraform plan
+   ```
+
+   작업 호스트를 켠 상태와 끈 상태로 각각 `plan` 을 내 **개수 차이가 나는지** 확인한다. 스위치가 안 먹으면 여기서 드러난다.
+
+4. **클러스터 매니페스트가 펼쳐진다**
+
+   ```bash
+   eksctl create cluster -f cluster.rendered.yaml --dry-run
+   ```
+
+   `taints` 와 부트스트랩 설정이 출력에 보이는지 확인한다.
+
+</Steps>
+
+### set-03 채점 대응
+
+[set-03 `mark.sh`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-03/task-1/mark.sh) 는 항목 형식이 다르다 — set-07 의 `=== 6-1-A ===` 가 아니라 `=====5-1=====` 이다. 파일을 열어 항목 번호와 내용을 먼저 맞춘다.
+
+이 모듈이 걸리는 것은 클러스터·노드그룹 계열(`5-*`)이다. 무엇을 뽑는지 읽고 자기 구성이 그 출력을 낼지 예측한다.
+
+**채점에 없는 것도 본다.** 감사 역할을 검사하는 항목이 없다는 사실이 곧 "만들면 안 된다"의 근거다.
+
+## 4. 복기
+
+[set-03 `terraform/`](https://github.com/ishs-cloud-computing/skills-2026/tree/main/set-03/task-1/terraform)과 [`eksctl/cluster.yaml`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-03/task-1/eksctl/cluster.yaml)을 대조한다. **3절을 통과한 뒤에 연다.**
+
+놓친 곳을 넷으로 나눈다. 앞 모듈의 셋에 하나가 더 붙는다.
+
+- 과제지를 못 읽은 것
+- 읽었는데 어디를 고칠지 못 찾은 것
+- 찾았는데 틀린 것
+- **지워야 하는 줄 몰랐던 것** — 이 모듈에서 처음 세는 항목이다
+
+넷째가 나왔다면 다음부터는 기준본의 리소스 목록을 먼저 뽑고 과제지와 하나씩 지워 가며 읽는다.
+
+## 5. 배포와 채점 확인
+
+클러스터가 있어야 한다. 없으면 이 절과 6·7절을 건너뛴다.
 
 ```bash
-# 실습 A (무료지만 계정 위생)
-aws iam delete-user-policy --user-name lab-no-perm --policy-name allow-assume
-aws iam delete-access-key --user-name lab-no-perm --access-key-id $AK
-aws iam delete-user --user-name lab-no-perm
-aws iam delete-role-policy --role-name lab-audit-role --policy-name lab-audit-policy
-aws iam delete-role --role-name lab-audit-role
-
-# 실습 B
-# VPC CloudShell environment 삭제(콘솔), S3 _transfer/ 삭제
-# 클러스터를 더 안 쓰면: eksctl delete cluster -f cluster.rendered.yaml (방치 ≈ $7.4/일)
-# Interface Endpoint를 만들었다면 반드시 삭제 (개당 과금)
+terraform apply
+eksctl create cluster -f cluster.rendered.yaml
 ```
 
-<details class="diagram-note">
-<summary>이 블록이 하는 일</summary>
+`taints` 를 걸었으므로 **앱을 올리기 전에 toleration 을 확인한다.** 안 그러면 노드는 멀쩡한데 앱이 안 뜬다.
 
-실습에서 만든 IAM 자원을 만든 역순으로 지운다. 정책이 붙어 있으면 사용자·역할이 지워지지 않으므로 정책 → 액세스 키 → 사용자·역할 순이다. 실습 B 쪽 주석은 과금이 계속 도는 항목을 짚는다 — 클러스터, VPC CloudShell 환경, 인터페이스 엔드포인트다.
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl get nodes -L "wsc2026/node"
+  kubectl describe node (kubectl get nodes -l "wsc2026/node=application" -o jsonpath='{.items[0].metadata.name}') | Select-String -Pattern 'Taints' -Context 0,2
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl get nodes -L 'wsc2026/node'
+  kubectl describe node $(kubectl get nodes -l 'wsc2026/node=application' -o jsonpath='{.items[0].metadata.name}') | grep -A2 Taints
+  ```
+  </TabItem>
+</Tabs>
 
-</details>
+기대: 라벨 열이 `addon` 과 `application` 으로 채워지고, application 노드에 `NoSchedule` taint 가 보인다.
 
-## 변형 셀프 체크
+이름 해석이 새 도메인으로 되는지도 확인한다.
 
-당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다. 답은 set-07 audit role 과 set-03 프라이빗 클러스터 실측 기준이다.
+```bash
+kubectl run dnstest --rm -it --restart=Never --image=busybox:1.36 -- nslookup kubernetes.default
+```
 
-1. 선수 등번호가 `103` 에서 `217` 로 바뀌면 ExternalId 는 어디를 고치나?
+기대: 응답에 지정한 도메인이 보인다. 기본 도메인이 나오면 부트스트랩과 해석 컴포넌트 중 한쪽만 고친 것이다.
 
-   <details>
-   <summary>답 확인</summary>
+## 6. 과제지 오독 복구
 
-   `terraform.tfvars` 의 `player_number` 한 곳이다. `data.tf` 의 `local.audit_external_id` 가 `audit_external_id_prefix` 와 이어 붙여 `unicorn-audit-2026217` 을 만든다. mark 9-1-A 는 신뢰 정책의 ExternalId 문자열을 그대로 출력하고, 9-2-A 는 채점 셸의 `number` 로 assume 을 시도한다 — 한 글자만 달라도 9-2-A 의 성공 케이스가 전부 AccessDenied 다.
+배포까지 했는데 값이 다르다. 판정 축은 [04](/part-2/04-eksctl-cluster/lab/)와 같은 **수정 API 유무**이고, **여기에 한 종류가 더 있다.**
 
-   </details>
+| 판정 | 무엇으로 아나 | 비용 |
+|---|---|---|
+| 즉시 수정 | 해당 값을 바꾸는 API 가 있다 | 초~분 |
+| 짝이 있는 수정 | 수정은 되는데 반대편도 함께 고쳐야 한다 | 분 |
+| 노드그룹 교체 | 노드 부팅 때만 반영되는 값이다 | 분 |
+| **지웠어야 하는 것** | 고치는 문제가 아니다 — 존재 자체가 감점이다 | 초 — **다만 기억해야 한다** |
 
-2. audit role 에 S3 객체 읽기 권한을 더하라면 어디를 고치고, 어디를 그대로 두나?
+마지막 줄이 이 모듈에서 처음 나온다.
 
-   <details>
-   <summary>답 확인</summary>
+### 6-1. taint 만 걸고 toleration 을 안 달았다
 
-   `iam.tf` 의 `aws_iam_policy_document.audit` 에 statement 를 하나 더 쓴다. 신뢰 정책과 `max_session_duration` 은 그대로 둔다 — 권한과 assume 조건은 별개의 평가 단계다. 액션 와일드카드가 금지이므로 액션을 개별 나열하고 리소스는 버킷 ARN 으로 좁힌다. 액션 이름은 [Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html)에서 찾고, 동선은 [검색 가이드](/reference/search-guide/)에 있다. mark 9-1-A 가 인라인 정책의 Action 목록을 전부 출력하므로 추가한 액션이 그 자리에 그대로 보인다.
+**상황.** 앱 노드그룹에 스케줄 차단을 걸었는데 앱 쪽에 통과 설정을 안 넣었다. 노드는 `Ready` 인데 앱 파드가 `Pending` 이다.
 
-   </details>
+**판정.** taint 자체는 고칠 수 있다.
 
-3. eksctl 생성이 중단돼 퍼블릭 엔드포인트가 열린 채 남으면 어느 체크가 깨지나?
+```bash
+aws eks update-nodegroup-config help
+```
 
-   <details>
-   <summary>답 확인</summary>
+`--taints` 가 `addOrUpdateTaints` · `removeTaints` 를 받는다. **수정 API 가 있다.**
 
-   set-03 mark 4-1 이다. 이 항목은 `describe-cluster` 로 버전·상태와 함께 `endpointPublicAccess`·`endpointPrivateAccess` 를 한 줄로 뽑는다. 기대는 `False True` 이므로 퍼블릭이 열려 있으면 그 줄이 어긋난다. 설정 원본은 eksctl 의 `privateCluster.enabled` 이고, 이미 만든 클러스터는 `aws eks update-cluster-config` 로 닫는다.
+**하지만 고쳐야 할 곳은 노드가 아니다.** 요구가 "앱 외에는 스케줄되지 않게"이므로 taint 는 남아야 하고, 앱 쪽에 통과 설정을 다는 것이 맞다.
 
-   </details>
+**복구.** 워크로드 매니페스트에 toleration 을 넣고 다시 적용한다.
 
-4. 클러스터 도메인이 `wsc2026.skills.local` 에서 다른 문자열로 바뀌면?
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl get pod -n <ns> -o wide
+  kubectl describe pod -n <ns> <파드> | Select-String -Pattern 'Events' -Context 0,6
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl get pod -n <ns> -o wide
+  kubectl describe pod -n <ns> <파드> | grep -A6 Events
+  ```
+  </TabItem>
+</Tabs>
 
-   <details>
-   <summary>답 확인</summary>
+기대: 이벤트에 `had untolerated taint` 가 찍혀 있다가, 고친 뒤 파드가 뜬다.
 
-   세 곳이 같은 문자열을 쓴다. eksctl `overrideBootstrapCommand` 의 nodeadm `clusterDomain`, CoreDNS Corefile ConfigMap, kube-prometheus-stack Alertmanager 의 `clusterDomain` 이다. set-03 mark 4-1 은 Corefile 에서 `kubernetes` 다음 토큰만 뽑으므로 kubelet 쪽을 빠뜨려도 그 줄은 통과한다 — 그래서 실동작 확인은 `nslookup` 이다.
+**교훈.** **막는 설정과 통과하는 설정은 항상 짝이다.** 04 의 라벨과 nodeSelector 가 같은 구조였다. 한쪽만 고치면 증상이 "안 뜬다"로 같아서, 어느 쪽이 빠졌는지 이벤트 문구로 가른다 — `node affinity/selector` 면 라벨 문제이고 `untolerated taint` 면 taint 문제다.
 
-   </details>
+### 6-2. 클러스터 내부 도메인을 기본으로 뒀다
 
+**상황.** 노드 부트스트랩 설정을 안 넣어 기본 도메인으로 떴다.
+
+**판정.** 이 값은 **노드가 부팅할 때 kubelet 이 읽는다.** 이미 뜬 노드에는 나중에 적용할 방법이 없다.
+
+```bash
+aws eks update-nodegroup-config help
+```
+
+라벨과 taint 는 받지만 부트스트랩 설정은 없다. **노드그룹 교체다.**
+
+**복구.**
+
+```bash
+eksctl delete nodegroup -f cluster.rendered.yaml --include=<노드그룹> --approve
+eksctl create nodegroup -f cluster.rendered.yaml --include=<노드그룹>
+```
+
+**파급.** 그 노드그룹 위의 파드가 전부 다시 스케줄된다. 다른 노드그룹에 여유가 없으면 그동안 서비스가 끊긴다.
+
+그리고 **이름 해석 컴포넌트 쪽도 같이 맞춰야 한다.** 노드만 새 도메인을 쓰고 해석 쪽이 기본 도메인이면 조회가 실패한다. 둘을 함께 배포한다.
+
+**교훈.** **"부팅할 때만 읽는 값"은 수정 API 가 없다.** eksctl 설정에서 `overrideBootstrapCommand` 계열, EC2 의 user data 가 여기 해당한다. 만들기 전에 확정할 값 목록에 이것을 넣는다.
+
+### 6-3. 감사 역할을 그대로 뒀다
+
+**상황.** 다른 것은 다 이행했는데 기준본의 감사 역할이 남아 있다. 채점 스크립트에는 그것을 검사하는 항목이 아예 없다.
+
+**판정.** **`plan` 도 `validate` 도 아무 말을 안 한다.** 코드는 완벽히 유효하고 리소스도 정상이다. 틀린 것은 문법도 설계도 아니고 **범위**다.
+
+확인은 과제지와 대조하는 수밖에 없다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws iam list-roles --query "Roles[?contains(RoleName,'audit')].RoleName" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws iam list-roles --query "Roles[?contains(RoleName,'audit')].RoleName" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: **빈 출력.** 이름이 나오면 요구되지 않은 리소스가 있는 것이다.
+
+**복구.** 코드에서 지우고 apply 한다. 초 단위다.
+
+**교훈.** **가장 싸게 고칠 수 있는데 가장 발견하기 어렵다.** 만들라는 요구는 과제지가 알려 주지만 없어진 요구는 아무도 안 알려 준다. 도구도 안 잡아 준다.
+
+방법은 하나다 — **기준본의 리소스 목록을 먼저 뽑고, 과제지를 읽으며 하나씩 지워 나간다.** 끝까지 안 지워진 것이 곧 삭제 대상이다. 작업 호스트도 같은 종류라, set-03 이 그것을 스위치로 만든 이유가 여기 있다.
+
+## 7. 장애 진단
+
+정상으로 선 상태에서 일부러 고장을 내고 증상만 보고 좁혀 간다. **주입 명령과 복구 명령이 짝으로 있다.**
+
+닫힌 클러스터의 고장은 **경로가 없어서** 나는 것이 대부분이다. 열린 클러스터라면 인터넷으로 우회됐을 것이 여기서는 막힌다.
+
+### 7-1. 작업 호스트에서 클러스터에 못 닿는다
+
+**주입.** 클러스터 API 용 엔드포인트의 보안 그룹에서 443 을 뺀다. ID 는 앞 두 명령이 알려준다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws ec2 describe-vpc-endpoints --query "VpcEndpoints[].[ServiceName,VpcEndpointId,Groups[0].GroupId]" --output text
+  aws ec2 revoke-security-group-ingress --group-id <endpoint-sg-id> --protocol tcp --port 443 --cidr 10.0.0.0/8
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws ec2 describe-vpc-endpoints --query "VpcEndpoints[].[ServiceName,VpcEndpointId,Groups[0].GroupId]" --output text
+  aws ec2 revoke-security-group-ingress --group-id <endpoint-sg-id> --protocol tcp --port 443 --cidr 10.0.0.0/8
+  ```
+  </TabItem>
+</Tabs>
+
+**증상.** 작업 호스트에서 `kubectl` 이 응답 없이 멈추다 타임아웃 난다. SSM 접속 자체는 된다.
+
+**좁히는 순서.** 밖에서 안으로, 한 계층씩만 본다.
+
+<Steps>
+
+1. **어디까지 되나** — SSM 으로 호스트에 들어가지는가. 들어가진다면 호스트는 살아 있고 문제는 그 다음이다. **이 갈림이 첫째다**
+
+2. **이름이 풀리나** — `nslookup <클러스터 엔드포인트 호스트명>`. 프라이빗 IP 가 나와야 한다. 퍼블릭 IP 가 나오면 프라이빗 DNS 가 안 켜진 것이고, 아예 안 풀리면 DNS 경로 문제다
+
+3. **포트가 열리나** — 이름은 풀리는데 안 되면 연결 단계다. 그 IP 의 443 으로 붙어 본다
+
+4. **엔드포인트의 보안 그룹** — `aws ec2 describe-vpc-endpoints` 로 붙은 SG 를 찾고 인바운드 443 이 있는지 본다. 없으면 여기가 원인이다
+
+</Steps>
+
+**"이름이 풀리나"를 건너뛰지 않는다.** 닫힌 환경에서 가장 흔한 원인은 방화벽이 아니라 **이름이 엉뚱한 곳을 가리키는 것**이다. 프라이빗 DNS 를 안 켜면 이름은 퍼블릭 IP 로 풀리고, 그 IP 로는 나갈 길이 없어 타임아웃이 난다 — 증상이 방화벽과 똑같다.
+
+**복구.** 코드가 실제 상태와의 차이를 메운다.
+
+```bash
+terraform plan
+terraform apply
+```
+
+기대: `plan` 이 보안 그룹 규칙 하나를 `+ create` 로 잡는다.
+
+### 7-2. 노드가 이미지를 못 받는다
+
+**주입.** 컨테이너 레지스트리용 엔드포인트 하나를 지운다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws ec2 describe-vpc-endpoints --query "VpcEndpoints[?contains(ServiceName,'ecr.dkr')].[VpcEndpointId]" --output text
+  aws ec2 delete-vpc-endpoints --vpc-endpoint-ids <endpoint-id>
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws ec2 describe-vpc-endpoints --query "VpcEndpoints[?contains(ServiceName,'ecr.dkr')].[VpcEndpointId]" --output text
+  aws ec2 delete-vpc-endpoints --vpc-endpoint-ids <endpoint-id>
+  ```
+  </TabItem>
+</Tabs>
+
+**증상.** 새로 뜨는 파드가 `ImagePullBackOff` 가 된다. **이미 떠 있는 파드는 멀쩡하다** — 이미지가 노드에 이미 있기 때문이다. 그래서 배포할 때까지 모른다.
+
+**좁히는 순서.**
+
+<Steps>
+
+1. **파드에게 묻는다** — `kubectl describe pod` 의 이벤트에 시도한 주소와 실패 이유가 그대로 찍힌다
+
+2. **이름 문제인가 경로 문제인가** — 이벤트에 타임아웃이 보이면 경로이고, `not found` 나 `denied` 면 이미지나 권한이다. **이 갈림이 방향을 정한다**
+
+3. **레지스트리로 가는 길이 있나** — 닫힌 클러스터는 인터넷으로 못 나간다. `aws ec2 describe-vpc-endpoints` 로 필요한 엔드포인트가 다 있는지 센다
+
+4. **엔드포인트가 하나가 아니라는 것을 안다** — 레지스트리는 API 용과 데이터 전송용이 나뉘고, 이미지 레이어는 별도 저장소를 거친다. **하나만 있으면 인증까지는 되고 내려받기에서 멈춘다**
+
+</Steps>
+
+4번이 이 항목의 요점이다. **"엔드포인트를 만들었는데 왜 안 되지"의 대부분은 개수 문제다.**
+
+**복구.**
+
+```bash
+terraform plan
+terraform apply
+```
+
+기대: 지운 엔드포인트가 `+ create` 로 다시 잡힌다. 파드가 다시 시도하도록 `kubectl delete pod` 로 밀어 준다.
+
+**교훈.** 닫힌 환경에서는 **"안 만든 것"이 곧 "못 하는 것"이다.** 열린 환경이라면 인터넷이 알아서 메워 주던 경로를 전부 명시해야 하고, 빠진 하나가 배포 시점에야 드러난다. [01 실습](/part-1/01-terraform-vpc/lab/)에서 엔드포인트를 놓은 것이 여기서 값을 한다.
+
+## 8. 정리
+
+0절에서 만든 IAM 자원부터 지운다. **역할과 사용자는 붙어 있는 정책을 먼저 떼야 지워진다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws iam delete-user-policy --user-name lab-no-perm --policy-name allow-assume
+  aws iam list-access-keys --user-name lab-no-perm --query "AccessKeyMetadata[].AccessKeyId" --output text |
+    ForEach-Object { aws iam delete-access-key --user-name lab-no-perm --access-key-id $_ }
+  aws iam delete-user --user-name lab-no-perm
+  aws iam delete-role-policy --role-name lab-audit-role --policy-name lab-audit-policy
+  aws iam delete-role --role-name lab-audit-role
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws iam delete-user-policy --user-name lab-no-perm --policy-name allow-assume
+  for k in $(aws iam list-access-keys --user-name lab-no-perm --query "AccessKeyMetadata[].AccessKeyId" --output text); do
+    aws iam delete-access-key --user-name lab-no-perm --access-key-id "$k"
+  done
+  aws iam delete-user --user-name lab-no-perm
+  aws iam delete-role-policy --role-name lab-audit-role --policy-name lab-audit-policy
+  aws iam delete-role --role-name lab-audit-role
+  ```
+  </TabItem>
+</Tabs>
+
+`lab-audit-policy` 를 안 만들었으면 그 줄은 건너뛴다. `DeleteConflict` 가 나면 아직 붙어 있는 정책이 있는 것이다.
+
+클러스터와 인프라는 [07 실습 7절](/part-2/07-full-deploy-set02/lab/)의 순서를 따른다. **작업 호스트를 먼저 지운다** — 이 모듈에서 그것을 스위치로 만들었다면 변수를 끄고 apply 하는 것으로 끝난다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws iam list-roles --query "Roles[?contains(RoleName,'lab-')].RoleName" --output text
+  aws ec2 describe-instances --filters Name=instance-state-name,Values=running `
+    --query "Reservations[].Instances[].Tags[?Key=='Name'].Value" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws iam list-roles --query "Roles[?contains(RoleName,'lab-')].RoleName" --output text
+  aws ec2 describe-instances --filters Name=instance-state-name,Values=running \
+    --query "Reservations[].Instances[].Tags[?Key=='Name'].Value" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 첫 명령은 빈 출력. 둘째에 노드 말고 다른 것이 보이면 작업 호스트가 남은 것이다.
+
+막히면 [트러블슈팅](/reference/troubleshooting/), 계정 전체 점검은 [잔존 리소스 점검](/reference/cleanup-check/)이다.

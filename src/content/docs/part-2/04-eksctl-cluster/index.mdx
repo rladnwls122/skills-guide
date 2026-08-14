@@ -16,6 +16,9 @@ import { LinkButton } from '@astrojs/starlight/components';
 - [ ] 노드그룹 2분할(addon/app)의 이유(mark 5-4)와 label/taint 설계를 설명할 수 있다
 - [ ] `${VAR}` 플레이스홀더를 terraform output으로 치환해 클러스터를 생성할 수 있다
 - [ ] `tags.Name` vs `instanceName` 함정, `disableDefaultAddons` 함정을 안다
+- [ ] set-02 구성을 set-07 의 private·Pod Identity 요구로 **직접 이행**할 수 있다
+- [ ] 잘못 만든 값을 만났을 때 **수정 API 가 있는지로** 고칠지 다시 만들지 판정할 수 있다
+- [ ] 파드가 안 뜨거나 AWS 호출이 거부될 때 계층을 좁혀 원인을 짚을 수 있다
 
 ## 소요 시간 / 일차
 
@@ -55,9 +58,11 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 ## 참고 경로
 
-- `~\skills-2026\set-02\task-1\eksctl\cluster.yaml` (IRSA 방식)
+- `~\skills-2026\set-02\task-1\eksctl\cluster.yaml` (기준본 — IRSA 방식)
+- `~\skills-2026\set-07\task-1\eksctl\cluster.yaml` (변동 타깃 — Pod Identity + private cluster)
 - `~\skills-2026\set-03\task-1\eksctl\cluster.yaml` (Pod Identity + fully private)
-- `~\skills-2026\set-02\task-1\README.md` (배포 순서 3 — 치환 스크립트)
+- `~\skills-2026\set-02\task-1\README.md` (배포 순서 1~3 — 기준본 세우기)
+- `~\skills-2026\set-07\task-1\README.md` (배포 순서 3~4 — private 클러스터용 작업 bastion)
 
 ## 공식 문서
 

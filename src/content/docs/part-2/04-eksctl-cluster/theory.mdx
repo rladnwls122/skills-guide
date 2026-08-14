@@ -14,6 +14,12 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 교재 원본: `skills-2026/set-02/task-1/eksctl/cluster.yaml`, `set-03/task-1/eksctl/cluster.yaml`
 
+:::tip[읽으면서 확인한다]
+절 끝에 **지금 확인하기** 블록이 접혀 있다. 열고 따라오면 `cluster.yaml` 한 장이 실제로 무엇으로 펼쳐지는지 눈으로 본다. 블록을 열지 않고 읽어도 문서는 그대로 이어진다.
+
+[01 이론](/part-1/01-terraform-vpc/theory/)과 달리 **이 문서는 아무것도 만들지 않는다.** 전부 `--dry-run` 과 스키마 조회라 **과금이 0원**이다. 클러스터를 실제로 세우는 것은 [04 실습](/part-2/04-eksctl-cluster/lab/)이다 — 생성에 약 20분이 걸리고 떠 있는 내내 과금되므로 한 번만 세운다.
+:::
+
 ---
 
 ## 1. eksctl ClusterConfig 구조
@@ -76,6 +82,33 @@ ClusterConfig 한 장에 들어가는 최상위 블록들이다. `vpc` 는 기�
 | 엔드포인트 공개 범위 | `vpc.clusterEndpoints` | public 이 닫히면 kubectl 은 VPC CloudShell 에서 |
 
 VPC·서브넷·SG·KMS·정책 ARN 은 YAML 에 `${VAR}` 플레이스홀더로 두고 terraform output 으로 치환한다. 손으로 고치는 값은 이름·버전·로그 목록처럼 과제지가 글자로 지정한 것들뿐이다.
+
+<details class="build-step">
+<summary>지금 확인하기 — ClusterConfig 가 받는 최상위 블록 전부 보기</summary>
+
+위 도식은 정답지가 실제로 쓴 블록만 그렸다. eksctl 이 받아 주는 블록은 더 많고, 그 목록은 eksctl 자신이 갖고 있다. `eksctl utils schema` 는 AWS 를 호출하지 않고 내장 스키마만 뱉는다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $s = eksctl utils schema | ConvertFrom-Json
+  $s.definitions.ClusterConfig.properties.PSObject.Properties.Name
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  eksctl utils schema | jq -r '.definitions.ClusterConfig.properties | keys[]'
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 키 수십 개가 나온다. 도식의 블록(`metadata` · `vpc` · `secretsEncryption` · `cloudWatch` · `iam` · `managedNodeGroups` · `addons`)이 전부 이 목록 안에 있고, 정답지가 안 쓴 `privateCluster` · `fargateProfiles` 같은 것도 함께 보인다. 과제지가 낯선 요구를 하면 여기서 필드 이름을 찾는다.
+
+`eksctl: command not found` 면 도구가 없는 것이다 — [Day 0 §2 도구 설치](/start/#2-도구-설치-본-pc)로 돌아간다.
+
+정답지 원본은 [set-02 `cluster.yaml`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/eksctl/cluster.yaml)에서 바로 볼 수 있다. 브라우저로 필드를 찾을 때는 [schema.eksctl.io](https://schema.eksctl.io/)가 같은 스키마를 문서 형태로 보여 준다.
+
+</details>
 
 ---
 
@@ -185,6 +218,27 @@ kubectl 인증은 두 갈래 모두 Access Entry(`authenticationMode: API`)를 �
 
 **EBS CSI** — set-02 가 이 애드온을 깔지 않는 이유도 mark 5-4 다. EBS CSI 는 노드마다 `ebs-csi-node` DaemonSet 을 띄우는데, 그 파드가 app 노드에 뜬 kube-system 파드가 되어 배치 검사에 걸린다. 그래서 Prometheus 의 저장소도 PVC 대신 emptyDir 로 둔다.
 
+### set-07 은 정반대로 간다 :badge[실측]{variant=note}
+
+여기까지가 set-02 의 논리다. 그 논리를 규칙으로 외우면 다음 세트에서 틀린다. [set-07 `cluster.yaml`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/eksctl/cluster.yaml)은 같은 자리에서 전부 반대를 고른다.
+
+| 항목 | set-02 | set-07 |
+|---|---|---|
+| 파드 자격증명 | IRSA — `withOIDC` + `serviceAccounts` 3개 | Pod Identity — `podIdentityAssociations` 4개 |
+| `eks-pod-identity-agent` | 없음(5-4 때문에 금지) | `addons` 첫 줄 |
+| EBS CSI | 없음(5-4 때문에 금지) | `aws-ebs-csi-driver` 설치, 컨트롤러만 addon 노드로 고정 |
+| 엔드포인트 | `vpc.clusterEndpoints` public+private | `privateCluster.enabled: true` — `clusterEndpoints` 블록 자체가 없다 |
+| 애드온 버전 | 미지정(클러스터 default) | `v1.21.2-eksbuild.2` 처럼 전부 고정 |
+
+**두 세트를 가르는 것은 mark 5-4 하나다.** set-02 에는 "kube-system 파드는 addon 노드에만" 검사가 있고 set-07 에는 없다. DaemonSet 을 깔면 안 되는 제약이 사라지니 신형 방식을 그대로 쓴다.
+
+그래서 이 절에서 가져갈 것은 "Pod Identity 는 감점"이 아니라 **판단 순서**다.
+
+1. 그 세트의 채점에 노드 배치 검사가 있는가 → 있으면 DaemonSet 을 늘리는 선택지가 전부 막힌다
+2. 막히지 않으면 Pod Identity 가 기본이다 — OIDC 설정이 없고 역할 trust 한 줄로 끝난다
+
+애드온 버전도 같다. 작업규칙 2 의 "고정하지 않는다"는 set-02 의 선택이고, set-07 은 재현성을 위해 전부 고정한다. 과제지와 그 세트의 작업규칙을 먼저 읽는다.
+
 ---
 
 ## 3. 노드그룹 2분할 (addon / app)
@@ -247,7 +301,7 @@ addons:
 
 </details>
 
-애드온 버전은 **지정하지 않는다**(작업규칙 2: EKS Addon 미고정 — eksctl이 클러스터 버전 default 사용).
+set-02 에서 애드온 버전은 **지정하지 않는다**(작업규칙 2: EKS Addon 미고정 — eksctl이 클러스터 버전 default 사용). 작업규칙은 세트마다 딸려 오는 것이라 그 세트 것을 읽고 판단한다.
 
 **④ 변형 포인트** — 이름과 라벨 키가 세트마다 다르다. 세트별 실측값은 이렇다.
 
@@ -268,7 +322,35 @@ addons:
 | `describe-nodegroup` tags.Name 채점 | `tags.Name` | 채점 대상이 아니면 넣지 않는다 |
 | 부트스트랩 커스터마이즈 | `overrideBootstrapCommand`(nodeadm NodeConfig) | 필요할 때만 |
 
-판단 기준은 과제지가 이름을 어디에 명시하는지다 — EC2 인스턴스 태그 요구면 `instanceName`, `describe-nodegroup` 출력 검사면 `tags.Name` 이다. 애드온 버전은 어느 세트에서도 지정하지 않는다.
+판단 기준은 과제지가 이름을 어디에 명시하는지다 — EC2 인스턴스 태그 요구면 `instanceName`, `describe-nodegroup` 출력 검사면 `tags.Name` 이다.
+
+<details class="build-step">
+<summary>지금 확인하기 — 라벨 키 하나가 파일 안에서 몇 번 쓰이나</summary>
+
+라벨 키는 노드그룹에만 있는 값이 아니다. 실제로 몇 군데에 박혀 있는지 세어 둔다. 과제지가 이 키를 바꾸라고 할 때 고쳐야 할 자리의 개수다. cwd 는 `set-02\task-1\eksctl` 이고, 아무것도 만들지 않는다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String -Pattern '^[^#]*(node-type|instanceName)' cluster.yaml
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -nE '^[^#]*(node-type|instanceName)' cluster.yaml
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 5줄이 나온다. `node-type` 이 셋 — 노드그룹 두 개의 `labels` 와 **coredns 애드온의 `configurationValues` 안에 JSON 문자열로 한 번 더**. `instanceName` 이 둘이다.
+
+세 번째 `node-type` 이 이 블록의 요점이다. 라벨 키를 바꾸라는 요구가 오면 `labels` 두 곳만 고치고 끝내기 쉬운데, 그러면 coredns 가 갈 곳을 잃고 Pending 으로 남는다. 여기에 [05](/part-2/05-k8s-workloads-alb/theory/)의 앱 Deployment `nodeSelector` 까지 더하면 자리는 넷이다.
+
+주석까지 걸려 나오면 패턴 앞의 `^[^#]*` 를 빠뜨린 것이다.
+
+</details>
+
+애드온 버전은 set-02 기준으로 지정하지 않는다(작업규칙 2). 세트가 바뀌면 이 규칙도 바뀐다 — set-07 은 전부 고정한다.
 
 ---
 
@@ -346,6 +428,53 @@ graph LR
 - **바뀌는 값**: 참조 리소스가 늘거나(서브넷·SG 추가) 자격증명 방식이 바뀌어 정책 ARN 대신 역할 ARN 을 넘길 때(`BOOK_APP_POLICY_ARN` → `BOOK_POD_ROLE_ARN`).
 - **고칠 곳**: `cluster.yaml` 의 `${VAR}` 자리와 치환 스크립트의 변수 이름 목록 두 곳. terraform output 이름도 같이 맞춘다.
 - **확인**: 치환 후 `grep '\${' cluster.rendered.yaml`(PowerShell 은 `Select-String '\$\{'`) 출력이 0줄.
+
+<details class="build-step">
+<summary>지금 확인하기 — 치환하고, 누락을 잡고, dry-run 으로 펼친다</summary>
+
+앞의 두 블록과 달리 이것은 **Terraform 이 만든 리소스가 있어야 한다.** [01 실습](/part-1/01-terraform-vpc/lab/)을 마쳐 `.env.ps1`(bash 는 `.env.sh`)이 있는 상태에서 한다. 그래도 **여기서 새로 만드는 것은 없다** — 파일 하나와 조회뿐이다.
+
+cwd 는 `set-02\task-1\eksctl` 이다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  . ..\.env.ps1
+  $c = Get-Content cluster.yaml -Raw
+  foreach ($v in 'VPC_ID','PRIV_SUBNET_C','PRIV_SUBNET_D','CLUSTER_EXTRA_SG_ID','NODE_SG_ID',
+                 'EKS_KMS_ARN','BOOK_APP_POLICY_ARN','LBC_POLICY_ARN','FLUENT_BIT_POLICY_ARN') {
+    $c = $c.Replace('${' + $v + '}', [Environment]::GetEnvironmentVariable($v))
+  }
+  $c | Set-Content cluster.rendered.yaml
+  Select-String '\$\{' cluster.rendered.yaml
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  source ../.env.sh
+  envsubst '$VPC_ID $PRIV_SUBNET_C $PRIV_SUBNET_D $CLUSTER_EXTRA_SG_ID $NODE_SG_ID
+            $EKS_KMS_ARN $BOOK_APP_POLICY_ARN $LBC_POLICY_ARN $FLUENT_BIT_POLICY_ARN' \
+    < cluster.yaml > cluster.rendered.yaml
+  grep -n '\${' cluster.rendered.yaml
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 마지막 검사 명령의 **출력이 없다.** 한 줄이라도 나오면 그 변수가 환경에 없는 것이고, 값이 빈 채로 치환돼도 YAML 은 멀쩡해 보인다는 것이 이 검사가 필요한 이유다.
+
+출력이 0줄일 때만 다음으로 간다. `--dry-run` 은 eksctl 이 기본값을 채워 넣은 ClusterConfig 를 그대로 뱉고 **아무것도 만들지 않는다.** 다만 서브넷·AMI 를 실제로 조회하므로 자격증명이 필요하다.
+
+```bash
+eksctl create cluster -f cluster.rendered.yaml --dry-run
+```
+
+기대: 원문보다 긴 ClusterConfig 가 화면에 나온다. 원문에 없던 필드가 채워져 있고, 특히 `managedNodeGroups` 아래에 `amiFamily`·`iam` 같은 기본값이 붙는다. `[✔]`·`created` 같은 진행 줄은 나오지 않는다 — 나왔다면 `--dry-run` 을 빠뜨린 것이다.
+
+`Error: loading config file` 이면 YAML 들여쓰기이고, `unknown field` 면 eksctl 이 그 필드를 모르는 것이라 1절 블록의 스키마 목록으로 돌아간다.
+
+**`--dry-run` 은 치환 누락을 잡지 못한다.** 미치환 문자열도 그저 문자열이라 스키마 검사를 통과한다. 그래서 grep 이 먼저다.
+
+</details>
 
 ---
 

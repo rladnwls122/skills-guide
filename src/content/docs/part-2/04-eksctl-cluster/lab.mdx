@@ -1,262 +1,70 @@
 ---
-title: 04. 실습 — set-02 클러스터 생성
-description: "terraform output 치환부터 eksctl create cluster, mark 5-1~5-3 셀프 검증까지의 실습."
+title: 04. eksctl 클러스터 — 변동 이행 실습
+description: "set-02 클러스터를 set-07 의 private·Pod Identity 요구로 이행하고, 배포 뒤 오독 복구와 장애 진단까지 가는 실습."
 sidebar:
   order: 3
 ---
 
-import { Tabs, TabItem } from '@astrojs/starlight/components';
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 
 > 문서 유형: tutorial
 
 원리와 채점 관점은 [04 이론 — eksctl ClusterConfig](/part-2/04-eksctl-cluster/theory/)에 있다.
 
-## 목표
+**방식**: set-02 의 클러스터가 선 상태에서 시작한다. set-07 변동 과제지를 읽고 **절차 안내 없이 직접** 고친 뒤, 통과 기준으로 스스로 판정한다. 배포한 다음에는 값을 잘못 읽었을 때의 복구와 고장 진단까지 간다.
 
-- [ ] terraform output → 환경변수 → cluster.rendered.yaml 렌더 파이프라인을 손으로 완주
-- [ ] `eksctl create cluster` 로 wskorea26-cluster 생성 (~20분)
-- [ ] mark 5-1 ~ 5-3 채점 명령을 직접 실행해 기대 출력과 대조
-- [ ] (실패 대비) 부분 복구 명령 4종을 알고 있다
+클러스터는 한 번 만들면 약 20분이 묶인다. 그래서 이 모듈에서 진짜로 익힐 것은 YAML 을 빨리 쓰는 속도가 아니라 **`create` 를 누르기 전에 무엇을 확인하는가**, 그리고 **잘못 만든 뒤에 고쳐서 살릴 수 있는 값인지 판정하는 법**이다.
+
+## 실습 목표
+
+- [ ] 컨트롤 플레인을 외부에서 못 닿게 하고, 그 결과 본 PC 의 `kubectl` 이 끊긴다는 사실을 스스로 마주한다
+- [ ] IRSA 를 Pod Identity 로 바꾼다 — 애드온 하나가 함께 따라온다
+- [ ] 프라이빗 서브넷 3 AZ, 노드 볼륨 CMK 암호화, 노드 시간대 KST 를 반영한다
+- [ ] 라벨 키를 바꿀 때 따라오는 자리를 전부 센다
+- [ ] `${VAR}` 잔존 0건과 `--dry-run` 통과를 만든 뒤에만 `create` 를 누른다
+- [ ] 만들어 놓고 값을 잘못 읽은 것을 발견했을 때, 수정 API 가 있는지로 판정한다
+- [ ] 파드가 안 뜨거나 AWS 호출이 거부될 때 계층을 좁혀 원인을 짚는다
 
 선행 지식과 목표는 [모듈 개요](/part-2/04-eksctl-cluster/)에.
 
 :::note[실전 참조 — 막히면 여는 곳]
-- ClusterConfig 필드: `eksctl utils schema > schema.json` 뒤 `jq -r '.definitions.ClusterConfig.properties | keys[]' schema.json`, 브라우저는 [schema.eksctl.io](https://schema.eksctl.io/)
-- CLI 플래그·출력 필드: `aws eks describe-cluster help` · `aws eks describe-nodegroup help`
+- ClusterConfig 필드 이름: `eksctl utils schema` 출력, 브라우저는 [schema.eksctl.io](https://schema.eksctl.io/)
+- private 클러스터 스키마: 위 목록의 `privateCluster` 항목 — `clusterEndpoints` 와 어느 쪽을 쓰는지 확인한다
+- 애드온의 default 버전: `eksctl utils describe-addon-versions --kubernetes-version 1.35 --name <addon>`
+- CLI 출력 필드: `aws eks describe-cluster help` · `aws eks describe-nodegroup help` · `aws eks list-pod-identity-associations help`
 - 노드 배치를 보는 YAML 필드: `kubectl explain pod.spec.nodeSelector` · `kubectl explain node.metadata.labels`
 - 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
 :::
 
-## 0. 사전 준비 — 정답지 클론과 변수 영속화
+## 0. 기준본 세우기
 
-정답지 저장소가 아직 없다면 [Day 0 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다. 이 가이드의 정답지 경로는 전부 **클론 루트 `~\skills-2026`** 기준이다. 다른 위치에 클론했다면 아래 `cd` 경로만 본인 것으로 바꾼다.
+set-02 의 클러스터가 선 상태에서 시작한다.
 
-이 실습은 정답지의 `set-02\task-1\terraform` 을 **통째로** apply 한 상태에서 시작한다. [01 실습](/part-1/01-terraform-vpc/lab/)에서 직접 쓴 VPC 만으로는 안 된다 — 뒤의 렌더가 보안 그룹·KMS 키·IAM 정책 ARN 까지 요구하고, 그 값들은 정답지 tf 의 `security.tf`·`kms.tf`·`iam.tf` 에서 나오기 때문이다.
+이 실습은 정답지의 `set-02/task-1/terraform` 을 **통째로** apply 한 상태를 전제한다. [01 실습](/part-1/01-terraform-vpc/lab/)에서 이행한 `~/set07-lab` 으로는 안 된다 — 그 사본은 VPC 만 고친 것이고, 뒤의 렌더가 보안 그룹·KMS 키·IAM 정책 ARN 까지 요구하는데 그 값들은 정답지 tf 의 `security.tf`·`kms.tf`·`iam.tf` 에서 나온다.
 
-<Tabs syncKey="shell">
-  <TabItem label="PowerShell">
-  ```powershell
-  $env:AWS_DEFAULT_REGION = "ap-northeast-2"
-  $env:NUM = "103"                   # 본인 비번호로 교체
-  cd ~\skills-2026\set-02\task-1\terraform
-  terraform init
-  terraform apply -var "player_number=$env:NUM"
-  ```
-  </TabItem>
-  <TabItem label="Bash (Linux/CloudShell)">
-  ```bash
-  export AWS_DEFAULT_REGION=ap-northeast-2
-  export NUM=103                     # 본인 비번호로 교체
-  cd ~/skills-2026/set-02/task-1/terraform
-  terraform init
-  terraform apply -var "player_number=$NUM"
-  ```
-  </TabItem>
-</Tabs>
-
-apply 가 실패하면 [01 실습의 apply 실패 세 갈래](/part-1/01-terraform-vpc/lab/)를 먼저 본다.
-
-### `.env.ps1` 영속화 블록
-
-apply 가 끝나면 output 을 환경 변수로 읽고, 같은 값을 파일로 박아 둔다. 이 실습과 [05](/part-2/05-k8s-workloads-alb/lab/)·[07](/part-2/07-full-deploy-set02/lab/)이 이 파일 하나로 변수를 복원한다. cwd 는 `terraform` 이다.
-
-<Tabs syncKey="shell">
-  <TabItem label="PowerShell">
-  ```powershell
-  terraform output -json | Set-Content ..\outputs.json
-
-  $env:ACCOUNT_ID            = terraform output -raw account_id
-  $env:VPC_ID                = terraform output -raw vpc_id
-  $env:PRIV_SUBNET_C         = (terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-c'
-  $env:PRIV_SUBNET_D         = (terraform output -json private_subnet_ids | ConvertFrom-Json).'wskorea26-priv-subnet-d'
-  $env:CLUSTER_EXTRA_SG_ID   = terraform output -raw cluster_extra_sg_id
-  $env:NODE_SG_ID            = terraform output -raw node_sg_id
-  $env:EKS_KMS_ARN           = terraform output -raw eks_kms_arn
-  $env:BOOK_APP_POLICY_ARN   = terraform output -raw book_app_policy_arn
-  $env:LBC_POLICY_ARN        = terraform output -raw lbc_policy_arn
-  $env:FLUENT_BIT_POLICY_ARN = terraform output -raw fluent_bit_policy_arn
-  $env:ECR                   = terraform output -raw ecr_repository_url
-  $env:APP_TG                = terraform output -raw app_target_group_arn
-  $env:GRAFANA_TG            = terraform output -raw grafana_target_group_arn
-  $env:BUCKET                = terraform output -raw s3_bucket_name
-  $env:ALB_DNS               = terraform output -raw book_alb_dns
-  $env:GRAFANA_ALB_DNS       = terraform output -raw grafana_alb_dns
-  $env:CF                    = terraform output -raw cloudfront_domain
-  $env:GRAFANA_ADMIN_USER     = terraform output -raw grafana_admin_user
-  $env:GRAFANA_ADMIN_PASSWORD = terraform output -raw grafana_admin_password
-
-  @"
-  `$env:AWS_DEFAULT_REGION = "ap-northeast-2"
-  `$env:NUM                 = "$env:NUM"
-  `$env:ACCOUNT_ID          = "$env:ACCOUNT_ID"
-  `$env:VPC_ID              = "$env:VPC_ID"
-  `$env:PRIV_SUBNET_C       = "$env:PRIV_SUBNET_C"
-  `$env:PRIV_SUBNET_D       = "$env:PRIV_SUBNET_D"
-  `$env:CLUSTER_EXTRA_SG_ID = "$env:CLUSTER_EXTRA_SG_ID"
-  `$env:NODE_SG_ID          = "$env:NODE_SG_ID"
-  `$env:EKS_KMS_ARN         = "$env:EKS_KMS_ARN"
-  `$env:BOOK_APP_POLICY_ARN = "$env:BOOK_APP_POLICY_ARN"
-  `$env:LBC_POLICY_ARN      = "$env:LBC_POLICY_ARN"
-  `$env:FLUENT_BIT_POLICY_ARN = "$env:FLUENT_BIT_POLICY_ARN"
-  `$env:ECR                 = "$env:ECR"
-  `$env:APP_TG              = "$env:APP_TG"
-  `$env:GRAFANA_TG          = "$env:GRAFANA_TG"
-  `$env:BUCKET              = "$env:BUCKET"
-  `$env:ALB_DNS             = "$env:ALB_DNS"
-  `$env:GRAFANA_ALB_DNS     = "$env:GRAFANA_ALB_DNS"
-  `$env:CF                  = "$env:CF"
-  `$env:GRAFANA_ADMIN_USER  = "$env:GRAFANA_ADMIN_USER"
-  `$env:GRAFANA_ADMIN_PASSWORD = '$env:GRAFANA_ADMIN_PASSWORD'
-  "@ | Set-Content ..\.env.ps1
-
-  . ..\.env.ps1
-  ```
-  </TabItem>
-  <TabItem label="Bash (Linux/CloudShell)">
-  ```bash
-  terraform output -json > ../outputs.json
-  o() { jq -r "$1" ../outputs.json; }   # outputs.json 에서 값 하나 뽑는 도우미
-
-  cat > ../.env.sh <<EOF
-  export AWS_DEFAULT_REGION=ap-northeast-2
-  export NUM="$NUM"
-  export ACCOUNT_ID="$(o '.account_id.value')"
-  export VPC_ID="$(o '.vpc_id.value')"
-  export PRIV_SUBNET_C="$(o '.private_subnet_ids.value["wskorea26-priv-subnet-c"]')"
-  export PRIV_SUBNET_D="$(o '.private_subnet_ids.value["wskorea26-priv-subnet-d"]')"
-  export CLUSTER_EXTRA_SG_ID="$(o '.cluster_extra_sg_id.value')"
-  export NODE_SG_ID="$(o '.node_sg_id.value')"
-  export EKS_KMS_ARN="$(o '.eks_kms_arn.value')"
-  export BOOK_APP_POLICY_ARN="$(o '.book_app_policy_arn.value')"
-  export LBC_POLICY_ARN="$(o '.lbc_policy_arn.value')"
-  export FLUENT_BIT_POLICY_ARN="$(o '.fluent_bit_policy_arn.value')"
-  export ECR="$(o '.ecr_repository_url.value')"
-  export APP_TG="$(o '.app_target_group_arn.value')"
-  export GRAFANA_TG="$(o '.grafana_target_group_arn.value')"
-  export BUCKET="$(o '.s3_bucket_name.value')"
-  export ALB_DNS="$(o '.book_alb_dns.value')"
-  export GRAFANA_ALB_DNS="$(o '.grafana_alb_dns.value')"
-  export CF="$(o '.cloudfront_domain.value')"
-  export GRAFANA_ADMIN_USER="$(o '.grafana_admin_user.value')"
-  export GRAFANA_ADMIN_PASSWORD='$(o '.grafana_admin_password.value')'
-  EOF
-
-  source ../.env.sh
-  ```
-  </TabItem>
-</Tabs>
-
-<details class="diagram-note">
-<summary>이 블록이 하는 일</summary>
-
-`terraform output` 값을 지금 셸에 올리고, 같은 값을 파일 하나로 굳힌다. 어느 셸이든 요령은 같다 — **값은 지금 확장하고, 변수 이름은 글자 그대로 파일에 남긴다**. PowerShell 은 here-string 안의 백틱 `` `$ `` 가 "지금 확장하지 말라"는 표시이고, 큰따옴표 안의 `$env:VPC_ID` 는 반대로 지금 값으로 바뀐다. bash 는 heredoc 이 `$( )` 만 지금 실행하고 `export VPC_ID=` 부분은 글자로 남긴다. 마지막 Grafana 비밀번호 줄만 작은따옴표인 것은 비밀번호에 `$` 가 들어가서, 파일을 다시 읽을 때 그 뒤가 변수로 확장되는 것을 막기 위해서다.
-
-</details>
-
-**검증**: `terraform output` 이 에러 없이 뜨고 `..\.env.ps1`(bash 는 `../.env.sh`)이 생겼으면 된다. 새 터미널로 이어서 할 땐 `set-02\task-1` 에서 `. .\.env.ps1`(bash 는 `source ./.env.sh`) 한 줄만 다시 실행한다.
-
-## 1. 환경변수 로드 + 렌더
-
-<Tabs syncKey="shell">
-  <TabItem label="PowerShell">
-  ```powershell
-  cd ~\skills-2026\set-02\task-1
-  . .\.env.ps1                      # terraform output 영속 파일
-
-  cd eksctl
-  $c = Get-Content cluster.yaml -Raw
-  foreach ($v in 'VPC_ID','PRIV_SUBNET_C','PRIV_SUBNET_D','CLUSTER_EXTRA_SG_ID','NODE_SG_ID',
-                 'EKS_KMS_ARN','BOOK_APP_POLICY_ARN','LBC_POLICY_ARN','FLUENT_BIT_POLICY_ARN') {
-    $c = $c.Replace('${' + $v + '}', [Environment]::GetEnvironmentVariable($v))
-  }
-  $c | Set-Content cluster.rendered.yaml
-  ```
-  </TabItem>
-  <TabItem label="Bash (Linux/CloudShell)">
-  ```bash
-  cd ~/skills-2026/set-02/task-1
-  source ./.env.sh                  # terraform output 영속 파일
-
-  cd eksctl
-  envsubst '$VPC_ID $PRIV_SUBNET_C $PRIV_SUBNET_D $CLUSTER_EXTRA_SG_ID $NODE_SG_ID
-            $EKS_KMS_ARN $BOOK_APP_POLICY_ARN $LBC_POLICY_ARN $FLUENT_BIT_POLICY_ARN' \
-    < cluster.yaml > cluster.rendered.yaml
-  ```
-  </TabItem>
-</Tabs>
-
-<details class="diagram-note">
-<summary>이 블록이 하는 일</summary>
-
-`cluster.yaml` 의 `${VAR}` 자리 아홉 개를 실제 값으로 바꿔 `cluster.rendered.yaml` 을 만든다. 값의 출처는 앞 모듈이 남긴 `.env.ps1`(bash 는 `.env.sh`)이라 점 하나로 먼저 불러온다. PowerShell 은 `.Replace()` 로 문자열을 그대로 치환하므로 `${...}` 의 특수문자를 신경 쓰지 않아도 되고, bash 는 `envsubst` 에 **치환할 변수 목록을 명시**한다 — 목록을 주지 않으면 YAML 안의 다른 `$` 표기까지 건드린다. 치환한 파일을 따로 만드는 이유는 원본을 그대로 두어 다시 렌더할 수 있게 하려는 것이다.
-
-</details>
-
-**검증 — 치환 누락 grep:**
-
-<Tabs syncKey="shell">
-  <TabItem label="PowerShell">
-  ```powershell
-  Select-String '\$\{' cluster.rendered.yaml
-  ```
-  </TabItem>
-  <TabItem label="Bash (Linux/CloudShell)">
-  ```bash
-  grep -n '\${' cluster.rendered.yaml
-  ```
-  </TabItem>
-</Tabs>
-
-:::caution[생략 금지]
-기대 출력: **아무것도 없음**. 한 줄이라도 나오면 해당 변수가 env에 없는 것 — `.env.ps1`(bash 는 `.env.sh`) 재확인.
-치환이 남은 채로 생성에 들어가면 20분을 버린다.
+:::danger[01 실습 스택을 먼저 지운다]
+`~/set07-lab` 을 띄워 둔 채로 여기를 시작하면 NAT 게이트웨이가 양쪽에서 동시에 과금된다. 이름이 달라 충돌하지는 않지만 돈이 두 배로 나간다. `~/set07-lab` 에서 `terraform destroy` 를 먼저 돌린다.
 :::
 
-## 2. 클러스터 생성 (~20분)
+### 정답지 런북을 그대로 따른다
 
-<Tabs syncKey="shell">
-  <TabItem label="PowerShell">
-  ```powershell
-  eksctl create cluster -f cluster.rendered.yaml
-  ```
-  </TabItem>
-  <TabItem label="Bash (Linux/CloudShell)">
-  ```bash
-  eksctl create cluster -f cluster.rendered.yaml
-  ```
-  </TabItem>
-</Tabs>
+기준본을 세우는 절차는 정답지가 이미 갖고 있다. 사이트가 같은 명령을 두 벌 갖지 않도록 링크로 넘긴다.
 
-기대 출력(말미):
+[**set-02 `task-1/README.md`**](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/README.md) 의 다음 단계를 순서대로 실행한다.
 
-```
-[✓]  EKS cluster "wskorea26-cluster" in "ap-northeast-2" region is ready
-```
+<Steps>
 
-대기 중 CloudFormation 콘솔에서 `eksctl-wskorea26-cluster-cluster` → `-addon-...` → `-nodegroup-...` 스택 순서를 관찰해 둔다(트러블슈팅 감각).
+1. **`1) Terraform`** — apply 하고 `terraform output` 을 `.env.ps1`(bash 는 `.env.sh`)로 굳힌다. 이 파일이 다음 단계의 `${VAR}` 치환 재료다. 왜 파일로 굳히는지는 [04 이론 4절](/part-2/04-eksctl-cluster/theory/)에 있다.
 
-:::danger[생성 실패 후 같은 이름으로 재시도할 때]
-`eksctl create cluster` 가 실패하면 CloudFormation 스택이 `ROLLBACK_COMPLETE` 로 남는다. 이 상태의 스택은 갱신이 안 되므로, 같은 이름으로 다시 만들면 `AlreadyExistsException` 이나 `stack ... is in ROLLBACK_COMPLETE state` 로 즉시 막힌다. 지우고 다시 만든다.
+2. **`2) 컨테이너 이미지 빌드 & ECR push`** — 본 PC 에 Docker 가 없으므로 CloudShell 에서 한다. 클러스터 자체에는 필요 없지만 [05](/part-2/05-k8s-workloads-alb/lab/)가 이어 쓴다.
 
-<Tabs syncKey="shell">
-  <TabItem label="PowerShell">
-  ```powershell
-  aws cloudformation describe-stacks `
-    --query "Stacks[?starts_with(StackName,'eksctl-wskorea26-cluster')].[StackName,StackStatus]" --output text
-  eksctl delete cluster --name wskorea26-cluster --disable-nodegroup-eviction --wait
-  ```
-  </TabItem>
-  <TabItem label="Bash (Linux/CloudShell)">
-  ```bash
-  aws cloudformation describe-stacks \
-    --query "Stacks[?starts_with(StackName,'eksctl-wskorea26-cluster')].[StackName,StackStatus]" --output text
-  eksctl delete cluster --name wskorea26-cluster --disable-nodegroup-eviction --wait
-  ```
-  </TabItem>
-</Tabs>
+3. **`3) EKS 클러스터 (eksctl)`** — 치환하고, 잔존 `${}` 를 검사하고, `eksctl create cluster` 를 돌린다. **약 20분**이다.
 
-`eksctl delete` 가 남은 스택까지 지운다. 그래도 스택이 남으면 콘솔에서 해당 스택을 직접 삭제한 뒤 재시도한다. 삭제 확인 없이 `create` 를 다시 던지면 또 20분을 버린다.
-:::
+</Steps>
+
+원본 매니페스트는 [set-02 `eksctl/cluster.yaml`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/eksctl/cluster.yaml)에서 바로 볼 수 있다.
+
+### 섰는지 확인한다
 
 <Tabs syncKey="shell">
   <TabItem label="PowerShell">
@@ -273,202 +81,484 @@ apply 가 끝나면 output 을 환경 변수로 읽고, 같은 값을 파일로 
   </TabItem>
 </Tabs>
 
-기대 출력: 노드 4개, `node-type=addon` 2 + `node-type=app` 2.
+기대: 노드 4개. `node-type=addon` 2개와 `node-type=app` 2개다.
 
-## 3. 채점 항목 셀프 검증 (mark 5-1 ~ 5-4)
+노드가 안 보이면 `aws eks describe-cluster --name wskorea26-cluster --query cluster.status` 를 먼저 본다. `CREATING` 이면 아직 도는 중이고, `ACTIVE` 인데도 노드가 없으면 노드그룹 스택만 실패한 것이다.
 
-<Tabs syncKey="shell">
-  <TabItem label="PowerShell">
-  ```powershell
-  # 5-1 버전 + 로그 5종
-  aws eks describe-cluster --name wskorea26-cluster --query "cluster.[name,version]" --output text
-  aws eks describe-cluster --name wskorea26-cluster --query "sort(cluster.logging.clusterLogging[?enabled==``true``].types[])" --output text
-  ```
-  </TabItem>
-  <TabItem label="Bash (Linux/CloudShell)">
-  ```bash
-  # 5-1 버전 + 로그 5종
-  aws eks describe-cluster --name wskorea26-cluster --query 'cluster.[name,version]' --output text
-  aws eks describe-cluster --name wskorea26-cluster --query 'sort(cluster.logging.clusterLogging[?enabled==`true`].types[])' --output text
-  ```
-  </TabItem>
-</Tabs>
+:::danger[여기서 과금이 시작된다]
+클러스터는 떠 있는 내내 과금된다. 노드 4대와 01 이 만든 NAT 게이트웨이도 함께다. 5~7절이 배포된 상태를 전제하므로 이 실습은 배포까지 간다. 끝나면 8절 정리를 반드시 돌린다.
 
-기대: `wskorea26-cluster 1.35` / `api audit authenticator controllerManager scheduler`
-
-<Tabs syncKey="shell">
-  <TabItem label="PowerShell">
-  ```powershell
-  # 5-2 KMS 별칭 + 서브넷 이름 (채점지 원문은 bash — CloudShell에서 그대로 실행 가능)
-  aws eks describe-cluster --name wskorea26-cluster --query "cluster.encryptionConfig[0].provider.keyArn" --output text
-  ```
-  </TabItem>
-  <TabItem label="Bash (Linux/CloudShell)">
-  ```bash
-  # 5-2 KMS 별칭 + 서브넷 이름 (채점지 원문이 이 형태다)
-  aws eks describe-cluster --name wskorea26-cluster --query 'cluster.encryptionConfig[0].provider.keyArn' --output text
-  ```
-  </TabItem>
-</Tabs>
-
-기대: `wskorea26-eks-key`의 ARN (별칭 역조회는 채점지 5-2-A 명령 참조).
-
-<Tabs syncKey="shell">
-  <TabItem label="PowerShell">
-  ```powershell
-  # 5-3 노드그룹 이름/타입/tags.Name
-  foreach ($ng in 'wskorea26-addon-ng','wskorea26-app-ng') {
-    aws eks describe-nodegroup --cluster-name wskorea26-cluster --nodegroup-name $ng `
-      --query "nodegroup.[nodegroupName,instanceTypes[0],tags.Name]" --output text
-  }
-  ```
-  </TabItem>
-  <TabItem label="Bash (Linux/CloudShell)">
-  ```bash
-  # 5-3 노드그룹 이름/타입/tags.Name
-  for ng in wskorea26-addon-ng wskorea26-app-ng; do
-    aws eks describe-nodegroup --cluster-name wskorea26-cluster --nodegroup-name "$ng" \
-      --query 'nodegroup.[nodegroupName,instanceTypes[0],tags.Name]' --output text
-  done
-  ```
-  </TabItem>
-</Tabs>
-
-<details class="diagram-note">
-<summary>이 블록이 하는 일</summary>
-
-노드그룹 두 개의 이름·인스턴스 타입·Name 태그를 차례로 뽑는다. 채점이 보는 세 값을 한 줄씩 출력하므로 기대값과 눈으로 대조할 수 있다 — 태그가 빠지면 이 자리에 `None` 이 찍힌다.
-
-</details>
-
-기대:
-
-```
-wskorea26-addon-ng      t3.medium       wskorea26-addon-node
-wskorea26-app-ng        t3.medium       wskorea26-app-node
-```
-
-<Tabs syncKey="shell">
-  <TabItem label="PowerShell">
-  ```powershell
-  # 5-4 사전 점검: kube-system 파드(aws-node/kube-proxy 제외)가 전부 addon 노드인가
-  kubectl get pod -n kube-system -o wide
-  ```
-  </TabItem>
-  <TabItem label="Bash (Linux/CloudShell)">
-  ```bash
-  # 5-4 사전 점검: kube-system 파드(aws-node/kube-proxy 제외)가 전부 addon 노드인가
-  kubectl get pod -n kube-system -o wide
-  ```
-  </TabItem>
-</Tabs>
-
-:::danger[mark 5-4]
-기대: coredns 2개가 addon 노드 위. `eks-pod-identity-agent`, `metrics-server`가 **보이면 안 된다**.
+시간이 없어 3절까지만 할 거라면 기준본을 세우지 않아도 된다 — 3절의 grep 과 `--dry-run` 판정은 클러스터 없이도 대부분 된다. 대신 5~7절은 못 한다.
 :::
 
-## 4. :badge[함정]{variant=danger} 정리
+## 1. 변동 과제지
 
-| 함정 | 증상 | 예방 |
+set-07 요구다. **정답 `cluster.yaml` 을 먼저 열지 않는다.**
+
+| 항목 | set-02 (기준본) | set-07 (변동) |
 |---|---|---|
-| `${VAR}` 치환 누락 | eksctl이 서브넷/SG를 못 찾고 실패 | grep 검사 필수 (1절) |
-| Pod Identity 사용 | agent가 app 노드에 떠서 mark 5-4 감점 | set-02는 IRSA 고정 |
-| 기본 애드온 자동설치 | metrics-server가 app 노드 스케줄 → 5-4 감점 | `addonsConfig.disableDefaultAddons: true` |
-| coredns 노드 미고정 | coredns가 app 노드로 → 5-4 감점 | `configurationValues` nodeSelector |
-| `tags.Name`만 쓰고 instanceName 누락 | EC2 인스턴스 Name 태그 미적용 | 둘 다 유지 (역할이 다름) |
-| version 따옴표 없이 `1.35` | YAML이 float로 파싱 | `version: "1.35"` |
-| 생성 도중 중단 | 스택 일부만 존재 | 아래 부분 복구 |
+| 클러스터 이름 | `wskorea26-cluster` | `unicorn-eks-cluster` |
+| 컨트롤 플레인 접근 | 퍼블릭·프라이빗 둘 다 열림 | **외부에서 닿으면 안 된다** |
+| 파드 자격증명 | OIDC 로 위임 | **EKS 가 직접 중계** |
+| 프라이빗 서브넷 | 2개 (c, d) | 3개 (a, b, c) |
+| 노드 라벨 | `node-type: addon\|app` | `unicorn: addon\|app` |
+| EC2 인스턴스 Name | `wskorea26-{addon,app}-node` | `unicorn-k8snode-{addon,app}-node` |
+| Secret 암호화 키 | EKS 전용 키 | 플랫폼 공용 CMK |
+| 노드 볼륨 암호화 | 켜짐(기본 키) | **플랫폼 공용 CMK 로** |
+| 노드 시간대 | 기본(UTC) | **KST** |
+| 애드온 버전 | 미지정 | 전부 고정 |
+| 블록 스토리지 | 없음 | 워크로드가 EBS 볼륨을 쓴다 |
 
-**부분 복구 (생성 중단 시):**
+이 표는 요구를 옮긴 것이지 고칠 자리를 알려 주는 것이 아니다. 어느 필드인지는 직접 찾는다.
+
+### 요구에서 파생되는 것
+
+과제지는 결과만 적는다. 거기서 따라 나오는 것을 읽어 내는 것이 이 절의 훈련이다. 세 가지가 특히 그렇다.
+
+**컨트롤 플레인이 외부에서 닿으면 안 된다**는 요구는 필드 하나로 끝나지 않는다. 그렇게 만드는 순간 본 PC 의 `kubectl` 이 API 서버에 못 닿는다. 클러스터를 만든 다음 무엇으로 조작할지를 **만들기 전에** 정해 둬야 한다. 5절에서 이 문제를 실제로 만난다.
+
+**파드 자격증명을 EKS 가 직접 중계**하게 하면 애드온 하나가 필수로 따라온다. 그것이 없으면 연결을 걸어도 파드는 자격증명을 못 받고, 증상이 코드 오류처럼 보인다. [04 이론 2절](/part-2/04-eksctl-cluster/theory/)이 두 방식을 대조한다.
+
+**워크로드가 EBS 볼륨을 쓴다**는 것도 애드온 요구다. set-02 는 이 애드온을 일부러 뺐고 그 이유가 있었다. set-07 에도 그 이유가 그대로 있는지 확인하고 판단한다.
+
+## 2. 이행 (타이머 25분)
+
+타이머를 걸고 시작한다. 아래는 절차가 아니라 **스스로 답해야 할 질문 목록**이다. 답은 적지 않는다.
+
+- 컨트롤 플레인을 닫는 필드는 `vpc.clusterEndpoints` 인가, 다른 최상위 블록인가? 둘을 함께 쓰면 어떻게 되나
+- 프라이빗 서브넷이 셋이 되면 `vpc.subnets.private` 의 키 이름과 `az` 값은 어디서 오나. `.env.ps1` 에 그 값이 이미 있나
+- 라벨 키를 바꾸면 이 파일 안에서 고칠 자리가 몇 군데인가 — [04 이론 3절](/part-2/04-eksctl-cluster/theory/)의 확인 블록이 세는 법을 보여 준다
+- EC2 인스턴스 Name 태그를 지정하는 필드와 `describe-nodegroup` 의 `tags.Name` 을 만드는 필드는 같은가. set-07 채점은 어느 쪽을 보나
+- 노드 볼륨을 특정 CMK 로 암호화하는 필드 이름은 무엇인가. `volumeEncrypted` 만으로 되나
+- 모든 노드의 시간대를 바꾸려면 노드 부팅 때 명령을 넣어야 한다. 그 필드는 무엇이고, 노드그룹 둘에 같은 내용을 두 번 쓰지 않는 YAML 문법은 무엇인가
+- 애드온 버전을 고정하려면 그 버전 문자열을 어디서 얻나
+
+새로 쓰는 파일이 아니라 `cluster.yaml` 사본을 고친다. 원본을 직접 건드리지 않는다.
+
+## 3. 통과 기준
+
+배포 없이 판정되는 것만 여기 있다. 셋 다 통과해야 5절로 간다.
+
+<Steps>
+
+1. **옛 값 잔존 0건**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'wskorea26|node-type' cluster.yaml
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -nE 'wskorea26|node-type' cluster.yaml
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **출력 없음.** 한 줄이라도 나오면 그 자리가 이행되지 않은 것이다. coredns 의 `configurationValues` 안이 가장 자주 남는다.
+
+2. **`${VAR}` 치환 누락 0건**
+
+   치환한 뒤 검사한다. set-07 은 참조하는 리소스가 늘어 변수 이름 목록 자체가 바뀐다 — `.env.ps1` 에 없는 변수를 쓰면 조용히 빈 문자열이 된다.
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String '\$\{' cluster.rendered.yaml
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -n '\${' cluster.rendered.yaml
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **출력 없음.**
+
+3. **`--dry-run` 통과**
+
+   ```bash
+   eksctl create cluster -f cluster.rendered.yaml --dry-run
+   ```
+
+   기대: eksctl 이 기본값을 채운 ClusterConfig 가 나오고 에러가 없다. 아무것도 만들지 않는다.
+
+   `mutually exclusive` 나 `unknown field` 가 나오면 2절의 첫 질문으로 돌아간다 — 컨트롤 플레인을 닫는 두 방식을 겹쳐 쓴 것이다.
+
+</Steps>
+
+### set-07 채점 대응
+
+[set-07 `mark.sh`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/mark.sh) 의 `6-1-A` 와 `6-2-A` 가 이 모듈을 잰다. 무엇을 보는지 먼저 읽고, 자기 YAML 이 그 출력을 낼지 예측한다.
+
+| 채점 | 보는 것 | 내 YAML 의 어느 필드가 정하나 |
+|---|---|---|
+| 6-1-A | 클러스터 버전 | |
+| 6-1-A | `endpointPublicAccess` · `endpointPrivateAccess` 쌍 | |
+| 6-1-A | 활성 로그 종류 | |
+| 6-1-A | Secret 암호화 키 ARN | |
+| 6-1-A | `authenticationMode` | |
+| 6-2-A | `unicorn=app` 노드가 퍼진 AZ 목록 | |
+| 6-2-A | `unicorn=addon` 노드 개수 | |
+| 6-2-A | EC2 인스턴스 Name 태그별 실행 대수 | |
+| 6-2-A | app 노드의 **퍼블릭 IP** | |
+
+오른쪽 열을 직접 채운다. 마지막 줄이 함정이다 — 채점이 값이 **있는지**가 아니라 **비었는지**를 본다. 어느 필드가 그것을 만드는지 찾는다.
+
+## 4. 복기
+
+[set-07 `eksctl/cluster.yaml`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/eksctl/cluster.yaml)과 대조한다. **3절을 통과한 뒤에 연다.**
+
+놓친 곳을 셋으로 나눈다.
+
+- **과제지를 못 읽은 것** — 요구가 있는 줄 몰랐다. 다음엔 과제지를 표로 옮기고 시작한다
+- **읽었는데 어디를 고칠지 못 찾은 것** — 필드 이름을 몰랐다. `eksctl utils schema` 로 찾는 연습이 부족한 것이다
+- **찾았는데 틀린 것** — 문법이나 값이 어긋났다. `--dry-run` 이 잡아 주는 종류인지 확인한다
+
+셋의 처방이 다르므로 뭉뚱그리지 않는다.
+
+## 5. 배포와 채점 확인
+
+이행본을 실제로 올린다. 6·7절이 배포된 상태를 전제한다.
+
+```bash
+eksctl create cluster -f cluster.rendered.yaml
+```
+
+기대(말미): `EKS cluster "unicorn-eks-cluster" in "ap-northeast-2" region is ready`. **약 20분**이 걸린다.
+
+기다리는 동안 CloudFormation 콘솔에서 `eksctl-unicorn-eks-cluster-cluster` → `-addon-...` → `-nodegroup-...` 스택 순서를 관찰해 둔다. 어느 스택에서 멈추는지가 곧 원인의 계층이다.
+
+:::danger[생성 실패 후 같은 이름으로 재시도할 때]
+`eksctl create cluster` 가 실패하면 CloudFormation 스택이 `ROLLBACK_COMPLETE` 로 남는다. 이 상태의 스택은 갱신이 안 되므로, 같은 이름으로 다시 만들면 `AlreadyExistsException` 이나 `stack ... is in ROLLBACK_COMPLETE state` 로 즉시 막힌다. 지우고 다시 만든다.
 
 <Tabs syncKey="shell">
   <TabItem label="PowerShell">
   ```powershell
-  eksctl utils associate-iam-oidc-provider --cluster wskorea26-cluster --approve   # OIDC
-  eksctl create iamserviceaccount -f cluster.rendered.yaml --approve               # IAM SA
-  eksctl create nodegroup -f cluster.rendered.yaml --include=<ng-name>             # NodeGroup
-  eksctl create addon -f cluster.rendered.yaml                                     # Addon
+  aws cloudformation describe-stacks `
+    --query "Stacks[?starts_with(StackName,'eksctl-unicorn-eks-cluster')].[StackName,StackStatus]" --output text
+  eksctl delete cluster --name unicorn-eks-cluster --disable-nodegroup-eviction --wait
   ```
   </TabItem>
   <TabItem label="Bash (Linux/CloudShell)">
   ```bash
-  eksctl utils associate-iam-oidc-provider --cluster wskorea26-cluster --approve   # OIDC
-  eksctl create iamserviceaccount -f cluster.rendered.yaml --approve               # IAM SA
-  eksctl create nodegroup -f cluster.rendered.yaml --include=<ng-name>             # NodeGroup
-  eksctl create addon -f cluster.rendered.yaml                                     # Addon
+  aws cloudformation describe-stacks \
+    --query "Stacks[?starts_with(StackName,'eksctl-unicorn-eks-cluster')].[StackName,StackStatus]" --output text
+  eksctl delete cluster --name unicorn-eks-cluster --disable-nodegroup-eviction --wait
   ```
   </TabItem>
 </Tabs>
 
-## 5. 통과 기준 (mark 대응)
-
-- [ ] mark 5-1: 이름/버전/로그 5종 정확 일치
-- [ ] mark 5-2: KMS 별칭 `alias/wskorea26-eks-key`, 서브넷 `wskorea26-priv-subnet-c wskorea26-priv-subnet-d`
-- [ ] mark 5-3: NG 2개 이름·t3.medium·tags.Name·priv 서브넷 정확 일치
-- [ ] mark 5-4 사전조건: kube-system에 coredns만 addon 노드, 불청객 DaemonSet 없음
-
-## 6. 정리
-
-:::caution[과금 주의]
-**05로 바로 이어가면 클러스터 유지 (README destroy 방침 예외).** 이어가지 않으면 아래로 삭제한다.
+`eksctl delete` 가 남은 스택까지 지운다. 그래도 스택이 남으면 콘솔에서 해당 스택을 직접 삭제한 뒤 재시도한다. 삭제 확인 없이 `create` 를 다시 던지면 또 20분을 버린다.
 :::
 
-당일 종료 시:
+### 여기서 `kubectl` 이 끊긴다
+
+컨트롤 플레인을 닫았으므로 본 PC 에서 `kubectl get nodes` 가 응답하지 않는다. 1절에서 예고한 파생 결과다. 채점도 CloudShell 에서 이뤄지므로 이 상태가 정상이다.
+
+정답지는 SSM 으로 접속하는 작업용 EC2 를 임시로 세워 거기서 `kubectl`·`helm` 을 돌린다. 절차는 [set-07 `task-1/README.md`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/README.md) 의 `3) 작업용 SSM bastion 생성` 과 `4) 도구 설치·자격증명·파일 수신·환경 변수` 에 있다. 그대로 따르고, 이후 절의 `kubectl` 은 전부 거기서 실행한다.
+
+**이 EC2 는 작업용이라 채점 전에 지워야 한다.** 과제지 유의사항의 불필요 리소스 감점 대상이다.
+
+### 채점 명령으로 확인
+
+`aws` 계열은 본 PC 에서도 된다. `kubectl` 계열만 bastion 에서 돌린다.
 
 <Tabs syncKey="shell">
   <TabItem label="PowerShell">
   ```powershell
-  eksctl delete cluster -f cluster.rendered.yaml --disable-nodegroup-eviction
-  # terraform 리소스(VPC 등)는 PART-2 전체 종료 전까지 유지 가능 — NAT 시간당 과금은 인지할 것
+  aws eks describe-cluster --name unicorn-eks-cluster `
+    --query "cluster.resourcesVpcConfig.[endpointPublicAccess, endpointPrivateAccess]" --output text
+  aws ec2 describe-instances `
+    --filters Name=tag:Name,Values=unicorn-k8snode-app-node Name=instance-state-name,Values=running `
+    --query "Reservations[].Instances[].PublicIpAddress" --output json
   ```
   </TabItem>
   <TabItem label="Bash (Linux/CloudShell)">
   ```bash
-  eksctl delete cluster -f cluster.rendered.yaml --disable-nodegroup-eviction
-  # terraform 리소스(VPC 등)는 PART-2 전체 종료 전까지 유지 가능 — NAT 시간당 과금은 인지할 것
+  aws eks describe-cluster --name unicorn-eks-cluster \
+    --query "cluster.resourcesVpcConfig.[endpointPublicAccess, endpointPrivateAccess]" --output text
+  aws ec2 describe-instances \
+    --filters Name=tag:Name,Values=unicorn-k8snode-app-node Name=instance-state-name,Values=running \
+    --query "Reservations[].Instances[].PublicIpAddress" --output json
   ```
   </TabItem>
 </Tabs>
 
-## 7. 변형 셀프 체크
+기대: 첫 명령이 `False True`, 둘째가 **빈 배열** `[]`. 둘째에 IP 가 찍히면 노드가 퍼블릭 서브넷에 떴거나 퍼블릭 IP 자동 할당이 켜진 것이다.
 
-당일 과제의 약 30% 가 수정된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+## 6. 과제지 오독 복구
 
-1. 클러스터 이름이 `wskorea26-cluster` 에서 다른 값으로 바뀌면 무엇을 고치나?
+이행을 마치고 만들기까지 했는데 과제지를 다시 읽어 보니 값이 다르다. 물어야 할 것은 하나다 — **고쳐서 살리나, 부수고 다시 만드나.**
 
-   <details>
-   <summary>답 확인</summary>
+01 실습에서는 `terraform plan` 의 `# forces replacement` 가 답을 줬다. eksctl 에는 그 출력이 없다. 대신 **그 값을 바꾸는 API 가 존재하는지**로 판정한다.
 
-   파일 안의 리터럴은 `eksctl/cluster.yaml` 의 `metadata.name` 한 곳뿐이다. `terraform/variables.tf` 의 `cluster_name` 은 선언만 있고 어느 리소스도 참조하지 않는다 — `grep -rn "var.cluster_name" *.tf` 가 0건이다. 나머지는 명령 인자다: `aws eks update-kubeconfig --name` 과 LBC helm 의 `--set clusterName`. mark 5-1-A 부터 5-4-A 까지 전부 이 이름으로 클러스터를 찾는다.
+| 판정 | 무엇으로 아나 | 비용 |
+|---|---|---|
+| 즉시 수정 | `aws eks update-*` 에 해당 옵션이 있다 | 초~분 |
+| 짝이 있는 수정 | 수정 API 는 있는데 다른 리소스가 같은 값을 참조한다 | 분 — 짝을 못 세면 더 |
+| 노드그룹 교체 | 노드그룹만 지우고 다시 만든다 | 분 |
+| 클러스터 재생성 | `create` 외에 방법이 없다 | 처음 만든 시간이 그대로 다시 든다 |
 
-   </details>
+판정은 추측으로 하지 않는다. `aws eks update-cluster-config help` 와 `aws eks update-nodegroup-config help` 가 **무엇을 받는지**가 곧 판정 근거다.
 
-2. EKS 버전 요구가 `1.35` 에서 `1.34` 로 바뀌면?
+### 6-1. 컨트롤 플레인을 닫는 것을 빼먹었다
 
-   <details>
-   <summary>답 확인</summary>
+**상황.** 이름과 서브넷은 다 맞췄는데 엔드포인트를 기준본 그대로 두어 퍼블릭이 열린 채로 만들었다. 채점 `6-1-A` 가 `True True` 를 뱉는다.
 
-   `cluster.yaml` 의 `version` 한 곳이다. 값에 따옴표를 빼면 YAML 이 숫자로 읽어 `1.34` 가 소수로 파싱된다. mark 5-1-A 는 `wskorea26-cluster 1.35` 처럼 이름과 버전을 한 줄로 비교하므로 문자열이 그대로 맞아야 한다.
+**판정.**
 
-   </details>
+```bash
+aws eks update-cluster-config help
+```
 
-3. 노드그룹을 addon·app 둘에서 셋으로 늘리라면 어디를 고치고, 어디를 그대로 두나?
+`--resources-vpc-config` 가 `endpointPublicAccess` · `endpointPrivateAccess` 를 받는다. **수정 API 가 있다 → 즉시 수정**이다.
 
-   <details>
-   <summary>답 확인</summary>
+**복구.**
 
-   `cluster.yaml` 의 `managedNodeGroups` 에 항목을 하나 더 넣고 `labels`·`tags.Name`·`instanceName` 을 과제지 이름대로 채운다. `vpc.subnets` 와 `iam.serviceAccounts` 는 그대로 둔다 — 노드그룹이 같은 프라이빗 서브넷 두 개를 공유하기 때문이다. 필드 이름이 막히면 `eksctl utils schema` 출력이나 [schema.eksctl.io](https://schema.eksctl.io/)를 열고, 찾는 순서는 [검색 가이드](/reference/search-guide/)에 있다.
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws eks update-cluster-config --name unicorn-eks-cluster `
+    --resources-vpc-config endpointPublicAccess=false,endpointPrivateAccess=true
+  aws eks describe-cluster --name unicorn-eks-cluster --query "cluster.status" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws eks update-cluster-config --name unicorn-eks-cluster \
+    --resources-vpc-config endpointPublicAccess=false,endpointPrivateAccess=true
+  aws eks describe-cluster --name unicorn-eks-cluster --query "cluster.status" --output text
+  ```
+  </TabItem>
+</Tabs>
 
-   </details>
+기대: 클러스터가 잠깐 `UPDATING` 이 됐다가 `ACTIVE` 로 돌아온다. 노드는 그대로 살아 있다.
 
-4. `addonsConfig.disableDefaultAddons` 를 빼면 어느 체크가 흔들리나?
+**파급.** 리소스는 하나도 안 죽지만 **네가 죽는다.** 이 명령이 끝나는 순간 지금 쓰던 `kubectl` 이 끊긴다. bastion 을 먼저 세워 두지 않았으면 클러스터 안을 볼 방법이 없어진다.
 
-   <details>
-   <summary>답 확인</summary>
+**교훈.** 싼 수정이라고 순서가 자유로운 것은 아니다. **접근 경로를 끊는 변경은 대체 경로를 먼저 만들고 실행한다.**
 
-   mark 5-4-A 다. 이 항목은 kube-system 파드가 올라간 노드의 `node-type` 라벨을 뽑아 중복을 지우고 출력한다. 기대값은 `addon` 한 줄인데, 기본 애드온이 설치되면 metrics-server 가 app 노드에 스케줄돼 `app` 이 함께 나온다. 예외로 빠지는 것은 `aws-node` 와 `kube-proxy` 둘뿐이다.
+### 6-2. 라벨 키를 기준본 그대로 뒀다
 
-   </details>
+**상황.** 노드그룹 `labels` 를 `node-type` 으로 둔 채 만들었다. 채점 `6-2-A` 가 `unicorn=app` 노드를 못 찾아 빈 출력을 낸다.
 
-막히면 [트러블슈팅](/reference/troubleshooting/), 그날을 끝냈으면 [잔존 리소스 점검](/reference/cleanup-check/)을 돌린다.
+**판정.**
 
+```bash
+aws eks update-nodegroup-config help
+```
+
+`--labels` 가 `addOrUpdateLabels` · `removeLabels` 를 받는다. 노드그룹을 지우지 않고 고칠 수 있다.
+
+**복구.** 노드그룹 둘 다에 건다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws eks update-nodegroup-config --cluster-name unicorn-eks-cluster `
+    --nodegroup-name unicorn-app-ng `
+    --labels "addOrUpdateLabels={unicorn=app},removeLabels=node-type"
+  kubectl get nodes -l unicorn=app --no-headers
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws eks update-nodegroup-config --cluster-name unicorn-eks-cluster \
+    --nodegroup-name unicorn-app-ng \
+    --labels "addOrUpdateLabels={unicorn=app},removeLabels=node-type"
+  kubectl get nodes -l unicorn=app --no-headers
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 앱 노드 두 대가 나온다.
+
+**파급.** 여기서 끝내면 다음 날 파드가 안 뜬다. **라벨은 짝이 있는 값이다.** 이 클러스터에서 같은 키를 참조하는 자리를 전부 센다.
+
+- 노드그룹 둘의 `labels` — 방금 고쳤다
+- coredns 애드온의 `configurationValues` 안 `nodeSelector`
+- [05](/part-2/05-k8s-workloads-alb/lab/)의 앱 Deployment `nodeSelector`
+- 모니터링 스택의 `nodeSelector` 값들
+
+노드 쪽만 고치면 파드가 옛 키를 찾다 `Pending` 으로 남는다. 증상이 나오는 곳과 원인이 있는 곳이 멀어서, 7절이 이 경우를 따로 다룬다.
+
+**교훈.** 수정 API 가 있다고 값이 싼 것은 아니다. **그 값을 참조하는 곳의 개수가 진짜 비용이다.**
+
+### 6-3. Secret 암호화 키를 기준본 것으로 뒀다
+
+**상황.** `secretsEncryption.keyARN` 을 기준본의 EKS 전용 키로 둔 채 만들었다. 과제지는 플랫폼 공용 CMK 를 요구한다.
+
+**판정.** 앞의 둘과 다르게 접근한다. `aws eks update-cluster-config` 에는 암호화 옵션이 없다. 암호화를 다루는 명령은 따로 있다.
+
+```bash
+aws eks associate-encryption-config help
+```
+
+이름이 `associate` 이지 `update` 가 아니다. **없는 것을 붙이는 명령이고, 이미 붙은 키를 다른 키로 바꾸거나 떼는 API 는 없다.** 판정 표의 마지막 칸이다.
+
+**복구.** 클러스터를 지우고 다시 만든다.
+
+```bash
+eksctl delete cluster --name unicorn-eks-cluster --disable-nodegroup-eviction --wait
+eksctl create cluster -f cluster.rendered.yaml
+```
+
+처음 만든 시간이 그대로 다시 든다. 05 에서 올린 워크로드도 전부 같이 죽는다.
+
+**교훈.** 01 실습의 VPC CIDR 과 같은 자리다. **되돌리는 시간이 처음부터 다시 만드는 시간과 같은 값**이 이 모듈에도 있다.
+
+이 클러스터에서 그런 값은 셋이다 — **클러스터 이름, 리전, Secret 암호화 키.** 과제지를 받으면 이 셋부터 확정하고 시작한다. 나머지는 만들고 나서도 고칠 수 있다.
+
+## 7. 장애 진단
+
+정상으로 선 상태에서 일부러 고장을 내고 증상만 보고 좁혀 간다. **주입 명령과 복구 명령이 짝으로 있다** — 주입만 하고 덮어 두지 않는다.
+
+명령은 전부 bastion 에서 실행한다.
+
+### 7-1. 파드가 Pending 에서 안 움직인다
+
+**주입.** addon 노드 한 대에서 라벨을 뗀다. 6-2 가 코드에서 만든 상황을 손으로 재현하는 것이다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $node = kubectl get nodes -l unicorn=addon -o jsonpath='{.items[0].metadata.name}'
+  kubectl label node $node unicorn-
+  kubectl delete pod -n kube-system -l k8s-app=kube-dns
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  node=$(kubectl get nodes -l unicorn=addon -o jsonpath='{.items[0].metadata.name}')
+  kubectl label node "$node" unicorn-
+  kubectl delete pod -n kube-system -l k8s-app=kube-dns
+  ```
+  </TabItem>
+</Tabs>
+
+**증상.** coredns 파드 일부가 `Pending` 에 머문다. 클러스터 안의 이름 해석이 흔들리기 시작하므로 다른 서비스에서 먼저 티가 나기도 한다.
+
+**좁히는 순서.** 위에서 아래로, 한 계층씩만 본다.
+
+<Steps>
+
+1. **파드가 왜 안 뜨는지 파드에게 묻는다** — `kubectl describe pod <name> -n kube-system`. 맨 아래 `Events` 가 이유를 글자로 말한다. `didn't match Pod's node affinity/selector` 면 스케줄 조건 문제이고, `Insufficient cpu` 면 자원 문제다. **여기서 갈래가 갈리므로 이 줄을 먼저 읽는다**
+
+2. **파드가 요구하는 조건** — `kubectl get pod <name> -n kube-system -o jsonpath='{.spec.nodeSelector}'`
+
+3. **그 조건을 만족하는 노드가 있나** — `kubectl get nodes -l <키>=<값>`. 빈 출력이면 원인은 노드 쪽이다
+
+4. **노드의 실제 라벨** — `kubectl get nodes --show-labels`. 여기서 라벨이 빠진 노드가 보인다
+
+</Steps>
+
+`describe` 를 건너뛰고 노드부터 보는 것이 가장 흔한 시간 낭비다. **파드는 자기가 왜 못 떴는지 이미 알고 있고 `Events` 에 적어 둔다.**
+
+**복구.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl label node $node unicorn=addon
+  kubectl get pod -n kube-system -l k8s-app=kube-dns -o wide
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl label node "$node" unicorn=addon
+  kubectl get pod -n kube-system -l k8s-app=kube-dns -o wide
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 몇 초 안에 `Running` 으로 바뀌고 addon 노드에 배치된다.
+
+증상별 처방 목록은 [트러블슈팅](/reference/troubleshooting/)에 있다.
+
+### 7-2. 파드는 떴는데 AWS 호출이 거부된다
+
+**주입.** 앱의 Pod Identity 연결을 끊는다. `<association-id>` 는 첫 명령이 알려준다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws eks list-pod-identity-associations --cluster-name unicorn-eks-cluster --namespace unicorn `
+    --query "associations[].[serviceAccount,associationId]" --output text
+  aws eks delete-pod-identity-association --cluster-name unicorn-eks-cluster --association-id <association-id>
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws eks list-pod-identity-associations --cluster-name unicorn-eks-cluster --namespace unicorn \
+    --query "associations[].[serviceAccount,associationId]" --output text
+  aws eks delete-pod-identity-association --cluster-name unicorn-eks-cluster --association-id <association-id>
+  ```
+  </TabItem>
+</Tabs>
+
+**증상.** 파드는 `Running` 이다. 그런데 앱 로그에 `AccessDenied` 나 `is not authorized to perform` 이 찍히고, 앱을 호출하면 500 이 돌아온다. **파드 상태만 보면 정상이라 코드를 의심하게 되는 것이 이 고장의 함정이다.**
+
+**좁히는 순서.**
+
+<Steps>
+
+1. **에러 문자열을 그대로 읽는다** — `kubectl logs -n unicorn -l app --tail=50`. `AccessDenied` 계열이면 코드가 아니라 신원 문제다. 여기서 방향이 정해진다
+
+2. **파드가 어떤 신원으로 도는가** — `kubectl get pod -n unicorn <name> -o jsonpath='{.spec.serviceAccountName}'`
+
+3. **그 서비스 계정에 연결이 걸려 있나** — `aws eks list-pod-identity-associations --cluster-name unicorn-eks-cluster --namespace unicorn`. 목록에 없으면 여기가 원인이다
+
+4. **연결은 있는데도 거부되면** 그때 역할의 정책과 신뢰 관계로 내려간다 — `aws iam get-role --role-name <역할>`
+
+</Steps>
+
+**복구.** 지운 연결을 다시 만든다. `<role-arn>` 은 Terraform 이 만든 것이라 `terraform output` 에 있다.
+
+```bash
+aws eks create-pod-identity-association --cluster-name unicorn-eks-cluster \
+  --namespace unicorn --service-account unicorn-book-app-sa --role-arn <role-arn>
+```
+
+기대: `associationId` 가 돌아온다. 파드는 다음 자격증명 갱신부터 정상이므로, 급하면 `kubectl delete pod -n unicorn -l app` 으로 다시 띄운다.
+
+**교훈.** 증상이 앱에서 나와도 원인이 앱에 없을 수 있다. **`AccessDenied` 는 코드 버그가 아니라 신원 배선 문제라는 신호다.** 이 순서를 몸에 익혀 두면 코드를 읽는 데 시간을 버리지 않는다.
+
+## 8. 정리
+
+:::caution[05 로 바로 이어 간다면]
+클러스터를 남긴다. 다시 만드는 데 20분이 들기 때문이고, 이것은 [잔존 리소스 점검](/reference/cleanup-check/)의 destroy 방침에 대한 명시적 예외다. 이어 가지 않으면 아래를 돌린다.
+:::
+
+작업용 bastion 을 먼저 지운다. 클러스터보다 먼저다 — 클러스터를 지우고 나면 접속할 이유가 없어지는데 잊어버리기 쉽다.
+
+```bash
+eksctl delete cluster -f cluster.rendered.yaml --disable-nodegroup-eviction
+```
+
+기대: 스택 삭제가 순서대로 돈다.
+
+`eksctl delete` 가 끝났다고 다 지워졌다고 믿지 않는다. 남은 스택을 직접 센다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws cloudformation describe-stacks `
+    --query "Stacks[?starts_with(StackName,'eksctl-unicorn-eks-cluster')].[StackName,StackStatus]" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws cloudformation describe-stacks \
+    --query "Stacks[?starts_with(StackName,'eksctl-unicorn-eks-cluster')].[StackName,StackStatus]" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 빈 출력. `DELETE_FAILED` 로 남은 스택이 있으면 콘솔에서 직접 지운다.
+
+Terraform 리소스(VPC·NAT 등)는 PART-2 를 끝낼 때까지 남겨도 되지만 NAT 는 시간당 과금이다. 그날을 끝냈으면 함께 지운다.
+
+막히면 [트러블슈팅](/reference/troubleshooting/), 계정 전체 점검은 [잔존 리소스 점검](/reference/cleanup-check/)이다.

@@ -1,0 +1,240 @@
+---
+title: PART-2 콘솔 배포 — eksctl 은 되돌리는 주체가 다르다
+description: "노드그룹을 콘솔로 추가해 eksctl 산출물과 대조하고, CloudFormation 이 정본인 환경에서 drift 를 판단하는 방법."
+sidebar:
+  order: 99
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: how-to
+
+[PART-1 콘솔 배포](/part-1/console-deploy/)가 Terraform 과 콘솔의 관계를 다뤘다. PART-2 는 **되돌리는 주체가 다르다.**
+
+eksctl 이 만든 것은 Terraform 상태 파일이 아니라 **CloudFormation 스택**에 기록된다. 그래서 `terraform plan` 이 아무 말도 안 하는데도 문제가 생긴다. 그 차이가 이 문서다.
+
+:::note[클릭 순서는 적지 않는다]
+콘솔 화면은 자주 바뀐다. **무엇을 만들려는지**와 **만든 뒤 무엇을 확인하는지**만 적는다.
+:::
+
+## 1. 같은 리소스, 두 경로
+
+[04 실습](/part-2/04-eksctl-cluster/lab/)의 클러스터가 떠 있는 상태에서 한다.
+
+### 만들 것
+
+노드그룹 하나를 콘솔로 추가한다. 이름은 `console-lab-ng`, 노드 한 대짜리로 작게 만든다.
+
+:::caution[비용]
+노드가 실제로 뜬다. 확인이 끝나면 이 문서의 정리 절에서 바로 지운다.
+:::
+
+### 만든 뒤 확인
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $C = aws eks list-clusters --query "clusters[0]" --output text
+  aws eks list-nodegroups --cluster-name $C --query "nodegroups" --output text
+  aws eks describe-nodegroup --cluster-name $C --nodegroup-name console-lab-ng `
+    --query "nodegroup.{Name:nodegroupName,Status:status,Type:instanceTypes[0],Role:nodeRole,Labels:labels}" --output json
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  C=$(aws eks list-clusters --query 'clusters[0]' --output text)
+  aws eks list-nodegroups --cluster-name "$C" --query nodegroups --output text
+  aws eks describe-nodegroup --cluster-name "$C" --nodegroup-name console-lab-ng \
+    --query 'nodegroup.{Name:nodegroupName,Status:status,Type:instanceTypes[0],Role:nodeRole,Labels:labels}' --output json
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 노드그룹 목록에 eksctl 이 만든 것들과 함께 새 것이 보인다.
+
+### eksctl 이 만든 것과 무엇이 다른가
+
+같은 조회로는 **구분이 안 된다.** 둘 다 EKS 관리형 노드그룹이고 API 응답도 같은 모양이다.
+
+차이는 다른 곳에 있다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws cloudformation describe-stacks --query "Stacks[?starts_with(StackName,'eksctl-')].StackName" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws cloudformation describe-stacks --query "Stacks[?starts_with(StackName,'eksctl-')].StackName" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: eksctl 이 만든 노드그룹마다 스택이 하나씩 있고, **콘솔로 만든 것은 목록에 없다.**
+
+| | 콘솔로 만든 노드그룹 | eksctl 이 만든 노드그룹 |
+|---|---|---|
+| EKS 가 아는 것 | 노드그룹이 있다 | 노드그룹이 있다 (같다) |
+| CloudFormation 이 아는 것 | **모른다** | 스택 하나가 대응한다 |
+| `eksctl get nodegroup` | 보인다 | 보인다 (같다) |
+| `eksctl delete cluster` | **안 지워질 수 있다** | 스택째 지워진다 |
+
+마지막 줄이 이 문서에서 가장 중요하다.
+
+## 2. 콘솔이 몰래 만드는 것
+
+노드그룹을 만들 때 콘솔은 **IAM 역할**을 함께 만들자고 권한다. 그것을 받아들이면 역할이 하나 생긴다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws eks describe-nodegroup --cluster-name $C --nodegroup-name console-lab-ng --query "nodegroup.nodeRole" --output text
+  aws iam list-roles --query "Roles[?contains(RoleName,'NodeInstanceRole') || contains(RoleName,'eksNodeRole')].RoleName" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws eks describe-nodegroup --cluster-name "$C" --nodegroup-name console-lab-ng --query 'nodegroup.nodeRole' --output text
+  aws iam list-roles --query "Roles[?contains(RoleName,'NodeInstanceRole') || contains(RoleName,'eksNodeRole')].RoleName" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+**IAM 역할은 노드그룹을 지워도 남는다.** 리전에 속하지 않는 전역 리소스이고, 다른 것이 쓰고 있을 수 있어 AWS 가 자동으로 지우지 않는다.
+
+정리할 때 걸리는 것들을 모으면 이렇다.
+
+| 콘솔이 만드는 것 | 노드그룹 삭제 시 | 잔존 위험 |
+|---|---|---|
+| 시작 템플릿 | 함께 사라지는 경우가 많다 | 낮다 |
+| **IAM 역할** | **남는다** | **높다 — 불필요 리소스 감점 대상** |
+| **인스턴스 프로파일** | 남는다 | 높다 |
+| 노드 보안 그룹 규칙 | 클러스터 SG 에 남을 수 있다 | 중간 |
+
+그리고 **애드온**이 있다. 콘솔에서 클러스터를 만들면 기본 애드온을 함께 설치하자고 권하는데, [04 이론](/part-2/04-eksctl-cluster/theory/)이 다루듯 **애드온 하나가 노드 배치 채점을 깨뜨릴 수 있다.** set-02 가 기본 애드온 자동 설치를 끄는 이유가 그것이다.
+
+## 3. drift 판단 — 여기서는 정본이 다르다
+
+[PART-1](/part-1/console-deploy/)에서는 `terraform plan` 이 차이를 알려 줬다. **여기서는 그런 것이 없다.**
+
+### 무엇이 정본인가
+
+eksctl 은 매니페스트를 읽어 CloudFormation 스택을 만든다. 그래서 기록이 두 겹이다.
+
+<Steps>
+
+1. **`cluster.yaml`** — 사람이 쓴 것. eksctl 이 읽는 입력
+
+2. **CloudFormation 스택** — eksctl 이 만든 것. AWS 가 아는 기록
+
+3. **실제 리소스** — 스택이 만든 것
+
+</Steps>
+
+콘솔로 고치면 **3번만 바뀌고 2번은 모른다.** 그러면 다음에 `eksctl` 명령을 돌릴 때 스택이 자기가 아는 상태를 기준으로 판단한다.
+
+### 어긋난 것을 찾는 법
+
+Terraform 의 `plan` 에 해당하는 것이 CloudFormation 의 drift 탐지다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $S = aws cloudformation describe-stacks --query "Stacks[?starts_with(StackName,'eksctl-')].StackName | [0]" --output text
+  $D = aws cloudformation detect-stack-drift --stack-name $S --query StackDriftDetectionId --output text
+  aws cloudformation describe-stack-drift-detection-status --stack-drift-detection-id $D --output json
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  S=$(aws cloudformation describe-stacks --query "Stacks[?starts_with(StackName,'eksctl-')].StackName | [0]" --output text)
+  D=$(aws cloudformation detect-stack-drift --stack-name "$S" --query StackDriftDetectionId --output text)
+  aws cloudformation describe-stack-drift-detection-status --stack-drift-detection-id "$D" --output json
+  ```
+  </TabItem>
+</Tabs>
+
+탐지에 시간이 걸린다. 상태가 진행 중이면 잠시 뒤 두 번째 명령을 다시 돌린다.
+
+**Terraform 과 다른 점이 둘이다.**
+
+- `plan` 처럼 자동으로 안 돈다. **일부러 걸어야 한다**
+- **되돌려 주지 않는다.** 무엇이 어긋났는지 알려 줄 뿐이고 고치는 것은 사람 몫이다
+
+그래서 이 환경에서는 **"콘솔로 고쳤다는 사실을 사람이 기억하는 것"이 유일한 방어선**이다.
+
+### 선택지
+
+| 선택 | 무엇을 하나 | 옳은 때 |
+|---|---|---|
+| **매니페스트도 고친다** | `cluster.yaml` 에 같은 값을 적는다 | 클러스터를 다시 만들 계획이 있을 때 |
+| **그냥 둔다** | 콘솔 수정을 그대로 산다 | **대회 당일 대부분** — 클러스터를 다시 안 만든다 |
+| **스택을 다시 만든다** | 노드그룹을 지우고 매니페스트로 다시 만든다 | 어긋난 것이 많아 정리가 필요할 때 |
+
+**두 번째가 기본값인 이유가 있다.** 클러스터를 다시 만드는 데 약 20분이 들고, 대회 시간 안에 그럴 여유가 거의 없다. 그러면 매니페스트를 고쳐 봐야 그것을 쓸 일이 없다.
+
+다만 **다시 만들 계획이 있다면 반드시 매니페스트에도 적는다.** 안 적으면 다시 만든 클러스터에 그 수정이 빠진다.
+
+### 콘솔로 만든 것이 삭제를 막는다
+
+가장 아픈 경우다. `eksctl delete cluster` 는 자기가 만든 스택을 지우는데, **콘솔로 만든 노드그룹은 그 스택에 없다.** 클러스터를 지우려는데 노드그룹이 남아 있어 막히거나, 지워도 IAM 역할과 인스턴스 프로파일이 남는다.
+
+**콘솔로 만든 것은 콘솔로 지운다는 것을 처음부터 정해 둔다.** [04 실습 8절](/part-2/04-eksctl-cluster/lab/)의 스택 확인이 그래서 필요하다 — `eksctl delete` 가 끝났다고 다 지워졌다고 믿지 않는다.
+
+## 4. 판단표 — 콘솔이 옳은 때, 코드가 옳은 때
+
+| 상황 | 고르는 쪽 | 이유 |
+|---|---|---|
+| 노드 수를 급히 늘린다 | **콘솔** 또는 `eksctl scale` | 매니페스트 고치고 다시 도는 것보다 빠르다 |
+| 라벨·태그를 하나 고친다 | **콘솔** 또는 CLI | 수정 API 가 있는 값이다([04 실습 6절](/part-2/04-eksctl-cluster/lab/)) |
+| 애드온을 추가한다 | **매니페스트** | 설정값이 딸려 있고 채점이 그것을 본다 |
+| 노드그룹을 새로 만든다 | **매니페스트** | 콘솔로 만들면 스택 밖에 놓여 삭제가 꼬인다 |
+| 클러스터를 만든다 | **매니페스트** | 콘솔로는 필드를 다 못 채운다 |
+| 채점 직전 파드 하나를 살린다 | **`kubectl`** | 콘솔도 코드도 아니다 — 가장 빠른 경로다 |
+
+### 한 줄로
+
+**클러스터의 뼈대는 매니페스트, 살아 있는 동안의 조정은 CLI 다.** 콘솔은 눈으로 확인할 때 가장 쓸모 있고, 만드는 데 쓰면 스택 밖 리소스를 남긴다.
+
+## 정리
+
+콘솔로 만든 노드그룹을 지운다. **`eksctl delete cluster` 가 이것을 안 챙긴다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws eks delete-nodegroup --cluster-name $C --nodegroup-name console-lab-ng
+  aws eks wait nodegroup-deleted --cluster-name $C --nodegroup-name console-lab-ng
+  aws eks list-nodegroups --cluster-name $C --query "nodegroups" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws eks delete-nodegroup --cluster-name "$C" --nodegroup-name console-lab-ng
+  aws eks wait nodegroup-deleted --cluster-name "$C" --nodegroup-name console-lab-ng
+  aws eks list-nodegroups --cluster-name "$C" --query nodegroups --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 목록에 eksctl 이 만든 것만 남는다.
+
+**IAM 역할과 인스턴스 프로파일은 따로 지운다.** 노드그룹을 지워도 남는다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws iam list-roles --query "Roles[?contains(RoleName,'NodeInstanceRole') || contains(RoleName,'eksNodeRole')].RoleName" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws iam list-roles --query "Roles[?contains(RoleName,'NodeInstanceRole') || contains(RoleName,'eksNodeRole')].RoleName" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+eksctl 이 만든 역할과 콘솔이 만든 역할을 구분해야 한다 — **eksctl 것은 이름에 클러스터 이름이 들어간다.** 헷갈리면 [04 실습 8절](/part-2/04-eksctl-cluster/lab/)의 스택 목록으로 대조한다.
+
+계정 전체 점검은 [잔존 리소스 점검](/reference/cleanup-check/)이다.

@@ -6,10 +6,17 @@ sidebar:
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
 선행 지식과 학습 경로는 [모듈 개요](/part-4/09-serverless-event/)에.
+
+:::tip[읽으면서 확인한다]
+유형 2 끝에 **지금 확인하기** 블록이 접혀 있다. 조회뿐이라 **과금이 0원**이고 아무것도 만들지 않는다. 블록을 열지 않고 읽어도 문서는 그대로 이어진다.
+
+**리전을 먼저 맞춘다.** 2과제는 모듈마다 리전이 다르고 **틀리면 그 모듈이 0점**이다. 아래 명령들도 리전을 명시하지 않으면 엉뚱한 곳을 조회한다.
+:::
 
 2과제는 독립 모듈 여러 개로 구성되며, 모듈마다 "패턴"이 반복된다. 이 문서는 그중 유형 1·2를 다룬다. 각 유형은 ① 도식 ② 언제 나오나 ③ 핵심 연결 고리 ④ 채점이 보는 상태 ⑤ 변형 포인트 ⑥ 퀴즈 순서다. `유형 2 변형` 절만 ④ 가 고정 이름·값이고, 그 표에 변형 축을 함께 담아 별도의 변형 포인트를 두지 않는다.
 
@@ -242,6 +249,60 @@ flowchart TB
 | 룰 이름 `wsc2026-ec2-stop-rule` | 시연 전후의 `disable-rule`·`enable-rule` 인자 | 시연 후 다시 enable |
 
 위반 종류가 추가되면 그 종류에 네이티브 EventBridge 이벤트가 있는지부터 확인한다. 없으면 CloudTrail 경로라 지연이 수십 초~1분으로 늘고, 채점 스크립트의 sleep 시간을 그 기준으로 읽어야 한다.
+
+<details class="build-step">
+<summary>지금 확인하기 — 두 탐지 수단이 무엇을 약속하나</summary>
+
+set-02 는 AWS Config 규칙으로, set-08 은 CloudTrail 로 같은 위반을 잡는다. **둘이 무엇을 약속하는지가 다르고, 그 차이는 CLI 도움말에 적혀 있다.** 조회와 도움말뿐이라 과금이 없다.
+
+먼저 Config 쪽이 평가 시점을 어떻게 정하는지 본다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws configservice put-config-rule help | Select-String -Pattern 'MaximumExecutionFrequency|ConfigurationItemChangeNotification|Periodic' | Select-Object -First 8
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws configservice put-config-rule help | grep -E 'MaximumExecutionFrequency|ConfigurationItemChangeNotification|Periodic' | head -8
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 평가를 거는 방식이 **변경 알림**과 **주기 실행** 둘로 나뉜다는 설명이 나온다. 주기 쪽은 최소 간격이 시간 단위다.
+
+이제 EventBridge 가 무엇을 받는지 본다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws events put-rule help | Select-String -Pattern 'EventPattern|ScheduleExpression' | Select-Object -First 6
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws events put-rule help | grep -E 'EventPattern|ScheduleExpression' | head -6
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 이벤트 패턴으로 걸거나 일정으로 건다는 설명이 나온다. **패턴으로 걸면 이벤트가 도착하는 즉시 돈다.**
+
+여기서 두 수단의 성격이 갈린다.
+
+| | AWS Config 규칙 | CloudTrail + EventBridge |
+|---|---|---|
+| 무엇을 보나 | 리소스의 **상태** | API **호출** |
+| 언제 도나 | 구성 항목이 기록된 뒤, 또는 주기마다 | 이벤트가 버스에 도착하는 즉시 |
+| 잡히는 것 | 지금 잘못된 상태 전부 | 호출로 만들어진 변경만 |
+| 놓치는 것 | 빠른 되돌림 사이의 순간 | **호출 없이 생긴 상태** |
+
+**같은 "SG 인바운드 위반 자동복구"라도 기전이 다르므로 규칙 이름만 바꿔서는 이행이 안 된다.** set-02 는 상태를 감시하고 set-08 은 호출을 감시한다.
+
+`aws: command not found` 면 CLI 가 없는 것이다. 도움말 출력이 길면 `--no-cli-pager` 를 붙인다.
+
+</details>
 
 ### ⑥ 퀴즈
 

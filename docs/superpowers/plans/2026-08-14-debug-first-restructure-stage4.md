@@ -347,7 +347,29 @@ Task 4 까지 끝나면 **멈춘다.** 런북형에서 형식이 섰는지 확�
 3. 6절 판정 축을 모듈마다 다시 쓰는 것(01=`plan`, 04=modify API 유무)이 맞나
 4. 실측 없이 분 단위 수치를 안 쓴 결과가 문서에서 허전하지 않나
 
+## 실행 검증 (2026-08-14)
+
+계정 `600440344359` / `ap-northeast-2` 에서 **읽기 전용·무과금** 범위만 돌렸다. 그 계정에는 이 가이드와 무관한 `skills-*` 환경(EKS `skills-eks`, VPC `10.0.0.0/16`, ALB `skills-alb`, NAT 1, EC2 1)이 이미 떠 있어 아무것도 만들거나 고치지 않았다.
+
+| 문서 | 검증한 것 | 결과 |
+|---|---|---|
+| 05 theory 3절 | `helm template` 을 `serviceAccount.create` true/false 로 렌더해 `ServiceAccount` 개수 | **1개 / 0개** — 문서 기대값과 일치 |
+| 05 theory 3절 | 차트 핀 `3.4.0` 이 저장소에 실재하는지 | 실재 (최신은 3.5.0) |
+| 04 theory 1절 | `eksctl utils schema` 의 `ClusterConfig` 최상위 키 | 28개. `metadata`·`vpc`·`secretsEncryption`·`cloudWatch`·`iam`·`managedNodeGroups`·`addons`·`privateCluster`·`fargateProfiles` 전부 존재 |
+| 04 theory 3절 | `^[^#]*(node-type\|instanceName)` grep — PowerShell·bash 양쪽 | **5줄.** 주석 제외되고 세 번째 `node-type` 이 coredns `configurationValues` 안 |
+| 04 lab 6-1 | `aws eks update-cluster-config` 가 엔드포인트를 받는지 | `--resources-vpc-config endpointPublicAccess=false,endpointPrivateAccess=true` — 문서에 쓴 문법 그대로 |
+| 04 lab 6-2 | `aws eks update-nodegroup-config --labels` 문법 | `addOrUpdateLabels={k=v},removeLabels=k` — 문서와 일치 |
+| 04 lab 6-3 | 암호화 설정을 바꾸는 API 가 있는지 | `aws eks` 하위에 **`associate-encryption-config` 하나뿐.** update·disassociate 없음 — 재생성 판정이 맞다 |
+| 04 lab 5절 | `cluster.resourcesVpcConfig.[endpointPublicAccess, endpointPrivateAccess]` | 동작. `True False` 형태로 나온다 |
+| 04 lab 5절 | `Reservations[].Instances[].PublicIpAddress` | 동작. 퍼블릭 IP 없으면 `[]` — 문서 기대값 형태와 일치 |
+| 04 lab 7-2 / 05 lab 5절 | `aws eks list-pod-identity-associations` | 동작. `associations[].serviceAccount` 로 이름이 나온다 |
+| 05 lab 5절 | `LoadBalancers[0].[Scheme,Type,State.Code]` | 동작. `internet-facing application active` 형태 |
+| 05 lab 0절 | `TargetHealthDescriptions[].TargetHealth.State` | 동작 |
+| 05 lab 7-1 | `Target.Timeout` · `Target.ResponseCodeMismatch` 가 실제 값인지 | CLI 공식 help 에 둘 다 있고 뜻도 문서 서술과 같다. `Reason` 은 unhealthy 일 때만 붙는다 |
+
 ## 미해결
 
-- **AWS 실행 검증을 못 했다.** 6·7절의 주입·복구 명령은 정답지 코드와 `mark.sh` 에서 도출한 것이다. 실행 가능한 계정이 생기면 이 두 절만 따로 검증한다.
+- **kubectl 이 필요한 주장은 검증하지 못했다.** `--dry-run=server` 출력 형태, Deployment `spec.selector` 의 `field is immutable`, `ImagePullBackOff` 이벤트 문구, `rollout undo` 동작이 여기 해당한다. 이 PC 에 kubectl 이 없고, 계정의 `skills-eks` 는 이 가이드와 무관한 남의 환경이라 붙이지 않았다.
+- **6·7절 end-to-end 는 안 돌렸다.** set-02 기준본을 세우고 set-07 로 이행해야 하는데 클러스터 생성만 20분씩이고 실비가 든다. 6-3 두 건은 정의상 재생성 시나리오라 더 든다. 별도 승인이 필요하다.
+- 대신 위 표대로 **판정의 근거가 되는 API 존재 여부와 쿼리 문자열은 전부 실측으로 확인했다.** 소요 시간 수치를 쓰지 않은 방침은 유지한다.
 - 모듈 04 의 SSM bastion 절차를 사이트가 얼마나 흡수할지. 지금은 정답지 README 링크로 넘겼다. PART-3 모듈 08(Private EKS)이 같은 문제를 다시 만나므로 그때 함께 정한다.

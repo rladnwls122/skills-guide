@@ -21,27 +21,54 @@ set-08 2과제 4모듈은 2026-08-01에 구현이 들어와 근거가 코드로 
 
 같은 번호라고 같은 주제가 아니다 — 3모듈만 봐도 set-02는 EC2 정책 위반 자동복구, set-07은 KEDA/Karpenter 스케일링, set-08은 Security Group 자동복구다. 세트가 확정되면 번호가 아니라 **주제로** 해당 문서를 연다.
 
+## 모듈별 변동 짝 (PART-1~3)
+
+01~08 의 실습은 **기준본을 타깃 세트 요구로 이행하는** 훈련이다. 어느 세트에서 어느 세트로 가는지가 아래 표다. 전부 diff 로 확인한 값이다.
+
+| 모듈 | 기준본 | 변동 타깃 | 변동의 성격 | 판정 축 |
+|---|---|---|---|---|
+| [01](/part-1/01-terraform-vpc/lab/) | set-02 | set-07 | CIDR 규칙 계산 · 3 AZ 6서브넷 · Endpoint · Flow Log | `plan` 의 `forces replacement` |
+| [02](/part-1/02-kms-s3-cloudfront/lab/) | set-02 | set-07 | 키 분류 축이 리소스별 → 용도별 · 90일 회전 · 다중 리전 키 · WAF 신설 | 같음 |
+| [03](/part-1/03-container-lambda-dynamodb/lab/) | set-02 | set-07 | 파티션 키 · GSI 축 · PITR · 태그 정책 | 같음 + **프로바이더 버전** |
+| [04](/part-2/04-eksctl-cluster/lab/) | set-02 | set-07 | IRSA → Pod Identity · private 클러스터 · CMK 볼륨 · KST | **수정 API 유무** |
+| [05](/part-2/05-k8s-workloads-alb/lab/) | set-02 | set-07 | 인터넷 ALB → internal ALB + VPC Origin · SA 직접 생성 | k8s 불변 필드 + AWS 불변 속성 |
+| [06](/part-2/06-observability/lab/) | set-02 | set-07 | 수집 범위 · 로그 형식 · 저장소 · 네임스페이스 분리 | 위 + **시간 축** |
+| [07](/part-2/07-full-deploy-set02/lab/) | set-02 | set-07 | 위 여섯을 한 번에 · 타이머 | 순서와 배점 |
+| [08](/part-3/08-private-eks-iam/lab/) | **set-07** | **set-03** | 작업 호스트가 수동 → IaC · taint · 커스텀 도메인 | 수정 API 유무 + **삭제 판단** |
+
+08 만 방향이 반대다. 1과제 수상 후보 중 fully-private 클러스터를 쓰는 것은 set-03 과 set-07 둘뿐이라, 기준본이 set-07 이면 타깃이 하나로 결정된다.
+
+**판정 축이 모듈마다 다른 것이 요점이다.** Terraform 모듈은 `plan` 이 답을 주지만 eksctl 에는 그 출력이 없고, k8s 는 `apply` 가 `field is immutable` 로 거부하는 것으로 대신한다. 08 의 "삭제 판단"은 어느 도구도 안 잡아 준다.
+
 ## 모듈별 정답지 경로
 
 로컬 클론 기준 상대 경로 (`skills-2026/` 루트).
 
 | 모듈 | 참고 경로 | 내용 |
 |---|---|---|
-| 01 | `set-02/task-1/terraform/vpc.tf` | VPC 정답지 (RTB↔서브넷 매핑) |
-| 02 | `set-02/task-1/terraform/{kms,s3,cloudfront}.tf` | KMS 3키, OAC, 버킷정책 |
+| 01 | `set-02/task-1/terraform/vpc.tf` | 기준본 — VPC 정답지 (RTB↔서브넷 매핑) |
+| 01 | `set-07/task-1/terraform/{vpc,endpoints,flowlog}.tf` | **변동 타깃** — 3 AZ 6서브넷, Endpoint, Flow Log |
+| 02 | `set-02/task-1/terraform/{kms,s3,cloudfront}.tf` | 기준본 — KMS 3키, OAC, 버킷정책 |
+| 02 | `set-07/task-1/terraform/{kms,s3,waf}.tf` | **변동 타깃** — 용도별 CMK·MRK·버전 관리·WAF |
 | 02 | `set-03/task-1/terraform/kms.tf` | root-less 키 정책 (하드 모드) |
-| 03 | `set-02/task-1/{app/Dockerfile,terraform/lambda,terraform/dynamodb.tf}` | alpine+tzdata, GSI, ALB 응답 포맷 |
+| 03 | `set-02/task-1/{app/Dockerfile,terraform/lambda,terraform/dynamodb.tf}` | 기준본 — alpine+tzdata, GSI, ALB 응답 포맷 |
+| 03 | `set-07/task-1/terraform/{dynamodb,ecr,lambda}.tf` | **변동 타깃** — PK 변경, 태그 정책, 지정 로그 그룹 |
 | 03 | `set-07/task-2/module-1-nosql` | DynamoDB Streams·sparse GSI·Lambda ESM·조건부 쓰기 정답, `mark1.sh` |
-| 04 | `set-02/task-1/eksctl/cluster.yaml` | IRSA, disableDefaultAddons, instanceName |
-| 04 | `set-03/task-1/eksctl/cluster.yaml` | fully-private, Access Entry, Pod Identity |
-| 05 | `set-02/task-1/k8s/app/` | deployment/probe/PDB/TargetGroupBinding |
-| 05 | `set-02/task-1/terraform/alb.tf` | 리스너 규칙 2개 + 403 기본 |
-| 06 | `set-02/task-1/k8s/monitoring/`, `set-03/task-1/k8s/logging/` | Grafana provisioning, Fluent Bit log_to_metrics |
+| 04 | `set-02/task-1/eksctl/cluster.yaml` | 기준본 — IRSA, disableDefaultAddons, instanceName |
+| 04 | `set-07/task-1/eksctl/cluster.yaml` | **변동 타깃** — Pod Identity, privateCluster, CMK 볼륨, KST |
+| 04 | `set-03/task-1/eksctl/cluster.yaml` | fully-private, Access Entry, taint, 커스텀 도메인 |
+| 05 | `set-02/task-1/{k8s/app/,terraform/alb.tf}` | 기준본 — deployment/probe/PDB/TGB, 헤더 규칙 2개 + 403 |
+| 05 | `set-07/task-1/{k8s/,terraform/alb.tf}` | **변동 타깃** — internal ALB, VPC Origin, SA·StorageClass 신설 |
+| 06 | `set-02/task-1/k8s/monitoring/` | 기준본 — Grafana provisioning, Fluent Bit |
+| 06 | `set-07/task-1/k8s/{monitoring,logging}/` | **변동 타깃** — PVC 저장소, 5키 재조립, 네임스페이스 분리 |
+| 06 | `set-03/task-1/k8s/logging/` | log_to_metrics 패턴 (개념 대조) |
 | 06 | docs `setlist/set-03/task-1/{notes,runbook}.md` | 함정 원문 |
-| 07 | `set-02/task-1/README.md`, `mark.md` | 완주 런북·채점 기준 |
+| 07 | `set-02/task-1/README.md`, `mark.md` | 기준본 — 완주 런북·채점 기준 |
+| 07 | `set-07/task-1/{README.md,mark.sh}` | **변동 타깃** — 전체 이행 대상·채점 |
 | 07 | `set-02/task-1/terraform/cloudfront/book-rewrite.js` | CF Function rewrite |
-| 08 | `set-03/task-1/terraform/kms.tf`, `set-07/task-1/terraform/iam.tf` | root-less KMS, audit role(9-1/9-2) |
-| 08 | `set-07/task-1/README.md` | 머신 3분할, S3 릴레이, VPC Origin |
+| 08 | `set-07/task-1/{README.md,terraform/iam.tf}` | 기준본 — 머신 3분할, S3 릴레이, audit role(9-1/9-2) |
+| 08 | `set-03/task-1/{terraform/bastion.tf,eksctl/cluster.yaml}` | **변동 타깃** — bastion 을 IaC 로, taint, 커스텀 도메인 |
+| 08 | `set-03/task-1/terraform/kms.tf` | root-less KMS |
 | 09 | `set-02/task-2/module-1-*`, `module-3-*` | Step Functions, EventBridge/Config |
 | 09 | `set-08/task-2/module-3-event-handling` | SG 자동복구 정답(CloudTrail·EventBridge·Lambda), `mark/mark2-3.sh` |
 | 10 | `set-07/task-2/module-3-eks-scaling` | KEDA/Karpenter 정답, `mark3.sh` (module-4 로깅은 미착수 — `mark4.sh`·task.md 모듈 4 절만) |

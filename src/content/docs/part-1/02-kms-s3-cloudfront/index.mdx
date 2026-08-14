@@ -19,6 +19,10 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 - [ ] WAF Web ACL을 CloudFront(CLOUDFRONT scope, us-east-1 고정)에 연결할 수 있다
 - [ ] 관리형 규칙 그룹과 커스텀 매치 규칙의 구조 차이를 설명할 수 있다
 - [ ] RuleActionOverrides로 오탐 규칙 하나만 Count 전환하는 절차를 설명할 수 있다
+- [ ] set-02 의 키 구성을 set-07 의 **용도별 분류**로 직접 이행할 수 있다 — 개수가 같아도 설계가 다르다
+- [ ] 리전을 넘는 요구(CloudFront WAF 로그)가 왜 다중 리전 키를 부르는지 설명할 수 있다
+- [ ] `plan` 출력으로 in-place 와 재생성을 판정하고, 버킷 이름 재생성의 파급을 셀 수 있다
+- [ ] CDN 이 403 을 낼 때 CDN → 버킷 정책 → 키까지 계층을 좁힐 수 있다
 
 ## 소요 시간 / 일차
 
@@ -66,7 +70,9 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
   - set-03/task-1/terraform
     - kms.tf root-less 키 정책 (심화)
     - waf.tf 커스텀 SQLi(SQL 구문 주입)/XSS(스크립트 삽입) 매치 + Rate 규칙 (CLOUDFRONT scope, 로깅 없음)
-  - set-07/task-1/terraform
+  - set-07/task-1/terraform (변동 타깃)
+    - kms.tf 용도별 CMK 3개(app/data/platform) + 90일 회전 + 다중 리전 키
+    - s3.tf 버전 관리 + 계정 ID 버킷명 + fileset 업로드
     - waf.tf 관리형 규칙 그룹(CommonRuleSet·KnownBadInputsRuleSet) + Rate 규칙 + 로깅
 
 </FileTree>

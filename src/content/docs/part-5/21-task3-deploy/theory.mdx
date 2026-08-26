@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
@@ -49,6 +50,32 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 
 전부 트래픽 전에 검증한다. 앞의 셋은 배포 시점에 이미 확정되고, 뒤의 둘은 경기 내내 주기적으로 측정된다.
 :::
+
+
+<details class="build-step">
+<summary>지금 확인하기 — 유의사항이 못 박은 제약을 원문으로 읽는다</summary>
+
+배포 시점에 확정되는 제약은 전부 과제지 유의사항 절에 있다. **파일 읽기라 과금이 없다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String -Pattern 'Fargate|Lambda|t3.medium|불필요|인스턴스 타입|ECS' `
+    -Path $HOME\skills-2026\task-3\task-sample.md | Select-Object -First 10
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -nE 'Fargate|Lambda|t3.medium|불필요|인스턴스 타입|ECS' ~/skills-2026/task-3/task-sample.md | head -10
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 컴퓨팅은 EC2 만, 인스턴스 타입은 하나로 고정, 오케스트레이션은 EKS 고정, 불필요 리소스는 감점이라는 문장이 나온다. **넷 다 "만들면 되는 것"이 아니라 "만들면 안 되는 것"** 이라 배포 전에 읽어야 한다.
+
+출력이 비면 클론 경로를 확인한다. 대회 당일에는 이 자리가 종이 과제지이므로, 형광펜으로 표시할 문장이 바로 이것들이다.
+
+</details>
 
 ## 심사위원이 제시한 3축 — 프로비저닝·요청 처리·비용
 
@@ -164,6 +191,32 @@ flowchart LR
 
 0.2초 예산은 이 경로 전체에 걸린다 — CloudFront에서 RDS까지 홉마다 지연이 쌓인다. 같은 진입점 위에서 403은 WAF가, 404는 ALB 리스너 기본 액션이 낸다.
 
+
+<details class="build-step">
+<summary>지금 확인하기 — 응답 시간이 지나는 홉을 코드에서 센다</summary>
+
+0.2초 예산이 어디에 걸리는지는 라우팅 정의에 그대로 적혀 있다. 파일 읽기라 과금이 없다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String -Pattern 'path|backend|service|404|default' `
+    -Path $HOME\skills-2026\task-3\k8s\20-ingress.yaml | Select-Object -First 14
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -nE 'path|backend|service|404|default' ~/skills-2026/task-3/k8s/20-ingress.yaml | head -14
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 경로별 백엔드와 **어디에도 안 맞을 때의 기본 동작**이 보인다. 정의되지 않은 경로에 404 를 내는 것이 이 한 곳에서 정해진다.
+
+경로 규칙은 대소문자를 구분한다. 앞단에서 소문자로 바꾸면 두 계층의 판정이 어긋난다 — 그래서 앞단에서 문자열을 함부로 변형하지 않는다.
+
+</details>
+
 ## 스케일 리드타임이 초반 가용성을 결정한다
 
 트래픽은 T+60분에 **스텝으로** 들어온다. 그 순간부터 새 파드가 트래픽을 받기까지의 사슬은 이렇다. 사슬이 타이머 몇 개의 합으로 결정된다는 일반 원리는 [autoscaling-basics 의 수렴 시간 절](/start/autoscaling-basics/#수렴-시간은-타이머-세-개의-합이다)에 있다.
@@ -252,6 +305,32 @@ HPA 한 장이다. CPU 이용률 75% 를 목표로 2에서 9 사이를 오간다
 
 노드를 미리 확보하는 사전 워밍은 비용 ratio를 올리므로 무료가 아니다. 채점 트래픽 개시 직전에만 워밍하고, 개시 후에는 오토스케일에 맡기는 것이 밴드 안에 머무는 방법이다.
 
+
+
+<details class="build-step">
+<summary>지금 확인하기 — 노드가 뜨는 데 걸리는 시간의 근거</summary>
+
+초반 가용성은 노드가 준비되는 속도가 정한다. 그 시간을 정하는 설정을 먼저 본다. 파일 읽기라 과금이 없다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String -Pattern 'consolidat|limits|instance-type|disruption|expireAfter' `
+    -Path $HOME\skills-2026\task-3\k8s\01-nodepool.yaml | Select-Object -First 12
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -nE 'consolidat|limits|instance-type|disruption|expireAfter' ~/skills-2026/task-3/k8s/01-nodepool.yaml | head -12
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 노드 상한과 회수 정책이 보인다. **회수를 빠르게 잡으면 비용이 줄고 초반 가용성이 위험해진다** — 두 채점 축이 같은 값 하나로 반대 방향으로 움직이는 자리다.
+
+이 값을 부하 중에 바꾸는 훈련이 [22. 부하 운영](/part-5/22-task3-tuning/lab/)의 노브 조정 드릴이다.
+
+</details>
 
 ## 자기 점검 퀴즈
 

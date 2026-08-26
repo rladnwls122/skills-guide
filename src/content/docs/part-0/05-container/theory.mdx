@@ -62,6 +62,34 @@ RUN go build -o app     <- 레이어 5: 빌드 결과
 
 **C 라이브러리.** `alpine` 은 다른 C 라이브러리를 쓴다. 일반 배포판에서 빌드한 바이너리를 그대로 넣으면 실행이 안 되는 경우가 있다. 3과제 배부물처럼 **이미 빌드된 바이너리**를 받는 경우 특히 조심한다 — 그 바이너리가 어디서 빌드됐는지가 과제지에 적혀 있다.
 
+<details class="build-step">
+<summary>지금 띄우기 — 레이어가 실제로 쌓여 있는지 보기</summary>
+
+공개 이미지 하나의 구성을 조회한다. **아무것도 만들지 않고 받지도 않는다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  # 이미지를 받은 적이 있다면 레이어 목록이 보인다
+  docker image inspect alpine:3.20 --format '{{len .RootFS.Layers}} layers' 2>/dev/null \
+    || echo "이미지가 없다 - 실습에서 빌드한 뒤 다시 본다"
+  ```
+  </TabItem>
+  <TabItem label="PowerShell">
+  ```powershell
+  # 대회 PC 에는 Docker 가 없다. 원리 확인은 CloudShell 에서 한다.
+  "이 블록은 CloudShell 탭에서 실행한다"
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 레이어 수가 하나 이상 나온다. **베이스 이미지 하나도 여러 층으로 되어 있다** — 그래서 여러 이미지가 같은 베이스를 쓰면 그 층을 공유해 디스크와 내려받는 시간을 아낀다.
+
+이미지가 없다는 메시지가 나오면 [05 실습](/part-0/05-container/lab/)을 먼저 한 뒤 돌아온다.
+
+</details>
+
+
 ## 4. 태그와 다이제스트
 
 이미지를 가리키는 방법이 둘이다.

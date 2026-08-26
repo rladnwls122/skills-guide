@@ -1,0 +1,564 @@
+---
+title: 10. k8s 워크로드와 ALB — 변동 이행 실습
+description: "set-02 워크로드를 set-07 의 internal ALB·Pod Identity 요구로 이행하고, 배포 뒤 오독 복구와 장애 진단까지 가는 실습."
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+원리와 채점 관점은 [10 이론 — k8s 워크로드와 ALB 연동](/part-2/10-k8s-workloads-alb/theory/)에 있다.
+
+**방식**: set-02 의 워크로드가 뜬 상태에서 시작한다. set-07 변동 과제지를 읽고 **절차 안내 없이 직접** 고친 뒤, 통과 기준으로 스스로 판정한다. 배포한 다음에는 값을 잘못 읽었을 때의 복구와 고장 진단까지 간다.
+
+이 모듈의 변동은 이름 바꾸기가 아니다. **로드밸런서를 지키는 방식 자체가 바뀐다.** 그 하나에서 매니페스트 여러 장과 Terraform 이 함께 딸려 온다.
+
+## 실습 목표
+
+- [ ] 앱 로드밸런서를 인터넷에서 못 닿게 하고, 그것이 리스너 규칙 구성까지 바꾼다는 것을 확인한다
+- [ ] Pod Identity 로 바뀌면서 직접 만들어야 하는 매니페스트를 찾아낸다
+- [ ] 네임스페이스 분리와 이름 체계를 반영한다 — 참조하는 자리가 전부 따라온다
+- [ ] `kubectl --dry-run=server` 로 적용 전에 판정한다
+- [ ] "직접 호출이 **되면** 감점"인 채점 항목을 이해하고 스스로 확인한다
+- [ ] 만들어 놓고 값을 잘못 읽었을 때, k8s 의 불변 필드와 AWS 의 불변 속성을 구분한다
+- [ ] 타깃이 unhealthy 하거나 파드가 이미지를 못 받을 때 계층을 좁혀 원인을 짚는다
+
+선행 지식과 목표는 [모듈 개요](/part-2/10-k8s-workloads-alb/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- helm values 키: `helm show values eks/aws-load-balancer-controller --version 3.4.0`, 브라우저는 [ArtifactHub](https://artifacthub.io/packages/helm/aws/aws-load-balancer-controller)
+- YAML·CRD 필드: `kubectl explain deployment.spec` · `kubectl explain serviceaccount` · `kubectl explain targetgroupbinding.spec` (CRD 정본은 [TargetGroupBinding 문서](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/targetgroupbinding/targetgroupbinding/))
+- Terraform 인자: [aws_lb](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb) · [aws_lb_listener_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_listener_rule)
+- CLI 출력 필드: `aws elbv2 describe-rules help` · `aws elbv2 describe-target-health help` · `aws eks list-pod-identity-associations help`
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
+## 0. 기준본 세우기
+
+[09 실습](/part-2/09-eksctl-cluster/lab/)의 클러스터가 떠 있어야 하고, 같은 문서의 `.env.ps1`(bash 는 `.env.sh`)이 있어야 한다. 이 실습이 쓰는 `VPC_ID`·`ECR`·`APP_TG`·`ALB_DNS` 가 전부 그 파일에서 온다.
+
+### PART-2 의 기준본은 파일이지 떠 있는 것이 아니다
+
+PART-1 은 매 모듈이 기준본을 **띄워 놓고** 시작했다. PART-2 는 다르다.
+
+04 를 이행까지 마쳤다면 지금 클러스터는 set-07 형태다 — 노드 라벨이 `unicorn` 이고 파드 자격증명이 Pod Identity 다. 여기에 set-02 워크로드를 그대로 올리면 **뜨지 않는다.** 노드 라벨이 안 맞아 `Pending` 이 되고, eksctl 이 IRSA 로 만들어 주던 서비스 계정도 이 클러스터엔 없다.
+
+클러스터를 기준본으로 되돌리는 데는 20분과 실비가 또 든다. 그래서 PART-2 에서는 **기준본을 "올려 둔 상태"가 아니라 "읽는 대상"으로 삼는다.**
+
+<Steps>
+
+1. **기준본은 [set-02 `k8s/`](https://github.com/ishs-cloud-computing/skills-2026/tree/main/set-02/task-1/k8s) 파일들이다.** 이것이 1절 표의 왼쪽 열이고, 2절에서 고칠 원본이다
+
+2. **클러스터에 실제로 올라가는 것은 5절의 이행본 하나뿐이다.** 6·7절의 복구와 진단도 그 위에서 한다
+
+</Steps>
+
+**이 차이가 훈련을 약하게 만들지는 않는다.** 대회 당일에도 앞 계층은 이미 자기 손으로 만든 상태이고, 새로 받는 것은 과제지와 바꿔야 할 파일이다.
+
+### 지금 클러스터가 이행을 받을 준비가 됐나 확인한다
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl get nodes -L unicorn
+  kubectl get ns
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl get nodes -L unicorn
+  kubectl get ns
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 노드 4개에 `UNICORN` 열이 `app` 2개와 `addon` 2개로 채워져 있다. 네임스페이스 목록에는 아직 `unicorn` 이 없다 — 이 실습이 만든다.
+
+`UNICORN` 열이 비어 있으면 04 의 이행을 안 마친 것이다. [09 실습 5절](/part-2/09-eksctl-cluster/lab/)로 돌아간다.
+
+### 이행할 사본을 뜬다
+
+정답지를 직접 고치지 않는다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Copy-Item -Recurse $HOME\skills-2026\set-02\task-1\k8s $HOME\set07-k8s
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  cp -r ~/skills-2026/set-02/task-1/k8s ~/set07-k8s
+  ```
+  </TabItem>
+</Tabs>
+
+AWS Load Balancer Controller 는 아직 안 깔았다면 지금 깐다. 절차는 [set-02 `task-1/README.md`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/README.md) 의 `4) AWS Load Balancer Controller` 인데, **`--set clusterName` 과 `--set nodeSelector` 는 지금 클러스터 값으로 바꿔 넣는다.** `serviceAccount` 관련 옵션도 이 클러스터가 Pod Identity 를 쓰므로 그대로일 수 없다 — 무엇을 바꿔야 하는지는 [10 이론 3절](/part-2/10-k8s-workloads-alb/theory/)의 확인 블록이 숫자로 보여 준다.
+
+:::danger[과금이 이어진다]
+04 의 클러스터와 01 의 NAT 게이트웨이가 계속 과금 중이다. 여기에 ALB 두 개가 더해진다. 6·7절이 배포된 상태를 전제하므로 이 실습은 배포까지 간다. 끝나면 8절 정리를 반드시 돌린다.
+:::
+
+## 1. 변동 과제지
+
+set-07 요구다. **정답 매니페스트를 먼저 열지 않는다.**
+
+| 항목 | set-02 (기준본) | set-07 (변동) |
+|---|---|---|
+| 앱 로드밸런서 | 인터넷에서 닿는다 | **인터넷에서 닿으면 안 된다** |
+| CDN → 로드밸런서 | 인터넷 경유 + 비밀 헤더 검증 | VPC 안에서 끝난다 |
+| 파드 자격증명 | OIDC 로 위임 | EKS 가 직접 중계 (04 와 짝) |
+| 네임스페이스 | `wskorea26` · `monitoring` | `unicorn` · `monitoring` · **`logging` 추가** |
+| 앱 이름 | `wskorea26-book-*` | `unicorn-book-app-*` |
+| 타깃그룹 이름 | `wskorea26-book-tg` | `unicorn-tg` |
+| 노드 라벨 | `node-type: app` | `unicorn: app` |
+| 이미지 태그 | `stable` | **`v1.0.0`** |
+| 블록 스토리지 | 없음 | EBS 볼륨을 쓰고 **플랫폼 CMK 로 암호화** |
+| Grafana 로드밸런서 | 인터넷 | 인터넷 (그대로) |
+
+이 표는 요구를 옮긴 것이지 고칠 자리를 알려 주는 것이 아니다.
+
+### 요구에서 파생되는 것
+
+**앱 로드밸런서를 인터넷에서 못 닿게 한다**는 요구가 이 모듈에서 가장 멀리 퍼진다. 그렇게 만들면 "CloudFront 를 거친 요청만 받는다"를 비밀 헤더로 증명할 이유가 사라진다. 헤더 검증 규칙과 기본 403 응답이 무엇을 위해 있었는지 되짚고, 그것이 아직 필요한지 판단한다. [10 이론 4절](/part-2/10-k8s-workloads-alb/theory/)이 두 방식을 대조한다.
+
+**파드 자격증명을 EKS 가 직접 중계**하게 하면 지금까지 없던 매니페스트가 하나 필요해진다. set-02 에서는 그 리소스를 eksctl 이 대신 만들어 줬는데, 방식이 바뀌면 그러지 않는다. `k8s/app/` 에 무엇이 빠져 있는지 찾는다.
+
+**EBS 볼륨을 플랫폼 CMK 로 암호화**하라는 요구도 새 매니페스트를 부른다. 볼륨마다 키를 적는 것이 아니라 볼륨을 만드는 방식을 한 번 선언하는 리소스가 있다.
+
+**Grafana 로드밸런서는 그대로 인터넷**이다. "전부 internal 로"가 아니라는 뜻이다. 요구가 어느 리소스에 걸린 것인지 정확히 읽는다.
+
+## 2. 이행 (타이머 30분)
+
+타이머를 걸고 시작한다. `~/set07-k8s` 를 고친다. 아래는 절차가 아니라 **스스로 답해야 할 질문 목록**이다.
+
+- 로드밸런서를 internal 로 만드는 것은 k8s 쪽인가 Terraform 쪽인가. `k8s/` 안에는 그 필드가 없다면 어디를 고쳐야 하나
+- internal 이 되면 리스너의 기본 액션 403 은 무엇을 막고 있었나. 남겨 두면 어떤 요청이 막히나
+- Pod Identity 로 바뀌면 `serviceAccountName` 이 가리키는 대상은 누가 만드나. `kubectl get sa -n unicorn` 이 비면 무엇이 빠진 것인가
+- 네임스페이스 이름을 바꾸면 따라오는 파일이 몇 개인가. Deployment·Service·PDB·TargetGroupBinding 의 `namespace` 말고 또 어디에 적혀 있나
+- Deployment 의 `spec.selector` 와 `template.metadata.labels` 는 왜 같은 값을 두 번 쓰나. 한쪽만 고치면 어떻게 되나
+- 이미지 태그를 고정하면 ECR 에 그 태그가 실제로 있어야 한다. 확인 명령은 무엇인가
+- EBS 볼륨 암호화를 한 번에 선언하는 리소스 종류의 이름은 무엇인가. 그 안에서 CMK 를 지정하는 필드는
+
+Terraform 쪽 변동은 `alb.tf` 다. 이 실습에서는 로드밸런서 관련 필드만 건드리고, 나머지는 그대로 둔다.
+
+## 3. 통과 기준
+
+배포 없이 판정되는 것만 여기 있다.
+
+<Steps>
+
+1. **옛 이름 잔존 0건**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'wskorea26|node-type' -Path $HOME\set07-k8s\*,$HOME\set07-k8s\*\*
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -rnE 'wskorea26|node-type' ~/set07-k8s
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **출력 없음.** Deployment 의 `selector` 안이 가장 자주 남는다 — 라벨 값을 `template` 쪽만 고치기 쉽다.
+
+2. **`${VAR}` 치환 누락 0건**
+
+   렌더한 뒤 검사한다. StorageClass 가 새로 생기면서 치환 변수도 하나 늘어난다.
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String '\$\{' -Path $HOME\set07-k8s\rendered\*,$HOME\set07-k8s\rendered\*\*
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -rn '\${' ~/set07-k8s/rendered
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **출력 없음.**
+
+3. **`--dry-run=server` 통과**
+
+   API 서버까지 보내되 저장하지 않는다. 필드 이름 오타와 참조 오류를 여기서 잡는다.
+
+   ```bash
+   kubectl apply --dry-run=server -R -f ~/set07-k8s/rendered
+   ```
+
+   기대: 매니페스트마다 `... created (server dry run)` 또는 `... unchanged (server dry run)`.
+
+   `namespaces "unicorn" not found` 가 나오면 네임스페이스를 먼저 실제로 적용해야 한다 — dry-run 은 없는 네임스페이스를 가정해 주지 않는다.
+
+</Steps>
+
+### set-07 채점 대응
+
+[set-07 `mark.sh`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/mark.sh) 의 `6-3-A` 와 `8-1-A`·`8-5-A` 가 이 모듈을 잰다.
+
+| 채점 | 보는 것 | 내 매니페스트의 어느 필드가 정하나 |
+|---|---|---|
+| 6-3-A | Deployment 의 ready·available 복제본 수 | |
+| 6-3-A | Service 타입 | |
+| 6-3-A | liveness·readiness 경로, 종료 유예, preStop | |
+| 6-3-A | 파드의 `nodeSelector` 값 | |
+| 6-3-A | 네임스페이스의 Pod Identity 연결 목록 | |
+| 8-1-A | 로드밸런서 `Scheme` · `Type` · `State` | |
+| 8-1-A | 타깃그룹 이름 | |
+| 8-5-A | 로드밸런서 DNS 로 직접 POST 한 결과 | |
+
+:::danger[8-5-A 는 감각이 뒤집히는 항목이다]
+다른 채점은 전부 "되는지"를 본다. `8-5-A` 는 **안 되는지**를 본다.
+
+스크립트가 로드밸런서 DNS 로 직접 POST 하고, `--max-time 10` 안에 응답이 없으면 `000` 을 찍는다. **응답이 오면 감점이다.** 200 이든 403 이든 마찬가지다 — 응답이 왔다는 것 자체가 인터넷에서 그 로드밸런서에 닿는다는 뜻이기 때문이다.
+
+set-02 에서 403 을 만들어 통과하던 습관이 그대로 남으면 여기서 틀린다.
+:::
+
+오른쪽 열을 직접 채우고 5절로 간다.
+
+## 4. 복기
+
+[set-07 `k8s/`](https://github.com/ishs-cloud-computing/skills-2026/tree/main/set-07/task-1/k8s)와 [set-07 `terraform/alb.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/terraform/alb.tf)를 대조한다. **3절을 통과한 뒤에 연다.**
+
+놓친 곳을 셋으로 나눈다.
+
+- **과제지를 못 읽은 것** — 요구가 있는 줄 몰랐다
+- **읽었는데 어디를 고칠지 못 찾은 것** — 특히 `k8s/` 에 없어서 Terraform 을 봐야 했던 것들
+- **찾았는데 틀린 것** — `--dry-run=server` 가 잡아 주는 종류였는지 확인한다
+
+**새로 만들어야 했던 파일을 빠뜨렸다면** 두 번째 갈래다. 기준본에 없는 것을 추가하는 요구가 가장 자주 새는 종류이므로, 다음엔 과제지를 읽을 때 "이건 지금 파일에 있나"를 항목마다 묻는다.
+
+## 5. 배포와 채점 확인
+
+Terraform 부터 올리고 k8s 를 올린다. 순서가 바뀌면 TargetGroupBinding 이 없는 타깃그룹을 가리킨다.
+
+<Steps>
+
+1. **Terraform** — `alb.tf` 변경을 적용한다.
+
+   ```bash
+   terraform plan
+   terraform apply
+   ```
+
+   `plan` 에서 `# forces replacement` 가 어디에 붙는지 먼저 읽는다. 6절이 이것을 다룬다.
+
+2. **k8s** — 네임스페이스부터 순서대로 적용한다.
+
+   ```bash
+   kubectl apply -R -f ~/set07-k8s/rendered
+   ```
+
+</Steps>
+
+### 채점 명령으로 확인
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $alb = aws elbv2 describe-load-balancers --names unicorn-alb `
+    --query "LoadBalancers[0].[Scheme,Type,State.Code]" --output text
+  $alb
+  $dns = aws elbv2 describe-load-balancers --names unicorn-alb `
+    --query "LoadBalancers[0].DNSName" --output text
+  curl.exe -s -o NUL -w "%{http_code}`n" --max-time 10 -X POST "http://$dns/v1/book" `
+    -H 'Content-Type: application/json' -d '{\"client_id\":\"DIRECT\"}'
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws elbv2 describe-load-balancers --names unicorn-alb \
+    --query "LoadBalancers[0].[Scheme,Type,State.Code]" --output text
+  dns=$(aws elbv2 describe-load-balancers --names unicorn-alb \
+    --query "LoadBalancers[0].DNSName" --output text)
+  curl -s -o /dev/null -w "%{http_code}\n" --max-time 10 -X POST "http://$dns/v1/book" \
+    -H 'Content-Type: application/json' -d '{"client_id":"DIRECT"}' || echo "000"
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 첫 명령이 `internal application active`. 둘째는 **응답이 없어 타임아웃**이고 `000` 이 찍힌다. `200` 이나 `403` 이 나오면 로드밸런서가 아직 인터넷에 열려 있는 것이다.
+
+파드 쪽도 확인한다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl get pod -n unicorn -o wide
+  aws eks list-pod-identity-associations --cluster-name unicorn-eks-cluster --namespace unicorn `
+    --query "associations[].serviceAccount" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl get pod -n unicorn -o wide
+  aws eks list-pod-identity-associations --cluster-name unicorn-eks-cluster --namespace unicorn \
+    --query "associations[].serviceAccount" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 파드 2개가 `Running` 이고 app 노드 위에 있다. 두 번째 명령이 앱 서비스 계정 이름을 낸다.
+
+## 6. 과제지 오독 복구
+
+이행을 마치고 배포까지 했는데 값이 다르다. 물어야 할 것은 같다 — **고쳐서 살리나, 부수고 다시 만드나.**
+
+이 모듈은 판정할 대상이 두 종류다. **쿠버네티스 리소스**는 필드가 불변인지로 갈리고, **AWS 리소스**는 `terraform plan` 의 `# forces replacement` 로 갈린다. 둘을 섞지 않는다.
+
+| 판정 | 무엇으로 아나 | 비용 |
+|---|---|---|
+| 즉시 수정 | `kubectl apply` 가 그냥 통과 / `plan` 이 `~ update in-place` | 초 |
+| 리소스 교체 | `kubectl apply` 가 `field is immutable` 로 거부 | 분 — 그 사이 타깃이 빈다 |
+| 재생성, 연쇄 딸림 | `plan` 에 `forces replacement` + 다른 리소스가 함께 `-/+` | 십분 |
+
+### 6-1. 이미지 태그를 기준본 그대로 뒀다
+
+**상황.** `${ECR}:stable` 로 배포했다. 과제지는 `v1.0.0` 을 요구한다.
+
+**판정.** 이미지는 언제든 바꿀 수 있는 필드다. 확인은 바꿔 보는 것이다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl set image deployment/unicorn-book-app-deploy book="$env:ECR`:v1.0.0" -n unicorn
+  kubectl rollout status deployment/unicorn-book-app-deploy -n unicorn
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl set image deployment/unicorn-book-app-deploy book="$ECR:v1.0.0" -n unicorn
+  kubectl rollout status deployment/unicorn-book-app-deploy -n unicorn
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 롤링 업데이트가 돌고 `successfully rolled out` 이 나온다. 파드가 한 번에 죽지 않으므로 서비스는 안 끊긴다.
+
+**교훈.** 가장 싼 축이다. 대회 중 이런 것은 뒤로 미뤄도 된다. 다만 **ECR 에 그 태그가 실제로 있어야 한다** — 없으면 7-2 의 증상이 그대로 나온다.
+
+### 6-2. Deployment 의 `selector` 를 기준본 라벨로 뒀다
+
+**상황.** `template.metadata.labels` 는 `unicorn-book-app` 으로 고쳤는데 `spec.selector.matchLabels` 는 `wskorea26-book` 으로 남았다. 3절 grep 을 건너뛰면 여기서 걸린다.
+
+**판정.** 고쳐서 다시 적용해 본다.
+
+```bash
+kubectl apply -f ~/set07-k8s/rendered/app/deployment.yaml
+```
+
+기대: **거부된다.** `field is immutable` 이 나온다. `spec.selector` 는 Deployment 가 자기 파드를 식별하는 기준이라 만든 뒤에는 못 바꾼다. 이것이 쿠버네티스의 `forces replacement` 다.
+
+**파급.** Deployment 를 지우면 파드가 사라지고, 파드가 사라지면 타깃그룹이 빈다. 그 사이 서비스가 끊긴다. Service·PDB·TargetGroupBinding 은 살아 있지만 가리킬 대상이 없다.
+
+**복구.** 지우고 다시 만든다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl delete deployment unicorn-book-app-deploy -n unicorn
+  kubectl apply -f $HOME\set07-k8s\rendered\app\deployment.yaml
+  kubectl rollout status deployment/unicorn-book-app-deploy -n unicorn
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl delete deployment unicorn-book-app-deploy -n unicorn
+  kubectl apply -f ~/set07-k8s/rendered/app/deployment.yaml
+  kubectl rollout status deployment/unicorn-book-app-deploy -n unicorn
+  ```
+  </TabItem>
+</Tabs>
+
+타깃이 다시 healthy 가 될 때까지 기다린 뒤 다음으로 간다.
+
+**교훈.** **쿠버네티스에도 불변 필드가 있다.** `spec.selector`, Service 의 `clusterIP`, 그리고 리소스의 `namespace` 와 `name` 이 그렇다. `kubectl apply` 가 조용히 통과할 것이라 가정하지 말고, 라벨을 바꿀 때는 `selector` 와 `labels` 를 **한 번에** 고친다.
+
+### 6-3. 로드밸런서를 인터넷에서 닿게 만들었다
+
+**상황.** `internal` 을 그대로 `false` 로 두고 apply 했다. 채점 `8-5-A` 가 `000` 대신 응답 코드를 받아 감점이다.
+
+**판정.** 고치고 `plan` 을 낸다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  terraform plan -no-color | Select-String -Pattern 'forces replacement|# aws_' | Select-Object -First 20
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform plan -no-color | grep -E 'forces replacement|# aws_' | head -20
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `internal` 줄 옆에 `# forces replacement` 가 붙는다. 로드밸런서의 스킴은 만든 뒤 못 바꾸는 속성이다.
+
+**파급.** 로드밸런서만 죽지 않는다. **DNS 이름이 새로 발급되므로** 그것을 가리키던 것이 전부 따라온다.
+
+- 리스너와 리스너 규칙 — 로드밸런서에 딸린 자식이라 함께 재생성된다
+- CloudFront 의 VPC Origin — 새 로드밸런서를 가리키도록 갱신된다
+- 타깃그룹은 살아남지만 **TargetGroupBinding 이 등록해 둔 파드 IP 가 새 로드밸런서에 붙을 때까지 시간이 걸린다**
+
+`plan` 출력에서 `-/+` 가 붙은 리소스를 전부 센다. 셋을 못 세면 apply 후에 CloudFront 가 옛 로드밸런서를 가리킨 채 남는다.
+
+**복구.** `terraform apply`. CloudFront 배포 전파까지 기다려야 하므로 앞의 둘과 비교가 안 되게 오래 걸린다.
+
+**교훈.** 06 실습의 VPC CIDR, 11 실습의 Secret 암호화 키와 같은 자리다. **네트워크 경계를 정하는 값은 만들기 전에 확정한다.** 이 모듈에서 그런 값은 로드밸런서의 스킴 하나다.
+
+## 7. 장애 진단
+
+정상으로 선 상태에서 일부러 고장을 내고 증상만 보고 좁혀 간다. **주입 명령과 복구 명령이 짝으로 있다.**
+
+### 7-1. 타깃이 전부 unhealthy 가 된다
+
+**주입.** 노드 보안 그룹에서 로드밸런서가 들어오던 길을 막는다. 두 SG 의 ID 는 앞 두 명령이 알려준다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws ec2 describe-security-groups --filters "Name=group-name,Values=*alb*" `
+    --query "SecurityGroups[].[GroupName,GroupId]" --output text
+  aws ec2 describe-security-groups --filters "Name=group-name,Values=*node*" `
+    --query "SecurityGroups[].[GroupName,GroupId]" --output text
+  aws ec2 revoke-security-group-ingress --group-id <node-sg-id> `
+    --protocol tcp --port 8080 --source-group <alb-sg-id>
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws ec2 describe-security-groups --filters "Name=group-name,Values=*alb*" \
+    --query "SecurityGroups[].[GroupName,GroupId]" --output text
+  aws ec2 describe-security-groups --filters "Name=group-name,Values=*node*" \
+    --query "SecurityGroups[].[GroupName,GroupId]" --output text
+  aws ec2 revoke-security-group-ingress --group-id <node-sg-id> \
+    --protocol tcp --port 8080 --source-group <alb-sg-id>
+  ```
+  </TabItem>
+</Tabs>
+
+**증상.** 잠시 뒤 타깃그룹의 모든 타깃이 `unhealthy` 로 떨어진다. CDN 을 통한 호출이 502 나 503 을 낸다. **파드는 `Running` 이고 `Ready` 다** — 클러스터 안에서는 아무 이상이 없다.
+
+**좁히는 순서.** 밖에서 안으로, 한 계층씩만 본다.
+
+<Steps>
+
+1. **타깃이 등록은 돼 있나** — `aws elbv2 describe-target-health --target-group-arn <arn>`. 타깃 목록이 비었으면 TargetGroupBinding 이나 LBC 문제이고, 등록은 됐는데 `unhealthy` 면 다음으로 간다. **이 갈림이 가장 중요하다**
+
+2. **이유가 뭐라고 적혀 있나** — 같은 출력의 `TargetHealth.Reason`. `Target.Timeout` 은 닿지 않는 것이고 `Target.ResponseCodeMismatch` 는 닿았는데 응답이 다른 것이다. **닿았는지 아닌지가 여기서 갈린다**
+
+3. **파드 자체는 건강한가** — `kubectl get pod -n unicorn`. `Ready` 가 `1/1` 이면 앱은 정상이다. 앱이 정상인데 밖에서 못 닿으면 원인은 그 사이의 네트워크다
+
+4. **클러스터 안에서는 닿나** — `kubectl exec -n unicorn <pod> -- wget -qO- localhost:8080/health`. 여기서 응답이 오면 앱은 확실히 정상이고, 남은 것은 보안 그룹과 라우팅이다
+
+5. **보안 그룹** — 노드 SG 의 인바운드에 로드밸런서 SG 를 출처로 하는 8080 규칙이 있는지 본다
+
+</Steps>
+
+`Target.Timeout` 을 보고 파드 로그부터 뒤지는 것이 가장 흔한 시간 낭비다. **타임아웃은 요청이 도착조차 못 했다는 뜻이라 앱 로그에 아무것도 없는 것이 정상이다.**
+
+**복구.** 코드가 실제 상태와의 차이를 메운다.
+
+```bash
+terraform plan
+terraform apply
+```
+
+기대: `plan` 이 지운 보안 그룹 규칙 하나를 `+ create` 로 잡는다. 콘솔이나 CLI 로 고친 것을 코드가 되돌리는 이 동작이 drift 복구다 — [06 실습 7-1](/part-1/06-terraform-vpc/lab/)과 같은 구조다.
+
+증상별 처방 목록은 [트러블슈팅](/reference/troubleshooting/)에 있다.
+
+### 7-2. 새 파드가 이미지를 못 받는다
+
+**주입.** 없는 태그로 롤아웃을 건다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl set image deployment/unicorn-book-app-deploy book="$env:ECR`:nosuchtag" -n unicorn
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl set image deployment/unicorn-book-app-deploy book="$ECR:nosuchtag" -n unicorn
+  ```
+  </TabItem>
+</Tabs>
+
+**증상.** 새 파드가 `ImagePullBackOff` 에 머물고 롤아웃이 진행되지 않는다. **그런데 서비스는 멀쩡하다** — 롤링 업데이트가 옛 파드를 먼저 죽이지 않기 때문이다. 화면상 아무 일도 안 일어나서 놓치기 쉬운 고장이다.
+
+**좁히는 순서.**
+
+<Steps>
+
+1. **롤아웃이 왜 멈췄나** — `kubectl rollout status deployment/unicorn-book-app-deploy -n unicorn`. 진행이 멈춘 채 기다린다
+
+2. **파드에게 묻는다** — `kubectl describe pod -n unicorn <새 파드>`. `Events` 의 `Failed to pull image` 줄에 **시도한 이미지 문자열이 그대로 찍힌다.** 오타인지 여기서 바로 보인다
+
+3. **그 태그가 ECR 에 있나** — `aws ecr describe-images --repository-name <repo> --query "imageDetails[].imageTags[]"`. 없으면 원인은 태그이고, 있으면 다음으로 간다
+
+4. **노드가 ECR 에 닿나** — 이미지가 존재하는데 못 받으면 경로 문제다. `ecr.api`·`ecr.dkr` VPC Endpoint 와 프라이빗 라우팅을 본다. [06 실습](/part-1/06-terraform-vpc/lab/)이 놓은 것들이다
+
+</Steps>
+
+이 순서의 요점은 **2번에서 대부분 끝난다**는 것이다. 이벤트에 찍힌 문자열을 읽지 않고 네트워크부터 의심하면 오래 걸린다.
+
+**복구.** 직전 리비전으로 되돌린다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl rollout undo deployment/unicorn-book-app-deploy -n unicorn
+  kubectl rollout status deployment/unicorn-book-app-deploy -n unicorn
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl rollout undo deployment/unicorn-book-app-deploy -n unicorn
+  kubectl rollout status deployment/unicorn-book-app-deploy -n unicorn
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `successfully rolled out`. 실패한 새 파드가 사라지고 옛 파드가 그대로 남는다.
+
+**교훈.** 롤링 업데이트는 **실패해도 서비스를 안 끊는다.** 그래서 조용히 실패한다. 배포한 뒤에는 "에러가 안 났다"가 아니라 `rollout status` 로 **끝났는지**를 확인한다.
+
+## 8. 정리
+
+:::caution[06 으로 바로 이어 간다면]
+클러스터와 워크로드를 남긴다. [11 관측성](/part-2/11-observability/lab/)이 이 상태를 그대로 쓴다. 이어 가지 않으면 아래를 돌린다.
+:::
+
+k8s 리소스를 먼저 지우고 Terraform 을 지운다. 순서가 반대면 TargetGroupBinding 이 없어진 타깃그룹을 붙들고 오래 남는다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl delete -R -f $HOME\set07-k8s\rendered
+  kubectl get all -n unicorn
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl delete -R -f ~/set07-k8s/rendered
+  kubectl get all -n unicorn
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 두 번째 명령이 `No resources found`.
+
+클러스터 정리는 [09 실습 8절](/part-2/09-eksctl-cluster/lab/)에, 로드밸런서를 포함한 Terraform 리소스는 `terraform destroy` 로 지운다. 코드는 `~/set07-k8s` 에 남으므로 다음 날 다시 적용하면 된다.
+
+막히면 [트러블슈팅](/reference/troubleshooting/), 계정 전체 점검은 [잔존 리소스 점검](/reference/cleanup-check/)이다.

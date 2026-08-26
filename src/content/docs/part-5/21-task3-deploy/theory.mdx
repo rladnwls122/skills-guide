@@ -1,0 +1,318 @@
+---
+title: 21. 이론 — 무엇으로 채점되고 무엇을 세우는가
+description: 결과 로그의 네 비율이 점수라는 채점 구조, 배포 시점에 이미 확정되는 제약, 응답 시간 예산이 걸리는 경로와 스케일 리드타임.
+sidebar:
+  order: 2
+---
+
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+
+> 문서 유형: explanation
+
+선행 지식과 학습 경로는 [모듈 개요](/part-5/21-task3-deploy/)에.
+
+1·2과제는 리소스의 존재와 이름을 검사한다. 3과제는 리소스를 보지 않고 부하 주입 인스턴스의 `results_<비번호>.log` 안의 **네 비율**만 읽는다 — 채점 방식 자체가 다르다. 그래서 "배포가 끝났다"는 0점에서 출발한다는 뜻이고, 점수는 트래픽 2시간 동안의 운영이 만든다.
+
+:::caution[이 문서의 수치는 예상 풀이 기준이다]
+3과제 공식 과제지·채점지는 아직 공개되지 않았다. 이 문서의 4축 배점·SLO 정확값·계단 비율·비용 ratio 구간은 `task-3` 예상 풀이(파일명 그대로 `task-sample.md`·`mark-sample.md`)에서 가져온 예측이며 실제 대회에서 달라질 수 있다. 총점 40점은 1·2과제 각 30점·전체 100점에서 역산되므로 비교적 안정적이지만, 그 **안의 구성은 예상**이다.
+
+반대로 이 문서가 가르치는 **튜닝 방법론** — SLO로 HPA를 역산하는 사고, CPU limit을 제거하는 판단, RDS Proxy 풀링·인덱스 설계, 비용을 성능의 게이트로 다루는 사고 — 는 정확한 배점이 달라져도 유효하다.
+:::
+
+## 채점 4축의 구조
+
+| 축 | 배점 | 측정값 | 임계 |
+|---|---|---|---|
+| 비정상 요청 처리 | 4 | image download 비율, Exception Handling 비율 | 50 / 80 / 85 / 90% |
+| 고가용성 및 안정성 | 12 | 앱 3종 availability | 30 / 50 / 70 / 80 / 82.5 / 85 / 87.5 / 90% |
+| 성능 효율성 | 12 | user·product ≤ 0.2s 비율, stress ≤ 1.0s 비율 | 위와 동일 8단계 |
+| 비용 최적화 | 12 | 인스턴스 비용 ratio | 0.5 이상 1.00~3.75 이하 12단계 |
+
+*(배점·임계값은 예상 채점지 `mark-sample.md`를 그대로 옮겼다 — 위 캐션 참고.)*
+
+세 가지 구조적 사실이 전략을 결정한다.
+
+**① 계단식이라 부분 점수가 크다.** 30%만 넘겨도 축마다 득점이 시작된다. 목표 0.2초를 못 맞춰도 절반은 건진다. 부하 중 스택을 통째로 교체하는 것보다 지금 비율을 한 계단 올리는 조정이 항상 낫다.
+
+**② 비용 축은 성능 축의 종속 항목이다.** 비용 12점의 각 항목은 ratio 범위와 함께 user·product·stress **performance가 모두 30% 이상**일 것을 요구한다. 성능이 무너지면 비용 12점도 같이 사라진다. 그러므로 절약이 성능을 깎는 지점에서는 절약을 멈춘다.
+
+**③ 하한 0.5가 있다.** ratio가 낮을수록 좋은 것이 아니다. 리소스를 지나치게 줄이면 하한 아래로 떨어져 12점 전체가 0이 된다. 목표는 최소가 아니라 **밴드 안**이다.
+
+:::danger[사전준비 조항(예상) — 배포 시점에 이미 확정된다]
+계단식 채점보다 사전준비 조항이 더 무겁다.
+
+- 엔드포인트가 선수 시스템이 아니면 **전 항목 0점**
+- DB 타입·대수가 과제지와 다르면 **성능·비용 24점이 0점**
+- **컴퓨팅은 EC2 인스턴스만.** 샘플 과제지 유의사항 15는 "어떠한 목적으로든 Fargate 와 Lambda 를 사용할 수 없다"고 못박는다. 편의를 위한 한 번의 Lambda 도 예외가 아니다
+- **인스턴스 타입은 `t3.medium` 만.** 다른 타입을 섞거나 과도하게 띄우면 감점이다. 컨테이너 오케스트레이션도 EKS 고정이고 ECS 는 쓸 수 없다
+- **불필요한 리소스는 그 자체가 감점**이다 — 미사용 EC2, 추가 VPC, 다른 리전에 남긴 리소스. 작업용 bastion 도 EC2 수에 든다
+
+전부 트래픽 전에 검증한다. 앞의 셋은 배포 시점에 이미 확정되고, 뒤의 둘은 경기 내내 주기적으로 측정된다.
+:::
+
+## 심사위원이 제시한 3축 — 프로비저닝·요청 처리·비용
+
+채점지의 4축은 결과 로그가 남긴 비율이다. 심사위원 세션(2026-05-19)은 그 앞단에서 선수가 신경 쓸 것을 셋으로 정리했다. 같은 시스템을 결과가 아니라 **행동** 쪽에서 본 분해다.
+
+| 축 | 완료·판정 기준 | 4축의 어디로 나오나 |
+|---|---|---|
+| 프로비저닝 | 명시된 인프라를 세운 뒤 테스트 API 호출에 성공 응답이 오는 것 | 사전준비 조항 — 못 넘기면 전 항목 0 |
+| 요청 처리 | 응답 코드가 예상값(200 등)이고 제한 시간 안에 도착하는 것 | 가용성 12 + 성능 12 |
+| 비용 | 인스턴스 개수. bastion을 포함한 모든 EC2가 들어간다 | 비용 12 |
+
+3과제는 1·2과제처럼 요구사항대로 만들고 구현 여부를 확인하는 형태가 아니다. **당일 제공되는 애플리케이션을 분석해 정상 구동하고, 로그·메트릭·동작 방식을 읽어 효율적이고 안정적으로 운영하는 것**이 과제의 핵심이라고 협의회가 명시했다. 취약점도 특정 계층에 고정돼 있지 않다 — 시스템의 모든 구성 요소에서 나올 수 있고, 채점 플랫폼이 주는 로그와 정보로 식별해 대응한다.
+
+### 상태 판단은 USE·RED로 한다
+
+노브를 만지기 전에 지금 상태를 읽어야 한다. 심사위원 세션이 지목한 두 패턴이 그 언어다 — 하나는 자원을, 하나는 요청을 본다.
+
+| 패턴 | 축 | 보는 값 |
+|---|---|---|
+| USE | 자원 | Utilization(사용률) · Saturation(대기·큐 포화) · Errors(자원 단의 오류) |
+| RED | 요청 | Rate(초당 요청 수) · Errors(오류율) · Duration(지연 분포) |
+
+둘을 함께 봐야 조치가 갈린다. RED의 Duration이 늘었는데 USE의 Utilization이 낮으면 파드가 놀면서 무언가를 기다리는 상태다 — 커넥션 풀 포화나 DB 대기(Saturation)이므로 노드를 늘려도 낫지 않는다. 반대로 Utilization이 천장에 붙어 있고 Duration이 함께 오르면 scale-out이 맞는 조치다. **RED로 증상을 보고 USE로 원인 계층을 좁힌다** — 부하 중 30초 감시 루프가 그대로 이 순서다.
+
+## 그 값을 어디서 보는가 — Container Insights :badge[강의]{variant=tip}
+
+USE·RED를 읽으려면 지표와 로그가 먼저 모여 있어야 한다. EKS에서 그 수집기를 한 번에 세우는 것이 **CloudWatch Observability 추가 기능**이다. 설치하면 데몬셋 두 개가 모든 노드에 뜬다.
+
+| 데몬셋 | 수집 대상 | USE·RED의 어디 |
+|---|---|---|
+| CloudWatch Agent | CPU·메모리·네트워크·디스크 지표 | USE — Utilization·Saturation |
+| Fluent Bit | 컨테이너 stdout 로그, 데이터플레인 로그, 호스트 로그 | RED — Rate·Errors (로그에서 센다) |
+
+콘솔에서는 클러스터·노드·파드·컨테이너 네 단위로 사용률이 갈라져 보인다. 3과제에서 이 화면이 필요한 이유는 채점이 클라이언트 도착 기준 응답시간을 보기 때문이다 — 지연이 어느 계층에서 붙었는지는 이 지표 없이는 추측이 된다.
+
+:::caution[사용률이 비어 있으면 requests·limits 를 먼저 본다]
+Container Insights의 **사용률(%)** 은 사용량을 requests·limits로 나눠 계산한다. 파드에 두 값이 선언돼 있지 않으면 절대 사용량만 나오고 사용률 패널은 비어 있다. 대시보드가 비었을 때 수집기부터 의심하기 전에 매니페스트의 `resources` 를 먼저 확인한다.
+:::
+
+```mermaid
+flowchart LR
+    POD@{ icon: "k8s:pod", form: "square", label: "앱 파드<br/>stdout 로그", pos: "b", h: 46, w: 46 }
+    NODE@{ icon: "logos:aws-ec2", form: "square", label: "노드<br/>cgroup·kubelet 지표", pos: "b", h: 46, w: 46 }
+    AG["CloudWatch Agent<br/>DaemonSet"]
+    FB@{ icon: "simple-icons:fluentbit", form: "square", label: "Fluent Bit<br/>DaemonSet", pos: "b", h: 46, w: 46 }
+    CW@{ icon: "logos:aws-cloudwatch", form: "square", label: "CloudWatch<br/>Container Insights", pos: "b", h: 46, w: 46 }
+    IAM@{ icon: "logos:aws-iam", form: "square", label: "노드·에이전트 역할<br/>CloudWatchAgentServerPolicy", pos: "b", h: 46, w: 46 }
+
+    NODE --> AG --> CW
+    POD --> FB --> CW
+    IAM -.->|권한이 없으면 여기서 끊긴다| CW
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+추가 기능이 세우는 두 갈래다. 위쪽은 노드의 자원 지표를 CloudWatch Agent 가 모아 보내고, 아래쪽은 파드 로그를 Fluent Bit 이 보낸다. 점선은 실패 지점이다 — 수집은 정상인데 전송 권한이 없으면 콘솔에 아무것도 뜨지 않는다. 그래서 화면이 비었을 때 첫 확인은 데몬셋 파드의 로그다.
+
+</details>
+
+## 추적 계층 — Application Signals 와 X-Ray :badge[강의]{variant=tip}
+
+지표는 "얼마나 썼는가"를, 로그는 "무슨 일이 있었는가"를 말한다. 요청 하나가 **어느 구간에서 늦었는가**는 둘 다 답하지 못한다. 그 자리를 채우는 도구가 둘이다.
+
+| | Application Signals(APM) | X-Ray |
+|---|---|---|
+| 보는 것 | 서비스 단위 응답시간·에러율·요청 수 | 요청 하나의 구간별 지연 — ALB → 파드 → DB |
+| 붙이는 법 | 자동 계측 — 언어 런타임에 에이전트를 얹는다 | SDK로 코드에 세그먼트를 남긴다 |
+| 지원 언어 | Java · Python · Node.js | 위 셋 + Go(SDK 직접) |
+
+:::danger[Go 앱은 자동 계측이 없다]
+3과제가 제공하는 앱 바이너리는 Go로 빌드된 경우가 많고, **Application Signals는 Go를 자동 계측하지 못한다.** 제공 바이너리는 수정 금지이므로 코드에 SDK를 넣는 경로도 막힌다.
+
+그래서 Go 앱의 구간별 지연은 앱 바깥에서 재야 한다 — ALB의 `TargetResponseTime`, RDS Proxy의 `DatabaseConnectionsBorrowLatency`, 그리고 k6가 재는 클라이언트 도착 시간의 차이를 빼서 어느 홉이 먹었는지 좁힌다. 앱을 고칠 수 있는 조건(추가 문항으로 직접 개발한 Lambda 등)에서만 X-Ray SDK가 선택지가 된다.
+:::
+
+## 응답시간은 클라이언트 도착 기준이다
+
+과제지는 "채점 시 사용되는 응답시간 및 코드는 모두 클라이언트 도착 기준"이라고 못박는다. 즉 0.2초 안에 **CloudFront → WAF 평가 → ALB → 파드 → RDS Proxy → RDS** 왕복이 전부 들어간다. 앱 내부 처리 시간만 보고 안심하면 안 된다. 홉마다 붙는 지연이 예산을 먹으므로, 예산을 태우는 큰 덩어리 세 개(DB 풀스캔, CPU 스로틀링, 스케일 지연)를 먼저 없앤다.
+
+```mermaid
+flowchart LR
+    U["사용자"]
+    CF@{ icon: "logos:aws-cloudfront", form: "square", label: "CloudFront<br/>단일 엔드포인트", pos: "b", h: 46, w: 46 }
+    WAF@{ icon: "logos:aws-waf", form: "square", label: "WAF<br/>SQLi·KnownBadInputs", pos: "b", h: 46, w: 46 }
+    BLK["403<br/>(비정상 요청)"]
+    IMG{"/images/*?"}
+    S3@{ icon: "logos:aws-s3", form: "square", label: "S3(OAC)<br/>CachingOptimized", pos: "b", h: 46, w: 46 }
+    ALB@{ icon: "logos:aws-elb", form: "square", label: "ALB<br/>internet-facing", pos: "b", h: 46, w: 46 }
+    API{"정의된 /v1/* 경로?"}
+    NF["404<br/>(리스너 기본 액션)"]
+    TG@{ icon: "logos:aws-elb", form: "square", label: "타깃그룹<br/>user·product·stress", pos: "b", h: 46, w: 46 }
+    POD@{ icon: "k8s:pod", form: "square", label: "파드<br/>CachingDisabled", pos: "b", h: 46, w: 46 }
+    PRX@{ icon: "logos:aws-rds", form: "square", label: "RDS Proxy<br/>커넥션 멀티플렉싱", pos: "b", h: 46, w: 46 }
+    RDS@{ icon: "logos:aws-rds", form: "square", label: "RDS<br/>db.t3.micro Multi-AZ", pos: "b", h: 46, w: 46 }
+
+    U --> CF --> WAF
+    WAF -->|비정상 요청| BLK
+    WAF --> IMG
+    IMG -->|"예 · strip 후"| S3
+    IMG -->|아니오| ALB --> API
+    API -->|아니오| NF
+    API -->|예| TG --> POD
+    POD -->|"user·product만"| PRX --> RDS
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+요청이 갈라지는 지점을 순서대로 그렸다. WAF 가 먼저 비정상 요청을 403 으로 끊고, 그다음 경로가 `/images/*` 면 S3 로 가 캐시된다. 나머지는 ALB 로 가는데 정의되지 않은 경로는 리스너 기본 액션의 404 로 끝난다. 실제 API 만 파드에 닿고, 그중 사용자·상품 조회만 RDS Proxy 를 거쳐 DB 로 간다. 어느 계층이 어떤 응답을 내는지가 곧 채점의 응답 코드 항목이다.
+
+</details>
+
+0.2초 예산은 이 경로 전체에 걸린다 — CloudFront에서 RDS까지 홉마다 지연이 쌓인다. 같은 진입점 위에서 403은 WAF가, 404는 ALB 리스너 기본 액션이 낸다.
+
+## 스케일 리드타임이 초반 가용성을 결정한다
+
+트래픽은 T+60분에 **스텝으로** 들어온다. 그 순간부터 새 파드가 트래픽을 받기까지의 사슬은 이렇다. 사슬이 타이머 몇 개의 합으로 결정된다는 일반 원리는 [autoscaling-basics 의 수렴 시간 절](/start/autoscaling-basics/#수렴-시간은-타이머-세-개의-합이다)에 있다.
+
+1. metrics-server 스크레이프 + HPA 평가 주기 — 두 주기가 직렬로 쌓인다. metrics-server `--metric-resolution` 은 기본 60초이고 흔히 15초로 낮춰 쓰는데, 15초로 낮춰도 메트릭 노후 + HPA 싱크(15초)로 **최악 약 30초**다
+2. 파드 스케줄·기동 — 약 10초 (이미지가 노드에 캐시된 경우)
+3. 노드가 부족하면 Karpenter 노드 프로비저닝 — 부팅 약 20초, 등록·Ready까지 약 2분
+4. TargetGroupBinding 등록 + 헬스체크 통과 — `interval 10s × healthy_threshold 2` ≈ 20~30초
+
+```mermaid
+flowchart TD
+    T["T+60분 스텝 트래픽"]
+    LIVE@{ icon: "k8s:pod", form: "square", label: "이미 떠 있는 파드<br/>minReplicas 2", pos: "b", h: 46, w: 46 }
+    MS["metrics-server 스크레이프<br/>+ HPA 평가 (최대 ~30s)"]
+    HPACHECK{"이용률 > 목표 75%?"}
+    SCALE@{ icon: "k8s:deploy", form: "square", label: "신규 파드<br/>scaleUp 창 0 · 15s당 100%/4파드", pos: "b", h: 46, w: 46 }
+    ROOM{"노드에 스케줄 자리<br/>있음?"}
+    PEND["Pending"]
+    KARP@{ icon: "k8s:karpenter", form: "square", label: "Karpenter<br/>NodePool default", pos: "b", h: 46, w: 46 }
+    NODE@{ icon: "logos:aws-ec2", form: "square", label: "신규 t3.medium<br/>부팅 ~20s + Ready ~2분", pos: "b", h: 46, w: 46 }
+    TGB["TGB 등록 + 헬스체크<br/>10s × 2회 통과"]
+    SERVE["트래픽 수신"]
+
+    T --> LIVE --> SERVE
+    T --> MS --> HPACHECK
+    HPACHECK -->|예| SCALE --> ROOM
+    ROOM -->|예| TGB --> SERVE
+    ROOM -->|아니오| PEND --> KARP --> NODE --> TGB
+    NODE -.->|"consolidateAfter 30s<br/>유휴·저활용 시 회수"| KARP
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+트래픽이 늘 때 걸리는 시간을 단계별로 분해했다. 이미 떠 있는 파드는 즉시 받지만, 새 파드는 메트릭 수집과 HPA 평가에 최대 30초, 스케줄될 자리가 없으면 노드 부팅에 2분 남짓, 그다음 타깃 등록과 헬스체크 2회 통과가 더 걸린다. 그래서 미리 떠 있는 최소 replicas 와 노드 워밍업이 응답 시간을 좌우한다. 점선은 반대 방향으로, 유휴 노드는 30초 뒤 회수된다.
+
+</details>
+
+낙관적으로 40초, 노드가 새로 필요하면 2~3분이다. **그 시간의 트래픽은 이미 떠 있는 파드로 받는다.** 그래서 `minReplicas`를 2로 두고, HPA `scaleUp.stabilizationWindowSeconds: 0`에 15초당 100%·4파드 정책을 건다. 반대로 `scaleDown`은 120초 안정창을 둔다 — 스파이크 사이 골짜기마다 파드를 버리면 다음 파도에서 같은 사슬을 다시 탄다.
+
+```yaml
+# k8s/10-user.yaml 발췌 — product·stress도 동일 behavior
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: user
+spec:
+  minReplicas: 2
+  maxReplicas: 9
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+  behavior:
+    # 스케일아웃은 기본값 그대로가 이미 가장 빠르다 — 의도를 드러내려고 명시만 한다
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+    # 스파이크 종료 후 빠른 회수로 비용 ratio를 낮춘다
+    scaleDown:
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 30
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+HPA 한 장이다. CPU 이용률 75% 를 목표로 2에서 9 사이를 오간다. `behavior.scaleUp` 은 기본값과 같은 값을 일부러 적어 둔 것이다 — 안정화 창 0초에 15초마다 100% 또는 4파드 중 큰 쪽으로 늘린다. 이용률의 분모가 `requests` 이므로 그 값을 크게 잡으면 같은 부하에서도 스케일이 늦게 걸린다.
+
+</details>
+
+이 매니페스트에서 기본값과 다른 것은 `scaleDown` 쪽뿐이다 — 안정화 창 300→120초, 축소 정책 `Percent 100/15s`→`Percent 50/30s`. `scaleUp` 블록은 쿠버네티스 기본값과 같은 값이라 생략해도 동작이 같다. 스케일아웃을 "더 공격적으로" 만들 여지는 애초에 없다는 뜻이다.
+
+노드를 미리 확보하는 사전 워밍은 비용 ratio를 올리므로 무료가 아니다. 채점 트래픽 개시 직전에만 워밍하고, 개시 후에는 오토스케일에 맡기는 것이 밴드 안에 머무는 방법이다.
+
+
+## 자기 점검 퀴즈
+
+<Quiz title="성능 축이 무너질 때의 실제 손실">
+user·product·stress 중 하나라도 performance가 30% 아래로 떨어졌다. 잃는 점수는?
+
+- [x] 24점 — 성능 12점 + 비용 12점
+- [ ] 12점 — 성능 축만 잃고 비용 축은 ratio로 독립 채점된다
+  > 비용 축이 독립이라는 것이 가장 비싼 오해다. 비용 12점의 **각 항목**이 3개 앱 performance ≥ 30%를 동시에 요구한다.
+- [ ] 28점 — 성능 12점 + 비용 12점 + 고가용성 4점
+- [ ] 0점 — 계단식 채점이라 30% 아래에도 부분 점수가 남는다
+  > 계단식은 30% 이상 구간의 이야기다. 30%가 첫 계단이므로 그 아래는 득점이 시작되지 않는다.
+
+**24점.** 성능 12점을 잃고, 비용 12점의 모든 항목이 3개 앱 performance ≥ 30%를 동시 요구하므로 비용도 함께 0이 된다. 그래서 **절약이 성능을 깎는 지점에서는 절약을 멈춘다** — 비용 축은 성능 축의 종속 항목이다.
+</Quiz>
+
+<Quiz title="비용 ratio 밴드">
+비용 ratio는 하한 [[0.5]] 이상, 1.00~3.75 이하의 12단계로 채점된다. 목표는 최소가 아니라 밴드 안이다.
+
+---
+
+**ratio는 낮을수록 좋은 것이 아니다.** 하한 0.5 아래로 내려가면 비용 12점이 통째로 0이고, 거기까지 리소스를 줄인 상태면 성능·가용성도 같이 끌려 내려간다 — 24점짜리 동반 하락이다.
+
+인스턴스 타입이 t3.medium으로 고정돼 있으므로 ratio를 움직이는 변수는 **노드 수 × 시간**뿐이다. 밴드 안에 머무는 구조는 세 층이다.
+
+- HPA 목표 이용률 75%
+- NodePool `limits.cpu` — 3앱 × 9파드 × 600m ≈ 16.2 vCPU 를 수용하는 t3.medium 9대 = 18 vCPU
+- Karpenter consolidation 30초
+</Quiz>
+
+<Quiz title="T+60분 스텝 트래픽의 첫 40초">
+트래픽이 T+60분에 스텝으로 들어온다. 그 직후 40초~3분 구간을 실제로 버티는 것과, 그것을 결정하는 설정을 모두 고르라.
+
+- [x] 이미 떠 있는 파드 — `minReplicas: 2`
+- [x] HPA `behavior.scaleUp` — `stabilizationWindowSeconds: 0` + 15초당 100%·4파드
+- [ ] Karpenter의 노드 프로비저닝 속도
+  > 사슬에서 가장 느린 구간이다. 부팅 약 20초, 등록·Ready까지 약 2분 — 초반을 버티는 주체가 될 수 없다. 그 시간을 버텨주는 게 이미 떠 있는 파드다.
+- [ ] ALB `slow_start` 로 신규 타깃을 서서히 워밍한다
+  > 켜지 않는다. 스케일아웃 직후 신규 파드로 트래픽이 늦게 가면 그동안 기존 파드가 포화된다 — 기본값 0을 유지한다.
+
+**이미 떠 있는 파드가 버틴다.** 스케일 사슬은 HPA 평가 최대 15초 → 파드 기동 약 10초 → (노드 부족 시) Karpenter 부팅 20초 + Ready 2분 → TG 등록·헬스체크 20~30초. 낙관적으로 40초, 노드가 새로 필요하면 2~3분이다.
+
+그래서 `minReplicas: 2`로 바닥을 깔고 `scaleUp`은 안정창 0으로 즉시 튀게 한다. 반대로 `scaleDown`은 120초 안정창을 둔다 — 스파이크 사이 골짜기마다 파드를 버리면 다음 파도에서 같은 사슬을 처음부터 다시 탄다.
+</Quiz>
+
+<Quiz title="이 문서의 수치를 대하는 법">
+3과제 채점 배점·SLO 수치를 실제 대회에서 어느 정도까지 믿어도 되나?
+
+- [x] 총점 40점은 1·2과제 각 30점·전체 100점에서 역산돼 비교적 안정적이지만, 4축 배점·계단 비율·SLO 정확값(0.2초 등)·비용 ratio 구간은 예상 풀이의 예측이라 실제와 다를 수 있다 — 반면 SLO로 HPA를 역산하는 사고 같은 튜닝 방법론은 배점이 달라져도 유효하다
+- [ ] 예상 풀이(`task-3`)가 실측 코드로 구현돼 있으므로 모든 수치를 확정 사실로 취급해도 된다
+  > 실측 코드라는 것과 공식 과제지·채점지라는 것은 다르다. `task-3`는 공식 자료가 아직 없는 상태에서 만든 예상 풀이(`task-sample.md`·`mark-sample.md`)다.
+- [ ] 총점 40점을 포함해 이 문서의 모든 숫자는 실제 대회와 무관하므로 무시해도 된다
+  > 40점은 1·2과제 각 30점·전체 100점에서 역산되므로 다른 수치보다 신뢰도가 높다. "전부 예측이니 전부 무시"는 과도한 결론이다.
+- [ ] SLO 수치가 예상이라는 것은 CPU limit 제거·인덱스 설계 같은 튜닝 판단도 실제 대회에서는 소용없다는 뜻이다
+  > 배점·SLO 정확값과 튜닝 방법론은 다른 층위다. CFS 스로틀링이 p99를 깎는다는 사실, email 인덱스가 없으면 풀스캔이라는 사실은 과제가 달라져도 그대로 유효하다.
+
+배점 구조와 튜닝 방법론을 같은 확신 수준으로 취급하지 않는 것이 이 문서를 읽는 법이다. 숫자(40점의 내부 구성·SLO 정확값·비용 ratio 밴드)는 예상 풀이의 예측이고, 원리(SLO 예산 역산·CPU limit 제거·RDS Proxy 풀링·인덱스 설계·비용을 성능의 게이트로 보는 사고)는 과제가 30% 변형되어도 그대로 옮겨 쓸 수 있다.
+</Quiz>
+
+<QuizResults confetti />
+
+## 다음
+
+부하가 시작된 뒤의 판단 — `requests` 와 `limits`, 데이터 계층, 엣지 캐시, 방화벽 규칙, 비용 밴드 — 는 [22. 부하 운영과 튜닝 이론](/part-5/22-task3-tuning/theory/)에서 이어 간다.

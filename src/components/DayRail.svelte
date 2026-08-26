@@ -39,7 +39,7 @@
 			part: 'PART 1',
 			day: 'Week 2',
 			from: 2,
-			days: 5,
+			days: 3,
 			title: 'Foundation · IaC',
 			body: 'Terraform 으로 VPC·KMS·S3/CloudFront·컨테이너·Lambda·DynamoDB 를 한 스택에 올린다.',
 			done: '미니 스택 배포',
@@ -49,11 +49,11 @@
 			part: 'PART 2',
 			day: 'Week 2',
 			from: 2,
-			days: 5,
+			days: 4,
 			title: '1과제 — EKS 와 관측성',
 			body: 'eksctl·k8s·LBC·관측성을 거쳐 1과제를 완주한다. 커리큘럼의 중심축이고, 여기서 점수가 나와야 나머지가 의미를 갖는다.',
 			done: 'mark.sh 80%+ · No Data 0개',
-			href: '/part-2/11-eksctl-cluster/',
+			href: '/part-2/09-eksctl-cluster/',
 		},
 		{
 			part: 'PART 3',
@@ -63,7 +63,7 @@
 			title: 'Hard Mode',
 			body: 'fully-private EKS·IAM 심화·CoreDNS 커스텀 도메인. 1과제가 어렵게 나올 때의 보험이다.',
 			done: '부분 재현',
-			href: '/part-3/16-private-eks-iam/',
+			href: '/part-3/13-private-eks-iam/',
 		},
 		{
 			part: 'PART 4',
@@ -73,7 +73,7 @@
 			title: '2과제 모듈',
 			body: '서버리스·스케일링·로깅·스트리밍에 DocumentDB·VPC Lattice·CDN Function 을 더한다.',
 			done: '모듈별 1회 배포',
-			href: '/part-4/17-serverless-event/',
+			href: '/part-4/14-serverless-event/',
 		},
 		{
 			part: 'PART 5',
@@ -83,7 +83,7 @@
 			title: '3과제 운영',
 			body: '부하 아래에서 가용성·성능·비용 ratio 를 지킨다. 배점 40점으로 세 과제 중 가장 크다.',
 			done: '부하 드릴 3회',
-			href: '/part-5/24-task3-load-ops/',
+			href: '/part-5/21-task3-deploy/',
 		},
 	];
 
@@ -94,7 +94,7 @@
 		title: 'Battle Drills',
 		body: '30% 변동 드릴·파괴/복구 12종·4시간 모의 대회. 주차를 따로 주지 않고 위 일정 안에 끼워 넣는다.',
 		done: '모의 대회 90%+',
-		href: '/part-6/26-mutation-drill/',
+		href: '/part-6/23-mutation-drill/',
 	};
 
 	const LAST_WEEK = 4;

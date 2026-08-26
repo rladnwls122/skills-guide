@@ -1,0 +1,143 @@
+---
+title: Lab 16 — OTel · Loki 컨테이너 로깅 파이프라인
+description: 앱 stdout 을 OTel Collector 가 걷어 Loki 에 넣고 Grafana 가 읽는 경로를 순서 의존에 유의해 배포하고 LogQL 로 검증하는 실습.
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+정답지: `skills-2026/set-07/task-2/module-4-container-logging` — 저장소가 아직 없다면 [사전 준비 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다.
+
+**리전은 `ap-northeast-1`(도쿄) 다.** 앞 모듈([15. 오토스케일링](/part-4/15-eks-scaling/lab/))이 서울이었으므로 시작 전에 `AWS_DEFAULT_REGION` 부터 다시 세운다. 리전을 틀리면 리소스는 만들어지고 apply 도 성공하지만 **채점이 지정 리전만 조회해 그 모듈이 0점**이 된다.
+
+| | 이 랩에서 |
+|---|---|
+| 그대로 쓴다 | 정답지의 terraform, `k8s/` 매니페스트, helm values, 제공 `app.py` |
+| 직접 쓴다 | `app/Dockerfile` 한 장 — 제공 Dockerfile 은 flask 를 설치하지 않아 파드가 CrashLoop 한다 |
+| 값만 바꾼다 | 매니페스트의 `<ECR_IMAGE>` 자리, helm 설치 옵션의 버전·리소스 값 |
+
+terraform 과 eksctl 은 본 PC 에서, 이미지 빌드·helm·kubectl·채점은 **ap-northeast-1 CloudShell** 에서 한다.
+
+## 실습 목표
+
+- [ ] OTel→Loki→Grafana 파이프라인을 배포하고 LogQL 로 ERROR 로그를 조회한다
+- [ ] Grafana 대시보드 3패널을 전부 채운다
+- [ ] 순서 의존(LBC → TargetGroupBinding, Loki → OTel)을 지키고, 어겼을 때의 증상을 안다
+- [ ] 제공 Dockerfile 의 결함을 찾아 자기 Dockerfile 로 대체한다
+- [ ] 클러스터와 VPC 를 정리한다
+
+선행 지식과 목표는 [모듈 개요](/part-4/16-container-logging/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- LogQL 문법: [Loki 쿼리 문서](https://grafana.com/docs/loki/latest/query/)
+- helm values 키: `helm show values grafana-community/loki --version 18.7.1`
+- 매니페스트 필드: `kubectl explain daemonset.spec.template.spec`
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
+---
+
+## 1. 배포와 검증
+
+:::note[정답지가 들어왔다 — 이 절차의 근거가 코드로 바뀌었다]
+`set-07/task-2/module-4-container-logging` 에 구현이 있다. 이 파트의 순서와 값은 그 구현에 맞춰 두었으니, 막히면 정답지의 `README.md` 와 `cs-deploy.sh` 를 연다.
+
+구성은 본 PC 가 `terraform`·`eksctl` 만 쓰고 **이미지 빌드·helm·kubectl·채점은 전부 ap-northeast-1 CloudShell** 에서 하는 2분할이다. 정답지가 공식 OTel Helm 차트 대신 **원시 매니페스트**를 쓴다는 점이 이 모듈의 갈림길이다.
+:::
+
+### 1-1. 절차 (순서 요약 — 순서 의존이 많다)
+
+<Steps>
+
+1. **본 PC**: `module-4-container-logging/terraform` apply (VPC + **이름 고정 ALB/TG** + ECR + LBC IAM) → zip 반입.
+2. **CloudShell**: `~/.o11y-env` → `eksctl create cluster`(~20분) → 노드 2대가 AZ a/c로 분산됐는지 확인.
+3. 이미지 빌드: 제공 `app.py` 는 그대로 두고 **`app/Dockerfile` 만 직접 쓴다** — 제공 Dockerfile 은 flask 를 설치하지 않아 파드가 CrashLoop 한다. 베이스·tzdata·비루트 패턴은 [모듈 08 의 Dockerfile](/part-1/08-container-lambda-dynamodb/lab/)을 그대로 가져오고, 바뀌는 것은 의존성 설치 줄과 진입점이다.
+4. **LBC 차트 3.4.3 설치** ← TGB CRD가 여기서 생긴다. 이후에만 TGB apply 가능.
+5. namespace/StorageClass/앱 apply + 앱 TGB.
+6. **Loki 차트 18.7.1** (`grafana-community` 저장소 — `grafana/loki`는 GEL 전용) → svc `o11y-loki` 3100 확인.
+7. **OTel DaemonSet apply는 Loki 이후** (otlphttp 전송 대상 먼저).
+8. **Grafana 차트 12.10.0** + 대시보드 ConfigMap + Grafana TGB.
+
+</Steps>
+
+### 1-2. 검증 + 기대 출력
+
+```bash
+curl -s "http://$APP_ALB/healthz"                     # {"status":"ok"}
+curl -s "http://$APP_ALB/log?level=error&count=3"     # {"generated":3,"level":"error"}
+kubectl get ds o11y-otel -n monitoring                # DESIRED 2 / READY 2
+kubectl get svc o11y-loki -n monitoring               # ClusterIP 3100
+
+# LogQL 직접 조회 (port-forward)
+kubectl port-forward -n monitoring svc/o11y-loki 3100:3100 & sleep 2
+curl -s -G http://localhost:3100/loki/api/v1/query_range \
+  --data-urlencode 'query={k8s_namespace_name="o11y"} | json | level="ERROR"' \
+  --data-urlencode "start=$(date -d '3 minutes ago' +%s)000000000" \
+  --data-urlencode "end=$(date +%s)000000000" | jq -r '.data.result[].values[][1]' | head -3
+# 기대: {"ts":...,"level":"ERROR",...} JSON 원문 라인들
+kill %1
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+로그 파이프라인을 끝에서 끝까지 확인한다. 앱에 로그를 일부러 만들게 하고, 수집기 DaemonSet 이 노드 수만큼 떠 있는지, Loki 서비스가 있는지 본다. 마지막은 진짜 확인이다 — port-forward 로 Loki 에 직접 LogQL 을 던져 방금 만든 ERROR 로그가 JSON 원문 그대로 돌아오는지 본다. 본문이 훼손되면 `| json` 파싱이 깨져 여기서 빈 결과가 나온다.
+
+</details>
+
+채점 전 마지막 준비: `/log?level=info`, `/log?level=warn`, `/log?level=error` 각각 호출 → Grafana Log Overview 3패널 모두 데이터 확인(범례 INFO/WARN/ERROR). 채점: `bash ~/skills-2026/set-07/task-2/mark/mark4.sh` (4-6은 Grafana 웹 수동 채점).
+
+### 1-3. :badge[함정]{variant=danger}
+
+1. **제공 Dockerfile로 빌드 → CrashLoop.** 자체 Dockerfile 사용, app.py 수정 금지.
+2. **TGB를 LBC 설치 전에 apply → CRD 없음 오류.** 순서: LBC → TGB.
+3. **ALB를 Ingress로 만들면 이름 채점 실패** — 이름 고정이 필요하므로 terraform ALB + TGB.
+4. **level은 대문자 ERROR** — LogQL `| json | level="ERROR"`. 소문자로 찍히게 가공하면 오답.
+5. **범례는 plain text**(`ERROR`)여야 한다 — `{level="ERROR"}` 형태로 뜨면 오답. `sum by (level)` + legendFormat `{{level}}`.
+6. **No Data 패널 1개라도 있으면 오답** — 채점 전 3레벨 호출.
+7. **로그 확인(4-5)은 부분 일치**로 완화됐다(배포본 v5) — "3분 이내로 기록된 로그가 있으면 득점"이라 본문을 맞출 필요 없이 **채점 직전 트래픽을 한 번 흘려 최근 로그를 만들어 두면** 된다. 모든 노드 TZ는 KST로 설정한다.
+7. OTel이 body를 가공하면 `| json` 파싱 깨짐 — container 파서 외 본문 변형 금지.
+8. mark4.sh의 `rm -rf ~/.aws`는 CloudShell(관리형 세션)에선 무해 — bastion에서 돌리지 말 것.
+
+### 1-4. 통과 기준
+
+- [ ] /healthz ok, ds 2/2, svc 3100
+- [ ] LogQL ERROR 조회에 원본 JSON 라인 반환
+- [ ] Grafana 3패널 데이터 + 범례 INFO/WARN/ERROR
+- [ ] mark4.sh 자동 항목 PASS
+
+---
+
+
+## 정리 (당일 필수)
+
+```bash
+# CloudShell (ap-northeast-1)
+kubectl delete -f k8s/ --ignore-not-found     # TargetGroupBinding 먼저
+helm uninstall o11y-grafana o11y-loki -n monitoring
+eksctl delete cluster --name o11y-cluster --region ap-northeast-1
+```
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  # 본 PC
+  cd ~skills-2026set-07	ask-2module-4-container-logging	erraform ; terraform destroy -auto-approve
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  # 본 PC
+  cd ~/skills-2026/set-07/task-2/module-4-container-logging/terraform && terraform destroy -auto-approve
+  ```
+  </TabItem>
+</Tabs>
+
+- ALB 2대와 EBS 볼륨(Loki 의 PVC)이 남지 않았는지 콘솔에서 확인한다. **PVC 가 만든 볼륨은 클러스터를 지워도 남을 수 있다.**
+
+## 다음
+
+[17. 스트리밍](/part-4/17-streaming/) — Kinesis 와 MSK 갈래를 대조한다.

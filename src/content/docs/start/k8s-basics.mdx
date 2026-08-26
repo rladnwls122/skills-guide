@@ -195,16 +195,16 @@ flowchart TB
 - ALB·타깃그룹·헬스체크 — [로드밸런서 기초](/start/loadbalancer-basics/)
 - 노드그룹·IRSA·Pod Identity — [EKS 기초](/start/eks-basics/)
 - taint 와 toleration, 안티어피니티 — [오토스케일링 기초](/start/autoscaling-basics/)
-- probe 3종·topologySpreadConstraints·PDB — [PART-2 모듈 12 이론](/part-2/12-k8s-workloads-alb/theory/)
+- probe 3종·topologySpreadConstraints·PDB — [PART-2 모듈 10 이론](/part-2/10-k8s-workloads-alb/theory/)
 
 지금은 이름과 그림에서의 자리만 익히고 넘어간다.
 
 ## ④ 대회에서 어떻게 쓰이나
 
-- **Deployment가 채점의 중심**: replicas, liveness/readiness/startup probe, nodeSelector·toleration(전용 노드그룹 배치), topologySpreadConstraints(AZ 분산), PDB, preStop 훅까지 요구된다 — 전부 **PART-2 모듈 12**에서 심화.
+- **Deployment가 채점의 중심**: replicas, liveness/readiness/startup probe, nodeSelector·toleration(전용 노드그룹 배치), topologySpreadConstraints(AZ 분산), PDB, preStop 훅까지 요구된다 — 전부 **PART-2 모듈 10**에서 심화.
 - **Service는 ClusterIP만**: 외부 노출은 Ingress가 아니라 **Terraform으로 만든 ALB + TargetGroupBinding**(Pod IP를 타깃그룹에 직접 등록). Ingress로 만들면 ALB 이름은 애노테이션으로 맞출 수 있어도 **타깃그룹 이름을 지정할 수 없어서** "타깃그룹 이름 채점"을 통과 못 한다.
-- **ConfigMap**으로 앱 설정(DB 호스트 등)을 주입하고, **Secret**은 KMS envelope 암호화(모듈 16)의 대상이 된다.
-- **ServiceAccount**는 IRSA/Pod Identity로 AWS IAM 권한과 연결된다 — "Pod이 S3에 접근하는 방법". 개념만 잡고 PART-2 모듈 11에서 심화.
+- **ConfigMap**으로 앱 설정(DB 호스트 등)을 주입하고, **Secret**은 KMS envelope 암호화(모듈 13)의 대상이 된다.
+- **ServiceAccount**는 IRSA/Pod Identity로 AWS IAM 권한과 연결된다 — "Pod이 S3에 접근하는 방법". 개념만 잡고 PART-2 모듈 09에서 심화.
 - **Helm**은 AWS Load Balancer Controller, kube-prometheus-stack 설치에 쓴다. **차트 버전 고정**이 원칙(버전 미고정 = 대회 당일 다른 버전이 설치되는 사고).
 
 :::danger[Namespace를 틀리면 0점]
@@ -290,7 +290,7 @@ kind(Docker 필요)로 1노드 클러스터를 띄워 명령을 손에 익힌다
 
 </Steps>
 
-로컬이 부담스러우면 생략 가능 — **PART-2 모듈 11~12에서 EKS로 동일 내용을 실습**한다.
+로컬이 부담스러우면 생략 가능 — **PART-2 모듈 09~12에서 EKS로 동일 내용을 실습**한다.
 
 ## ⑥ 자기 점검 퀴즈
 
@@ -351,17 +351,17 @@ Secret은 base64 인코딩일 뿐 암호화가 아니다. EKS/대회에서는 �
 
 ---
 
-base64는 누구나 되돌릴 수 있는 **인코딩**이지 암호화가 아니다. EKS 클러스터의 Secret 암호화 설정으로 **KMS envelope 암호화**를 켜면, etcd에 저장되는 Secret이 KMS 키로 감싼 데이터 키로 암호화된다. PART-3 모듈 16에서 실습하며, 이때 쓰는 KMS 키 정책이 대회 유형의 **root-less** 정책이다 — root로 리소스를 만들어 두면 여기서 전부 막힌다.
+base64는 누구나 되돌릴 수 있는 **인코딩**이지 암호화가 아니다. EKS 클러스터의 Secret 암호화 설정으로 **KMS envelope 암호화**를 켜면, etcd에 저장되는 Secret이 KMS 키로 감싼 데이터 키로 암호화된다. PART-3 모듈 13에서 실습하며, 이때 쓰는 KMS 키 정책이 대회 유형의 **root-less** 정책이다 — root로 리소스를 만들어 두면 여기서 전부 막힌다.
 </Quiz>
 
 <QuizResults confetti />
 
 ## ⑦ 다음 단계
 
-모듈 11(EKS·IRSA)와 모듈 12(k8s 워크로드 심화)에서 이 내용을 EKS 위에서 실전 수준으로 확장한다.
+모듈 09(EKS·IRSA)와 모듈 10(k8s 워크로드 심화)에서 이 내용을 EKS 위에서 실전 수준으로 확장한다.
 
 <LinkButton href="/start/loadbalancer-basics/" icon="right-arrow">다음 선수 학습 — 로드밸런서 기초</LinkButton>
-<LinkButton href="/part-2/11-eksctl-cluster/" variant="minimal">PART 2 — EKS Core</LinkButton>
+<LinkButton href="/part-2/09-eksctl-cluster/" variant="minimal">PART 2 — EKS Core</LinkButton>
 
 ## 공식 문서
 

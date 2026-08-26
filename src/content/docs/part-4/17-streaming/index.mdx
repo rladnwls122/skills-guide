@@ -1,0 +1,90 @@
+---
+title: 17. 스트리밍 — Kinesis · Flink Studio · MSK
+description: 모듈 개요 — 스트리밍 두 갈래를 정답지와 채점 항목으로 대조한다. 생성에만 35분이 걸리는 리소스를 일정에 어떻게 넣을지도 함께 정한다.
+sidebar:
+  order: 1
+---
+
+import { FileTree, LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+2과제 **유형 5 — 스트리밍**을 다룬다. 갈래가 둘이다.
+
+| 갈래 | 구성 | 기준본 |
+|---|---|---|
+| Kinesis + Flink Studio | 스트림 → Zeppelin 노트북에서 SQL 질의 → Glue 카탈로그 | set-02 task-2 module-2 |
+| MSK + Lambda 컨슈머 | Kafka 토픽 → Lambda 이벤트 소스 매핑 → DynamoDB·SNS | set-02 task-2 module-3 |
+
+:::caution[이 모듈만 실제 배포가 선택이다]
+MSK 는 **apply 만 35분, destroy 23분**이 걸린다(실측 2026-08-16, 클러스터 하나가 31분 40초). 학습 시간의 절반을 대기로 쓰게 되고 그동안 계속 과금된다.
+
+그래서 필수 경로는 **정답지 대조**다. 채점 항목이 대부분 리소스의 구성값이라, 무엇이 어떤 값으로 있어야 하는지를 코드에서 확인하면 재현할 수 있다. 배포는 시간과 예산이 남을 때의 선택이다.
+
+대회 당일에는 사정이 다르다 — MSK 가 나오면 **가장 먼저 apply 를 걸어 두고** 그 35분 동안 다른 모듈을 끝낸다. 순서를 반대로 하면 그 자체로 시간이 모자란다.
+:::
+
+## 학습 목표
+
+- [ ] Kinesis `ACTIVE`/`ON_DEMAND` 와 Flink `READY`/`ZEPPELIN-FLINK-3_0` 등 채점이 읽는 값을 정확히 말한다
+- [ ] MSK 의 `ACTIVE`·버전·인스턴스 타입·IAM 인증 활성 여부가 채점 대상임을 안다
+- [ ] DynamoDB 항목이 특정 속성 타입으로 조회되는 이유를 설명한다
+- [ ] Flink Studio 를 terraform 으로 직접 만들 수 없어 CloudFormation 으로 감싸는 이유를 안다
+- [ ] MSK 의 생성·삭제 소요를 당일 일정에 반영한다
+
+## 소요 시간
+
+- 대조만 하면 약 1~1.5시간. 실제로 배포하면 module-2 기준 +30분, MSK 는 apply·destroy 만 1시간이 더 든다. Week 3.
+
+## 과금 리소스와 destroy 방침
+
+| 리소스 | 과금 | 방침 |
+|---|---|---|
+| MSK 브로커 ×2 | **apply 35분·destroy 23분 + 시간당 과금 (큼)** | 확인 즉시 `terraform destroy` |
+| Kinesis + Flink Studio + EC2 + ALB + NAT | 시간당 과금 (생성 지연은 없다) | 확인 즉시 `terraform destroy` |
+
+:::danger[MSK destroy 가 중간에 멈출 수 있다]
+프라이빗 서브넷과 VPC 삭제가 네트워크 인터페이스 회수를 기다리다 교착한다. terraform 로그만 봐서는 원인이 안 보인다 — **terraform state 밖의 일**이다. 30분 넘게 진행이 없으면 콘솔에서 남은 네트워크 인터페이스를 확인한다.
+:::
+
+## 선행 지식
+
+- Lambda 이벤트 소스 매핑과 DynamoDB 속성 타입 — [serverless-basics](/start/serverless-basics/) · [dynamodb-basics](/start/dynamodb-basics/)
+- 보안 그룹 셀프 참조 — [02. 네트워크 기초](/part-0/02-network-basics/theory/)
+
+## 선행 모듈
+
+- [14. 서버리스 워크플로](/part-4/14-serverless-event/) — 같은 세트의 다른 모듈이라 채점 방식이 같다
+
+## 참고 경로 (정답지)
+
+<FileTree>
+
+- skills-2026/set-02/task-2
+  - **mark.md** 채점기준표 (모듈별 배점)
+  - mark
+    - **mark2-2.sh** / **mark2-3.sh** 채점 스크립트
+  - module-2-analytics Kinesis + Flink 정답
+    - terraform
+      - **kinesis.tf** ON_DEMAND 스트림
+      - **flink.tf** CloudFormation 으로 감싼 Studio + Glue 카탈로그 권한
+    - **README.md** 타임스탬프 우회와 노트북 설정 함정
+  - module-3-msk MSK 정답
+    - terraform
+      - **msk.tf** IAM 인증과 비인증 TLS 병행
+      - **security.tf** 셀프 참조 보안 그룹
+      - **lambda.tf** 이벤트 소스 매핑
+    - **README.md** MSK 함정과 실측 소요
+
+</FileTree>
+
+## 공식 문서
+
+- [Amazon MSK 개발자 안내서](https://docs.aws.amazon.com/msk/latest/developerguide/)
+- [Managed Service for Apache Flink — Studio notebook](https://docs.aws.amazon.com/managed-flink/latest/java/how-notebook.html)
+- [aws_msk_cluster](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/msk_cluster) · [aws_kinesis_stream](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kinesis_stream)
+
+## 다음 단계
+
+<LinkButton href="/part-4/17-streaming/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-4/17-streaming/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

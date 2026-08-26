@@ -1,0 +1,532 @@
+---
+title: 08. 컨테이너 + Lambda + DynamoDB — 변동 이행 실습
+description: "set-02 의 레지스트리·테이블·함수를 set-07 요구로 이행하고, 배포 뒤 오독 복구와 장애 진단까지 가는 실습."
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+원리와 채점 관점은 [08 이론 — 컨테이너·Lambda·DynamoDB](/part-1/08-container-lambda-dynamodb/theory/)에 있다.
+
+**방식**: [07 실습](/part-1/07-kms-s3-cloudfront/lab/)이 이어 온 작업 사본을 그대로 쓴다. set-07 변동 과제지를 읽고 **절차 안내 없이 직접** 고친 뒤, 통과 기준으로 스스로 판정한다. 배포한 다음에는 값을 잘못 읽었을 때의 복구와 고장 진단까지 간다.
+
+이 모듈에는 **다른 데서 안 나오는 종류의 실패**가 하나 있다. 코드가 맞는데도 막히는 경우다. 그것을 판정하는 법이 이 모듈의 고유 훈련이다.
+
+## 실습 목표
+
+- [ ] 조회 패턴이 뒤집힌 요구를 읽고 파티션 키와 GSI 축을 다시 정한다
+- [ ] 파티션 키가 왜 이 모듈에서 가장 비싼 값인지, 삭제 방지가 왜 그 비용을 더 키우는지 확인한다
+- [ ] 태그 덮어쓰기 정책에 **예외**를 두는 요구를 반영한다 — 코드가 아니라 도구 버전이 걸리는 경우를 판정한다
+- [ ] 로그 그룹 이름을 기본 규칙에서 지정 이름으로 옮긴다
+- [ ] `plan` 출력으로 in-place 와 재생성을 판정하고 파급을 센다
+- [ ] 함수가 실패할 때 권한 문제와 호출 차단을 구분해 좁힌다
+
+선행 지식과 목표는 [모듈 개요](/part-1/08-container-lambda-dynamodb/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- Terraform 인자: [aws_ecr_repository](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_repository) · [aws_dynamodb_table](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/dynamodb_table) · [aws_lambda_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function) · [aws_cloudwatch_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group)
+- **인자가 있는데 프로바이더가 모른다고 할 때**: `terraform providers schema -json` 으로 실제로 아는지 먼저 확인한다. [08 이론 2절](/part-1/08-container-lambda-dynamodb/theory/)의 확인 블록이 그 방법이다
+- CLI 출력 필드: `aws ecr describe-repositories help` · `aws dynamodb describe-table help` · `aws lambda get-function-configuration help`
+- 실행역할에 넣을 액션 이름: [Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) 의 DynamoDB·KMS 페이지
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
+## 0. 기준본 세우기
+
+[07 실습](/part-1/07-kms-s3-cloudfront/lab/)의 `~/set07-lab` 을 그대로 이어 쓴다. 06 이 VPC 를, 07 이 키·버킷·배포를 이행했고 **레지스트리·테이블·함수는 아직 set-02 그대로**다. 이 모듈이 마지막 조각을 맡는다.
+
+앞 모듈을 건너뛰었다면 사본부터 다시 뜬다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Copy-Item -Recurse $HOME\skills-2026\set-02\task-1\terraform $HOME\set07-lab
+  cd ~\set07-lab
+  terraform init
+  terraform apply
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  cp -r ~/skills-2026/set-02/task-1/terraform ~/set07-lab
+  cd ~/set07-lab
+  terraform init
+  terraform apply
+  ```
+  </TabItem>
+</Tabs>
+
+이 모듈이 다루는 파일은 `ecr.tf` · `dynamodb.tf` · `lambda.tf` 셋이다. 원본은 [set-02 `terraform/`](https://github.com/ishs-cloud-computing/skills-2026/tree/main/set-02/task-1/terraform)에서 볼 수 있다.
+
+컨테이너 이미지 빌드와 push 는 본 PC 에 Docker 가 없어 CloudShell 에서 한다. 절차는 [set-02 `task-1/README.md`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-02/task-1/README.md) 의 `2) 컨테이너 이미지 빌드 & ECR push` 에 있다.
+
+### 지금 무엇이 서 있나 확인한다
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws ecr describe-repositories --query "repositories[].[repositoryName,imageTagMutability]" --output text
+  aws dynamodb describe-table --table-name wskorea26-data-table `
+    --query "Table.{PK:KeySchema[?KeyType=='HASH']|[0].AttributeName, GSI:GlobalSecondaryIndexes[0].IndexName}" --output json
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws ecr describe-repositories --query "repositories[].[repositoryName,imageTagMutability]" --output text
+  aws dynamodb describe-table --table-name wskorea26-data-table \
+    --query "Table.{PK:KeySchema[?KeyType=='HASH']|[0].AttributeName, GSI:GlobalSecondaryIndexes[0].IndexName}" --output json
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 리포지토리 이름과 `MUTABLE`, 그리고 `PK` 가 `client_id`, `GSI` 가 `concert_name-created_at-index`.
+
+`ResourceNotFoundException` 이면 apply 가 안 끝난 것이다. `AccessDenied` 와 구분한다 — 앞은 대상이 없는 것이고 뒤는 권한이 없는 것이라 갈 길이 다르다.
+
+:::danger[과금이 이어진다]
+01 의 NAT 가 계속 과금 중이다. 이 모듈이 더하는 것은 작다 — DynamoDB 는 온디맨드라 요청만큼이고, Lambda 와 ECR 도 소액이다. 5~7절이 배포된 상태를 전제하므로 이 실습은 배포까지 간다. 끝나면 8절 정리를 돌린다.
+:::
+
+## 1. 변동 과제지
+
+set-07 요구다. **정답 코드를 먼저 열지 않는다.**
+
+| 항목 | set-02 (기준본) | set-07 (변동) |
+|---|---|---|
+| 테이블 이름 | `wskorea26-data-table` | `unicorn-concert-db` |
+| 예약 하나를 찾는 기준 | 고객 | **예약 번호** |
+| 최신순으로 묶어 보는 기준 | 콘서트 | **고객** |
+| PITR | 없음 | 켠다 |
+| 테이블 암호화 키 | DynamoDB 전용 키 | 02 에서 만든 **애플리케이션 데이터용 키** |
+| 리포지토리 이름 | `wskorea26-book-repo` | `unicorn-concert-app` |
+| 태그 덮어쓰기 | 자유 | **금지 — 단 `latest` 는 예외** |
+| 리포지토리 암호화 키 | 관리형 `aws/ecr` | 02 에서 만든 **저장소용 키** |
+| 이미지 태그 | `stable` | `v1.0.0` 과 `latest` |
+| 함수 이름 | `wskorea26-book-lambda` | `unicorn-get-booking-func` |
+| 함수 로그 그룹 | 기본 규칙에 맡김 | **`/unicorn/lambda/get-booking` 으로 지정** |
+| 함수 권한 | 인덱스 Query | **항목 하나 직접 읽기 + 인덱스 Query** |
+
+### 요구에서 파생되는 것
+
+**조회 기준 두 줄이 이 모듈의 전부다.** 표에 "예약 번호로 찾는다"와 "고객별로 최신순"이라고만 적혀 있지만, 그것이 테이블 설계를 결정한다. 무엇이 파티션 키가 되고 무엇이 인덱스로 가는지 스스로 배치한다. [08 이론 3절](/part-1/08-container-lambda-dynamodb/theory/)이 두 세트를 나란히 놓는다.
+
+**"단 `latest` 는 예외"** 가 두 번째다. 예외 없는 금지와 예외 있는 금지는 쓰는 값 자체가 다르고, 예외를 적는 자리가 따로 있다. 그리고 **이 요구는 코드만으로 해결되지 않을 수 있다** — 이론 2절 확인 블록이 그 이유를 보여 준다.
+
+**로그 그룹 이름을 지정하라는 요구**는 두 곳을 건드린다. 로그 그룹 리소스 자체와, 함수가 어디에 쓸지 정하는 설정이다. 한쪽만 고치면 그룹은 만들어졌는데 로그는 옛 자리에 쌓인다.
+
+**권한이 하나 늘었다.** 인덱스를 훑는 것과 항목 하나를 직접 집는 것은 다른 액션이다. 요구가 "예약 번호로 찾는다"이므로 어느 쪽이 늘어야 하는지는 요구에서 나온다.
+
+## 2. 이행 (타이머 30분)
+
+타이머를 걸고 시작한다. `~/set07-lab` 의 `ecr.tf` · `dynamodb.tf` · `lambda.tf` 를 고친다. 아래는 절차가 아니라 **스스로 답해야 할 질문 목록**이다.
+
+- 파티션 키를 바꾸면 `attribute` 블록은 몇 개가 되나. 늘어나나 줄어드나
+- GSI 의 HASH 가 될 속성이 테이블 파티션 키 자리에서 빠진다. 그래도 `attribute` 에 남겨야 하나
+- 태그 덮어쓰기에 예외를 두는 값의 이름은 무엇이고, 예외 대상을 적는 자리는 인자인가 블록인가
+- 로그 그룹 이름을 함수에 알려 주는 인자는 어디에 있나. 함수 리소스 안인가 밖인가
+- 항목 하나를 키로 직접 읽는 DynamoDB 액션 이름은 무엇인가
+- 02 에서 만든 키들의 참조 이름이 바뀌었다. 이 파일들이 그 키를 어떻게 부르고 있나
+- 애플리케이션 코드(`lambda/index.py`)는 손대야 하나. 무엇을 보고 판단하나
+
+**마지막 질문이 중요하다.** 인프라만 고치고 코드를 안 고치면 배포는 되는데 응답이 틀린다.
+
+## 3. 통과 기준
+
+배포 없이 판정되는 것만 여기 있다.
+
+<Steps>
+
+1. **옛 이름 잔존 0건**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'wskorea26|client_id.*hash|concert_name-created' -Path .\ecr.tf,.\dynamodb.tf,.\lambda.tf
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -nE 'wskorea26|concert_name-created' ecr.tf dynamodb.tf lambda.tf
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **출력 없음.**
+
+2. **프로바이더가 새 문법을 아는지 먼저 확인**
+
+   ```bash
+   terraform init -upgrade
+   terraform validate
+   ```
+
+   `Blocks of type "image_tag_mutability_exclusion_filter" are not expected here` 가 나오면 **코드 문제가 아니다.** [08 이론 2절](/part-1/08-container-lambda-dynamodb/theory/)의 확인 블록으로 프로바이더가 그 블록을 아는지 확인한다. 6-2 가 이 상황을 다룬다.
+
+3. **`plan` 이 무엇을 재생성하나**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     terraform plan -no-color | Select-String -Pattern 'Plan: |forces replacement|# aws_dynamodb|# aws_ecr|# aws_lambda'
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     terraform plan -no-color | grep -E 'Plan: |forces replacement|# aws_dynamodb|# aws_ecr|# aws_lambda'
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: 테이블에 `forces replacement` 가 붙는다. **여기서 놀라지 않는 것이 이 절의 목적이다** — 파티션 키를 바꿨으니 당연한 결과이고, 6-3 이 그 파급을 다룬다.
+
+</Steps>
+
+### set-07 채점 대응
+
+[set-07 `mark.sh`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/mark.sh) 의 `4-1-A` · `5-1-A` · `7-1-A` 가 이 모듈을 잰다.
+
+| 채점 | 보는 것 | 내 코드의 어느 인자가 정하나 |
+|---|---|---|
+| 4-1-A | 과금 모드, 파티션 키 | |
+| 4-1-A | GSI 이름·HASH·RANGE·투영 방식 | |
+| 4-1-A | 암호화 종류와 키 ARN, 삭제 방지 | |
+| 4-1-A | PITR 상태 | |
+| 5-1-A | 스캔 설정·태그 정책·암호화 종류 | |
+| 5-1-A | 리포지토리에 있는 태그 목록 | |
+| 5-1-A | 특정 태그 이미지의 취약점 집계 | |
+| 7-1-A | 함수 이름·KMS 키·로그 그룹 | |
+
+`7-1-A` 가 세 값을 한 줄로 뽑는다는 점을 본다. 로그 그룹을 지정하지 않으면 기본 규칙 이름이 나와 틀린다.
+
+## 4. 복기
+
+[set-07 `dynamodb.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/terraform/dynamodb.tf) · [`ecr.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/terraform/ecr.tf) · [`lambda.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/terraform/lambda.tf)와 대조한다. **3절을 통과한 뒤에 연다.**
+
+놓친 곳을 셋으로 나눈다.
+
+- **과제지를 못 읽은 것** — PITR 처럼 한 줄로 적힌 요구
+- **읽었는데 어디를 고칠지 못 찾은 것** — 로그 그룹을 함수에 연결하는 인자를 못 찾았다면 여기
+- **찾았는데 틀린 것** — `validate` 가 잡아 준 종류인지, 아니면 프로바이더 문제였는지 구분한다
+
+정답지의 GSI 문법이 이론 3절에서 본 축약형인지도 확인한다. **같은 것을 두 가지로 쓸 수 있다는 것을 아는 것이 복기의 수확이다.**
+
+## 5. 배포와 채점 확인
+
+```bash
+terraform apply
+```
+
+기대: `Apply complete!` 테이블이 재생성되므로 **기존 항목이 전부 사라진다.** 검증용 데이터를 다시 넣어야 한다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws dynamodb describe-table --table-name unicorn-concert-db `
+    --query "Table.{PK:KeySchema[?KeyType=='HASH']|[0].AttributeName, GSI:GlobalSecondaryIndexes[0].IndexName, Delete:DeletionProtectionEnabled}" --output json
+  aws dynamodb describe-continuous-backups --table-name unicorn-concert-db `
+    --query "ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus" --output text
+  aws lambda get-function-configuration --function-name unicorn-get-booking-func `
+    --query "[FunctionName, KMSKeyArn, LoggingConfig.LogGroup]" --output json
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws dynamodb describe-table --table-name unicorn-concert-db \
+    --query "Table.{PK:KeySchema[?KeyType=='HASH']|[0].AttributeName, GSI:GlobalSecondaryIndexes[0].IndexName, Delete:DeletionProtectionEnabled}" --output json
+  aws dynamodb describe-continuous-backups --table-name unicorn-concert-db \
+    --query "ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus" --output text
+  aws lambda get-function-configuration --function-name unicorn-get-booking-func \
+    --query "[FunctionName, KMSKeyArn, LoggingConfig.LogGroup]" --output json
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `PK` 가 예약 번호 속성, `GSI` 가 고객 축 인덱스 이름, `Delete` 가 `true`. PITR 은 `ENABLED`. 마지막이 함수 이름·키 ARN·**지정한 로그 그룹 이름** 세 줄이다.
+
+로그 그룹 자리에 `/aws/lambda/...` 가 나오면 지정이 안 먹은 것이다 — 6-1 이 그 경우다.
+
+## 6. 과제지 오독 복구
+
+배포까지 했는데 값이 다르다. 판정은 01·02 와 같은 축이고, **여기에 한 종류가 더 있다.**
+
+| 판정 | 무엇으로 아나 | 비용 |
+|---|---|---|
+| in-place | `plan` 에 `~ update in-place` | 초 |
+| 재생성, 의존 없음 | `plan` 에 `forces replacement` | 분 |
+| 재생성, 의존 딸림 | 위와 같되 다른 리소스가 함께 `-/+` | 십분 |
+| **도구가 모른다** | `plan` 이 아예 안 돈다 — `validate` 에서 막힌다 | 분 — **코드를 고치면 안 된다** |
+
+마지막 줄이 이 모듈에서 처음 나온다.
+
+### 6-1. 로그 그룹을 지정하는 것을 빼먹었다
+
+**상황.** 로그 그룹 리소스는 만들었는데 함수가 그것을 쓰도록 연결하지 않았다. 채점 `7-1-A` 의 세 번째 값이 `/aws/lambda/unicorn-get-booking-func` 로 나온다.
+
+**판정.** 연결 인자를 넣고 `plan` 을 낸다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  terraform plan -no-color | Select-String -Pattern 'logging_config|log_group|forces replacement'
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform plan -no-color | grep -E 'logging_config|log_group|forces replacement'
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 함수가 `~ update in-place` 로 잡히고 `forces replacement` 는 없다. 로그 대상은 함수의 설정이지 정체성이 아니다.
+
+**복구.** `terraform apply`. 초 단위다.
+
+**파급.** 리소스는 안 죽지만 **이미 쌓인 로그는 옛 그룹에 남는다.** 새 그룹은 다음 호출부터 채워지므로, 채점 전에 함수를 한 번 호출해 새 그룹에 스트림이 생기게 해야 한다. 빈 로그 그룹은 조회는 되지만 내용이 없다.
+
+**교훈.** 값은 싼데 **시간 축이 붙는다.** "고쳤다"와 "채점이 볼 수 있다" 사이에 호출 한 번이 필요한 항목이 있다.
+
+### 6-2. 태그 정책 인자를 프로바이더가 모른다
+
+**상황.** 이론 2절대로 썼는데 `validate` 가 막는다.
+
+```
+Error: Unsupported block type
+Blocks of type "image_tag_mutability_exclusion_filter" are not expected here.
+```
+
+**판정.** **여기서 코드를 고치기 시작하면 시간을 버린다.** 먼저 프로바이더가 그 블록을 아는지 묻는다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $s = terraform providers schema -json | ConvertFrom-Json
+  $s.provider_schemas.'registry.terraform.io/hashicorp/aws'.resource_schemas.aws_ecr_repository.block.block_types.PSObject.Properties.Name
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform providers schema -json |
+    jq -r '.provider_schemas["registry.terraform.io/hashicorp/aws"].resource_schemas.aws_ecr_repository.block.block_types | keys[]'
+  ```
+  </TabItem>
+</Tabs>
+
+목록에 `image_tag_mutability_exclusion_filter` 가 **없으면 코드가 아니라 도구가 낡은 것이다.**
+
+**복구.**
+
+```bash
+terraform init -upgrade
+terraform validate
+```
+
+`.terraform.lock.hcl` 이 버전을 고정하고 있으므로 `-upgrade` 없이는 안 올라간다. 올린 뒤 같은 조회를 다시 해 목록에 생겼는지 확인한다.
+
+**교훈.** **문법 오류처럼 보이는 에러가 항상 문법 문제는 아니다.** 과제지가 최신 기능을 요구하면 도구 버전이 먼저다. 판정 순서는 이렇다 — `validate` 가 막으면 ① 오타인가 ② 프로바이더가 아는가 ③ 그래도 아니면 문서를 본다. ②를 건너뛰면 맞는 코드를 계속 고치게 된다.
+
+### 6-3. 파티션 키를 잘못 읽었다
+
+**상황.** 조회 기준 두 줄을 뒤집어 읽어 고객을 파티션 키로 두고 만들었다. set-02 와 같은 배치다.
+
+**판정.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  terraform plan -no-color | Select-String -Pattern 'forces replacement|# aws_' | Select-Object -First 20
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform plan -no-color | grep -E 'forces replacement|# aws_' | head -20
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `hash_key` 줄 옆에 `# forces replacement`. 파티션 키는 테이블의 정체성이라 바꿀 수 없다.
+
+**여기서 apply 하면 막힌다.** 삭제 방지가 켜져 있기 때문이다.
+
+```
+Error: deleting DynamoDB Table: ValidationException:
+Resource cannot be deleted because deletion protection is enabled.
+```
+
+**복구 순서가 있다.** 이 순서를 모르면 위 에러에서 멈춘다.
+
+<Steps>
+
+1. **삭제 방지를 먼저 끈다** — 코드에서 `deletion_protection_enabled` 를 `false` 로 두고 apply 한다. 이때는 테이블이 안 죽는다. `~ update in-place` 다
+
+2. **그다음 파티션 키를 바꿔 apply 한다** — 이제 재생성이 통과한다
+
+3. **삭제 방지를 다시 켠다** — 채점 항목이므로 꺼 둔 채로 두면 감점이다
+
+</Steps>
+
+**파급.** 테이블만 죽지 않는다.
+
+- **항목이 전부 사라진다.** 검증 데이터를 다시 넣어야 한다
+- GSI 도 함께 다시 만들어진다
+- Lambda 실행 역할의 리소스 ARN 이 테이블 ARN 을 참조한다
+- 애플리케이션 코드가 파티션 키 이름을 문자열로 쓴다면 그것도 함께 고친다
+
+**교훈.** 01 의 VPC CIDR, 02 의 버킷 이름과 같은 자리다. 다만 여기엔 **삭제 방지라는 한 겹이 더 있다.** 비싼 값을 되돌리는 데 드는 시간에 "안전장치를 푸는 시간"이 더해진다는 것이 이 모듈이 더하는 교훈이다.
+
+과제지를 받으면 **테이블 이름과 파티션 키부터 확정하고 시작한다.**
+
+## 7. 장애 진단
+
+정상으로 선 상태에서 일부러 고장을 내고 증상만 보고 좁혀 간다. **주입 명령과 복구 명령이 짝으로 있다.**
+
+### 7-1. 함수가 500 을 낸다
+
+**주입.** 실행 역할에서 인라인 정책을 지운다. 정책 이름은 첫 명령이 알려준다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws iam list-role-policies --role-name unicorn-get-booking-func-role --output text
+  aws iam delete-role-policy --role-name unicorn-get-booking-func-role --policy-name <정책이름>
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws iam list-role-policies --role-name unicorn-get-booking-func-role --output text
+  aws iam delete-role-policy --role-name unicorn-get-booking-func-role --policy-name <정책이름>
+  ```
+  </TabItem>
+</Tabs>
+
+**증상.** 함수 호출이 500 을 내거나 오류 응답이 온다. 함수 자체는 존재하고 상태도 정상이다.
+
+**좁히는 순서.**
+
+<Steps>
+
+1. **함수가 실행은 됐나** — `aws lambda get-function-configuration --function-name <함수> --query "[State,LastUpdateStatus]"`. `Active` 면 배포는 정상이다. 배포 문제와 실행 문제를 여기서 가른다
+
+2. **로그를 읽는다** — 로그 그룹의 최신 스트림에서 마지막 메시지를 본다. `AccessDeniedException` 이면 신원·권한 문제이고, `ValidationException` 이면 요청 자체가 잘못된 것이다. **여기서 방향이 갈린다**
+
+3. **역할에 정책이 붙어 있나** — `aws iam list-role-policies --role-name <역할>`. 비었으면 여기가 원인이다
+
+4. **정책이 있는데도 거부되면 리소스 ARN 을 본다** — 인덱스를 쓰는데 `/index/*` 가 빠지면 테이블은 되고 인덱스만 막힌다. **부분적으로만 되는 실패**라 알아채기 어렵다
+
+</Steps>
+
+로그를 안 읽고 코드부터 보는 것이 가장 흔한 시간 낭비다. **함수는 자기가 왜 실패했는지 로그에 적어 둔다.**
+
+**복구.** 코드가 실제 상태와의 차이를 메운다.
+
+```bash
+terraform plan
+terraform apply
+```
+
+기대: `plan` 이 `aws_iam_role_policy` 하나를 `+ create` 로 잡는다. drift 복구다.
+
+### 7-2. 함수가 아예 호출되지 않는다
+
+**주입.** 예약 동시성을 0 으로 내린다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws lambda put-function-concurrency --function-name unicorn-get-booking-func --reserved-concurrent-executions 0
+  aws lambda get-function-concurrency --function-name unicorn-get-booking-func --output json
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws lambda put-function-concurrency --function-name unicorn-get-booking-func --reserved-concurrent-executions 0
+  aws lambda get-function-concurrency --function-name unicorn-get-booking-func --output json
+  ```
+  </TabItem>
+</Tabs>
+
+기대(주입 확인): `ReservedConcurrentExecutions` 가 `0`.
+
+**증상.** 요청이 전부 실패하는데 **로그 그룹에 새 로그가 하나도 안 생긴다.** 7-1 과 증상이 겉으로 비슷하지만 결정적으로 다르다.
+
+**좁히는 순서.**
+
+<Steps>
+
+1. **로그에 새 스트림이 생기나** — 호출한 뒤 로그 그룹을 본다. **새 로그가 아예 없으면 함수 안으로 못 들어간 것이다.** 7-1 은 들어가서 실패했으므로 로그가 남는다. 이 한 가지로 두 고장이 갈린다
+
+2. **호출이 거부되고 있나** — `aws lambda invoke --function-name <함수> --payload '{}' out.json` 을 직접 던져 본다. `TooManyRequestsException` 이나 스로틀 관련 메시지가 오면 호출 단계에서 막힌 것이다
+
+3. **동시성 설정** — `aws lambda get-function-concurrency --function-name <함수>`. `0` 이면 여기가 원인이다
+
+4. 설정이 정상인데도 막히면 그때 호출하는 쪽(ALB 타깃 등록, 권한)을 본다
+
+</Steps>
+
+**복구.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws lambda delete-function-concurrency --function-name unicorn-get-booking-func
+  aws lambda get-function-concurrency --function-name unicorn-get-booking-func --output json
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws lambda delete-function-concurrency --function-name unicorn-get-booking-func
+  aws lambda get-function-concurrency --function-name unicorn-get-booking-func --output json
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `ReservedConcurrentExecutions` 항목이 사라진다. 곧 정상으로 돌아온다.
+
+**교훈.** **"로그가 있느냐 없느냐"가 진단의 첫 갈림이다.** 로그가 있으면 함수 안에서 실패한 것이라 권한·코드·데이터를 보고, 로그가 없으면 함수 밖에서 막힌 것이라 호출 경로·동시성·트리거를 본다. 이 둘을 구분하지 않으면 엉뚱한 계층을 뒤진다.
+
+예약 동시성 0 은 실수로도 만들어진다 — 다른 함수에 동시성을 몰아 주다 보면 계정 한도가 남지 않아 같은 증상이 난다.
+
+## 8. 정리
+
+:::caution[PART-2 로 넘어가기 전에]
+[09 실습](/part-2/09-eksctl-cluster/lab/)은 정답지 원본을 따로 apply 한다. **`~/set07-lab` 을 띄워 둔 채로 PART-2 를 시작하면 NAT 가 양쪽에서 과금된다.** 여기서 지운다.
+:::
+
+**삭제 방지를 먼저 끈다.** 이 순서를 지키지 않으면 destroy 가 중간에 멈춘다.
+
+<Steps>
+
+1. 코드에서 `deletion_protection_enabled` 를 `false` 로 두고 apply 한다
+
+2. 그다음 destroy 한다
+
+</Steps>
+
+```bash
+terraform destroy
+```
+
+기대: `Destroy complete!`
+
+리포지토리에 이미지가 남아 있어도 `force_delete` 가 켜져 있으면 함께 지워진다. 꺼져 있으면 이미지를 먼저 지워야 한다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws dynamodb list-tables --query "TableNames[?contains(@,'unicorn')]" --output text
+  aws ecr describe-repositories --query "repositories[?contains(repositoryName,'unicorn')].repositoryName" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws dynamodb list-tables --query "TableNames[?contains(@,'unicorn')]" --output text
+  aws ecr describe-repositories --query "repositories[?contains(repositoryName,'unicorn')].repositoryName" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 둘 다 빈 출력.
+
+막히면 [트러블슈팅](/reference/troubleshooting/), 계정 전체 점검은 [잔존 리소스 점검](/reference/cleanup-check/)이다.

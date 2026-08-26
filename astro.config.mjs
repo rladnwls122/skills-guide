@@ -174,27 +174,27 @@ export default defineConfig({
         },
         {
           label: 'PART 2 — 1과제 · EKS·관측성',
-          link: '/part-2/11-eksctl-cluster/',
+          link: '/part-2/09-eksctl-cluster/',
           items: [{ label: 'Week 2', items: [{ autogenerate: { directory: 'part-2' } }] }],
         },
         {
           label: 'PART 3 — Hard Mode',
-          link: '/part-3/16-private-eks-iam/',
+          link: '/part-3/13-private-eks-iam/',
           items: [{ label: 'Week 3', items: [{ autogenerate: { directory: 'part-3' } }] }],
         },
         {
           label: 'PART 4 — 2과제 모듈',
-          link: '/part-4/17-serverless-event/',
+          link: '/part-4/14-serverless-event/',
           items: [{ label: 'Week 3', items: [{ autogenerate: { directory: 'part-4' } }] }],
         },
         {
           label: 'PART 5 — 3과제 운영',
-          link: '/part-5/24-task3-load-ops/',
+          link: '/part-5/21-task3-deploy/',
           items: [{ label: 'Week 4', items: [{ autogenerate: { directory: 'part-5' } }] }],
         },
         {
           label: 'PART 6 — Battle Drills',
-          link: '/part-6/26-mutation-drill/',
+          link: '/part-6/23-mutation-drill/',
           items: [{ label: 'Week 4', items: [{ autogenerate: { directory: 'part-6' } }] }],
         },
         {

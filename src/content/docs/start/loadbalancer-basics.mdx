@@ -213,7 +213,7 @@ ALB 를 CloudFront 뒤에만 두는 방법이다. CloudFront 는 오리진으로
 
 CloudFront 가 오리진으로 보낼 때 커스텀 헤더를 심고, ALB 규칙이 그 헤더 값을 조건으로 검사한다. 헤더가 없으면 어떤 규칙에도 안 걸려 기본 액션 `fixed-response 403` 으로 떨어진다.
 
-set-02 실측은 규칙이 **정확히 2개**다. 채점(mark 7-2)이 `describe-rules` 출력의 `HttpHeaderConfig.Values[]` 줄 수를 세므로 규칙을 더하거나 빼면 그 항목이 어긋난다. 상세는 [k8s 워크로드·ALB 이론](/part-2/12-k8s-workloads-alb/theory/) 에 있다.
+set-02 실측은 규칙이 **정확히 2개**다. 채점(mark 7-2)이 `describe-rules` 출력의 `HttpHeaderConfig.Values[]` 줄 수를 세므로 규칙을 더하거나 빼면 그 항목이 어긋난다. 상세는 [k8s 워크로드·ALB 이론](/part-2/10-k8s-workloads-alb/theory/) 에 있다.
 
 ### 3-2. 이름이 채점 대상이다
 
@@ -538,10 +538,10 @@ EC2 노드에서도 `ip` 를 쓰면 노드를 거치는 홉이 하나 줄어든�
 
 ## ⑦ 다음 단계
 
-모듈 12 에서 이 구조를 실제로 세운다. Terraform 으로 ALB 와 타깃그룹을 만들고, `TargetGroupBinding` 으로 파드를 등록하고, CloudFront 헤더를 검사하는 리스너 규칙을 붙인다.
+모듈 10 에서 이 구조를 실제로 세운다. Terraform 으로 ALB 와 타깃그룹을 만들고, `TargetGroupBinding` 으로 파드를 등록하고, CloudFront 헤더를 검사하는 리스너 규칙을 붙인다.
 
 <LinkButton href="/start/eks-basics/" icon="right-arrow">다음 선수 학습 — EKS 기초</LinkButton>
-<LinkButton href="/part-2/12-k8s-workloads-alb/" variant="minimal">PART 2 — k8s 워크로드·ALB</LinkButton>
+<LinkButton href="/part-2/10-k8s-workloads-alb/" variant="minimal">PART 2 — k8s 워크로드·ALB</LinkButton>
 
 ## 공식 문서
 

@@ -1,0 +1,100 @@
+---
+title: 15. 오토스케일링 — SQS · KEDA · Karpenter (서울 ap-northeast-2)
+description: 모듈 개요 — 큐 길이가 파드를, 파드가 노드를 늘리는 2단 스케일링을 배포하고 set-08 판으로 이행한다.
+sidebar:
+  order: 1
+---
+
+import { FileTree, LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+2과제 **유형 3 — 이벤트 기반 오토스케일링**을 다룬다. 기준본은 set-07 task-2 module-3(실채점 전 항목 통과 확정)이고, 이행 타깃은 같은 체인을 다른 값으로 쓰는 set-08 task-2 module-4 다.
+
+같은 파트의 나머지 유형은 따로 갈라져 있다 — [16. 컨테이너 로깅](/part-4/16-container-logging/), [17. 스트리밍](/part-4/17-streaming/).
+
+## 학습 목표
+
+- [ ] SQS 큐 길이 → KEDA(Pod 1~5) → Karpenter(Node) 2단 스케일링 체인을 백지에서 그릴 수 있다
+- [ ] scaleDown `stabilizationWindowSeconds: 15`(+ `Percent 100/15s`) + NodePool `consolidateAfter: 60s`가 "150초 내 수렴" 채점과 한 쌍인 이유를 설명할 수 있다
+- [ ] Pod requests 500m×5가 t3.medium 1대(allocatable ~1.9 vCPU)를 넘어 노드 2대가 유발되는 계산을 할 수 있다
+- [ ] Karpenter 디스커버리 태그(`karpenter.sh/discovery` 서브넷, `aws:eks:cluster-name` SG)의 역할을 안다
+- [ ] set-08 module-4(Fargate 컨트롤러 + SQS)가 set-07 module-3과 갈리는 지점 — `min 0`이면 `pollingInterval`이 유효해지는 이유, TriggerAuthentication, nodeSelector 2개 — 을 설명할 수 있다
+
+## 소요 시간
+
+- 약 4~5시간 (이론 1.5h + 기준본 실습 2h + 이행 1h). EKS 클러스터 생성 ~20분이 포함된다. Week 3.
+
+## 과금 리소스와 destroy 방침
+
+| 리소스 | 과금 | 방침 |
+|---|---|---|
+| **EKS 클러스터** (skm-eks-cluster) | **시간당 컨트롤플레인 과금 (가장 큼)** | **실습 종료 즉시 `eksctl delete cluster`** |
+| 노드 EC2 (t3.medium 등) | 시간당 과금 | 클러스터 삭제로 함께 정리 |
+| NAT Gateway (모듈 VPC) | 시간당 + 처리량 | terraform destroy 즉시 |
+| SQS / ECR / EBS PV | 소액 | destroy로 정리 |
+
+:::caution[삭제 순서 주의]
+k8s 리소스(TGB, Karpenter 노드) → helm → `eksctl delete cluster` → `terraform destroy`. Karpenter가 만든 노드가 남아 있으면 클러스터 삭제가 걸릴 수 있으니 NodePool을 먼저 지운다.
+:::
+
+## 선행 지식
+
+:::tip[개념이 낯설면 여기부터]
+이 모듈의 이론은 **1장 요약**이라 서비스 개념을 설명하지 않고 시간 예산과 채점 함정부터 다룬다. 다음 네 가지 중 하나라도 흐릿하면 [autoscaling-basics](/start/autoscaling-basics/)를 먼저 읽는다(약 1.5시간).
+
+- HPA의 이용률 계산과 안정화 창
+- KEDA의 ScaledObject가 HPA를 만들어 준다는 구조
+- Karpenter가 Cluster Autoscaler와 다른 점
+- Fargate 프로파일
+
+SQS 자체가 처음이면 [serverless-basics](/start/serverless-basics/)의 SQS 절도 함께 본다.
+:::
+
+- HPA·KEDA·Karpenter·Fargate가 각각 무엇을 조정하는지 — [autoscaling-basics](/start/autoscaling-basics/)
+- SQS 큐 길이 지표와 가시성 제한 시간 — [serverless-basics](/start/serverless-basics/)
+- Deployment의 `replicas`를 바깥에서 조종하는 것이 오토스케일러(KEDA/HPA)다 — [k8s-basics](/start/k8s-basics/)
+- 파드 `requests`가 스케줄링 단위 — 노드 수 계산의 입력값 — [k8s-basics](/start/k8s-basics/)
+- ServiceAccount에 붙는 IAM 역할이 SQS·S3 접근을 만든다 — [iam-basics](/start/iam-basics/)
+
+막히는 항목이 있으면 그 링크를 먼저 읽는다. 아니면 바로 다음 파일로 간다.
+
+## 선행 모듈
+
+- PART-2 EKS-Core 전체 (eksctl, IRSA, addon 노드그룹)
+- [11. 관측성](/part-2/11-observability/) (Grafana 기초)
+- [14. 서버리스 워크플로](/part-4/14-serverless-event/) (2과제 채점 상태 감각)
+
+## 참고 경로 (정답지)
+
+<FileTree>
+
+- skills-2026
+  - set-07/task-2
+    - module-3-eks-scaling 기준본 — 유형 3 정답 (실채점 전 항목 통과)
+      - k8s
+        - **30-keda-scaledobject.yaml** scaleDown 15s/100% 오버라이드, pollingInterval 없음
+        - **10-karpenter-nodepool.yaml** taint·consolidation·디스커버리 태그
+        - **20-deployment.yaml** env 리터럴 3개·requests 500m
+      - **README.md** / **README.linux.md** CloudShell 실측 런북
+    - mark/**mark3.sh** 채점 스크립트
+    - **NOTES.md** 실측 함정과 결정 로그
+  - set-08/task-2
+    - module-4-sqs-scaling 이행 타깃 — Fargate 컨트롤러 + SQS
+      - k8s **30-keda-scaledobject.yaml** minReplicaCount 0 · pollingInterval
+      - app/**Dockerfile**
+    - mark/**mark2-4.sh** 채점 스크립트
+    - **NOTES.md** 전용 함정 절 — 실채점 통과본이다
+
+</FileTree>
+
+## 공식 문서
+
+- [HorizontalPodAutoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) — 이용률 계산식과 `behavior` 필드
+- [KEDA Scalers](https://keda.sh/docs/latest/scalers/) — SQS 스케일러 인자·인증 방식
+- [Karpenter NodePool](https://karpenter.sh/docs/concepts/nodepools/) — requirements·limits·consolidation
+
+## 다음 단계
+
+<LinkButton href="/part-4/15-eks-scaling/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-4/15-eks-scaling/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

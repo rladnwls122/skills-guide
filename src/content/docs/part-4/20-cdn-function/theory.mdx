@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
@@ -72,6 +73,31 @@ AWS 공식 비교표에서 이 모듈 판단에 필요한 항목만 추렸다.
 **어느 쪽을 언제 쓰나** — 캐시 키 정규화, 헤더 조작, URL 리다이렉트/재작성, 간단한 인가 검증처럼 가벼운 문자열 로직은 CloudFront Functions. 외부 API 호출, 파일시스템, 요청 본문 파싱처럼 무거운 작업이 필요하면 Lambda@Edge. 이 모듈은 KVS 조회 + URI/쿠키 조작뿐이라 CloudFront Functions로 충분하다 — 오히려 **Lambda@Edge는 KeyValueStore를 아예 못 써서** 이 설계를 그대로 옮길 수 없다(훅·기능 지원 표).
 
 ---
+
+
+<details class="build-step">
+<summary>지금 확인하기 — 함수가 걸리는 훅이 넷이라는 것</summary>
+
+어느 시점에 함수를 걸지가 이 모듈의 첫 판단이다. 도움말로 훅 이름을 확인한다. **조회뿐이라 과금이 없다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws cloudfront create-function help | Select-String -Pattern 'viewer-request|viewer-response|Runtime|EventType' | Select-Object -First 6
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws cloudfront create-function help | grep -E 'viewer-request|viewer-response|Runtime|EventType' | head -6
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 뷰어 쪽 요청·응답 훅과 런타임 이름이 보인다. **CloudFront Functions 는 뷰어 훅 둘에만 걸린다** — 오리진 쪽 훅이 필요하면 다른 서비스를 써야 한다.
+
+경로를 고쳐 오리진으로 넘기는 일은 요청 훅에서 한다. 응답 훅에서 하면 이미 늦다.
+
+</details>
 
 ## 2. 이 모듈이 실제로 하는 일 — KVS 기반 A/B 리라이트
 
@@ -145,6 +171,31 @@ function handler(event) {
 
 ---
 
+
+<details class="build-step">
+<summary>지금 확인하기 — KeyValueStore 를 함수 밖에서 읽어 본다</summary>
+
+A/B 비율 같은 값을 코드가 아니라 저장소에 두는 구조다. 저장소가 무엇을 담는지 도움말로 본다. 조회뿐이라 과금이 없다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws cloudfront-keyvaluestore help | Select-String -Pattern 'get-key|put-key|list-keys|describe-key-value-store' | Select-Object -First 6
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws cloudfront-keyvaluestore help | grep -E 'get-key|put-key|list-keys|describe-key-value-store' | head -6
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 키 단위 읽기·쓰기 명령이 보인다. **함수를 다시 배포하지 않고 값만 바꿀 수 있다**는 것이 이 구조의 이유다 — 비율을 바꾸는 데 배포 전파를 기다리지 않는다.
+
+`Invalid choice: 'cloudfront-keyvaluestore'` 가 나오면 CLI 가 오래된 것이다. CloudShell 에서 실행한다.
+
+</details>
+
 ## 3. 함정 — `await`는 반드시 단독 문장으로
 
 :::danger[함정 — await를 함수 인자 자리에 쓰면 실행 시점에만 죽는다]
@@ -177,6 +228,32 @@ CloudFront Functions는 만들면 바로 `DEVELOPMENT` 스테이지에 들어간
 - **`mark2.sh`가 검사하지 않는 항목도 있다.** 과제지 4번 절의 Security Header 응답 헤더 정책은 이름·내용이 `mark2.sh`의 자동 검사 대상이 아니다(2-1 ~ 2-6 어디에도 없다). 그래도 과제지 요구사항이므로 구현은 하되, "mark에 없다고 안 만들어도 된다"는 판단은 위험하다 — 수동 채점 가능성이 있다.
 
 ---
+
+
+<details class="build-step">
+<summary>지금 확인하기 — 실측 함정 목록을 원문으로 본다</summary>
+
+이 모듈의 함정은 대부분 문법이 아니라 **배포 절차**에서 나온다. 정답지 기록을 직접 읽는다. 파일 읽기라 과금이 없다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String -Pattern 'await|publish|LIVE|DEVELOPMENT|KVS' `
+    -Path $HOME\skills-2026\set-07\task-2\NOTES.md | Select-Object -First 10
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -nE 'await|publish|LIVE|DEVELOPMENT|KVS' ~/skills-2026/set-07/task-2/NOTES.md | head -10
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 함수를 만들었어도 **게시(publish)하지 않으면 배포에 반영되지 않는다**는 기록과, 문법 제약에 대한 메모가 나온다. 콘솔에서 저장까지 하고 게시를 안 해 "코드는 맞는데 동작이 안 바뀐다"로 헤매는 것이 이 모듈의 대표 사고다.
+
+출력이 비면 클론 경로를 확인한다.
+
+</details>
 
 ## 6. 변형 포인트
 

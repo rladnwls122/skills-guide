@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
@@ -67,14 +68,59 @@ flowchart LR
 5. **ALB/TG는 terraform으로 이름 고정 + TargetGroupBinding으로 Pod 연결.** TGB는 CRD라 **LBC 설치 이후에만 apply 가능** — 순서 의존. 두 방식을 고르는 기준은 [loadbalancer-basics 의 판단 표](/start/loadbalancer-basics/#5-5-판단-표)에 있다.
 6. **대시보드 쿼리**: `sum by (level) (...)` + legendFormat `{{level}}` — 범례가 INFO/WARN/ERROR로 떠야 한다. level 값은 **대문자 ERROR**.
 
+
+<details class="build-step">
+<summary>지금 확인하기 — 파서가 파일 경로에서 무엇을 뽑나</summary>
+
+라벨이 어디서 오는지는 수집기 설정 한 곳에 적혀 있다. **정답지 파일을 읽을 뿐이라 과금이 없다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String -Pattern 'include:|type: container|k8s\.|otlphttp|exclude' `
+    -Path $HOME\skills-2026\set-07\task-2\module-4-container-logging\k8s\20-otel-collector.yaml |
+    Select-Object -First 12
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -nE 'include:|type: container|k8s\.|otlphttp|exclude' \
+    ~/skills-2026/set-07/task-2/module-4-container-logging/k8s/20-otel-collector.yaml | head -12
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 수집 경로 글롭, `container` 파서, 그리고 `k8s.` 로 시작하는 리소스 속성 이름들이 보인다. **라벨은 로그 본문이 아니라 파일 경로에서 나온다** — 그래서 본문을 가공해도 인덱스 라벨은 늘지 않는다.
+
+`exclude` 줄도 함께 본다. 수집기가 자기 로그를 다시 먹으면 루프가 된다.
+
+</details>
+
 ### ④ 채점이 보는 상태
 
 - 리소스 조회: `log-generator` 2 replica(o11y), ds `o11y-otel`, svc `o11y-loki` ClusterIP 3100, deploy `o11y-grafana` — 이름·네임스페이스 정확 일치.
 - LogQL 채점: `{k8s_namespace_name="o11y"} | json | level="ERROR"`가 결과를 반환해야 함.
 - **Grafana는 웹 수동 채점 항목 존재** — 로그인/Datasource/Log Overview 3패널.
 
+
+<details class="build-step">
+<summary>지금 확인하기 — Loki 차트가 여는 것</summary>
+
+포트와 인제스트 경로를 설치 전에 확인한다. 값 조회뿐이라 과금이 없다.
+
+```bash
+helm repo add grafana-community https://grafana-community.github.io/helm-charts 2>/dev/null
+helm show values grafana-community/loki --version 18.7.1 | grep -nE 'port|otlp|singleBinary|persistence' | head -12
+```
+
+기대: HTTP 포트 `3100` 과 단일 바이너리 배포 옵션이 보인다. **저장소 설정이 `grafana/loki` 가 아니라 `grafana-community` 인 것**도 함께 확인한다 — 이름이 비슷한 다른 차트가 있다.
+
+`no repositories` 가 나오면 첫 줄이 실패한 것이다. 망이 막혔다면 정답지 `helm/loki-values.yaml` 의 값과 대조하는 것으로 대신한다.
+
+</details>
+
 :::note[배포본 v5에서 완화·확정된 것들]
-정답지가 없는 모듈이라 배포 자료의 `CHANGELOG.txt`가 중요한 근거다.
+정답 구현이 들어오기 전에는 배포 자료의 `CHANGELOG.txt` 가 유일한 근거였다. 지금은 `set-07/task-2/module-4-container-logging` 에 구현이 있으므로 둘을 함께 본다 — 아래 항목은 배포 자료 쪽 근거다.
 
 - **로그 확인(4-5)이 정확 일치에서 부분 일치로 바뀌었다.** 기준은 "출력된 로그 중 **3분 이내로 기록된 로그가 있으면 득점**" — 로그 본문 전체를 맞출 필요가 없고 **최근성**만 보면 된다. 채점 직전에 트래픽을 한 번 흘려 두는 것으로 충족된다.
 - **모든 EKS 노드의 TZ를 KST로** 설정하라는 지시가 추가됐다.
@@ -88,6 +134,32 @@ flowchart LR
 
 - 범례가 `{level="ERROR"}` 형태면 오답 — legendFormat `{{level}}` 유지.
 - ALB 타깃 healthy까지 1~2분 — 채점 직전 `curl /healthz`로 확인.
+
+
+<details class="build-step">
+<summary>지금 확인하기 — 채점이 던지는 질의를 그대로 읽는다</summary>
+
+무엇을 만족시켜야 하는지는 채점 스크립트에 문자열로 박혀 있다. **파일 읽기뿐이라 과금이 없다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String -Pattern 'query_range|k8s_namespace_name|kubectl get|3100' `
+    -Path $HOME\skills-2026\set-07\task-2\mark\mark4.sh | Select-Object -First 8
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -nE 'query_range|k8s_namespace_name|kubectl get|3100' ~/skills-2026/set-07/task-2/mark/mark4.sh | head -8
+  ```
+  </TabItem>
+</Tabs>
+
+기대: LogQL 이 `{k8s_namespace_name="o11y"} | json | level="ERROR"` 이고, 시간 범위가 **3분 이내**로 잘려 있다. 라벨 이름 하나, 레벨 값의 대소문자 하나가 어긋나면 결과가 빈다.
+
+이 한 줄이 네임스페이스 이름·라벨 승격·로그 본문 형식 셋을 동시에 묶는다.
+
+</details>
 
 ### ⑤ 퀴즈
 

@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
@@ -82,6 +83,31 @@ HPA behavior `scaleDown.stabilizationWindowSeconds`(기본 300초 → **15초**)
 4. **Karpenter 디스커버리 태그**: EC2NodeClass의 `selectorTerms`가 서브넷은 `karpenter.sh/discovery: skm-eks-cluster` 태그(terraform이 부착), SG는 `aws:eks:cluster-name` 태그로 찾는다. 태그가 없으면 NodeClass가 서브넷/SG를 못 찾아 노드가 안 뜬다. 노드에 붙는 `karpenter.sh/nodepool` 라벨은 Karpenter가 프로비저닝을 마친 뒤 붙이는 결과값이라 디스커버리 입력이 아니고, 서브넷의 `kubernetes.io/role/internal-elb` 태그는 LBC가 내부 ALB 서브넷을 고를 때만 쓴다.
 5. **NodePool taint `dedicated=app:NoSchedule`** + Deployment toleration + nodeSelector — 앱만 Karpenter 노드에, addon(KEDA·Karpenter 자신·coredns)은 addon 노드그룹에 격리.
 
+
+<details class="build-step">
+<summary>지금 확인하기 — 150초라는 요건이 어디에 적혀 있나</summary>
+
+과제지에 없는 요건을 채점 스크립트에서 직접 확인한다. **파일을 읽을 뿐이라 과금이 없고 계정도 필요 없다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String -Pattern 'seq 1 |sleep ' -Path $HOME\skills-2026\set-07\task-2\mark\mark3.sh | Select-Object -First 6
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -nE 'seq 1 |sleep ' ~/skills-2026/set-07/task-2/mark/mark3.sh | head -6
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 대기 루프가 `for i in $(seq 1 30)` 이고 안쪽에 5초 `sleep` 이 있다. **30 × 5 = 150초** — 이 곱셈이 요건의 전부다. 과제지에도 채점기준표에도 이 숫자는 없다.
+
+출력이 비면 정답지 클론 경로가 다른 것이다. [사전 준비 §4 저장소 클론](/start/#4-저장소-클론)의 경로를 확인한다.
+
+</details>
+
 ### ④ 채점이 보는 상태
 
 - 스케일아웃: 메시지 100건 주입 → 3분 관찰 → **Max Ready Pods ≥ 5 / Max App Nodes ≥ 2**.
@@ -91,6 +117,23 @@ HPA behavior `scaleDown.stabilizationWindowSeconds`(기본 300초 → **15초**)
 - **addon 노드 1대(t3.medium) 용량이 빠듯** — coredns 2 + KEDA 3 + Karpenter 1. Karpenter requests를 0.5 vCPU/512Mi로 낮춰 설치한다.
 - **Karpenter는 `--set replicas=1`로 설치한다** — 차트 기본 2 + required podAntiAffinity(hostname) + 자기 NodePool 노드를 배제하는 nodeAffinity 때문에, 채점이 1/1/1로 고정한 addon 노드 1대에선 두 번째 Pod가 앉을 자리가 구조적으로 없어 `helm --wait`가 영원히 안 끝난다. 행 상태에서 중단하면 release가 `pending-upgrade`로 잠겨 재-upgrade가 막힌다 — `helm uninstall karpenter -n kube-system` 후 재설치.
 - **KEDA Pod가 Pending이면 차트 tolerations 스키마부터** — addon 노드가 taint돼 있어 toleration 필요. 차트 버전에 따라 키가 바뀌므로 `helm show values kedacore/keda | grep -A3 tolerations`로 확인.
+
+
+<details class="build-step">
+<summary>지금 확인하기 — 차트가 toleration 을 어떤 키로 받나</summary>
+
+addon 노드에 taint 가 걸려 있어 KEDA 파드가 `Pending` 이 되는 일이 잦다. 차트가 그 값을 어떤 이름으로 받는지는 **버전마다 다르므로** 설치 전에 확인한다. 값 조회뿐이라 과금이 없다.
+
+```bash
+helm repo add kedacore https://kedacore.github.io/charts 2>/dev/null
+helm show values kedacore/keda --version 2.20.1 | grep -nE 'tolerations|nodeSelector|resources' | head -10
+```
+
+기대: `tolerations` 와 `nodeSelector` 키가 **컴포넌트별로 따로** 나온다. operator 하나만 고치면 나머지 파드가 그대로 `Pending` 에 남는다.
+
+`Error: no repositories` 가 나오면 첫 줄의 `helm repo add` 가 실패한 것이다. 사내망이라 막혔다면 정답지의 `README.md` 에 적힌 값과 대조하는 것으로 대신한다.
+
+</details>
 
 ### ⑤ 변형 포인트
 
@@ -218,6 +261,34 @@ set-07에서는 `pollingInterval`을 **지우는 것**이 정답이었다. `minR
 
 대신 4-6이 큐에 메시지를 넣으므로 **4모듈의 마지막 항목으로 수행**한다.
 :::
+
+
+<details class="build-step">
+<summary>지금 확인하기 — 두 세트의 ScaledObject 를 나란히 놓는다</summary>
+
+이행에서 바뀌는 것이 정확히 무엇인지 파일 비교로 먼저 본다. **읽기만 하므로 과금이 없다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $a = "$HOME\skills-2026\set-07\task-2\module-3-eks-scaling\k8s\30-keda-scaledobject.yaml"
+  $b = "$HOME\skills-2026\set-08\task-2\module-4-sqs-scaling\k8s\30-keda-scaledobject.yaml"
+  Compare-Object (Get-Content $a) (Get-Content $b) | Select-Object -First 20 SideIndicator, InputObject
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  diff ~/skills-2026/set-07/task-2/module-3-eks-scaling/k8s/30-keda-scaledobject.yaml \
+       ~/skills-2026/set-08/task-2/module-4-sqs-scaling/k8s/30-keda-scaledobject.yaml
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 유휴 파드 수와 폴링 주기, 트리거 인증 방식이 갈린다. **한쪽에만 있는 필드**가 이행의 핵심이다 — 값을 바꾸는 것이 아니라 필드가 생기고 사라진다.
+
+차이가 전부처럼 보이면 들여쓰기까지 다른 것이니 필드 이름만 추려 본다.
+
+</details>
 
 ### ④ 고정 이름·값
 

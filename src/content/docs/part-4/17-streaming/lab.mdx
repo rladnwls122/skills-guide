@@ -23,6 +23,7 @@ MSK 는 **apply 만 35분, destroy 23분**이 걸리고 그동안 계속 과금�
 - [ ] 두 갈래(Kinesis + Flink Studio / MSK + Lambda 컨슈머)의 구성 차이를 설명한다
 - [ ] MSK 의 생성·삭제 소요를 일정에 반영한다
 - [ ] (선택) 최단 경로로 배포하고 확인 즉시 지운다
+- [ ] 세 가지 증상을 코드만 보고 어느 채점 항목이 떨어지는지 판정한다
 
 선행 지식과 목표는 [모듈 개요](/part-4/17-streaming/)에.
 
@@ -159,6 +160,107 @@ Part C를 배포했다면 destroy까지 여기서 끝낸다 — 마지막 "정�
 
 ---
 
+
+
+## 2. 지면 진단 — 코드를 읽고 채점 결과를 예측한다
+
+MSK 는 생성에만 35분이 걸려 실제로 고장을 내 볼 수 없다. 대신 **정답지 코드와 채점 스크립트를 나란히 놓고 판정한다.** 당일에도 apply 를 걸어 둔 35분 동안 하는 일이 정확히 이것이다.
+
+방식은 셋 다 같다 — 상황을 읽고 **어느 채점 항목이 떨어지는지, 그리고 증상이 어떻게 보일지**를 먼저 적은 뒤 코드로 확인한다.
+
+### 2-1. 프로듀서가 브로커에 못 붙는다
+
+증상: 프로듀서 로그에 `unexpected EOF: broker appears to be expecting TLS`.
+
+<Steps>
+
+1. **먼저 답을 적는다.** 이 증상은 인증 실패인가 연결 실패인가. 어느 채점 항목이 떨어지는가.
+
+2. **코드로 확인한다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'BOOTSTRAP|9092|9094|9098|sasl|tls' `
+       -Path $HOME\skills-2026\set-02\task-2\module-3-msk\terraform\*.tf | Select-Object -First 12
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -rniE 'BOOTSTRAP|9092|9094|9098|sasl|tls' \
+       ~/skills-2026/set-02/task-2/module-3-msk/terraform/*.tf | head -12
+     ```
+     </TabItem>
+   </Tabs>
+
+3. **판정.** 포트마다 기대하는 인증 방식이 다르다. 제공 바이너리가 못 쓰는 방식의 포트를 주면 **연결 단계에서** 끊긴다 — 그래서 증상이 인증 오류가 아니라 연결 오류로 보인다.
+
+   떨어지는 항목은 클러스터 상태가 아니라 **데이터가 흐르는지 보는 항목들**이다. 클러스터는 멀쩡히 `ACTIVE` 라 4-3 은 통과하는데 4-5 가 빈다.
+
+</Steps>
+
+**교훈.** 채점 항목이 통과하는 것과 시스템이 동작하는 것은 다르다. **상태를 보는 항목과 결과를 보는 항목을 갈라서** 어디가 깨졌는지 좁힌다.
+
+### 2-2. 저장은 되는데 조회가 빈다
+
+증상: DynamoDB 에 항목이 쌓이는데 채점 조회가 아무것도 못 찾는다.
+
+<Steps>
+
+1. **먼저 답을 적는다.** 무엇이 다르면 "있는데 못 찾는" 상태가 되는가.
+
+2. **채점이 무엇으로 찾는지 읽는다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'temperature|status|scan|query|\.S|\.N' `
+       -Path $HOME\skills-2026\set-02\task-2\mark\mark2-3.sh | Select-Object -First 10
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -nE 'temperature|status|scan|query|\.S|\.N' \
+       ~/skills-2026/set-02/task-2/mark/mark2-3.sh | head -10
+     ```
+     </TabItem>
+   </Tabs>
+
+3. **판정.** 채점이 **속성 타입까지 지정해** 조회한다. 값이 같아도 타입이 다르면 그 조회는 빈다. 저장하는 쪽 코드가 숫자를 숫자로 넣으면 문자열로 찾는 조회에 안 걸린다.
+
+</Steps>
+
+**교훈.** "데이터가 있다"와 "채점이 찾을 수 있다"는 다른 질문이다. 채점 명령을 **그대로 한 번 돌려 보는 것**이 유일한 확인 방법이다.
+
+### 2-3. destroy 가 끝나지 않는다
+
+증상: `terraform destroy` 가 30분 넘게 한 리소스에서 멈춰 있다.
+
+<Steps>
+
+1. **먼저 답을 적는다.** terraform 이 붙잡고 있는 것인가, 기다리고 있는 것인가.
+
+2. **실측 기록을 읽는다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'destroy|ENI|Hyperplane|서브넷|교착' `
+       -Path $HOME\skills-2026\set-02\task-2\NOTES.md | Select-Object -First 8
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -nE 'destroy|ENI|Hyperplane|서브넷|교착' ~/skills-2026/set-02/task-2/NOTES.md | head -8
+     ```
+     </TabItem>
+   </Tabs>
+
+3. **판정.** 프라이빗 서브넷과 VPC 삭제가 **AWS 쪽 네트워크 인터페이스 회수를 기다린다.** terraform state 밖의 일이라 로그에는 원인이 안 보인다. 콘솔에서 남은 인터페이스를 확인하는 것 말고 할 일이 없고, **손으로 지우면 더 나빠진다.**
+
+</Steps>
+
+**교훈.** 도구가 멈춰 있다고 도구 문제가 아니다. **누가 무엇을 기다리는지**를 먼저 묻는다. 이 판단이 당일 23분을 사고로 오인하지 않게 한다.
 
 ## 정리
 

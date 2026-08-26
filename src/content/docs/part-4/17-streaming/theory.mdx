@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
@@ -74,6 +75,32 @@ flowchart LR
 5. **Flink 역할 Glue 권한은 카탈로그 전체**(`database/*`, `table/*/*`) — Zeppelin이 hive/default DB도 GetDatabase로 탐침해서 좁히면 AccessDenied.
 6. **SQL 결과는 노트북 화면에 표시될 뿐 어디에도 저장되지 않는다** — 두 `%flink.ssql(type=update)` 쿼리에 sink 커넥터를 두지 않았다. task.md는 "쿼리가 정상 실행"만 요구하고, mark 2-4도 애플리케이션 상태(`READY`/`ZEPPELIN-FLINK-3_0`)만 볼 뿐 쿼리 실행 결과는 채점하지 않는다 — 그래도 Run 상태에서 두 쿼리가 성공하는 시연 자체는 과제지 요구라 생략할 수 없다.
 
+
+<details class="build-step">
+<summary>지금 확인하기 — 35분이 어디서 나오는가</summary>
+
+일정에 넣을 숫자를 실측 기록에서 직접 확인한다. **읽기만 하므로 과금이 없다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String -Pattern '실측|apply|destroy|분' -Path $HOME\skills-2026\set-02\task-2\NOTES.md |
+    Select-String -Pattern 'MSK|클러스터|31|35|23' | Select-Object -First 8
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -nE 'MSK|클러스터' ~/skills-2026/set-02/task-2/NOTES.md | grep -E '31|35|23|분' | head -8
+  ```
+  </TabItem>
+</Tabs>
+
+기대: apply 35분(클러스터 하나가 31분 40초), destroy 23분이라는 실측이 나온다. **이 숫자가 당일 착수 순서를 정한다** — MSK 가 나오면 가장 먼저 apply 를 걸고 그동안 다른 모듈을 끝낸다.
+
+출력이 비면 클론 경로를 확인한다. 숫자를 외우기보다 **어디를 보면 나오는지**를 기억한다.
+
+</details>
+
 ### ③′ 핵심 연결 고리 — MSK
 
 프로듀서는 Go 바이너리 EC2 하나, 컨슈머는 Lambda 둘이다 — `wsc2026-sensor-consumer`가 raw 토픽을, `wsc2026-sensor-alert-consumer`가 alert 토픽을 각각 별도 ESM으로 구독한다. 이상치는 sensor-consumer가 alert 토픽에 다시 발행해 alert-consumer로 넘어간다(도식의 루프백).
@@ -85,6 +112,33 @@ flowchart LR
 5. **ESM `starting_position = LATEST`** — 재배포 시 백로그 재처리 폭주 방지.
 6. **MSK SG 셀프 참조 인바운드** — ESM 폴러 ENI가 클러스터 서브넷에서 브로커와 통신하는 데 필수.
 7. **env 이름은 제공 문서 원문 그대로**: producer `BOOTSTRAP_SERVERS`(복수) / consumer `BOOTSTRAP_SERVER`(단수).
+
+
+<details class="build-step">
+<summary>지금 확인하기 — 인증 방식이 무엇을 켜고 포트가 어떻게 갈리나</summary>
+
+MSK 인증 설정 한 덩어리가 브로커 포트와 클라이언트 요구사항을 동시에 정한다. **정답지 파일을 읽을 뿐이라 과금이 없다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String -Pattern 'sasl|iam|tls|unauthenticated|client_broker' `
+    -Path $HOME\skills-2026\set-02\task-2\module-3-msk\terraform\msk.tf | Select-Object -First 12
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -niE 'sasl|iam|tls|unauthenticated|client_broker' \
+    ~/skills-2026/set-02/task-2/module-3-msk/terraform/msk.tf | head -12
+  ```
+  </TabItem>
+</Tabs>
+
+기대: IAM 인증과 비인증 TLS 가 **동시에** 켜져 있다. 채점은 IAM 이 켜졌는지만 보고, 제공 프로듀서 바이너리는 IAM 을 못 쓰기 때문이다 — 하나만 켜면 둘 중 하나가 깨진다.
+
+포트를 잘못 주면 클라이언트가 `broker appears to be expecting TLS` 로 끊긴다. 증상이 인증 오류가 아니라 **연결 오류로 보이는 것**이 이 함정의 핵심이다.
+
+</details>
 
 ### ④ 채점이 보는 상태
 
@@ -111,6 +165,35 @@ flowchart LR
 - 4-5-B `--output json` 으로 `SENSOR-002` 의 `sensorId`·`timestamp` **두 항목만** 조회하고, `timestamp`가 ISO 8601 KST(`2026-06-01T18:28:24+09:00`) 형식이면 정답(producer가 계속 돌고 있다는 증거). 정정 전 명령은 `--output table`·`max-items 3` 이었다 — [정정 내역](/reference/errata/) 참고.
 - 4-1 의 S3 버킷 ARN 은 **비번호 부분을 제외하고** 채점한다.
 - `wsc2026-alaytics-ec2-role` 의 오타는 정정으로 수정됐고 이 이름은 채점 대상이 아니다. "오타는 그대로" 원칙 자체는 유효하되 정정 공지를 먼저 본다.
+
+
+<details class="build-step">
+<summary>지금 확인하기 — 이벤트 소스 매핑이 어디서부터 읽나</summary>
+
+두 Lambda 가 토픽을 어떻게 구독하는지 확인한다. 파일 읽기와 도움말뿐이라 과금이 없다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Select-String -Pattern 'starting_position|topics|event_source|batch' `
+    -Path $HOME\skills-2026\set-02\task-2\module-3-msk\terraform\lambda.tf | Select-Object -First 10
+  aws lambda create-event-source-mapping help | Select-String -Pattern 'LATEST|TRIM_HORIZON|StartingPosition' | Select-Object -First 5
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  grep -nE 'starting_position|topics|event_source|batch' \
+    ~/skills-2026/set-02/task-2/module-3-msk/terraform/lambda.tf | head -10
+  aws lambda create-event-source-mapping help | grep -E 'LATEST|TRIM_HORIZON|StartingPosition' | head -5
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 시작 위치가 `LATEST` 다. 도움말에 나오듯 다른 값은 **토픽에 쌓인 것을 처음부터 다시 읽는다** — 재배포할 때마다 백로그를 통째로 재처리해 채점 데이터가 중복된다.
+
+`aws: command not found` 면 도움말 부분만 건너뛴다. 파일 쪽 확인만으로도 값은 보인다.
+
+</details>
 
 ### ⑤ 퀴즈
 

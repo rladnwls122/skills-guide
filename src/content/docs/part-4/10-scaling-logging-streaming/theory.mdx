@@ -18,7 +18,7 @@ import { Quiz, QuizResults } from 'starlight-quiz/components';
 - **유형 3 — 이벤트 기반 오토스케일링** · set-07 task-2 module-3 — SQS 큐 길이가 KEDA 로 파드를, Karpenter 로 노드를 늘리는 2단 스케일링.
 - **유형 3 변형 — Fargate 컨트롤러 + SQS** · set-08 task-2 module-4 — 같은 체인에서 컨트롤러만 Fargate 로 올리고 파라미터를 뒤집은 구성.
 - **유형 4 — 컨테이너 로깅 파이프라인** · set-07 task-2 module-4 — 앱 stdout 을 OTel Collector 가 걷어 Loki 에 넣고 Grafana 가 읽는 경로.
-- **유형 5 — 스트리밍** · set-02 task-2 module-2·module-4 — Kinesis + Flink Studio 노트북 갈래와 MSK + Lambda 컨슈머 갈래.
+- **유형 5 — 스트리밍** · set-02 task-2 module-2·module-3 — Kinesis + Flink Studio 노트북 갈래와 MSK + Lambda 컨슈머 갈래.
 
 ---
 
@@ -151,7 +151,7 @@ SQS 조회 자격증명은 keda-operator SA의 IRSA에서 가져온다. 앱 Pod�
 
 ## 유형 3 변형 — set-08 module-4 (Fargate 컨트롤러 + SQS, 오레곤 us-west-2)
 
-근거: set-08 task-2 과제지, 2026-08-01 정정본의 판정 기준, `asgmt2_module4_check.sh`. 정답 구현은 `skills-2026`의 브랜치 `set-08/task-2`, `set-08/task-2/module-4-sqs-scaling`(`k8s/`·`app/Dockerfile`·Terraform)에 있다.
+근거: set-08 task-2 과제지, 2026-08-01 정정본의 판정 기준, `asgmt2_module4_check.sh`. 정답 구현은 `skills-2026` `main` 의 `set-08/task-2/module-4-sqs-scaling`(`k8s/`·`app/Dockerfile`·Terraform)에 있다.
 
 같은 SQS → KEDA → Karpenter 체인인데 **컨트롤러가 Fargate에 뜨고 파라미터가 정반대**다. set-07 module-3을 그대로 옮기면 거의 전 항목이 어긋난다 — 두 세트를 나란히 놓고 무엇이 왜 갈리는지 보는 것이 이 절의 목적이다.
 

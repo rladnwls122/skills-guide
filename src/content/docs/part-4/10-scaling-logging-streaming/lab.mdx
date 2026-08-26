@@ -231,24 +231,24 @@ kubectl get nodes -l karpenter.sh/nodepool=skm-app-nodepool   # 1대로 수렴
 
 ## Part B — 유형 4 · 로깅 파이프라인 (ap-northeast-1, o11y-)
 
-:::caution[module-4 정답지는 미착수다]
-`set-07/task-2/module-4/`는 디렉터리 구조만 있다(근거는 `task.md`·`mark.md` 파일의 모듈 4 절과 `mark/mark4.sh` 스크립트).
+:::note[정답지가 들어왔다 — 이 절차의 근거가 코드로 바뀌었다]
+`set-07/task-2/module-4-container-logging` 에 구현이 있다. 이 파트의 순서와 값은 그 구현에 맞춰 두었으니, 막히면 정답지의 `README.md` 와 `cs-deploy.sh` 를 연다.
 
-이 모듈의 절차는 그 근거로 짠 **설계안**이라 차트 버전·파일 경로는 구현 시 달라질 수 있다. 채점 항목과 순서 의존(LBC → TGB, Loki → OTel)을 익히는 용도로 읽는다. 정답지가 구현되면 그 README를 우선한다.
+구성은 본 PC 가 `terraform`·`eksctl` 만 쓰고 **이미지 빌드·helm·kubectl·채점은 전부 ap-northeast-1 CloudShell** 에서 하는 2분할이다. 정답지가 공식 OTel Helm 차트 대신 **원시 매니페스트**를 쓴다는 점이 이 모듈의 갈림길이다.
 :::
 
 ### B-1. 절차 (순서 요약 — 순서 의존이 많다)
 
 <Steps>
 
-1. **본 PC**: `module-4/terraform` apply (VPC + **이름 고정 ALB/TG** + ECR + LBC IAM) → zip 반입.
+1. **본 PC**: `module-4-container-logging/terraform` apply (VPC + **이름 고정 ALB/TG** + ECR + LBC IAM) → zip 반입.
 2. **CloudShell**: `~/.o11y-env` → `eksctl create cluster`(~20분) → 노드 2대가 AZ a/c로 분산됐는지 확인.
 3. 이미지 빌드: 제공 `app.py` 는 그대로 두고 **`app/Dockerfile` 만 직접 쓴다** — 제공 Dockerfile 은 flask 를 설치하지 않아 파드가 CrashLoop 한다. 베이스·tzdata·비루트 패턴은 [모듈 03 의 Dockerfile](/part-1/03-container-lambda-dynamodb/lab/)을 그대로 가져오고, 바뀌는 것은 의존성 설치 줄과 진입점이다.
-4. **LBC 3.4.2 설치** ← TGB CRD가 여기서 생긴다. 이후에만 TGB apply 가능.
+4. **LBC 차트 3.4.3 설치** ← TGB CRD가 여기서 생긴다. 이후에만 TGB apply 가능.
 5. namespace/StorageClass/앱 apply + 앱 TGB.
-6. **Loki 18.5.1** (`grafana-community` 저장소 — `grafana/loki`는 GEL 전용) → svc `o11y-loki` 3100 확인.
+6. **Loki 차트 18.7.1** (`grafana-community` 저장소 — `grafana/loki`는 GEL 전용) → svc `o11y-loki` 3100 확인.
 7. **OTel DaemonSet apply는 Loki 이후** (otlphttp 전송 대상 먼저).
-8. **Grafana 10.5.15** + 대시보드 ConfigMap + Grafana TGB.
+8. **Grafana 차트 12.10.0** + 대시보드 ConfigMap + Grafana TGB.
 
 </Steps>
 
@@ -277,7 +277,7 @@ kill %1
 
 </details>
 
-채점 전 마지막 준비: `/log?level=info`, `/log?level=warn`, `/log?level=error` 각각 호출 → Grafana Log Overview 3패널 모두 데이터 확인(범례 INFO/WARN/ERROR). 채점: `bash ~/module-4/mark/mark4.sh` (4-6은 Grafana 웹 수동 채점).
+채점 전 마지막 준비: `/log?level=info`, `/log?level=warn`, `/log?level=error` 각각 호출 → Grafana Log Overview 3패널 모두 데이터 확인(범례 INFO/WARN/ERROR). 채점: `bash ~/skills-2026/set-07/task-2/mark/mark4.sh` (4-6은 Grafana 웹 수동 채점).
 
 ### B-3. :badge[함정]{variant=danger}
 
@@ -309,10 +309,10 @@ kill %1
 <Steps>
 
 1. `mark.md`의 "2) Real-time Data Analytics"·"4) MSK" 절(2-1~2-6, 4-1~4-5-B)을 읽는다 — 채점이 보는 값이 곧 학습 목표다.
-2. `module-2-analytics/terraform/kinesis.tf`·`flink.tf`, `module-4-msk/terraform/msk.tf`·`security.tf`·`lambda.tf`를 정독하며 mark 항목과 한 줄씩 맞춰본다. 예:
+2. `module-2-analytics/terraform/kinesis.tf`·`flink.tf`, `module-3-msk/terraform/msk.tf`·`security.tf`·`lambda.tf`를 정독하며 mark 항목과 한 줄씩 맞춰본다. 예:
    - mark 2-4 기대값 `wsc2026-analytics-flink READY ZEPPELIN-FLINK-3_0` ↔ `flink.tf`의 `var.flink_app_name`·`var.flink_runtime` 기본값이 정확히 이 값.
    - mark 4-3 기대값 `... Sasl.Iam.Enabled True` ↔ `msk.tf`의 `client_authentication.sasl.iam = true`(`unauthenticated`는 `producer_auth_mode`로 별도 제어 — mark는 이 값을 보지 않는다).
-3. `module-2-analytics/README.md`·`module-4-msk/README.md`의 "요구사항 ↔ 구현 매핑" 표로 나머지 항목(2-1·2-2·2-5·2-6, 4-1·4-2·4-4·4-5)을 전부 훑는다.
+3. `module-2-analytics/README.md`·`module-3-msk/README.md`의 "요구사항 ↔ 구현 매핑" 표로 나머지 항목(2-1·2-2·2-5·2-6, 4-1·4-2·4-4·4-5)을 전부 훑는다.
 4. (선택, 콘솔) Managed Apache Flink 콘솔에서 Studio 노트북 생성 마법사를 끝까지 진행해 본다(생성 직전 취소) — 위저드가 자동으로 붙이는 커넥터 체크박스를 확인하면 [이론](/part-4/10-scaling-logging-streaming/theory/)의 "커넥터를 Maven으로 명시 주입" 함정이 왜 필요한지 눈으로 이해된다.
 5. (선택, 콘솔) MSK 콘솔에서 클러스터 생성 마법사의 "액세스 제어 방법" 화면까지 진행해 본다(생성 직전 취소) — IAM 역할 기반 인증과 미인증 액세스를 동시에 켜는 체크박스 위치를 확인한다.
 6. `terraform plan`으로 실제 인자만 확인한다(리소스를 만들지 않으므로 과금 없음):
@@ -321,13 +321,13 @@ kill %1
      <TabItem label="PowerShell">
      ```powershell
      cd module-2-analytics\terraform ; terraform init ; terraform plan -var "player_number=$env:NUM"
-     cd ..\..\module-4-msk\terraform ; terraform init ; terraform plan -var "player_number=$env:NUM"
+     cd ..\..\module-3-msk\terraform ; terraform init ; terraform plan -var "player_number=$env:NUM"
      ```
      </TabItem>
      <TabItem label="Bash (Linux/CloudShell)">
      ```bash
      cd module-2-analytics/terraform && terraform init && terraform plan -var "player_number=$NUM"
-     cd ../../module-4-msk/terraform && terraform init && terraform plan -var "player_number=$NUM"
+     cd ../../module-3-msk/terraform && terraform init && terraform plan -var "player_number=$NUM"
      ```
      </TabItem>
    </Tabs>
@@ -373,14 +373,14 @@ module-2(Kinesis+Flink)는 생성 지연이 없어 부담이 적다. module-4(MS
    <Tabs syncKey="shell">
      <TabItem label="PowerShell">
      ```powershell
-     cd module-4-msk\terraform
+     cd module-3-msk\terraform
      py -m pip install -r lambda\sensor_consumer\requirements.txt -t lambda\sensor_consumer\
      terraform apply -var "player_number=$env:NUM"
      ```
      </TabItem>
      <TabItem label="Bash (Linux/CloudShell)">
      ```bash
-     cd module-4-msk/terraform
+     cd module-3-msk/terraform
      python3 -m pip install -r lambda/sensor_consumer/requirements.txt -t lambda/sensor_consumer/
      terraform apply -var "player_number=$NUM"
      ```
@@ -652,14 +652,14 @@ eksctl delete cluster --name o11y-cluster --region ap-northeast-1
   ```powershell
   # 본 PC
   cd ~\skills-2026\set-07\task-2\module-3-eks-scaling\terraform ; terraform destroy -auto-approve
-  cd ..\..\module-4\terraform ; terraform destroy -auto-approve   # module-4를 배포했을 때만
+  cd ..\..\module-4-container-logging\terraform ; terraform destroy -auto-approve   # module-4를 배포했을 때만
   ```
   </TabItem>
   <TabItem label="Bash (Linux/CloudShell)">
   ```bash
   # 본 PC
   cd ~/skills-2026/set-07/task-2/module-3-eks-scaling/terraform && terraform destroy -auto-approve
-  cd ../../module-4/terraform && terraform destroy -auto-approve   # module-4를 배포했을 때만
+  cd ../../module-4-container-logging/terraform && terraform destroy -auto-approve   # module-4를 배포했을 때만
   ```
   </TabItem>
 </Tabs>

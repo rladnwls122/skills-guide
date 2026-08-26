@@ -323,7 +323,71 @@ spec:
 
 ## 드릴 B — k6 3단 프로파일
 
-정답지의 `script/load.js`를 그대로 쓴다. 임계값이 채점표와 같아 빨간불이 곧 감점이다.
+부하 스크립트는 **저장소에 없다.** 직접 쓴다 — 그리고 그게 맞다. 대회장에서 트래픽을 넣는 것은 채점 플랫폼이고, 여기서 만드는 스크립트는 그 트래픽을 **미리 흉내 내 내 시스템의 한계를 찾는 도구**다. 임계값을 채점 기준과 같게 두면 스크립트의 빨간불이 곧 감점 예고가 된다.
+
+아래를 `load.js` 로 저장한다. 임계값은 샘플 과제지의 서비스 수준 목표에서 그대로 가져왔다 — user·product 는 0.2초, stress 는 1초, 그리고 최소 가용성 상한이 5초다.
+
+```javascript title="load.js"
+import http from 'k6/http';
+import { check, group } from 'k6';
+
+const BASE = __ENV.BASE_URL;
+const VUS = Number(__ENV.VUS || 20);
+const DURATION = __ENV.DURATION || '2m';
+
+export const options = {
+  vus: VUS,
+  duration: DURATION,
+  thresholds: {
+    // 서비스 수준 목표 — 여기가 빨간불이면 성능 ratio 를 잃는다
+    'http_req_duration{api:user}': ['p(90)<200'],
+    'http_req_duration{api:product}': ['p(90)<200'],
+    'http_req_duration{api:stress}': ['p(90)<1000'],
+    // 최소 가용성 — 5초를 넘기면 그 요청은 실패로 친다
+    http_req_duration: ['p(99)<5000'],
+    http_req_failed: ['rate<0.01'],
+  },
+};
+
+// 변조 방지용 쿼리스트링. 값 자체는 검사되지 않지만 빠지면 요청이 거부된다
+const hex = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+const uuid = () => [hex(8), hex(4), hex(4), hex(4), hex(12)].join('-');
+const rid = () => ({ requestid: String(Date.now()).slice(-12), uuid: uuid() });
+
+export default function () {
+  const id = `k6-${__VU}-${__ITER}`;
+  const q = rid();
+
+  group('user', () => {
+    const body = JSON.stringify({ ...q, username: id, email: `${id}@example.org` });
+    const post = http.post(`${BASE}/v1/user`, body,
+      { headers: { 'Content-Type': 'application/json' }, tags: { api: 'user' } });
+    check(post, { 'user 201': (r) => r.status === 201 });
+
+    const get = http.get(`${BASE}/v1/user?email=${id}@example.org&requestid=${q.requestid}&uuid=${q.uuid}`,
+      { tags: { api: 'user' } });
+    check(get, { 'user 200': (r) => r.status === 200 });
+  });
+
+  group('product', () => {
+    // 같은 id 를 반복 조회한다 — 캐시가 듣는 구간인지 여기서 갈린다
+    const get = http.get(`${BASE}/v1/product?id=k6-fixed&requestid=${q.requestid}&uuid=${q.uuid}`,
+      { tags: { api: 'product' } });
+    check(get, { 'product 200 or 404': (r) => r.status === 200 || r.status === 404 });
+  });
+
+  group('stress', () => {
+    const body = JSON.stringify({ ...q, length: 256 });
+    const res = http.post(`${BASE}/v1/stress`, body,
+      { headers: { 'Content-Type': 'application/json' }, tags: { api: 'stress' } });
+    check(res, { 'stress 201': (r) => r.status === 201 });
+  });
+}
+```
+
+:::caution[앱이 바뀌면 스크립트도 바뀐다]
+경로·필드·응답코드는 **당일 배부되는 앱**이 정본이다. 위 값은 샘플 과제지 기준이므로, 당일에는 앱을 먼저 한 번 호출해 실제 응답을 보고 스크립트를 맞춘다. 3과제는 요구사항을 구현하는 과제가 아니라 **주어진 앱을 분석해 운영하는 과제**다.
+:::
 
 <Steps>
 
@@ -347,12 +411,12 @@ spec:
    <Tabs syncKey="shell">
      <TabItem label="PowerShell">
      ```powershell
-     $env:VUS='20'; $env:DURATION='2m'; k6 run script/load.js
+     $env:VUS='20'; $env:DURATION='2m'; k6 run load.js
      ```
      </TabItem>
      <TabItem label="Bash (Linux/CloudShell)">
      ```bash
-     VUS=20 DURATION=2m k6 run script/load.js
+     VUS=20 DURATION=2m k6 run load.js
      ```
      </TabItem>
    </Tabs>
@@ -364,12 +428,12 @@ spec:
    <Tabs syncKey="shell">
      <TabItem label="PowerShell">
      ```powershell
-     $env:VUS='80'; $env:DURATION='1m'; k6 run script/load.js
+     $env:VUS='80'; $env:DURATION='1m'; k6 run load.js
      ```
      </TabItem>
      <TabItem label="Bash (Linux/CloudShell)">
      ```bash
-     VUS=80 DURATION=1m k6 run script/load.js
+     VUS=80 DURATION=1m k6 run load.js
      ```
      </TabItem>
    </Tabs>
@@ -381,12 +445,12 @@ spec:
    <Tabs syncKey="shell">
      <TabItem label="PowerShell">
      ```powershell
-     $env:VUS='40'; $env:DURATION='10m'; k6 run script/load.js
+     $env:VUS='40'; $env:DURATION='10m'; k6 run load.js
      ```
      </TabItem>
      <TabItem label="Bash (Linux/CloudShell)">
      ```bash
-     VUS=40 DURATION=10m k6 run script/load.js
+     VUS=40 DURATION=10m k6 run load.js
      ```
      </TabItem>
    </Tabs>
@@ -578,12 +642,12 @@ AI로 골격을 받는 것은 괜찮다 — 받은 뒤 쿼리를 직접 읽고 �
    <Tabs syncKey="shell">
      <TabItem label="PowerShell">
      ```powershell
-     $env:VUS='80'; $env:DURATION='1m'; k6 run script/load.js
+     $env:VUS='80'; $env:DURATION='1m'; k6 run load.js
      ```
      </TabItem>
      <TabItem label="Bash (Linux/CloudShell)">
      ```bash
-     VUS=80 DURATION=1m k6 run script/load.js
+     VUS=80 DURATION=1m k6 run load.js
      ```
      </TabItem>
    </Tabs>

@@ -9,7 +9,11 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: 개요
 
-2과제 단골 유형 두 개를 하루에 잡는다: **유형 1 — 서버리스 워크플로**(S3 → Lambda → Step Functions → DynamoDB, set-02 task-2 module-1)와 **유형 2 — 이벤트 자동복구**(EventBridge/CloudTrail/Config → Lambda 복구, set-02 task-2 module-3).
+2과제 단골 유형 두 개를 하루에 잡는다: **유형 1 — 서버리스 워크플로**(S3 → Lambda → Step Functions → DynamoDB, set-02 task-2 module-1)와 **유형 2 — 이벤트 자동복구**(EventBridge/CloudTrail/Config → Lambda 복구, set-08 task-2 module-3).
+
+:::caution[유형 2 의 기준본이 바뀌었다]
+set-02 2과제는 RC 판(2026-08-23)에서 **모듈 3(Cloud Event Handling)이 삭제**되고 MSK 가 3번이 됐다. 그래서 유형 2 를 실제로 배포해 보는 자리는 **set-08 task-2 module-3(보안 그룹 자동복구)** 이다. set-02 판(EC2 정책 위반 자동복구)은 `main` 에 코드가 없고 삭제 직전 커밋 `7022375` 의 이력에만 남아 있다 — lab 에서는 기전 비교용 지면 대조로만 읽는다.
+:::
 
 ## 학습 목표
 
@@ -80,14 +84,15 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
     - terraform/lambda
       - **index.py** Decimal 평균·오류행 분기 정답
     - **README.md** "최종 실행 절차(채점 직전, 순서 엄수)" 실측 런북
-  - module-3-event 유형 2 정답
+  - **README.md** 모듈별 리전·공통 워크플로 (RC 판 이후 모듈 3개)
+- skills-2026/set-08/task-2
+  - module-3-event-handling 유형 2 정답 — 보안 그룹 자동복구
     - terraform
-      - **eventbridge.tf** 룰 6개 (네이티브 + CloudTrail 패턴)
-      - **config.tf** Config 레코더 + 스코프 제한
-      - lambda/`<function>`
-        - **index.py** 복구 함수 6개
-    - **README.md** §"설계 근거 · 함정" — 레이스 컨디션·무한루프 실측 기록
-  - **README.md** 모듈별 리전·공통 워크플로
+      - **cloudtrail.tf**·**eventbridge.tf** 행위를 잡는 경로
+      - **lambda.tf** 복구 함수 정의
+      - **sg.tf** 감시 대상 보안 그룹
+    - **README.md** 요구사항 ↔ 구현 매핑
+  - mark/**mark2-3.sh** 채점 스크립트
 
 </FileTree>
 

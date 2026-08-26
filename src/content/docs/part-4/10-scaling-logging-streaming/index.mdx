@@ -9,7 +9,7 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: 개요
 
-2과제 유형 세 개를 다룬다: **유형 3 — 오토스케일링**(SQS→KEDA→Karpenter, set-07 task-2 module-3 — 실채점 전 항목 통과 확정), **유형 4 — 로깅**(OTel→Loki→Grafana, set-07 task-2 module-4 — **정답지 미착수**, 과제지·`mark4.sh` 기반 설계안), **유형 5 — 스트리밍**(Kinesis/Flink Studio·MSK, set-02 task-2 module-2·4 — **정답지 대조 필수, 배포는 선택**).
+2과제 유형 세 개를 다룬다: **유형 3 — 오토스케일링**(SQS→KEDA→Karpenter, set-07 task-2 module-3 — 실채점 전 항목 통과 확정), **유형 4 — 로깅**(OTel→Loki→Grafana, set-07 task-2 module-4 — 정답지 O(`module-4-container-logging`)), **유형 5 — 스트리밍**(Kinesis/Flink Studio·MSK, set-02 task-2 module-2·3 — **정답지 대조 필수, 배포는 선택**).
 
 ## 학습 목표
 
@@ -25,7 +25,7 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 ## 소요 시간 / 일차
 
-- Day 11, 약 7~9시간 (이론 2h + 유형 3 실습 2.5h + 유형 4 실습 3h + 유형 5 정답지 대조 1h) — 유형 5를 실제로 배포하면 module-2 기준 +30분, module-4(MSK) 기준 +1시간 내외 추가된다
+- Day 11, 약 7~9시간 (이론 2h + 유형 3 실습 2.5h + 유형 4 실습 3h + 유형 5 정답지 대조 1h) — 유형 5를 실제로 배포하면 module-2 기준 +30분, module-3(MSK) 은 apply 만 35분(실측)이라 +1시간 내외 추가된다
 - EKS 클러스터 생성 ~20분 ×2회가 포함되므로 두 실습을 병렬로 돌리면 단축된다 (리전이 달라 간섭 없음)
 
 ## 과금 리소스와 destroy 방침
@@ -37,7 +37,7 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 | NAT Gateway (모듈 VPC) | 시간당 + 처리량 | terraform destroy 즉시 |
 | ALB ×2 (유형 4) | 시간당 과금 | terraform destroy |
 | SQS / ECR / EBS PV | 소액 | destroy로 정리 |
-| MSK 브로커 ×2 (유형 5, 선택 — set-02 module-4) | **생성 ~30분 + 시간당 과금 (큼)** | 확인 즉시 `terraform destroy` |
+| MSK 브로커 ×2 (유형 5, 선택 — set-02 module-3) | **apply 35분·destroy 23분 + 시간당 과금 (큼)** | 확인 즉시 `terraform destroy` |
 | Kinesis+Flink+EC2+ALB+NAT (유형 5, 선택 — set-02 module-2) | 시간당 과금(생성 지연 없음) | 확인 즉시 `terraform destroy` |
 
 :::caution[삭제 순서 주의]
@@ -86,7 +86,7 @@ SQS 자체가 처음이면 [serverless-basics](/start/serverless-basics/)의 SQS
         - **10-karpenter-nodepool.yaml** taint·consolidation·디스커버리 태그
         - **20-deployment.yaml** env 리터럴 3개·requests 500m
       - **README.md** / **README.linux.md** CloudShell 실측 런북
-    - module-4/ 유형 4 — **정답지 미착수** (디렉터리 구조만)
+    - module-4-container-logging/ 유형 4 정답
       - **task.md**·**mark.md**의 모듈 4 절 + mark/**mark4.sh** 가 유일한 근거
   - docs/src/content/docs/setlist/set-07/task-2
     - **notes.md** 실측 함정 모음
@@ -99,7 +99,7 @@ SQS 자체가 처음이면 [serverless-basics](/start/serverless-basics/)의 SQS
         - **kinesis.tf** ON_DEMAND 스트림
         - **flink.tf** CFN 래핑 Studio + Glue 카탈로그 전체 권한
       - **README.md** TIMESTAMP 우회·`%flink.conf` 함정 원문
-    - module-4-msk 유형 5 MSK 정답
+    - module-3-msk 유형 5 MSK 정답
       - terraform
         - **msk.tf** IAM+비인증 TLS 병행
         - **security.tf** 셀프 참조 SG

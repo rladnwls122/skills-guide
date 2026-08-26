@@ -1,0 +1,113 @@
+---
+title: 파괴/복구 실습 — 12 시나리오
+description: set-02 스택을 12가지 방식으로 고의로 망가뜨리고 확인 명령→원인→조치 순서로 자력 복구하는 드릴.
+sidebar:
+  order: 3
+---
+
+> 문서 유형: how-to
+
+진단 방법론은 [27 이론 — 파괴/복구 진단 방법론](/part-6/27-break-fix/theory/)에 있다.
+
+## 규칙
+
+- set-02 1과제 스택이 **mark 통과 상태**로 떠 있는 데서 시작.
+- 시나리오마다: **망가뜨린다 → 증상 관찰 → 스스로 복구 → 복구 확인 → 다음**.
+- [트러블슈팅](/reference/troubleshooting/) 참조는 허용(대회장에도 가져갈 문서)하되 참조 여부를 회고 표에 기록 — 참조 없이 되는 개수를 늘려가는 게 목표.
+
+:::danger[실패 처리 조건]
+- **원인을 도구에게 물었으면** 그 시나리오는 실패다. 이 모듈이 재는 것은 진단 사슬이므로, Amazon Q에게도 "왜 이런가"를 묻지 않는다 — 받는 것은 조치에 쓸 조각(명령·매니페스트 일부)이다.
+- 복구 순서는 반드시 **확인 명령 → 원인 → 조치**. 확인 없이 고치면 복구에 성공해도 실패 처리.
+:::
+
+선행 지식과 목표는 [모듈 개요](/part-6/27-break-fix/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- 증상별 확인 명령: [트러블슈팅](/reference/troubleshooting/)
+- YAML 필드가 맞는지: `kubectl explain deployment.spec.template.spec.containers` · `kubectl explain pod.spec.nodeSelector`
+- CLI 플래그·출력 필드: `aws elbv2 describe-target-health help` · `aws ec2 authorize-security-group-ingress help`
+- Terraform 쪽 원복: [aws_cloudfront_distribution](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_distribution) · [aws_lb_listener_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lb_listener_rule)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
+## 시나리오 표
+
+| # | 망가뜨리는 방법 | 기대 증상 | 목표 | 복구 확인 |
+|---|---|---|---|---|
+| ① | deployment의 readinessProbe path를 `/healthz-x` 등으로 오타 후 apply | TG unhealthy, ALB 5xx | 15분 | `describe-target-health` 전 타깃 healthy |
+| ② | ALB→노드/Pod SG의 인바운드 룰 삭제 (`aws ec2 revoke-security-group-ingress`) | TG unhealthy (timeout) | 15분 | 룰 복원 후 healthy + curl 200 |
+| ③ | terraform에서 CF 커스텀 헤더 값만 변경 후 apply (ALB 룰은 그대로) | CF 경유 403, ALB 기본 액션 403 동작 확인 | 15분 | 헤더 원복 → CF 경유 200, ALB 직접 403 유지 |
+| ④ | deployment 이미지 태그를 `stable`→`stble` 오타 후 apply | ImagePullBackOff | 10분 | 태그 원복 → Pod Running |
+| ⑤ | deployment에서 필수 env(예: TABLE_NAME) 삭제 후 apply | CrashLoopBackOff | 10분 | `kubectl logs --previous`로 원인 특정 → env 복원 → Running |
+| ⑥ | nodeSelector 라벨 값 오타(`app`→`ap`) 후 apply | Pending | 10분 | describe Events로 특정 → 원복 → Running |
+| ⑦ | 다른 IAM 신원(임시 프로필/역할)로 `aws eks update-kubeconfig` 후 kubectl | Unauthorized | 15분 | `sts get-caller-identity` 대조 → 원 신원 kubeconfig 복원 → get nodes 성공 |
+| ⑧ | ServiceAccount의 IRSA annotation(`eks.amazonaws.com/role-arn`) 제거 + Pod 재시작 | 앱 AWS 호출 AccessDenied | 15분 | `kubectl describe sa` → annotation 복원 + Pod 재시작 → 호출 성공 |
+| ⑨ | Lambda 응답 dict에서 `statusCode` 제거 후 배포 | ALB 경유 502 | 15분 | CloudWatch Logs 확인 → 필드 복원 → 200 |
+| ⑩ | 컨테이너에서 `TZ` env 제거 후 재빌드·재배포, POST 1건 | DynamoDB에 UTC 시각 저장 | 20분 | `dynamodb scan --max-items 1` 실측 → TZ 복원·재배포 → KST 저장 |
+| ⑪ | CloudFront의 OAC(또는 Lambda) 오리진 ORP를 `AllViewer`로 변경 | 해당 오리진 403 (SigV4/Authorization 충돌) | 20분(전파 대기 포함) | ORP 원복 + `wait distribution-deployed` → 200 |
+| ⑫ | terraform 사본에서 LBC가 만들 ALB 의존 리소스(CF 오리진 등)를 1차 apply에 포함시키고 plan/apply | 순환·참조 오류 체험 | 15분 | 2회 apply 패턴으로 재구성(1차 CDN 제외 → 2차 `-var enable_cdn=true`)한 plan 통과 |
+
+체크박스 진행표:
+
+- [ ] ① probe 경로  - [ ] ② SG 차단  - [ ] ③ 커스텀 헤더  - [ ] ④ 이미지 태그
+- [ ] ⑤ env 삭제  - [ ] ⑥ nodeSelector  - [ ] ⑦ 신원 불일치  - [ ] ⑧ IRSA annotation
+- [ ] ⑨ statusCode 누락  - [ ] ⑩ TZ/UTC  - [ ] ⑪ ORP AllViewer  - [ ] ⑫ 순환 체험
+
+## 팁
+
+- ①②는 증상이 같다(TG unhealthy) — describe-target-health의 **reason이 다르다**(health check failed vs timeout). 이 차이를 몸으로 확인하는 게 핵심.
+- ⑦은 실수로 본 자격증명을 날리지 않게 `AWS_PROFILE` 임시 지정으로만 흉내낼 것.
+- ⑪⑫는 대기가 길다 — 다른 시나리오와 병렬 진행 ([소요 시간표](/reference/timings/)의 "긴 것 먼저").
+
+## 판정 기준
+
+- **12개 중 8개 이상**을 목표 시간 내에, 확인→원인→조치 순서로 스스로 복구하면 통과 — 그중 4개 이상은 troubleshooting.md도 안 보고.
+- 8개 미만이면 실패 항목만 다음날 재도전.
+
+## 변형 셀프 체크
+
+시나리오 표의 고장은 사람이 낸 실수다. 같은 자리가 당일 과제의 **값 변경 요구**로 나오면 복구가 아니라 수정이 된다. 재배포 없이, 각 질문에 먼저 답한 뒤 펼쳐 확인한다.
+
+1. 시나리오 ③ 의 커스텀 헤더 값이 고장이 아니라 과제지가 바꾼 요구라면 무엇을 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `terraform/variables.tf` 의 `origin_verify_value` 한 곳이다. `cloudfront.tf` 의 `custom_header` 와 `alb.tf` 의 리스너 규칙 두 개가 같은 변수를 참조한다. mark 7-2-A 가 이 값을 두 줄로, 8-4-A 가 헤더 이름과 짝지어 본다. 복구와 달리 CloudFront 전파를 기다린 뒤 검증한다.
+
+   </details>
+
+2. 시나리오 ⑥ 이 라벨 **값** 오타가 아니라 라벨 **키** 자체가 `node-type` 에서 바뀐 요구라면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   네 곳이다. `eksctl/cluster.yaml` 의 노드그룹 `labels`, 앱 deployment 의 `nodeSelector`, coredns 애드온의 `configurationValues`, LBC helm 의 `--set nodeSelector...` 다. mark 5-4-A 는 노드의 라벨 키를 jsonpath 로 직접 읽으므로 한 곳만 빠져도 그 자리가 빈 줄로 나온다.
+
+   </details>
+
+3. 시나리오 ⑤ 가 env 삭제가 아니라 env 이름이 `TABLE_NAME` 에서 바뀐 요구라면?
+
+   <details>
+   <summary>답 확인</summary>
+
+   `terraform/lambda.tf` 의 `environment` 와 `lambda/index.py` 의 `os.environ` 참조 두 곳을 같은 이름으로 맞춘다. 한쪽만 고치면 함수가 `KeyError` 로 죽는다. mark 6-1-A 는 환경 변수를 이름으로 지목해 뽑으므로 과제지 표기와 글자까지 같아야 한다.
+
+   </details>
+
+## 회고 양식
+
+```
+## Break-Fix 회고 (날짜: )
+| # | 성공/실패 | 소요 | 문서 참조 | 막힌 지점 |
+|---|---|---|---|---|
+- 실패 항목의 증상→확인 명령→원인→조치를 자기 언어로 작성해
+  /reference/troubleshooting/ 에 추가한다 (기존 항목과 병합).
+- 정상 출력 vs 고장 출력에서 새로 외운 차이:
+```
+
+:::caution[종료 후 — 과금]
+이 드릴은 set-02 1과제 스택을 **켜 둔 채로** 돈다. EKS 컨트롤 플레인·NAT 게이트웨이·ALB 2대·CloudFront 가 전부 시간당 과금이라, 12개 시나리오를 하루에 다 못 끝냈어도 그날 안에 지운다.
+
+정리 순서는 [15 실습 ⑩](/part-2/15-full-deploy-set02/lab/)과 같다 — helm → `eksctl delete cluster` → DynamoDB 삭제방지 해제 → `terraform destroy`. 지운 뒤 [잔존 리소스 점검](/reference/cleanup-check/)을 돌려 빈 출력을 확인한다.
+:::

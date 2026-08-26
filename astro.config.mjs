@@ -110,7 +110,7 @@ export default defineConfig({
     ],
   }), mermaidFullscreen, splitView, scrollbars, starlight({
     title: 'skills-guide',
-    description: '전국기능경기대회 클라우드컴퓨팅 2주 완성 가이드',
+    description: '전국기능경기대회 클라우드컴퓨팅 한 달 완성 가이드',
     defaultLocale: 'root',
     locales: { root: { label: '한국어', lang: 'ko' } },
     customCss: [
@@ -156,40 +156,46 @@ export default defineConfig({
       starlightCodeblockFullscreen(),
       starlightSidebarTopics([
         {
-          label: '시작 (D0)',
+          label: 'PART 0 — 컴퓨팅 기초',
+          link: '/part-0/01-os-process/',
+          icon: 'puzzle',
+          items: [{ label: 'Week 1', items: [{ autogenerate: { directory: 'part-0' } }] }],
+        },
+        {
+          label: '시작 · 선수 지식',
           link: '/start/',
           icon: 'rocket',
-          items: [{ label: '선수 지식', items: [{ autogenerate: { directory: 'start' } }] }],
+          items: [{ label: 'Week 1', items: [{ autogenerate: { directory: 'start' } }] }],
         },
         {
           label: 'PART 1 — Foundation·IaC',
-          link: '/part-1/01-terraform-vpc/',
-          items: [{ label: 'D1~3', items: [{ autogenerate: { directory: 'part-1' } }] }],
+          link: '/part-1/06-terraform-vpc/',
+          items: [{ label: 'Week 2', items: [{ autogenerate: { directory: 'part-1' } }] }],
         },
         {
           label: 'PART 2 — 1과제 · EKS·관측성',
-          link: '/part-2/04-eksctl-cluster/',
-          items: [{ label: 'D4~8', items: [{ autogenerate: { directory: 'part-2' } }] }],
+          link: '/part-2/11-eksctl-cluster/',
+          items: [{ label: 'Week 2', items: [{ autogenerate: { directory: 'part-2' } }] }],
         },
         {
           label: 'PART 3 — Hard Mode',
-          link: '/part-3/08-private-eks-iam/',
-          items: [{ label: 'D9', items: [{ autogenerate: { directory: 'part-3' } }] }],
+          link: '/part-3/16-private-eks-iam/',
+          items: [{ label: 'Week 3', items: [{ autogenerate: { directory: 'part-3' } }] }],
         },
         {
           label: 'PART 4 — 2과제 모듈',
-          link: '/part-4/09-serverless-event/',
-          items: [{ label: 'D10~12', items: [{ autogenerate: { directory: 'part-4' } }] }],
+          link: '/part-4/17-serverless-event/',
+          items: [{ label: 'Week 3', items: [{ autogenerate: { directory: 'part-4' } }] }],
         },
         {
           label: 'PART 5 — 3과제 운영',
-          link: '/part-5/14-task3-load-ops/',
-          items: [{ label: 'D13~14', items: [{ autogenerate: { directory: 'part-5' } }] }],
+          link: '/part-5/24-task3-load-ops/',
+          items: [{ label: 'Week 4', items: [{ autogenerate: { directory: 'part-5' } }] }],
         },
         {
           label: 'PART 6 — Battle Drills',
-          link: '/part-6/15-mutation-drill/',
-          items: [{ label: '일차 없음', items: [{ autogenerate: { directory: 'part-6' } }] }],
+          link: '/part-6/26-mutation-drill/',
+          items: [{ label: 'Week 4', items: [{ autogenerate: { directory: 'part-6' } }] }],
         },
         {
           label: 'Reference',

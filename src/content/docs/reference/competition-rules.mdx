@@ -40,7 +40,7 @@ description: 지도교사 협의회 회의록과 심사위원 세션에서 확�
 | 제2과제 | 하위 문제 **최대 2개 추가**. 기존 4개 + 2 = 최대 6개이고 **추가 시간은 주지 않는다** | — |
 | 제3과제 | 전면 변경 없이 추가 문항 | 추가 바이너리 배포, 새 Lambda 함수 개발 후 시스템 운영 |
 
-대응 절차는 [변동 드릴](/part-6/15-mutation-drill/), 후보 밖 개념은 [변동 대비](/reference/variation-drill/)에 있다.
+대응 절차는 [변동 드릴](/part-6/26-mutation-drill/), 후보 밖 개념은 [변동 대비](/reference/variation-drill/)에 있다.
 
 ## 과제 분량 :badge[협의회]{variant=note}
 
@@ -81,7 +81,7 @@ description: 지도교사 협의회 회의록과 심사위원 세션에서 확�
 | 용도 | kubectl을 포함한 채점 명령 실행 전용. EKS와 무관한 채점 항목의 명령 실행 서버로 쓰지 못한다 |
 | 비용 | 3과제에서는 EC2 개수에 포함돼 비용 점수를 깎는다 |
 
-원활한 운영을 위해 과제지·채점지에 명시된 환경 사용이 권장된다. 세트별 접근 경로 설계는 [프라이빗 EKS 이론](/part-3/08-private-eks-iam/theory/)에 있다.
+원활한 운영을 위해 과제지·채점지에 명시된 환경 사용이 권장된다. 세트별 접근 경로 설계는 [프라이빗 EKS 이론](/part-3/16-private-eks-iam/theory/)에 있다.
 
 ## 3과제 채점 방식 :badge[협의회]{variant=note}
 
@@ -117,7 +117,7 @@ description: 지도교사 협의회 회의록과 심사위원 세션에서 확�
 | USE | 자원 | Utilization(사용률) · Saturation(대기·큐 포화) · Errors(자원 단의 오류) |
 | RED | 요청 | Rate(초당 요청 수) · Errors(오류율) · Duration(지연 분포) |
 
-훈련 절차는 [3과제 부하 운영](/part-5/14-task3-load-ops/)에 있다.
+훈련 절차는 [3과제 부하 운영](/part-5/24-task3-load-ops/)에 있다.
 
 ## 학습 방법 :badge[심사위원]{variant=tip}
 
@@ -127,10 +127,10 @@ description: 지도교사 협의회 회의록과 심사위원 세션에서 확�
 |---|---|---|
 | 외우는 게 힘들다 | 전 기능 암기가 아니라 **비슷한 서비스 사이의 차이**로 익힌다. IAM 역할은 EC2가 assume할 수 있고 키 방식보다 keyless라 보안이 낫다, EFS는 EBS와 달리 NFS로 마운트돼 네트워크를 타므로 보안 그룹이 붙는다 — 이런 대비가 좋은 예다. "생성 버튼을 누르고 IAM 란에 역할을 넣고 EFS를 하나 만들면 10점"식의 절차 암기가 나쁜 예다 | [선수 지식](/start/) |
 | 직종이 얼마 안 돼 과제가 별로 없다 | 서비스 이해가 먼저다. 지방·전국·국제대회 5년치 과제가 쌓여 있고 [aws-samples](https://github.com/aws-samples)에 샘플이 수천 개 있다. 학습한 주제의 샘플 아키텍처를 직접 구축해 본다 | [링크 모음](/reference/links/) |
-| 코드 개발이 힘들다 | Claude Code·codex로 앱 하나를 직접 개발해 본다. 과제에 REST API 구현이 있으므로 Lambda에 배포할 수준의 Python은 익힌다 | [모듈 03](/part-1/03-container-lambda-dynamodb/) |
+| 코드 개발이 힘들다 | Claude Code·codex로 앱 하나를 직접 개발해 본다. 과제에 REST API 구현이 있으므로 Lambda에 배포할 수준의 Python은 익힌다 | [모듈 09](/part-1/09-container-lambda-dynamodb/) |
 | 트러블 슈팅이 힘들다 | 먼저 로그를 본다. 문제 시스템을 계층별로 나눠 차례로 이상 유무를 확인하는 전략을 익힌다 | [트러블슈팅](/reference/troubleshooting/) |
 | 기능이 너무 많다 | 자주 쓰는 서비스부터 익혀도 충분하다. AWS 인기도 상위 서비스가 과제 빈출과 겹친다 | [치트시트](/reference/cheatsheet/) |
-| 과제 풀다가 리소스가 한번에 삭제됐다 | IaC 작업 시 삭제에 유의하고, 폴더를 나눠 **apply 단위를 쪼개** 작업 실수에 대비한다 | [모듈 01](/part-1/01-terraform-vpc/) |
+| 과제 풀다가 리소스가 한번에 삭제됐다 | IaC 작업 시 삭제에 유의하고, 폴더를 나눠 **apply 단위를 쪼개** 작업 실수에 대비한다 | [모듈 06](/part-1/06-terraform-vpc/) |
 | 클라우드의 완성도 기준 | 외부 지표를 쓴다. **AWS Well-Architected Framework**가 국제대회 기준이다 | [링크 모음](/reference/links/) |
 
 ## 인터넷 열람
@@ -147,7 +147,7 @@ description: 지도교사 협의회 회의록과 심사위원 세션에서 확�
 |---|---|
 | 사용 가능 도구 | Amazon Q. 질의뿐 아니라 Terraform·YAML·WAF 규칙·CloudFront Function 같은 **코드 생성**에 쓸 수 있다 |
 | 쓰는 자리 | 리소스 골격·매니페스트·변환 코드의 초안. 과제지가 지정한 이름과 수치는 프롬프트로 직접 넘긴다 |
-| 훈련 방향 | Q에게 초안을 받고 **공식 문서로 검증해 고치는** 왕복을 속도로 만든다 — [AI 기반 과제 풀이 훈련](/part-6/18-ai-assisted-drill/) |
+| 훈련 방향 | Q에게 초안을 받고 **공식 문서로 검증해 고치는** 왕복을 속도로 만든다 — [AI 기반 과제 풀이 훈련](/part-6/29-ai-assisted-drill/) |
 
 Q가 답을 대신 써 주는 것과 그 답이 맞는지 판정하는 것은 다른 능력이다. 채점은 리소스 이름·인자값의 정확 일치를 보므로, Q의 출력이 그럴듯해도 인자 하나가 옛 버전이면 그대로 감점이다. 검증 절차와 프롬프트 패턴은 [AI 학습 활용 가이드](/reference/ai-study-guide/)에 있다.
 

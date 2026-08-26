@@ -1,0 +1,496 @@
+---
+title: 16. 이론 — Fully-Private EKS 운용과 IAM 심화
+description: "닫힌 클러스터의 생성·접근·이미지 pull 경로와 IAM 정책 이중 평가 원리 정리."
+sidebar:
+  order: 2
+---
+
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: explanation
+
+선행 지식과 학습 경로는 [모듈 개요](/part-3/16-private-eks-iam/)에.
+
+이 모듈은 "네트워크가 닫힌 클러스터를 어떻게 만들고·접근하고·채점받는가"와 "IAM 정책이 실제로 어떻게 평가되는가"를 다룬다. 둘 다 실측 함정이 많은 하드모드 영역이다.
+
+:::tip[읽으면서 확인한다]
+주제 1 과 주제 4 끝에 **지금 확인하기** 블록이 접혀 있다. 조회뿐이라 **과금이 0원**이고 아무것도 만들지 않는다. 블록을 열지 않고 읽어도 문서는 그대로 이어진다.
+:::
+
+---
+
+## 주제 1. Fully-Private EKS — 생성·접근·이미지 pull
+
+### ① 정의
+
+컨트롤 플레인 API 엔드포인트를 `endpointPublicAccess=false, endpointPrivateAccess=true`로 운용하는 클러스터. kubectl/helm은 **VPC 내부에서만** 가능하다. 컨트롤 플레인이 무엇이고 왜 사용자 VPC 밖에 있는지는 [eks-basics](/start/eks-basics/)에 있다.
+
+### ② 왜 (채점 관점)
+
+- mark 4-1이 `describe-cluster`로 `[false, true]`를 직접 확인한다.
+- 퍼블릭이 열린 채 남으면 보안 pillar 감점 + "private" 요구 불충족.
+
+### ③ 원리
+
+```mermaid
+sequenceDiagram
+    participant PC as 본 PC (eksctl)
+    participant EKS as EKS API
+    participant VPC as VPC 내부 (CloudShell/bastion)
+    PC->>EKS: eksctl create cluster (privateCluster.enabled)
+    Note over EKS: 생성 중 퍼블릭 엔드포인트 임시 ON<br/>(eksctl이 밖에서 클러스터를 만들 수 있는 이유)
+    EKS-->>PC: 완료 시 자동으로 퍼블릭 OFF
+    Note over PC,EKS: 생성이 중단되면 퍼블릭이 열린 채 남는다!<br/>describe-cluster로 확인 → update-cluster-config로 재차단
+    VPC->>EKS: 이후 kubectl/helm (private 443, cp-extra SG 허용)
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+프라이빗 클러스터가 만들어지는 동안 퍼블릭 엔드포인트가 잠시 켜지는 이유를 보여 준다. eksctl 은 VPC 밖에서 도는데 클러스터 API 에 붙어야 하므로, 생성 중에만 퍼블릭이 열리고 완료 시 자동으로 닫힌다. 위험은 중간에 실패했을 때다 — 자동으로 닫는 단계가 실행되지 않아 퍼블릭이 열린 채 남는다. 그래서 생성 후 상태 확인이 습관이어야 한다.
+
+</details>
+
+- **확인·재차단 명령** (생성 직후 습관화):
+  ```bash
+  aws eks describe-cluster --name <cluster> \
+    --query 'cluster.resourcesVpcConfig.[endpointPublicAccess,endpointPrivateAccess]'   # false, true
+  aws eks update-cluster-config --name <cluster> --resources-vpc-config endpointPublicAccess=false
+  ```
+- **이미지 pull 경로 2가지**:
+
+```mermaid
+flowchart LR
+    subgraph private-subnet["<span class='icon--aws icon--aws--private-subnet'></span> 프라이빗 서브넷 노드"]
+        N[노드/파드]
+    end
+    NAT@{ icon: "logos:aws-vpc", form: "square", label: "NAT Gateway", pos: "b", h: 46, w: 46 }
+    N -->|경로 A| NAT --> Internet[공개 레지스트리<br/>+ ECR + eks-auth]
+    VPCE@{ icon: "logos:aws-vpc", form: "square", label: "VPC Endpoint<br/>이미지 pull:<br/>s3(Gateway)/ecr.api/ecr.dkr<br/>인증: sts/oidc-eks/eks-auth", pos: "b", h: 46, w: 46 }
+    N -->|경로 B| VPCE --> ECR[(ECR)]
+    style VPCE fill:#e8f4e8
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+프라이빗 노드가 이미지를 받는 두 경로다. 경로 A 는 NAT 를 거쳐 인터넷으로 나가는 방식이라 공개 레지스트리까지 닿고, 경로 B 는 VPC 엔드포인트로 VPC 안에서 끝낸다. 엔드포인트 방식은 대상을 골라 만들어야 한다 — 이미지 pull 에 s3(게이트웨이)·ecr.api·ecr.dkr 이, 인증에 sts 계열이 필요하다. 하나라도 빠지면 노드는 뜨는데 이미지를 못 받는 상태가 된다.
+
+</details>
+
+  - 경로 A(NAT): 세트에 프라이빗 통신 요구가 없으면 이걸로 충분(비용·생성 시간 절감). S3 Gateway Endpoint만 두어 이미지 레이어 pull을 안정화하는 절충이 set-03.
+  - 경로 B(Endpoint): VPC 엔드포인트가 게이트웨이형과 인터페이스형으로 갈리는 이유는 [vpc-basics 의 VPC 엔드포인트 절](/start/vpc-basics/#vpc-엔드포인트--프라이빗-경로로-aws-api-부르기)에 있다. "인터넷 미경유" 요구 시 이미지 pull 용 `s3`(Gateway)/`ecr.api`/`ecr.dkr` 만으로는 부족하다. 인증에 `sts`(IRSA 의 `AssumeRoleWithWebIdentity`)·`oidc-eks`(OIDC 디스커버리)·`eks-auth`(Pod Identity), 노드 부트스트랩에 `ec2` 가 더 필요하고, 워크로드에 따라 `logs`·`elasticloadbalancing`·`kms` 를 추가한다 (set-07은 ECR·CloudWatch를 Endpoint로).
+
+:::danger[함정 — eks Endpoint 가 OIDC 해석을 가린다]
+set-03 실측(endpoints.tf 주석): `eks` Interface Endpoint를 `private_dns_enabled`로 만들면 그 PHZ(프라이빗 호스팅 영역 — VPC 안에서만 유효한 DNS 영역)가 `eks.<region>.amazonaws.com` 을 가져가면서 `oidc.eks.<region>.amazonaws.com` 해석까지 가려 **IRSA가 깨진다**. NAT가 있으면 이 호출은 NAT 경유로 충분하므로 set-03은 이 엔드포인트를 만들지 않는다.
+
+**`eks-auth` 는 반대다.** AWS는 아웃바운드 인터넷이 없는 클러스터에서 Pod Identity에 `com.amazonaws.<region>.eks-auth` 를 **필수**로 문서화한다. 프라이빗 DNS 이름이 `eks-auth.<region>.api.aws` 라 OIDC 도메인과 겹치지 않아 위 문제를 일으키지 않는다 — 만들지 않으면 오히려 Pod Identity가 죽는다.
+
+2026년 7월부터는 OIDC 디스커버리 전용 엔드포인트 `com.amazonaws.<region>.oidc-eks` 가 있다. `eks` 엔드포인트를 프라이빗 DNS로 켜야 하는 구성이라면 이것을 함께 만들어 해석을 되살린다. 둘이 더는 양자택일이 아니다.
+:::
+
+### ④ 변형 포인트
+
+당일 과제의 약 30% 가 수정된다. 이 주제에서 바뀌는 값은 대부분 엔드포인트 목록 한 곳에 모인다.
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 엔드포인트 공개 여부 | eksctl 설정의 `privateCluster.enabled` | mark 4-1 의 `describe-cluster` 가 `[false, true]` |
+| 이미지 pull 경로 | NAT 유지 또는 `endpoints.tf` 의 `s3`·`ecr.api`·`ecr.dkr` | 노드에서 이미지 pull 성공 |
+| "인터넷 미경유" 요구 | `endpoints.tf` 에 `sts`·`oidc-eks`·`eks-auth`·`ec2` 추가 | IRSA·Pod Identity 동작 |
+| 워크로드 종류 | `logs`·`elasticloadbalancing`·`kms` 엔드포인트 | 해당 API 호출 성공 |
+
+set-03 은 `privateCluster` 에 `skipEndpointCreation: true` 를 주고 NAT 와 S3 Gateway Endpoint 만으로 끝낸다. set-07 은 NAT 에 ECR·CloudWatch Interface Endpoint 를 병행하고 작업 호스트로 SSM bastion 을 쓴다. 엔드포인트를 늘릴 때 `eks` 를 프라이빗 DNS 로 켜면 `oidc-eks` 를 함께 만든다.
+
+<details class="build-step">
+<summary>지금 확인하기 — 닫힌 클러스터인지 한 줄로 판정하기</summary>
+
+"private 클러스터"는 느낌이 아니라 두 불리언 값이다. [PART-2](/part-2/11-eksctl-cluster/lab/)에서 만든 클러스터가 있으면 그대로 물어본다. **조회만 하므로 아무것도 안 바뀐다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $c = aws eks list-clusters --query "clusters[0]" --output text
+  aws eks describe-cluster --name $c `
+    --query "cluster.resourcesVpcConfig.[endpointPublicAccess, endpointPrivateAccess]" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  c=$(aws eks list-clusters --query "clusters[0]" --output text)
+  aws eks describe-cluster --name "$c" \
+    --query "cluster.resourcesVpcConfig.[endpointPublicAccess, endpointPrivateAccess]" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 두 값이 탭으로 구분돼 한 줄로 나온다. **닫힌 클러스터는 `False True` 다.**
+
+네 조합이 각각 다른 상황이다.
+
+| 출력 | 뜻 |
+|---|---|
+| `True False` | 인터넷에서만 닿는다. VPC 안에서는 퍼블릭 DNS 를 타야 한다 |
+| `True True` | 양쪽 다 열림. 기준본 set-02 가 이것이다 |
+| `False True` | **닫힌 클러스터.** VPC 안에서만 닿는다 |
+| `False False` | 아무 데서도 못 닿는다 — API 가 이 조합을 거부한다 |
+
+세 번째가 되는 순간 본 PC 의 `kubectl` 이 끊긴다. **그래서 이 값을 바꾸는 것은 "설정 변경"이 아니라 "작업 경로 변경"이다** — 주제 2 의 머신 분할이 여기서 나온다.
+
+`clusters[0]` 이 `None` 이면 클러스터가 없는 것이다. 이 블록은 건너뛰고 읽어도 된다.
+
+</details>
+
+---
+
+## 주제 2. 머신 3분할과 S3 릴레이
+
+### ① 정의
+
+private 클러스터 과제에서 역할별로 실행 위치를 나누는 운영 패턴.
+
+| 머신 | 역할 | 이유 |
+|---|---|---|
+| 본 PC | terraform apply / eksctl | tfstate·도구가 여기 있음. eksctl은 밖에서도 생성 가능(주제 1) |
+| 일반 CloudShell | docker build/push | 본 PC에 Docker 없을 때(대회: WSL/Docker 불가) |
+| VPC CloudShell 또는 SSM bastion | kubectl·helm·채점 | private API는 VPC 내부에서만 |
+
+### ② 왜 (채점 관점)
+
+- mark 스크립트 자체가 VPC 내부 셸에서 돈다(mark-sg → cp-extra SG 443 허용).
+- **생성자 신원 = 채점 신원 원칙**: `bootstrapClusterCreatorAdminPermissions: true`로 클러스터 생성자는 자동 admin. terraform/eksctl/채점을 같은 IAM 신원으로 실행하면 access entry 추가가 불필요하다. root-less KMS 키 정책은 계정 위임(`kms:CallerAccount`)이라 신원을 가리지 않지만, EKS 접근은 여기서 보듯 신원에 묶이므로 이 원칙은 KMS 와 무관하게 그대로 지킨다. 신원이 다르면 `create-access-entry` + `associate-access-policy`(ClusterAdmin)로 보정.
+
+### ③ 원리
+
+```mermaid
+flowchart LR
+    PC@{ icon: "logos:terraform-icon", form: "square", label: "본 PC<br/>terraform apply<br/>outputs.json 생성", pos: "b", h: 46, w: 46 }
+    PC -->|"aws s3 cp _transfer/"| S3[("S3 버킷<br/>_transfer/outputs.json<br/>_transfer/*.tgz")]
+    CS@{ icon: "aws:cloudshell", form: "square", label: "VPC CloudShell / bastion<br/>kubectl·helm·채점", pos: "b", h: 46, w: 46 }
+    S3 -->|"aws s3 cp + tar xzf"| CS
+    CS2@{ icon: "aws:cloudshell", form: "square", label: "일반 CloudShell<br/>docker build → ECR push", pos: "b", h: 46, w: 46 }
+    CS2 --> ECR[(ECR)]
+    CS -.->|채점 전| DEL["aws s3 rm _transfer/ --recursive<br/>(버킷이 채점 대상)"]
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+인터넷이 닿지 않는 환경에서 파일을 옮기는 3분할 구조다. 본 PC 가 Terraform 결과를 S3 `_transfer/` 로 올리면 VPC CloudShell 이 그것을 받아 kubectl·채점에 쓴다. 이미지 빌드만은 인터넷이 필요해 일반 CloudShell 이 맡는다. 점선이 마지막 단계다 — 그 버킷 자체가 채점 대상이므로 채점 전에 `_transfer/` 를 반드시 비운다.
+
+</details>
+
+- **VPC CloudShell은 비영속 + 업로드 UI 없음**: 홈이 세션 종료 시 삭제되고 파일을 올릴 방법이 없다 → S3 `_transfer/` 릴레이로 받고, 도구 설치·자격증명·kubeconfig·환경변수를 **하나의 멱등 셋업 블록**으로 만들어 재접속 시 통째로 재실행한다(약 1~2분). 환경변수는 `~/.wsc2026-env` 같은 파일로 `source`.
+- tfstate·`.terraform/`은 절대 릴레이에 올리지 않는다 — `terraform output -json > outputs.json`만 넘겨 jq로 읽는다.
+- set-07 변형: CloudShell 대신 **SSM bastion**(private 서브넷 EC2, 인바운드 0, 프로파일은 SSM 전용) — 30분 타임아웃·비영속을 피한다. 단 bastion은 **채점 전 삭제**(인스턴스+프로파일+role까지).
+- set-07 배포본 v4부터 **채점용 VPC CloudShell 환경(`unicorn-mark`)이 Public 서브넷에서 Private 서브넷으로 옮겨졌다.** 채점 트래픽이 private 서브넷에서 출발하므로 컨트롤 플레인 추가 SG의 443 허용 소스와 라우팅을 그 기준으로 잡는다.
+
+### ④ 변형 포인트
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 작업 호스트 | VPC CloudShell(set-03) · SSM bastion(set-07, 채점용 CloudShell 겸용) | private API 에 `kubectl` 이 닿음 |
+| 채점 셸의 출발 서브넷 | 컨트롤 플레인 추가 SG 의 443 허용 소스 + 라우팅 | set-07 v4 는 private 서브넷 |
+| 릴레이 경로 | 셋업 블록의 `aws s3 cp` 대상과 `_transfer/` 접두사 | 채점 전 `aws s3 rm _transfer/ --recursive` |
+| 환경변수 파일 | `~/.wsc2026-env` 의 이름·값 | 재접속 후 `source` 한 번으로 복구 |
+
+bastion 을 쓰면 채점 전에 인스턴스·인스턴스 프로파일·역할까지 함께 지운다.
+
+:::note[협의회(2026-07-31) — 접근 경로는 제한하지 않는다]
+EKS 접근 방식을 특정하지 않는 쪽으로 정리됐다. 과제지 요구는 "CloudShell에서 kubectl 명령어를 사용할 수 있어야 한다" 하나다. CloudShell 접근이 불가한 구성이면 **선수가 채점 전에 bastion을 사전 구축해 쓰는 것도 공식적으로 허용**된다.
+
+본 PC·VPC CloudShell·일반 CloudShell 3분할과 bastion 패턴이 그대로 공인된 셈이다. 다만 "채점 전 bastion 삭제"는 세트별 과제지의 미요구 리소스 정리 원칙에서 나온 것이므로, 당일 과제지가 bastion을 언급하면 그 지시를 우선한다.
+
+회의록이 붙인 조건 셋을 함께 지킨다([대회 운영 규칙](/reference/competition-rules/)).
+
+- **bastion 생성·수정은 경기 중에만.** 채점 시 새로 만들거나 중지된 인스턴스를 시작하는 제어는 허용되지 않는다 — 채점 전에 지웠다가 접근이 막히면 되살릴 방법이 없다. 지울지 남길지는 경기 종료 전에 결정한다.
+- **용도는 kubectl을 포함한 채점 명령 실행 전용.** EKS와 무관한 채점 항목의 명령을 돌리는 서버로는 쓰지 못한다.
+- 채점·풀이 시간 등 bastion 때문에 생기는 불이익은 선수가 감수한다. 3과제에서는 EC2 개수에 포함돼 비용 점수를 깎는다.
+:::
+
+---
+
+## 주제 3. CoreDNS 커스텀 도메인 (wsc2026.skills.local)
+
+### ① 정의
+
+클러스터 내부 DNS 도메인을 기본 `cluster.local`에서 과제 지정 도메인으로 변경하는 작업. **두 군데를 함께** 바꿔야 한다.
+
+### ② 왜 (채점 관점)
+
+mark 4-1이 kubelet configz의 clusterDomain과 Corefile을 grep 한다. 한쪽만 바꾸면 파드 DNS가 깨진다.
+
+### ③ 원리
+
+```mermaid
+flowchart TD
+    A@{ icon: "logos:kubernetes", form: "square", label: "① kubelet clusterDomain<br/>eksctl overrideBootstrapCommand에<br/>nodeadm NodeConfig<br/>(spec.kubelet.config.clusterDomain)", pos: "b", h: 46, w: 46 }
+    A --> C{양쪽 일치해야<br/>파드 DNS 정상}
+    B@{ icon: "k8s:cm", form: "square", label: "② CoreDNS Corefile 패치<br/>(k8s manifest로 ConfigMap 교체<br/>+ rollout restart)", pos: "b", h: 46, w: 46 }
+    B --> C
+    C --> D["nslookup<br/>kubernetes.default.svc.wsc2026.skills.local<br/>성공"]
+    E@{ icon: "k8s:deploy", form: "square", label: "coredns addon 업데이트", pos: "b", h: 46, w: 46 }
+    E -.->|Corefile 초기화!| B
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+커스텀 클러스터 도메인은 두 곳을 함께 고쳐야 한다. ①은 노드 부팅 설정으로 kubelet 의 `clusterDomain` 을 바꾸고, ②는 CoreDNS 의 Corefile 에 그 존을 추가한다. 둘이 일치해야 파드의 이름 해석이 성립한다. 점선이 함정이다 — coredns 애드온을 업데이트하면 Corefile 이 기본값으로 돌아가므로 ②를 다시 적용해야 한다.
+
+</details>
+
+- kubelet 쪽: AL2023 MNG는 `overrideBootstrapCommand`에 nodeadm NodeConfig를 넣으면 기본 NodeConfig와 필드 단위 merge된다 — 노드그룹 **모두**에 넣는다.
+- kps의 Alertmanager도 `clusterDomain` 설정이 있어 함께 맞춘다(모듈 13 연계).
+
+:::caution[coredns addon 업데이트 금지]
+addon을 업데이트하면 **Corefile이 초기화**될 수 있다. 이미 했다면 패치를 재적용하고 grep으로 재확인한다.
+:::
+
+### ④ 변형 포인트
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 클러스터 도메인 문자열 | eksctl `overrideBootstrapCommand` 의 nodeadm `clusterDomain` | mark 4-1 의 kubelet configz grep |
+| 같은 문자열 | CoreDNS Corefile ConfigMap | mark 4-1 의 Corefile grep |
+| 같은 문자열 | kps Alertmanager 의 `clusterDomain`(모듈 13) | helm values 가 같은 값 |
+| 노드그룹 개수 | 노드그룹마다 `overrideBootstrapCommand` | 모든 노드에서 `nslookup kubernetes.default.svc.<도메인>` 성공 |
+
+바뀌는 것은 도메인 문자열 하나지만 반영할 곳이 셋이다. 한 곳만 바꾸면 파드 DNS 가 깨진다. 커스텀 도메인 요구가 없는 세트는 세 곳을 모두 기본값 `cluster.local` 로 둔다.
+
+---
+
+## 주제 4. IAM 심화 — Audit Role과 정책 이중 평가 (set-07 9-1/9-2 :badge[실측]{variant=note})
+
+### ① 정의
+
+감사자용 AssumeRole 전용 역할. set-07 사양: trust = 계정 `:root` + `sts:ExternalId` StringEquals 조건, `max_session_duration = 3600`, 권한은 DynamoDB 조회 + VPC/EKS Describe(액션 와일드카드 금지).
+
+Principal·신뢰 정책(trust policy)·STS 임시 자격 증명이 처음이면 [iam-basics](/start/iam-basics/)를 먼저 본다 — 이 절은 그 문서의 개념 위에서 "평가가 두 번 일어난다"만 더한다.
+
+### ② 왜 (채점 관점)
+
+- mark 9-1: `get-role`로 MaxSessionDuration=3600, Principal=`:root`, ExternalId 문자열을 **정확 일치**로 본다.
+- mark 9-2: ExternalId 없이 assume → `AccessDenied` 기대, ExternalId 붙여 assume → 성공 후 허용 액션(describe-vpcs)은 되고 미허용 액션(describe-instances)은 `AccessDenied/UnauthorizedOperation`이어야 한다. 즉 **성공과 실패 양쪽이 모두 채점 대상**이다.
+
+:::danger[ExternalId 정확 일치]
+ExternalId는 `unicorn-audit-2026<선수등번호>` — **apply 시 넣은 player_number와 채점 셸이 export한 number가 정확히 일치**해야 한다.
+:::
+
+### ③ 원리 — AssumeRole 이중 평가
+
+```mermaid
+flowchart TD
+    U@{ icon: "logos:aws-iam", form: "square", label: "호출자: IAM 사용자/역할", pos: "b", h: 46, w: 46 }
+    U -->|sts:AssumeRole 요청| E{평가 1: 호출자의<br/>identity-based policy에<br/>sts:AssumeRole 허용?}
+    E -->|아니오| D1[AccessDenied<br/>trust가 :root여도 실패!]
+    E -->|예| T{평가 2: 역할의 trust policy<br/>Principal 매칭 + ExternalId 조건?}
+    T -->|아니오| D2[AccessDenied]
+    OK@{ icon: "logos:aws-iam", form: "square", label: "임시 자격증명 발급<br/>최대 3600초", pos: "b", h: 46, w: 46 }
+    T -->|예| OK
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+역할을 맡을 때 평가가 두 번 일어난다는 것을 순서로 보여 준다. 먼저 호출자 쪽 정책에 `sts:AssumeRole` 이 있어야 하고, 그다음 역할의 신뢰 정책이 Principal 과 ExternalId 조건을 확인한다. 어느 쪽에서 막혀도 오류 메시지는 같은 `AccessDenied` 라, 원인을 가르려면 두 곳을 각각 봐야 한다.
+
+</details>
+
+- trust의 `Principal: :root`는 "이 **계정의** principal이면 후보"라는 뜻이지 전원 허용이 아니다. **trust policy AND 호출자 identity-based policy 둘 다 통과**해야 한다 — 호출자가 admin(또는 sts:AssumeRole 허용 보유)이 아니면 assume은 실패한다. 이게 같은 계정 `:root` trust가 안전하게 쓰이는 이유.
+- **리소스 레벨 ARN 미지원 액션**: `ec2:DescribeVpcs`는 ARN을 지원하지 않아 `Resource "*"`가 불가피하다. 대신 좁힐 수 있는 것(`eks:DescribeCluster` → cluster ARN)만이라도 **별도 statement로 분리**해 좁힌다 — set-07 iam.tf가 이 구조.
+- **요구 목록 외 권한 추가는 수동 채점 리스크**: 테이블이 CMK 암호화라 조회에 `kms:Decrypt`가 실제로 필요하지만, 요구 목록에 없는 액션 추가는 "최소권한 위반"으로 읽힐 수 있다. 넣는다면 리소스를 해당 키 ARN 하나로 못박고 sid로 사유를 명시한다.
+- **root-less KMS 재확인(모듈 07 연계)**: 유의사항에 root/`kms:*` 금지가 있는 세트(set-03)는 키 정책을 관리자 principal `"*"` + `kms:CallerAccount` 조건(계정 위임) + 서비스별 최소 statement로 구성한다. 여기 audit role 의 trust 와 대비된다 — trust policy 는 `:root` ARN 을 그대로 쓰지만 KMS 키 정책은 채점이 `:root` 문자열을 grep 하므로 조건식으로 같은 뜻을 표현한다. 계정 위임이라 root 자격증명으로 apply·채점해도 막히지 않는다. 실물 JSON 은 [kms-basics](/start/kms-basics/#1-root-less-키-정책-실물--적용된-json)에 있다.
+
+### ④ 변형 포인트
+
+| 바뀌는 값 | 고칠 곳 | 확인 |
+|---|---|---|
+| 선수등번호 | `player_number` 변수 + 채점 셸이 export 하는 `number` | 두 값이 같은 문자열 (mark 9-1) |
+| ExternalId 접두사 `unicorn-audit-2026` | trust policy 의 `sts:ExternalId` 조건값 | `get-role` 출력과 과제지 문자열 일치 |
+| 최대 세션 3600초 | `max_session_duration` | `get-role` 의 MaxSessionDuration |
+| 허용 액션 목록 | 권한 정책 statement (set-07 `iam.tf`) | describe-vpcs 성공 · describe-instances 거부 (mark 9-2) |
+
+audit role 을 명시 요구하는 것은 set-07 뿐이다. set-03 의 하드 포인트는 root-less KMS 키 정책이고, 그쪽은 신원이 아니라 `kms:CallerAccount` 조건으로 위임한다.
+
+<details class="build-step">
+<summary>지금 확인하기 — 조건이 붙은 신뢰 정책 읽어 보기</summary>
+
+역할 하나를 조회해 신뢰 정책과 세션 상한을 함께 꺼낸다. **역할을 맡지는 않는다** — 그것은 실습 소관이다. 조회는 무료다.
+
+set-07 을 배포한 적이 없어도 된다. 계정에 있는 아무 역할이나 넣어 **구조**를 보는 것이 목적이다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws iam list-roles --query "Roles[0:5].RoleName" --output text
+  aws iam get-role --role-name <역할이름> `
+    --query "Role.[MaxSessionDuration, AssumeRolePolicyDocument.Statement[0].Principal, AssumeRolePolicyDocument.Statement[0].Condition]" --output json
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws iam list-roles --query "Roles[0:5].RoleName" --output text
+  aws iam get-role --role-name <역할이름> \
+    --query "Role.[MaxSessionDuration, AssumeRolePolicyDocument.Statement[0].Principal, AssumeRolePolicyDocument.Statement[0].Condition]" --output json
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 세 값이 배열로 나온다. 세션 상한은 초 단위 숫자이고, `Principal` 은 누가 맡을 수 있는지, `Condition` 은 그 위에 붙는 추가 조건이다.
+
+**대부분의 역할은 `Condition` 이 `null` 이다.** 조건 없이 `Principal` 만으로 통과시킨다는 뜻이다. `sts:ExternalId` 같은 조건이 붙은 역할은 흔치 않고, 그래서 채점이 그것을 굳이 확인한다.
+
+세션 상한도 함께 본다. 기본값은 3600 이고 최대 43200 까지 늘릴 수 있다. **"1시간으로 제한하라"는 요구는 기본값과 같아서, 아무것도 안 해도 통과한다.** 요구를 읽고 "이미 그렇다"를 판단하는 것도 이행의 일부다 — 손대지 않는 것이 정답인 항목이 있다.
+
+`NoSuchEntity` 면 역할 이름 오타다.
+
+</details>
+
+### set-03 은 같은 문제를 코드로 푼다 :badge[실측]{variant=note}
+
+주제 2 가 set-07 의 머신 분할을 다룬다. 작업 호스트를 CLI 로 만들고 채점 전에 손으로 지우는 방식이다. [set-03 `bastion.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-03/task-1/terraform/bastion.tf)는 같은 문제를 다르게 푼다.
+
+| 항목 | set-07 (기준본) | set-03 (변동 타깃) |
+|---|---|---|
+| 작업 호스트 | README 절차대로 **CLI 로 직접 생성** | **Terraform 리소스** — 변수 하나로 켜고 끈다 |
+| 채점 전 제거 | 손으로 지운다 — **잊으면 감점** | 변수를 끄고 apply |
+| 노드 라벨 키 | `unicorn` | `wsc2026/node` |
+| workload 노드 | taint 없음 | **`NoSchedule` taint** — 앱에 toleration 필요 |
+| 클러스터 도메인 | 기본 | **커스텀** — 노드 부트스트랩과 CoreDNS 양쪽을 고친다 |
+| Audit Role | 요구 있음 | **요구 없음** |
+| KMS 키 정책 | root 위임 | root-less |
+
+**두 방식의 차이는 "잊을 수 있는가"다.** 손으로 만든 것은 손으로 지워야 하고, 대회 막판에 그것을 기억할 확률은 낮다. 변수로 관리하면 지우는 것이 배포 절차의 일부가 된다.
+
+마지막 줄이 이행에서 가장 놓치기 쉽다. **요구가 사라진 것도 이행이다.** set-03 으로 가면 Audit Role 은 만들지 말아야 한다 — 남겨 두면 불필요 리소스다. 기준본에 있던 것을 지우는 판단은 새로 만드는 것보다 어렵다. 만드는 요구는 과제지에 적혀 있지만, **없어진 요구는 적혀 있지 않기 때문이다.**
+
+---
+
+## 주제 5. CloudFront VPC Origin + KMS Multi-Region Key (set-07)
+
+### ① 정의 / ② 왜
+
+- **VPC Origin**: CloudFront가 **internal ALB**를 인터넷 노출 없이 오리진으로 쓰는 기능. 채점은 CloudFront 경유 200 + **ALB 직접 접근 차단**을 본다.
+- **MRK**: 같은 키 자료를 여러 리전에 복제한 KMS 키. WAF 로그(us-east-1)=primary, EKS/EBS/Log(서울)=replica. alias는 양 리전에 존재, 회전(90일)은 primary가 관리.
+
+### ③ 원리
+
+```mermaid
+flowchart LR
+    User@{ icon: "mdi:web", form: "square", label: "사용자", pos: "b", h: 46, w: 46 }
+    CF@{ icon: "logos:aws-cloudfront", form: "square", label: "CloudFront<br/>unicorn-svc-cf + WAF", pos: "b", h: 46, w: 46 }
+    User --> CF
+    ALB@{ icon: "logos:aws-elb", form: "square", label: "internal ALB<br/>unicorn-alb", pos: "b", h: 46, w: 46 }
+    CF -->|VPC Origin| ALB
+    CF -->|OAC| S3[(S3 정적)]
+    Direct@{ icon: "mdi:web", form: "square", label: "직접 curl", pos: "b", h: 46, w: 46 }
+    Direct -.->|SG: CloudFront<br/>origin-facing prefix list만 80 허용| ALB
+    Direct -. "internal이라 인터넷에서 000(연결 불가),<br/>prefix list 밖 내부 접근은 거부" .-> X[403/000 기대]
+    subgraph KMS["<span class='icon--logos icon--logos--aws-kms'></span> KMS MRK"]
+        P@{ icon: "logos:aws-kms", form: "square", label: "primary us-east-1<br/>(WAF 로그, 회전 관리)", pos: "b", h: 46, w: 46 }
+        R@{ icon: "logos:aws-kms", form: "square", label: "replica ap-northeast-2<br/>(EKS/EBS/Log)", pos: "b", h: 46, w: 46 }
+        P === R
+    end
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+internal ALB 를 CloudFront VPC Origin 으로 노출하는 구성이다. 사용자 트래픽은 CloudFront 를 거쳐 내부 ALB 로 들어가고, 정적 파일은 OAC 로 S3 에서 받는다. 직접 접근은 두 겹으로 막힌다 — ALB 가 internal 이라 인터넷에서는 연결 자체가 안 되고(000), VPC 안에서 시도해도 보안 그룹이 CloudFront 오리진 프리픽스 리스트만 허용한다. 오른쪽 KMS 는 다중 리전 키로, 로그용 기본 키는 us-east-1 에 두고 복제본이 서울 리소스를 담당한다.
+
+</details>
+
+- ALB SG 인바운드를 `com.amazonaws.global.cloudfront.origin-facing` **managed prefix list**로만 열면 직접 접근은 차단된다 — 채점 기대값이 403 또는 000(타임아웃/연결 불가)인 이유. 000 유도는 prefix list SG로 달성한다.
+
+### ④ 변형 포인트
+
+- **바뀌는 값** — ALB 노출 방식과 CloudFront 오리진 종류. set-03 은 internet-facing ALB, set-07 은 internal ALB + VPC Origin 이다.
+- **고칠 곳** — ALB 스키마, ALB SG 인바운드 소스(`com.amazonaws.global.cloudfront.origin-facing` prefix list), CloudFront 오리진 설정. KMS 는 set-07 만 WAF 로그용 MRK primary 를 us-east-1 에 둔다.
+- **확인** — ALB 직접 curl 이 403 또는 000. MRK 는 alias 가 양 리전에 있고 회전 90일을 primary 가 관리한다.
+
+모듈 07·06 의 CloudFront 내용과 교차 확인한다.
+
+---
+
+## 자기 점검 퀴즈 (5문)
+
+<Quiz title="노트북에서 private 클러스터 생성">
+`eksctl create cluster`를 퍼블릭 네트워크의 본 PC에서 실행했는데 fully-private 클러스터가 만들어진다. 그 이유와, 생성이 중간에 끊겼을 때 해야 할 일은?
+
+- [x] eksctl이 생성 중 퍼블릭 엔드포인트를 임시로 켰다가 완료 시 자동으로 끈다 — 중단되면 퍼블릭이 열린 채 남으므로 `describe-cluster`로 `[false, true]`를 확인하고 필요하면 `update-cluster-config`로 재차단한다
+- [ ] `privateCluster.enabled`는 노드그룹에만 적용되고 컨트롤 플레인 엔드포인트는 apply 후 수동으로 닫는 게 정상 절차다
+  > `privateCluster.enabled`는 컨트롤 플레인 엔드포인트 설정을 포함한다. 수동 마감이 정상 절차인 게 아니라, 중단 시에만 남는 잔여 상태다.
+- [ ] eksctl은 CloudFormation만 호출하고 클러스터에는 접근하지 않으므로 엔드포인트가 열릴 일이 없다
+  > eksctl은 생성 후 애드온·aws-auth 등을 위해 실제로 API 서버에 붙는다. 그래서 생성 구간에 퍼블릭이 필요하다.
+- [ ] eksctl이 자동으로 SSM 터널을 뚫어 VPC 내부에서 API를 호출한다
+
+eksctl이 생성 중 퍼블릭 엔드포인트를 임시로 켰다가 완료 시 자동으로 끈다. 그래서 밖에서도 만들 수 있다. 생성이 중단되면 퍼블릭이 열린 채 남고, mark 4-1은 `describe-cluster`로 `[endpointPublicAccess, endpointPrivateAccess]`가 `[false, true]`인지 직접 확인한다. 생성 직후 습관화할 것 — 확인은 `aws eks describe-cluster --name <cluster> --query 'cluster.resourcesVpcConfig.[endpointPublicAccess,endpointPrivateAccess]'`, 재차단은 `aws eks update-cluster-config --name <cluster> --resources-vpc-config endpointPublicAccess=false`.
+</Quiz>
+
+<Quiz title="eks Endpoint 와 OIDC 해석">
+fully-private 클러스터에 `eks` Interface Endpoint를 `private_dns_enabled`로 만들었더니 IRSA가 깨졌다. 이유와 대응은?
+
+- [x] Endpoint의 PHZ가 `eks.<region>.amazonaws.com` 을 가져가면서 `oidc.eks.<region>.amazonaws.com` 해석까지 가린다 → NAT 경유로 두거나 `oidc-eks` Endpoint를 함께 만든다
+- [ ] `eks-auth` Endpoint도 같은 이유로 Pod Identity를 깨뜨리므로 둘 다 만들지 않는다
+  > `eks-auth` 의 프라이빗 DNS 이름은 `eks-auth.<region>.api.aws` 라 OIDC 도메인과 겹치지 않는다. 오히려 아웃바운드 인터넷이 없으면 Pod Identity에 **필수**다 — 안 만들면 그쪽이 죽는다.
+- [ ] `eks`는 Interface Endpoint를 지원하지 않아 생성 자체가 실패한다
+  > 생성은 정상적으로 된다. 문제는 만들어진 뒤 DNS 해석이 가로채이는 것이라 더 찾기 어렵다.
+- [ ] Interface Endpoint는 시간당 과금이라 비용 pillar에서 감점된다
+  > 비용은 부수적 이유다. 여기서 결정적인 것은 인증 파괴다.
+
+`eks` Endpoint의 PHZ가 OIDC 도메인 해석을 가린다(set-03 실측, endpoints.tf 주석). set-03은 NAT가 있으므로 이 Endpoint를 만들지 않는 쪽을 택했고, 2026년 7월 이후에는 `com.amazonaws.<region>.oidc-eks` 를 함께 만들어 해석을 되살리는 선택지도 있다.
+
+"인터넷 미경유" 요구가 있을 때 필요한 목록은 이미지 pull(`s3` Gateway / `ecr.api` / `ecr.dkr`)에서 끝나지 않는다. `sts`·`oidc-eks`·`eks-auth`·`ec2` 를 빠뜨리면 IRSA와 Pod Identity가 함께 죽는다.
+</Quiz>
+
+<Quiz title="AssumeRole 이중 평가">
+trust policy가 `Principal: arn:aws:iam::<acct>:root`인 역할을, 같은 계정의 **아무 정책도 붙어 있지 않은** IAM 사용자가 assume하면?
+
+- [x] `AccessDenied` — trust policy와 호출자의 identity-based `sts:AssumeRole` 허용을 **둘 다** 통과해야 한다
+- [ ] 성공한다 — `:root`는 그 계정의 모든 principal에게 assume을 허용한다는 뜻이다
+  > 가장 흔한 오개념. `:root`는 "후보 범위를 계정 전체로 넓힌다"는 위임 선언일 뿐, 호출자에게 권한을 부여하지 않는다.
+- [ ] trust에 ExternalId 조건이 없으면 성공하고, 조건이 있으면 실패한다
+  > ExternalId는 평가 2(trust) 안의 추가 조건일 뿐이다. 조건이 없어도 평가 1(호출자 정책)에서 이미 막힌다.
+- [ ] 성공하지만 세션이 `max_session_duration` 없이 기본 1시간으로 제한된다
+
+`AccessDenied`. AssumeRole은 두 평가를 순서대로 모두 통과해야 임시 자격증명을 발급한다.
+
+1. 호출자의 identity-based policy에 `sts:AssumeRole` 허용이 있는가.
+2. 역할 trust policy의 Principal이 매칭되고 ExternalId 조건이 맞는가.
+
+`:root` trust는 후보 범위를 계정으로 넓힐 뿐 권한을 주지 않는다 — 이것이 같은 계정 `:root` trust가 안전하게 쓰이는 이유다.
+</Quiz>
+
+<Quiz title="ExternalId 정확 일치">
+mark 9-1은 audit role의 ExternalId를 문자열 **정확 일치**로 본다. ExternalId는 `unicorn-audit-2026` + 선수등번호이며, 채점 셸이 export하는 등번호와 반드시 같아야 하는 terraform 변수 이름은 [[player_number]] 이다.
+
+---
+
+대회 당일 맞춰야 하는 두 값은 **terraform apply에 넣는 `player_number`**와 **채점 셸에서 export하는 등번호(`number`)**다. 둘이 다르면 mark 9-1의 문자열 비교와 mark 9-2의 assume이 **모두** 실패한다.
+
+9-2는 성공과 실패 양쪽이 다 채점 대상이다. ExternalId 없이 assume하면 `AccessDenied` 여야 하고, 붙여서 assume한 뒤에는 `describe-vpcs`가 성공하고 `describe-instances`가 거부되어야 한다. `get-role`은 `MaxSessionDuration=3600`도 함께 본다.
+</Quiz>
+
+<Quiz title="Corefile이 되돌아가는 이유">
+CoreDNS 커스텀 도메인(`wsc2026.skills.local`)을 패치했는데 어느 순간 Corefile이 원래대로 돌아가 있다. 대표 원인은?
+
+- [x] coredns addon을 업데이트해서 — Corefile이 addon 기본값으로 초기화된다
+- [ ] `kubectl rollout restart`가 ConfigMap을 차트 기본값으로 재생성해서
+  > restart는 파드만 다시 띄운다. ConfigMap은 건드리지 않으며, 오히려 패치를 반영하려면 필요한 단계다.
+- [ ] kubelet의 `clusterDomain` 설정이 주기적으로 Corefile에 동기화돼서
+  > kubelet과 Corefile은 서로를 덮어쓰지 않는다. 둘 다 수동으로 맞춰야 하는 **독립된 두 군데**라서 문제가 되는 것이다.
+- [ ] Karpenter가 노드를 교체할 때 coredns가 기본 설정으로 재배포돼서
+
+coredns addon 업데이트가 Corefile을 addon 기본값으로 초기화한다. 업데이트하지 않는다. 이미 했다면 패치를 재적용하고 grep으로 재확인한다.
+
+커스텀 도메인은 두 군데를 함께 바꿔야 한다.
+
+1. **kubelet clusterDomain** — eksctl `overrideBootstrapCommand`의 nodeadm NodeConfig. 노드그룹 **모두**에 넣는다.
+2. **CoreDNS Corefile**
+
+mark 4-1은 kubelet configz와 Corefile을 각각 grep한다. kps의 Alertmanager `clusterDomain`도 같이 맞춘다.
+</Quiz>
+
+<QuizResults confetti />

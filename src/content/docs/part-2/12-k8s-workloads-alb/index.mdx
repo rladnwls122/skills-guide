@@ -1,0 +1,78 @@
+---
+title: 12. k8s 워크로드 + ALB 연동 — Deployment / Helm / TargetGroupBinding
+description: "프로덕션급 Deployment·LBC 설치·Terraform ALB + TargetGroupBinding 패턴의 학습 목표와 선행 지식."
+sidebar:
+  order: 1
+---
+
+import { LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+## 학습 목표
+
+- [ ] probe 3종·nodeSelector·topologySpread·PDB·graceful shutdown이 들어간 Deployment를 백지에 쓸 수 있다
+- [ ] Helm의 repo/chart/release/values 개념과 `helm upgrade --install` 패턴을 안다
+- [ ] AWS Load Balancer Controller를 helm으로 addon 노드에 고정 설치할 수 있다
+- [ ] **Terraform ALB/TG 고정 생성 → TargetGroupBinding으로 Pod IP 등록** 패턴을 설명할 수 있다 (수상 과제 공통 패턴)
+- [ ] ALB 리스너 규칙과 Lambda 타깃 구성을 안다 — set-02 는 헤더+메서드 조건에 기본 403 이고, 규칙 수는 세트마다 채점이 정한다
+- [ ] 인터넷 접근을 **헤더로 막는 방식과 `internal` 로 막는 방식**의 차이를 설명할 수 있다
+- [ ] set-02 워크로드를 set-07 요구로 **직접 이행**할 수 있다
+- [ ] 쿠버네티스의 불변 필드와 AWS 의 불변 속성을 구분해 고칠지 다시 만들지 판정할 수 있다
+- [ ] 타깃이 unhealthy 하거나 파드가 이미지를 못 받을 때 계층을 좁혀 원인을 짚을 수 있다
+
+## 소요 시간
+
+- 1일치 분량 — 04에서 유지한 클러스터 위에서 진행
+- 이론 2.5h + 실습 3.5h
+
+## 과금 리소스 & destroy 방침
+
+| 리소스 | 요금(서울) | 비고 |
+|---|---|---|
+| EKS + 노드 (04에서 유지) | ~$0.31/h | |
+| ALB x 2 (book/grafana) | 약 $0.0225/h + LCU | PART-1 terraform이 생성 |
+| NAT x 2 | 약 $0.236/h | |
+
+:::caution[과금 주의]
+04에서 유지한 클러스터를 그대로 쓴다. **05 종료 시**: 06을 다음날 이어가면 유지,
+아니면 `eksctl delete cluster` + `terraform destroy` (DynamoDB 삭제방지 해제 선행 — 06 참고).
+:::
+
+## 선행 지식
+
+- ALB 는 리스너·규칙·타깃그룹·타깃 4계층이다. 규칙은 priority 오름차순으로 평가하고 처음 맞는 것에서 끝난다 — [loadbalancer-basics](/start/loadbalancer-basics/)
+- 타깃그룹 이름을 정해야 하면 Ingress 가 아니라 TargetGroupBinding 을 쓴다 — [loadbalancer-basics](/start/loadbalancer-basics/)
+- Deployment → ReplicaSet → Pod 관계. 직접 만지는 것은 Deployment뿐 — [k8s-basics](/start/k8s-basics/)
+- Service(ClusterIP)가 라벨 셀렉터로 파드에 분배한다. 대회는 LoadBalancer 타입을 쓰지 않는다 — [k8s-basics](/start/k8s-basics/)
+- Helm의 repo/chart/release/values 개념 — [k8s-basics](/start/k8s-basics/)
+- SG는 스테이트풀 — ALB→노드 인바운드만 열면 응답은 자동 허용 — [vpc-basics](/start/vpc-basics/)
+
+막히는 항목이 있으면 그 링크를 먼저 읽는다. 아니면 바로 다음 파일로 간다.
+
+## 선행 모듈
+
+- 04-eksctl-cluster (클러스터가 떠 있어야 함)
+- PART-1 Terraform (ALB/TG/Lambda가 apply 되어 있어야 함)
+
+## 참고 경로
+
+- `~\skills-2026\set-02\task-1\k8s\app\` (기준본 — deployment/service/pdb/configmap/targetgroupbinding)
+- `~\skills-2026\set-07\task-1\k8s\` (변동 타깃 — serviceaccount·storageclass 가 더 있다)
+- `~\skills-2026\set-02\task-1\terraform\alb.tf` (인터넷 ALB + 헤더 규칙 2개 + Lambda TG)
+- `~\skills-2026\set-07\task-1\terraform\alb.tf` (internal ALB + 경로·메서드 규칙)
+- `~\skills-2026\set-02\task-1\README.md` (배포 순서 4~5 — 기준본 세우기)
+
+## 공식 문서
+
+- [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) — 롤링 업데이트·셀렉터 규칙
+- [probe 설정](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) — liveness/readiness/startup 차이와 필드
+- [PodDisruptionBudget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/) — 노드 회수 중 가용성 보장
+- [TargetGroupBinding (AWS Load Balancer Controller)](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/targetgroupbinding/targetgroupbinding/) — spec 필드·targetType
+- [ALB 리스너 규칙](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/listener-update-rules.html) — 조건·우선순위·기본 액션
+- [Helm 문서](https://helm.sh/docs/) — repo/chart/release/values
+
+## 다음 단계
+
+<LinkButton href="/part-2/12-k8s-workloads-alb/theory/" icon="right-arrow">이론 읽기</LinkButton>
+<LinkButton href="/part-2/12-k8s-workloads-alb/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

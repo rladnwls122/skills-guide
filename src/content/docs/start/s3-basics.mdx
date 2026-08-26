@@ -95,7 +95,7 @@ S3 요청 하나가 허용되기까지의 관문 순서다. 퍼블릭 액세스 
 
 - **정적 웹사이트 원본**: 버킷은 비공개로 두고 CloudFront만 읽게 한다. 버킷의 정적 웹사이트 호스팅 기능을 켜는 방식이 아니라 **OAC + 버킷 정책** 조합이 대회 유형이다. OAC(Origin Access Control)는 CloudFront가 S3 원본을 읽을 때 `cloudfront.amazonaws.com` 서비스 주체로 **요청에 서명**하게 하는 장치다 — 버킷은 그 주체만 허용하면 되므로 퍼블릭 액세스는 계속 차단해 둔다.
 - **SSE-KMS 필수**: 버킷 기본 암호화를 지정 KMS 키로 건다. KMS 키 정책과 버킷 정책 양쪽이 맞아야 업로드가 성공한다.
-- 이 내용은 **PART-1 모듈 02(KMS + S3 + CloudFront)** 의 직접적인 기반이다.
+- 이 내용은 **PART-1 모듈 07(KMS + S3 + CloudFront)** 의 직접적인 기반이다.
 
 ## ④ 핵심 코드 패턴
 
@@ -379,10 +379,10 @@ S3 이벤트는 **정확히 한 번이 아니라 최소 한 번** 전달된다. 
 
 ## ⑦ 다음 단계
 
-SSE-KMS 가 실제로 어떤 키를 어떻게 쓰는지는 다음 문서에서 이어진다. 모듈 02에서 KMS·S3·CloudFront를 Terraform으로 한 스택에 묶는다.
+SSE-KMS 가 실제로 어떤 키를 어떻게 쓰는지는 다음 문서에서 이어진다. 모듈 07에서 KMS·S3·CloudFront를 Terraform으로 한 스택에 묶는다.
 
 <LinkButton href="/start/kms-basics/" icon="right-arrow">다음 선수 학습 — KMS 기초</LinkButton>
-<LinkButton href="/part-1/02-kms-s3-cloudfront/" variant="minimal">PART 1 — KMS + S3 + CloudFront 실습</LinkButton>
+<LinkButton href="/part-1/07-kms-s3-cloudfront/" variant="minimal">PART 1 — KMS + S3 + CloudFront 실습</LinkButton>
 
 ## 공식 문서
 

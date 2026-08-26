@@ -19,7 +19,7 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## 1. 리전을 먼저 맞춘다
 
-[09](/part-4/09-serverless-event/lab/)~[13](/part-4/13-cdn-function/lab/)의 리전을 한 장에 모으면 이렇다. :badge[실측]{variant=note}
+[17](/part-4/17-serverless-event/lab/)~[23](/part-4/23-cdn-function/lab/)의 리전을 한 장에 모으면 이렇다. :badge[실측]{variant=note}
 
 | 모듈 | 기준본 리전 | 이행 타깃 리전 |
 |---|---|---|
@@ -102,9 +102,9 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 | 보존 기간 | 비어 있다(무기한) | 보존을 요구하는 과제가 있다 |
 | 암호화 키 | 비어 있다 | **암호화를 요구하면 못 맞춘다** |
 
-[03 실습 6-1](/part-1/03-container-lambda-dynamodb/lab/)이 이 상황을 다룬다 — 로그 그룹을 지정하지 않으면 기본 규칙 이름이 나와 채점이 틀린다.
+[09 실습 6-1](/part-1/09-container-lambda-dynamodb/lab/)이 이 상황을 다룬다 — 로그 그룹을 지정하지 않으면 기본 규칙 이름이 나와 채점이 틀린다.
 
-**자동 생성된 그룹은 나중에 이름을 못 바꾼다.** 지우고 올바른 이름으로 다시 만든 뒤, 함수가 그것을 쓰도록 지정해야 한다. 그리고 [03 의 교훈](/part-1/03-container-lambda-dynamodb/lab/)대로 **이미 흘러간 로그는 옛 그룹에 남는다.**
+**자동 생성된 그룹은 나중에 이름을 못 바꾼다.** 지우고 올바른 이름으로 다시 만든 뒤, 함수가 그것을 쓰도록 지정해야 한다. 그리고 [09 의 교훈](/part-1/09-container-lambda-dynamodb/lab/)대로 **이미 흘러간 로그는 옛 그룹에 남는다.**
 
 ### 그 밖에 딸려 오는 것
 
@@ -178,7 +178,7 @@ EC2 와 VPC 만 센다. 함수·큐·테이블처럼 VPC 밖 리소스는 안 �
 | import 로 살린다 | 무의미하다. 채점이 다른 리전을 본다 |
 | **틀린 리전에서 지우고 맞는 리전에서 다시 만든다** | **이것뿐이다** |
 
-그래서 이 실수의 복구 비용은 **전면 재배포**다. [09 실습 6-1](/part-4/09-serverless-event/lab/)이 같은 판정을 다룬다.
+그래서 이 실수의 복구 비용은 **전면 재배포**다. [17 실습 6-1](/part-4/17-serverless-event/lab/)이 같은 판정을 다룬다.
 
 **예방이 유일한 대응이다.** 모듈을 시작할 때 리전을 세우고, 파트를 넘어갈 때 다시 세운다.
 

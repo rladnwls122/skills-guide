@@ -1,15 +1,15 @@
 ---
-title: 전국기능경기대회 클라우드컴퓨팅 16일 완성 가이드
+title: 전국기능경기대회 클라우드컴퓨팅 한 달 완성 가이드
 description: 런북 기반으로 배포하고, 문서에 없는 상황은 개념으로 해결한다.
 template: splash
 hero:
-  title: 16일 완성. 런북 기반. 개념으로 해결.
-  tagline: AWS 기초만 아는 상태에서 16일 만에 수상 과제 스택을 런북 기반으로 신속·정확하게 배포하고, 문서에 없는 상황을 개념 이해로 해결한다.
+  title: 한 달 완성. 기초부터. 개념으로 해결.
+  tagline: 운영체제·네트워크 기초부터 네 주에 걸쳐 쌓아, 수상 과제 스택을 자기 런북으로 신속·정확하게 배포하고 문서에 없는 상황을 개념 이해로 해결한다.
   image:
     file: ../../assets/skills-logo.png
     alt: 전국기능경기대회 로고
   actions:
-    - text: 시작하기 (D0 자가진단)
+    - text: 시작하기 (자가진단)
       link: /start/
       icon: right-arrow
       variant: primary
@@ -62,7 +62,7 @@ import DayRail from '../../components/DayRail.svelte';
 
 :::caution[매일 destroy]
 시간당 과금 리소스(NAT GW, EKS, MSK, ALB)는 **당일 destroy** 가 원칙이다.
-EKS 를 이어서 쓰는 날(D4→D5→D6)만 예외이고, 그것도 모듈 인덱스에 명시된 날만이다.
+EKS 를 이어서 쓰는 구간(모듈 11→12→13)만 예외이고, 그것도 모듈 인덱스에 명시된 경우만이다.
 :::
 
 - AWS Budgets 알람 $50 설정(00 모듈에서 수행). 전체 일정 총 예산 목표 < $100.

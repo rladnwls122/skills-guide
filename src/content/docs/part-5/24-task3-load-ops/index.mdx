@@ -1,0 +1,107 @@
+---
+title: 24. 3과제 부하 운영 — System operation
+description: "모듈 개요 — 리소스가 아니라 결과 로그의 4개 비율로 채점되는 3과제를 T+50분 배포와 부하 중 운영 관점에서 훈련한다."
+sidebar:
+  order: 1
+---
+
+import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+3과제는 리소스 존재 여부를 세지 않는다. 트래픽을 주입하고 **결과 로그(`results_<비번호>.log`)의 4개 비율**만 본다 — 비정상 요청 처리·가용성·성능·비용 ratio 40점. 배포는 입장권이고, 점수는 T+60분 트래픽 개시 이후 2시간의 운영에서 갈린다.
+
+이 모듈은 배포를 T+50분 안에 끝내고, 부하 중 4축을 동시에 지키는 튜닝·감시·복구를 훈련한다.
+
+:::caution[이 모듈의 근거는 예상 풀이다]
+3과제 공식 과제지·채점지는 아직 공개되지 않았다. 이 모듈의 배점 40점·SLO(서비스 수준 목표 — p95 응답 0.2초 같은 지표별 상한선) 수치·비용 ratio 밴드는 전부 `skills-2026/task-3`(예상 풀이, 파일명 그대로 `task-sample.md`·`mark-sample.md`)에서 가져온 예측이며 실제 대회에서 달라질 수 있다. 40점이라는 총점은 1·2과제 각 30점·전체 100점에서 역산되므로 비교적 안정적이지만, 그 안의 구성은 예상이다. 반면 이 모듈이 훈련하는 SLO 기반 HPA 튜닝·RDS Proxy 풀링·인덱스 설계·비용을 게이트로 다루는 사고는 배점이 달라져도 그대로 쓸 수 있다.
+:::
+
+:::note[협의회(2026-07-31)에서 확인된 것 — 예상의 골격이 맞았다]
+변별력은 3과제로 판단한다. 확인된 것 셋:
+
+- 채점 플랫폼이 **선수 트래픽 점수를 실시간 대시보드로 보여 준다.**
+- 평가 목적은 "요청을 처리하면서 리소스는 최대한 적게"다(대회 기간 **전체** 기준).
+- **악의적 트래픽이 유입되어 WAF 대응이 요구된다.**
+
+이 모듈의 4축(비정상 요청·가용성·성능·비용)과 방향이 일치한다. 기존 문제의 전면 변경은 없고 배점 수정과 추가 문제가 가능하다(예시: CloudWatch 모니터링 로그가 적재되면 Firehose를 통해 S3로 저장).
+
+실시간 점수가 보이므로 부하 중 "지표 확인 → 노브 조정 → 재확인" 루프를 대회장에서도 그대로 쓴다. 비용 축이 전 기간 누적이라, 부하가 없는 시간대에 노드·리소스를 줄여 두는 운영까지 점수다.
+
+회의록이 더한 것:
+
+- **EC2 인스턴스 수는 주기적으로 확인해** 전체 경기 시간 기준으로 산정한다. 제시된 구성 외 EC2에는 패널티가 붙는다(bastion도 개수에 든다).
+- Product App의 PUT 업로드는 Content-Type·Body 같은 기본 형식만 문제지에 나온다. **S3 저장 경로는 당일 앱 동작과 요청을 분석해 알아내는 과제의 일부**다.
+- 취약점 위치·엔드포인트 성격을 묻는 질의는 "정답 요구"로 분류돼 답변되지 않았다. 3과제는 요구사항 구현 확인이 아니라 **분석과 운영**이다([대회 운영 규칙](/reference/competition-rules/)).
+:::
+
+## 목표
+
+- [ ] 정답지(`skills-2026/task-3`) 런북으로 CloudFront 스택을 **T+50분 내** 배포하고 스모크 6종 통과
+- [ ] 부하 드릴에서 user·product `p(90) < 200ms`, stress `p(90) < 1000ms`, 실패율 < 10% 달성
+- [ ] 부하 전 구간에서 노드 2~9대 밴드 유지 (비용 ratio 0.5~3.75)
+- [ ] 부하 중 장애 10종 중 7개 이상을 확인 명령 → 조치 순서로 5분 내 복구
+- [ ] 노브 1개를 변경 → 재측정해 지표 변화를 원인과 결과로 설명한다
+- [ ] 트래픽 전에 Container Insights와 WAF 로깅을 켜고, 지표가 비면 권한부터 확인해 복구한다
+- [ ] `requests`가 스케줄링과 HPA 이용률 분모 둘에만 쓰인다는 것을 지표 변화로 설명한다
+
+## 소요 시간
+
+- 각 8~10시간 (배포 1시간 + 부하 드릴 3회 + 장애 드릴). 배점 40점으로 세 과제 중 가장 크다 — Week 4 를 통째로 여기와 드릴에 쓴다.
+
+## 과금 / destroy
+
+:::caution[시간당 과금이 가장 비싼 모듈]
+EKS + NAT GW + ALB + CloudFront + RDS Multi-AZ(db.t3.micro) + 노드 최대 9대.
+
+- 드릴 1회는 배포~부하~정리까지 3시간 안에 끝내고 **당일 destroy**한다.
+- k6 부하는 자기 CloudFront로만 주입한다. 종료 시 부하부터 멈추고 스택을 지운다.
+- 정리 순서: k6 중지 → `kubectl delete` → `eksctl delete cluster` → `terraform destroy` → [잔존 리소스 점검](/reference/cleanup-check/).
+:::
+
+## 선행 지식
+
+- 파드 `requests`가 스케줄링 단위이자 HPA 이용률의 분모 — [k8s-basics](/start/k8s-basics/)
+- Service·라벨 셀렉터 — TargetGroupBinding이 이 경로로 파드 IP를 등록한다 — [k8s-basics](/start/k8s-basics/)
+- 이미지 크기가 스케일아웃 지연에 직결(노드 신규 생성 시 pull 시간) — [docker-basics](/start/docker-basics/)
+- SG는 스테이트풀 — ALB→노드 8080만 열면 된다 — [vpc-basics](/start/vpc-basics/)
+- `aws ... --query`로 타깃 상태·프록시 설정을 초 단위로 확인 — [awscli-basics](/start/awscli-basics/)
+
+막히는 항목이 있으면 그 링크를 먼저 읽는다. 아니면 바로 다음 파일로 간다.
+
+## 선행 모듈
+
+- 06-full-deploy-set02 (EKS·ALB·CloudFront 배포 완주)
+- 16-break-fix ([트러블슈팅](/reference/troubleshooting/) 표가 손에 붙은 상태)
+- 정답지 `skills-2026/task-3`의 `README.md`·`ARCHITECTURE.md` 정독
+
+## 파일
+
+<CardGrid>
+  <Card title="theory" icon="open-book">
+    채점 4축, requests·limits, 관측 계층, 스케일 리드타임, 데이터·엣지 병목, 비용 밴드 + 퀴즈.
+
+    [읽기](/part-5/24-task3-load-ops/theory/)
+  </Card>
+  <Card title="lab" icon="rocket">
+    타임라인 드릴·관측 준비·k6 3단 프로파일·노브 조정 루프·부하 중 장애 대응.
+
+    [실습하기](/part-5/24-task3-load-ops/lab/)
+  </Card>
+</CardGrid>
+
+<LinkButton href="/part-5/24-task3-load-ops/theory/" icon="right-arrow">이론부터 시작</LinkButton>
+
+## 공식 문서
+
+- [HPA `behavior` 설정](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#configurable-scaling-behavior) — scaleUp/scaleDown 정책 필드
+- [EKS Auto Mode](https://docs.aws.amazon.com/eks/latest/userguide/automode.html) — 내장 컨트롤러가 대신 하는 것과 남는 설정
+- [Karpenter Disruption](https://karpenter.sh/docs/concepts/disruption/) — consolidation·budgets·PDB 상호작용
+- [RDS Proxy](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy.html) — 커넥션 풀링·피닝 조건·인증 방식
+- [CloudFront 캐시 키 제어](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/controlling-the-cache-key.html) — 캐시 정책·TTL·무효화
+- [WAF 관리형 룰 그룹 목록](https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-list.html) — 룰별 포함 규칙과 오차단 위험
+- [CloudWatch Logs 구독 필터](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/SubscriptionFilters.html) — 협의회가 예시로 든 추가 문제(로그 적재 → Firehose → S3)의 연결 지점
+- [Container Insights on EKS](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-setup-EKS-addon.html) — 추가 기능 설치와 데몬셋 구성
+- [WAF 로깅](https://docs.aws.amazon.com/waf/latest/developerguide/logging.html) — 로그 그룹 이름 규칙과 대상별 차이
+- [Application Signals 지원 언어](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-Application-Signals.html) — 자동 계측 가능 범위
+- [k6 문서](https://grafana.com/docs/k6/latest/) — options·threshold·stage 문법

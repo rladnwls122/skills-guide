@@ -1,0 +1,527 @@
+---
+title: 07. KMS + S3 + CloudFront — 변동 이행 실습
+description: "set-02 의 키·버킷·배포를 set-07 요구로 이행하고, 배포 뒤 오독 복구와 장애 진단까지 가는 실습."
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+원리와 채점 관점은 [07 이론 — KMS + S3 + CloudFront](/part-1/07-kms-s3-cloudfront/theory/)에 있다.
+
+**방식**: [06 실습](/part-1/06-terraform-vpc/lab/)이 만든 작업 사본을 이어 쓴다. set-07 변동 과제지를 읽고 **절차 안내 없이 직접** 고친 뒤, 통과 기준으로 스스로 판정한다. 배포한 다음에는 값을 잘못 읽었을 때의 복구와 고장 진단까지 간다.
+
+이 모듈의 변동은 값 바꾸기가 아니다. **키를 나누는 기준 자체가 바뀐다.** 그리고 지금까지 없던 서비스가 둘 늘어난다.
+
+## 실습 목표
+
+- [ ] 키를 리소스별이 아니라 **용도별로** 다시 묶는다 — 개수는 같은데 어느 서비스가 어느 키를 쓰는지가 전부 바뀐다
+- [ ] 회전 주기를 명시한다 — 켜기만 하면 기본값이 나와 틀린다
+- [ ] 리전을 넘는 요구가 왜 키 설계를 바꾸는지 알고 다중 리전 키를 놓는다
+- [ ] 버킷에 버전 관리를 켜고 객체 경로 규칙을 바꾼다
+- [ ] set-02 에 파일 자체가 없는 WAF 를 새로 놓는다
+- [ ] `plan` 출력으로 무엇이 in-place 이고 무엇이 재생성인지 판정한다
+- [ ] CDN 이 403 을 낼 때 CDN → 버킷 정책 → 키까지 계층을 좁힌다
+
+선행 지식과 목표는 [모듈 개요](/part-1/07-kms-s3-cloudfront/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- Terraform 인자: [aws_kms_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) · [aws_kms_replica_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_replica_key) · [aws_s3_bucket_versioning](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_versioning) · [aws_wafv2_web_acl](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/wafv2_web_acl)
+- 다중 리전 키는 원본과 복제본이 **다른 리소스 타입**이다. 위 두 링크를 나란히 본다
+- 인자 이름만 기억나지 않을 때: `terraform providers schema -json` (`terraform init` 을 마친 디렉터리에서)
+- 키 정책에 쓸 KMS 액션 이름: [Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html)
+- CLI 출력 필드: `aws kms describe-key help` · `aws s3api get-bucket-encryption help` · `aws wafv2 list-web-acls help`
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
+## 0. 기준본 세우기
+
+[06 실습](/part-1/06-terraform-vpc/lab/)의 `~/set07-lab` 을 그대로 이어 쓴다. 그 사본은 set-02 정답지에서 떠 온 것이라 **VPC 만 set-07 로 이행돼 있고 키·버킷·배포는 아직 set-02 그대로**다. 이 모듈이 그 다음 조각을 맡는다.
+
+01 을 건너뛰었거나 이미 지웠다면 사본부터 다시 뜬다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Copy-Item -Recurse $HOME\skills-2026\set-02\task-1\terraform $HOME\set07-lab
+  cd ~\set07-lab
+  terraform init
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  cp -r ~/skills-2026/set-02/task-1/terraform ~/set07-lab
+  cd ~/set07-lab
+  terraform init
+  ```
+  </TabItem>
+</Tabs>
+
+원본은 [set-02 `terraform/`](https://github.com/ishs-cloud-computing/skills-2026/tree/main/set-02/task-1/terraform)에서 바로 볼 수 있다. 이 모듈이 다루는 것은 `kms.tf` · `s3.tf` · `cloudfront.tf` 셋이다.
+
+### 지금 무엇이 서 있나 확인한다
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  terraform apply
+  aws kms list-aliases --query "Aliases[?starts_with(AliasName,'alias/wskorea26')].AliasName" --output text
+  aws s3api list-buckets --query "Buckets[?contains(Name,'concert-bucket')].Name" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform apply
+  aws kms list-aliases --query "Aliases[?starts_with(AliasName,'alias/wskorea26')].AliasName" --output text
+  aws s3api list-buckets --query "Buckets[?contains(Name,'concert-bucket')].Name" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 첫 명령이 `Apply complete!`, 둘째가 alias 세 개(`s3`·`dynamodb`·`eks`), 셋째가 버킷 이름 한 줄.
+
+`AccessDenied` 가 나오면 코드가 아니라 자격증명 문제다 — [awscli-basics](/start/awscli-basics/)를 다시 밟는다.
+
+:::danger[과금이 이어진다]
+01 이 만든 NAT 게이트웨이가 계속 과금 중이고 여기에 CloudFront 배포가 더해진다. CloudFront 자체는 유휴 시 거의 0 이지만 배포·무효화에 시간이 걸린다. 6·7절이 배포된 상태를 전제하므로 이 실습은 배포까지 간다. 끝나면 8절 정리를 돌린다.
+
+시간이 없어 3절까지만 할 거라면 `apply` 를 건너뛰어도 된다 — 3절 판정은 `plan` 까지라 배포 없이 전부 된다. 대신 5~7절은 못 한다.
+:::
+
+## 1. 변동 과제지
+
+set-07 요구다. **정답 코드를 먼저 열지 않는다.**
+
+| 항목 | set-02 (기준본) | set-07 (변동) |
+|---|---|---|
+| CMK 개수 | 3개 | 3개 (같다) |
+| CMK 를 나누는 기준 | 리소스별 — S3 / DynamoDB / EKS | **용도별** — 아래 참조 |
+| 키 이름 | `wskorea26-{s3,dynamodb,eks}-key` | `unicorn-kms-{app,data,platform}` |
+| 키 회전 | 켜져 있음 | 켜짐 + **90일 주기 명시** |
+| 리전 | 전부 서울 | **하나는 `us-east-1` 에도 있어야 한다** |
+| 버킷 이름 | `wskorea26-concert-bucket-<비번호>` | `unicorn-web-<계정ID>` |
+| 버킷 버전 관리 | 없음 | **켠다** |
+| 정적 객체 경로 | `web/main/` 아래 | 버킷 루트 |
+| 업로드 대상 | `index.html`·`main.jpeg` 명시 | 제공 디렉터리 전체에서 `book` 바이너리만 제외 |
+| CDN → ALB | 인터넷 경유 + 커스텀 헤더 | **VPC Origin** |
+| WAF | 없음 | **새로 놓는다** |
+
+용도별로 묶으라는 요구는 이렇게 온다.
+
+- 애플리케이션 데이터용 키 하나 — 예약 테이블과 비밀 값
+- 저장소용 키 하나 — 정적 웹 버킷과 컨테이너 레지스트리
+- 플랫폼용 키 하나 — 클러스터 Secret, 노드 볼륨, 각종 로그
+
+### 요구에서 파생되는 것
+
+**"하나는 `us-east-1` 에도 있어야 한다"** 가 이 모듈에서 가장 멀리 퍼진다. 왜 그런 요구가 붙는지를 먼저 읽어야 한다. 세 번째 키가 덮는 대상 중에 **CloudFront 용 WAF 의 로그**가 있고, 그 WAF 는 서울에 만들 수 없다. [07 이론 7절](/part-1/07-kms-s3-cloudfront/theory/)의 확인 블록이 그 사실을 명령으로 보여 준다.
+
+여기서 두 가지가 따라온다. 첫째, 프로바이더를 리전별로 둘 선언해야 한다. 둘째, **다중 리전 키는 리소스 타입이 하나가 아니다** — 원본과 복제본이 따로 있다.
+
+**버킷 이름에 비번호 대신 계정 ID 가 들어간다**는 것도 그냥 문자열 교체가 아니다. 계정 ID 를 코드에서 얻는 방법이 이미 `data.tf` 에 있는지 확인한다.
+
+**객체 경로가 루트로 바뀌고 업로드 대상이 목록에서 규칙으로 바뀐다.** 파일 이름을 손으로 나열하지 않고 디렉터리를 훑어 특정 파일만 빼는 방식이라, 쓰는 함수가 달라진다.
+
+## 2. 이행 (타이머 30분)
+
+타이머를 걸고 시작한다. `~/set07-lab` 의 `kms.tf` · `s3.tf` · `cloudfront.tf` 를 고치고 `waf.tf` 를 새로 만든다. 아래는 절차가 아니라 **스스로 답해야 할 질문 목록**이다.
+
+- 키가 셋에서 셋으로 그대로인데 왜 `plan` 이 전부 재생성으로 잡히나. 키 자체와 alias 중 무엇이 바뀐 것인가
+- 회전 주기를 정하는 인자 이름은 무엇인가. `enable_key_rotation` 만으로는 왜 안 되나
+- 다중 리전 키를 만들 때 원본 쪽에 켜야 하는 인자와, 복제본을 만드는 **다른 리소스 타입**의 이름은 각각 무엇인가
+- 두 리전을 한 구성에서 다루려면 `provider` 를 어떻게 선언하고 리소스에 어떻게 붙이나. `set-02` 에 그 선언이 있나
+- 계정 ID 를 코드에서 얻는 data 소스는 무엇인가. 이미 선언돼 있나
+- 디렉터리의 모든 파일에서 하나만 빼서 `for_each` 를 도는 함수 조합은 무엇인가
+- WAF 를 CloudFront 에 붙이려면 Web ACL 을 어느 리전에 만들고, 배포 쪽에는 무엇을 넘기나
+
+키 정책은 손대지 않아도 되는 부분이 많다. **어디가 그대로여도 되는지 판단하는 것도 이행 훈련의 일부다.**
+
+## 3. 통과 기준
+
+배포 없이 판정되는 것만 여기 있다.
+
+<Steps>
+
+1. **옛 이름 잔존 0건**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'wskorea26' -Path .\kms.tf,.\s3.tf,.\cloudfront.tf,.\waf.tf
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -nE 'wskorea26' kms.tf s3.tf cloudfront.tf waf.tf
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **출력 없음.** 키 정책 안의 문자열과 `description` 이 가장 자주 남는다.
+
+2. **`terraform validate` 통과**
+
+   ```bash
+   terraform init -upgrade
+   terraform validate
+   ```
+
+   `init -upgrade` 를 먼저 하는 이유는 이 모듈이 새 리소스 타입을 쓰기 때문이다. `Invalid resource type` 이 나오면 코드가 아니라 프로바이더가 낡은 것이다.
+
+3. **`plan` 의 개수와 이름이 스펙과 맞나**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     terraform plan -no-color | Select-String -Pattern 'Plan: |# aws_kms|# aws_wafv2|# aws_s3'
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     terraform plan -no-color | grep -E 'Plan: |# aws_kms|# aws_wafv2|# aws_s3'
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: KMS 키 3개와 복제 키 1개, alias 3개, Web ACL 1개가 잡힌다. 버킷은 이름이 바뀌었으므로 재생성이다 — 그 파급은 6절에서 다룬다.
+
+</Steps>
+
+### set-07 채점 대응
+
+[set-07 `mark.sh`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/mark.sh) 의 `2-1-A` · `3-1-A` · `8-2-A` · `8-6-A` 가 이 모듈을 잰다.
+
+| 채점 | 보는 것 | 내 코드의 어느 인자가 정하나 |
+|---|---|---|
+| 2-1-A | 세 키의 회전 여부 **와 주기** | |
+| 3-1-A | 버킷 이름 패턴 | |
+| 3-1-A | 퍼블릭 차단 4종 | |
+| 3-1-A | 버전 관리 상태 | |
+| 3-1-A | 기본 암호화 알고리즘과 키 | |
+| 8-2-A | CDN 오리진의 OAC 와 VPC Origin ID | |
+| 8-2-A | 버킷 정책의 Principal 과 SourceArn | |
+| 8-6-A | XSS 문자열을 붙인 요청의 응답 코드 | |
+
+오른쪽 열을 직접 채운다. `2-1-A` 는 회전을 켜기만 하고 주기를 안 적으면 값이 나오긴 하는데 틀린 값이 나온다 — 그게 이 항목이 두 값을 함께 뽑는 이유다.
+
+## 4. 복기
+
+[set-07 `kms.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/terraform/kms.tf) · [`s3.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/terraform/s3.tf) · [`waf.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/terraform/waf.tf)와 대조한다. **3절을 통과한 뒤에 연다.**
+
+놓친 곳을 셋으로 나눈다.
+
+- **과제지를 못 읽은 것** — 버전 관리처럼 한 줄로 적힌 요구가 여기 걸린다
+- **읽었는데 어디를 고칠지 못 찾은 것** — 다중 리전 키가 별도 리소스 타입인 것을 몰랐다면 여기다
+- **찾았는데 틀린 것** — `validate` 가 잡아 주는 종류였는지 확인한다
+
+**파일을 새로 만들어야 했던 것을 빠뜨렸다면** 두 번째 갈래다. 기준본에 블록 자체가 없는 요구가 가장 자주 샌다.
+
+## 5. 배포와 채점 확인
+
+```bash
+terraform apply
+```
+
+기대: `Apply complete!` 버킷이 재생성되므로 정적 객체가 다시 올라간다. CloudFront 배포 갱신은 전파에 시간이 걸린다 — `Status` 가 `Deployed` 가 될 때까지 기다린 뒤 채점한다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  foreach ($a in 'app','data','platform') {
+    $id = aws kms describe-key --key-id "alias/unicorn-kms-$a" --query "KeyMetadata.KeyId" --output text
+    aws kms get-key-rotation-status --key-id $id --query "[KeyRotationEnabled, RotationPeriodInDays]" --output text
+  }
+  aws s3api get-bucket-versioning --bucket "unicorn-web-$(aws sts get-caller-identity --query Account --output text)" --query "Status" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  for a in app data platform; do
+    aws kms get-key-rotation-status \
+      --key-id $(aws kms describe-key --key-id alias/unicorn-kms-$a --query "KeyMetadata.KeyId" --output text) \
+      --query "[KeyRotationEnabled, RotationPeriodInDays]" --output text
+  done
+  aws s3api get-bucket-versioning --bucket unicorn-web-$(aws sts get-caller-identity --query Account --output text) --query "Status" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 키마다 `True 90` 이 한 줄씩 세 줄, 그리고 `Enabled`.
+
+`True 365` 가 나오면 회전만 켜고 주기를 안 적은 것이다. 이 한 줄이 `2-1-A` 를 가른다.
+
+WAF 는 이론 7절 확인 블록과 같은 명령으로 본다.
+
+```bash
+aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 --query "WebACLs[].Name" --output json
+```
+
+기대: 방금 만든 Web ACL 이름이 배열에 들어 있다.
+
+## 6. 과제지 오독 복구
+
+배포까지 했는데 값이 다르다. 물어야 할 것은 하나다 — **고쳐서 살리나, 부수고 다시 만드나.**
+
+판정은 01 과 같은 축이다. `terraform plan` 이 답을 준다.
+
+| 판정 | `plan` 에서 | 비용 |
+|---|---|---|
+| in-place | `~ update in-place` | 초 |
+| 재생성, 의존 없음 | `-/+` + `# forces replacement` | 분 |
+| 재생성, 의존 딸림 | 위와 같되 다른 리소스가 함께 `-/+` | 십분 |
+
+### 6-1. 회전 주기를 안 적었다
+
+**상황.** 회전은 켰는데 주기를 안 적어 `True 365` 가 나온다.
+
+**판정.** 인자를 넣고 `plan` 을 낸다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  terraform plan -no-color | Select-String -Pattern 'rotation|forces replacement'
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform plan -no-color | grep -E 'rotation|forces replacement'
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `~ rotation_period_in_days` 한 줄만 바뀌고 `forces replacement` 는 없다. 회전 설정은 키의 속성이지 정체성이 아니다.
+
+**복구.** `terraform apply`. 초 단위다.
+
+**교훈.** 가장 싼 축이다. 급하면 뒤로 미뤄도 된다. 다만 **채점이 이 값을 직접 뽑는다**는 것은 기억한다 — 싸다고 안 해도 되는 것은 아니다.
+
+### 6-2. 키를 리소스별로 나눈 채 이름만 바꿨다
+
+**상황.** `unicorn-kms-s3`·`unicorn-kms-dynamodb`·`unicorn-kms-eks` 로 이름만 갈아 끼웠다. 개수도 셋이고 이름도 `unicorn-` 으로 시작하니 맞아 보인다.
+
+**판정.** 이건 `plan` 이 안 잡아 준다. **코드는 완벽하게 유효하고 apply 도 성공한다.** 틀린 것은 문법이 아니라 설계다.
+
+확인은 채점이 무엇을 찾는지로 한다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws kms describe-key --key-id alias/unicorn-kms-data --query "KeyMetadata.KeyId" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws kms describe-key --key-id alias/unicorn-kms-data --query 'KeyMetadata.KeyId' --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 키 ID. `NotFoundException` 이면 그 이름의 키가 없는 것이고, 채점 `2-1-A` 는 정확히 이 조회를 세 번 한다.
+
+**복구.** 이름만 고치면 되는 것이 아니다. 키가 셋에서 셋이지만 **어느 리소스가 어느 키를 참조하는지가 전부 바뀐다.** S3 와 ECR 이 같은 키를 봐야 하고, EKS·EBS·로그가 같은 키를 봐야 한다. 참조를 바꾸면 그 리소스들이 재생성되거나 in-place 로 갱신된다.
+
+`plan` 에서 `kms_master_key_id`·`kms_key_id`·`keyARN` 이 바뀌는 줄을 전부 센다.
+
+**교훈.** **이름이 맞는다고 설계가 맞는 것은 아니다.** 이 모듈에서 가장 조용한 실수이고, `plan` 도 `validate` 도 잡아 주지 않는다. 과제지가 "어느 서비스가 어느 키를 쓰는지"를 적었다면 그것이 이름보다 먼저다.
+
+### 6-3. 버킷 이름을 잘못 읽었다
+
+**상황.** 비번호를 계정 ID 로 바꾸는 것을 놓치고 `unicorn-web-<비번호>` 로 만들었다.
+
+**판정.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  terraform plan -no-color | Select-String -Pattern 'forces replacement|# aws_' | Select-Object -First 20
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  terraform plan -no-color | grep -E 'forces replacement|# aws_' | head -20
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `bucket` 줄 옆에 `# forces replacement`. 버킷 이름은 전역 고유 식별자라 바꿀 수 없다.
+
+**파급.** 버킷만 죽지 않는다. 버킷 이름을 참조하는 것이 전부 따라온다.
+
+- 퍼블릭 차단·암호화·버전 관리·정책 — 전부 버킷에 딸린 리소스다
+- CloudFront 오리진의 도메인
+- **KMS 키 정책의 조건절** — 이론 6절의 순환 참조 우회가 계정이나 배포 ARN 을 조건으로 쓴다
+- 버킷 안의 객체 — 새 버킷에 다시 올라간다
+
+`plan` 에서 `-/+` 가 붙은 것을 전부 센다. 여기에 더해 **버전 관리를 켜 두었으면 삭제가 더 성가시다** — 버전이 남아 있는 버킷은 비우지 않으면 지워지지 않는다.
+
+**복구.** `terraform apply`. CloudFront 오리진이 바뀌므로 전파를 기다려야 한다.
+
+**교훈.** 06 실습의 VPC CIDR 과 같은 자리다. **이름이 곧 전역 식별자인 리소스는 만들기 전에 두 번 확인한다.** 이 모듈에서 그런 값은 버킷 이름 하나다.
+
+## 7. 장애 진단
+
+정상으로 선 상태에서 일부러 고장을 내고 증상만 보고 좁혀 간다. **주입 명령과 복구 명령이 짝으로 있다.**
+
+### 7-1. CDN 이 갑자기 403 을 낸다
+
+**주입.** 버킷 정책을 지운다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $b = "unicorn-web-$(aws sts get-caller-identity --query Account --output text)"
+  aws s3api get-bucket-policy --bucket $b --query Policy --output text | Set-Content $HOME\bucket-policy-backup.json
+  aws s3api delete-bucket-policy --bucket $b
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  b="unicorn-web-$(aws sts get-caller-identity --query Account --output text)"
+  aws s3api get-bucket-policy --bucket "$b" --query Policy --output text > ~/bucket-policy-backup.json
+  aws s3api delete-bucket-policy --bucket "$b"
+  ```
+  </TabItem>
+</Tabs>
+
+지우기 전에 받아 두는 첫 줄이 중요하다. **되돌릴 것을 먼저 확보하고 부순다.**
+
+**증상.** CDN 주소로 정적 페이지를 열면 403 이 온다. 파일은 버킷에 그대로 있다.
+
+**좁히는 순서.** 밖에서 안으로, 한 계층씩만 본다.
+
+<Steps>
+
+1. **403 이 누구 것인가** — 응답 본문을 본다. CloudFront 가 낸 것인지 S3 가 낸 것인지가 글자로 적혀 있다. `curl -s https://<도메인>/index.html` 로 본문을 그대로 읽는다. **이 갈림이 가장 중요하다** — CloudFront 것이면 CDN 설정, S3 것이면 그 뒤 계층이다
+
+2. **객체가 실제로 있나** — `aws s3api head-object --bucket <버킷> --key index.html`. 없으면 업로드 문제다
+
+3. **버킷 정책이 CDN 을 허용하나** — `aws s3api get-bucket-policy --bucket <버킷>`. `NoSuchBucketPolicy` 면 여기가 원인이다
+
+4. 정책이 있는데도 막히면 그때 **키 정책**으로 내려간다 — 7-2 가 그 경우다
+
+</Steps>
+
+퍼블릭 차단 설정부터 보는 것이 가장 흔한 시간 낭비다. **퍼블릭 차단은 켜져 있는 것이 정상이고, CDN 은 퍼블릭 경로로 오는 것이 아니다.**
+
+**복구.** 코드가 실제 상태와의 차이를 메운다.
+
+```bash
+terraform plan
+terraform apply
+```
+
+기대: `plan` 이 `aws_s3_bucket_policy` 하나를 `+ create` 로 잡는다. 콘솔·CLI 로 지운 것을 코드가 되돌리는 이 동작이 drift 복구다 — [06 실습 7-1](/part-1/06-terraform-vpc/lab/)과 같은 구조다.
+
+증상별 처방 목록은 [트러블슈팅](/reference/troubleshooting/)에 있다.
+
+### 7-2. 정책은 멀쩡한데 객체를 못 읽는다
+
+**주입.** 저장소용 키를 비활성화한다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws kms disable-key --key-id alias/unicorn-kms-data
+  aws kms describe-key --key-id alias/unicorn-kms-data --query "KeyMetadata.[Enabled,KeyState]" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws kms disable-key --key-id alias/unicorn-kms-data
+  aws kms describe-key --key-id alias/unicorn-kms-data --query 'KeyMetadata.[Enabled,KeyState]' --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대(주입 확인): `False Disabled`.
+
+**증상.** 객체 목록은 멀쩡히 나온다. 그런데 내려받으려 하면 실패하고, CDN 도 오류를 낸다. **버킷 정책도 퍼블릭 차단도 아무것도 안 바뀌었다.**
+
+**좁히는 순서.**
+
+<Steps>
+
+1. **목록과 읽기를 분리해 본다** — `aws s3api list-objects-v2 --bucket <버킷> --query "Contents[].Key"` 는 되는데 `aws s3api get-object --bucket <버킷> --key index.html /dev/null` 이 안 되면, 문제는 **객체 존재나 권한이 아니라 복호화**다. 이 대조가 이 항목의 핵심이다
+
+2. **에러 문자열을 읽는다** — 실패 메시지에 `KMS` 나 `KMSInvalidStateException` 같은 단어가 있으면 방향이 정해진다
+
+3. **키 상태** — `aws kms describe-key --key-id <alias> --query "KeyMetadata.[Enabled,KeyState]"`. `Disabled` 면 여기가 원인이다
+
+4. 켜져 있는데도 안 되면 그때 **키 정책**의 Principal 과 조건절을 본다
+
+</Steps>
+
+**복구.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws kms enable-key --key-id alias/unicorn-kms-data
+  aws kms describe-key --key-id alias/unicorn-kms-data --query "KeyMetadata.[Enabled,KeyState]" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws kms enable-key --key-id alias/unicorn-kms-data
+  aws kms describe-key --key-id alias/unicorn-kms-data --query 'KeyMetadata.[Enabled,KeyState]' --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `True Enabled`. 곧 정상으로 돌아온다.
+
+**교훈.** [07 이론 1절](/part-1/07-kms-s3-cloudfront/theory/)의 봉투 암호화가 여기서 손에 잡힌다. **데이터는 그 자리에 그대로 있는데 키가 막히면 못 읽는다.** 그래서 "파일이 있다"와 "파일을 읽을 수 있다"는 다른 질문이고, 진단할 때 이 둘을 분리해서 물어야 한다.
+
+키는 이 모듈에서만 쓰이지 않는다. 저장소용 키 하나가 막히면 [09](/part-1/09-container-lambda-dynamodb/lab/)의 컨테이너 레지스트리도 함께 막힌다 — **용도별로 묶는다는 것은 장애 범위도 용도별로 묶인다는 뜻이다.**
+
+## 8. 정리
+
+:::caution[03 으로 바로 이어 간다면]
+그대로 둔다. [09 실습](/part-1/09-container-lambda-dynamodb/lab/)이 같은 `~/set07-lab` 을 이어 쓴다. PART-1 을 끝냈으면 아래를 돌린다.
+:::
+
+버킷을 먼저 비운다. **버전 관리를 켰으므로 객체를 지워도 버전이 남아 버킷이 안 지워진다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $b = "unicorn-web-$(aws sts get-caller-identity --query Account --output text)"
+  aws s3api list-object-versions --bucket $b --query "[Versions,DeleteMarkers][].{Key:Key,VersionId:VersionId}" --output json
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  b="unicorn-web-$(aws sts get-caller-identity --query Account --output text)"
+  aws s3api list-object-versions --bucket "$b" --query "[Versions,DeleteMarkers][].{Key:Key,VersionId:VersionId}" --output json
+  ```
+  </TabItem>
+</Tabs>
+
+남은 버전이 보이면 버킷 리소스에 `force_destroy` 를 켜고 apply 한 뒤 destroy 하는 것이 가장 짧다.
+
+```bash
+terraform destroy
+```
+
+기대: `Destroy complete!`
+
+KMS 키는 즉시 사라지지 않는다. **삭제 유예 기간 동안 `PendingDeletion` 상태로 남고 그동안에도 이름을 점유한다.** 같은 alias 로 다시 만들려면 이 점을 감안한다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws kms list-aliases --query "Aliases[?starts_with(AliasName,'alias/unicorn')].AliasName" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws kms list-aliases --query "Aliases[?starts_with(AliasName,'alias/unicorn')].AliasName" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 빈 출력.
+
+막히면 [트러블슈팅](/reference/troubleshooting/), 계정 전체 점검은 [잔존 리소스 점검](/reference/cleanup-check/)이다.

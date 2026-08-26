@@ -1,0 +1,94 @@
+---
+title: 09. 컨테이너(ECR) + Lambda + DynamoDB
+description: "모듈 개요 — Dockerfile 베이스 선택, ECR 스캔, DynamoDB 설계, ALB 통합 Lambda 학습 목표."
+sidebar:
+  order: 1
+---
+
+import { FileTree, LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+## 학습 목표
+
+- [ ] Dockerfile 베이스 선택(scratch/alpine/distroless)이 ECR 스캔·TLS·타임존에 미치는 영향을 설명할 수 있다
+- [ ] tzdata + `TZ=Asia/Seoul` 미설정 시 Go 바이너리 `created_at` 이 UTC 로 저장돼 채점에 실패하는 이유를 안다
+- [ ] scanOnPush + KMS 암호화 ECR 리포지토리를 만들고, 요구된 태그만 push 할 수 있다 (latest 추가 = 감점)
+- [ ] PK + GSI(HASH+RANGE) + PITR(지정 시점 복구 — 최근 35일 중 원하는 초 단위 시점으로 되돌린다) + 삭제방지 DynamoDB 테이블을 설계하고, boto3 Decimal 함정을 피할 수 있다
+- [ ] ALB 통합 Lambda(boto3 Query, ScanIndexForward=False, 환경변수 주입, 응답 포맷)를 작성할 수 있다
+
+- [ ] set-02 의 레지스트리·테이블·함수를 set-07 요구로 **직접 이행**할 수 있다
+- [ ] 조회 기준이 뒤집힌 요구에서 파티션 키와 GSI 축을 다시 배치할 수 있다
+- [ ] 파티션 키 재생성의 파급과 **삭제 방지를 먼저 꺼야 하는 순서**를 안다
+- [ ] `validate` 가 막을 때 오타인지 **프로바이더가 낡은 것인지** 판정할 수 있다
+- [ ] 로그가 남는 실패와 로그조차 안 남는 실패를 구분해 계층을 좁힐 수 있다
+
+## 소요 시간
+
+- 약 6시간 (이론 2h + 실습 3h + 정답 diff 1h)
+
+## 과금 리소스와 destroy 방침
+
+| 리소스 | 과금 | 방침 |
+|---|---|---|
+| ECR | 저장 GB당 소액 | destroy (`force_delete = true` 로 이미지 포함 삭제) |
+| DynamoDB (PAY_PER_REQUEST) | 요청당 과금, 실습 수준 무시 가능. **PITR 은 저장량 과금** | destroy 전 **삭제방지 해제** 필요 |
+| Lambda | 호출당, 무시 가능 | destroy |
+| KMS CMK 1개 | 월 $1 일할 | destroy → 7일 대기 |
+| CloudWatch Logs | 저장 소액 | destroy 로 함께 삭제 |
+
+:::caution[destroy 순서 주의]
+시간당 과금이 큰 리소스는 없다. 다만 **DynamoDB 는 `deletion_protection_enabled = true` 상태에서 destroy 가 실패한다** — 정리 절차([실습](/part-1/09-container-lambda-dynamodb/lab/) §정리)를 반드시 따른다.
+:::
+
+## 선행 지식
+
+- push 3단계: build → tag(레지스트리 주소 포함) → push — [docker-basics](/start/docker-basics/)
+- `RUN`은 빌드 시점, `ENTRYPOINT`/`CMD`는 실행 시점 — [docker-basics](/start/docker-basics/)
+- 베이스 이미지 크기가 pull 지연과 스캔 결과를 좌우한다 — [docker-basics](/start/docker-basics/)
+- 역할(Role) = 자격증명 없는 신원. Lambda 실행역할이 이것 — [iam-basics](/start/iam-basics/)
+- 파티션 키로 항목을 찾고, 다른 축의 조회는 GSI 로 푼다 — [dynamodb-basics](/start/dynamodb-basics/)
+- Query 는 파티션 키로 좁혀 읽고 Scan 은 전부 읽고 거른다 — [dynamodb-basics](/start/dynamodb-basics/)
+- boto3 로 숫자를 저장할 때는 `float` 가 아니라 `Decimal` — [dynamodb-basics](/start/dynamodb-basics/)
+
+막히는 항목이 있으면 그 링크를 먼저 읽는다. 아니면 바로 다음 파일로 간다.
+
+## 선행 모듈
+
+- `01-terraform-vpc` (Terraform 기본), `02-kms-s3-cloudfront` (CMK·alias 패턴)
+
+## 참고 경로 (정답지)
+
+<FileTree>
+
+- skills-2026/set-02
+  - task-1
+    - app/Dockerfile alpine 고정 + tzdata + 비루트 유저
+    - terraform
+      - ecr.tf scanOnPush + KMS(관리형 aws/ecr)
+      - dynamodb.tf PK/GSI/PITR/삭제방지
+      - lambda.tf 최소권한 실행역할 + 환경변수 주입
+      - lambda/index.py ALB 통합 핸들러 정답
+    - README.md §2 — CloudShell 빌드/push/스캔 확인 실측 명령
+  - task-2/module-1-workflow/terraform/lambda/index.py Decimal 평균 계산 실측
+- skills-2026/set-07
+  - task-2/module-1-nosql/ 같은 스택의 2과제 버전 정답 — DynamoDB(Streams·sparse GSI) + Lambda(ESM) + EC2 조건부 쓰기, `mark1.sh` 전 항목 실채점 통과
+
+</FileTree>
+
+set-07 task-2 module-1(NoSQL)이 이 모듈과 같은 스택의 2과제 버전이다. 2과제는 추첨된 세트의 모듈 4개가 전부 출제된다.
+
+이 모듈을 마친 뒤 그 정답지의 `NOTES.md` 파일에서 함정 절(재배포 시 Lambda 로그 그룹 선존재 충돌 등)을 한 번 훑어 둔다.
+
+## 공식 문서
+
+- [Dockerfile 레퍼런스](https://docs.docker.com/reference/dockerfile/) — `FROM`/`RUN`/`ENV`/`ENTRYPOINT` 정확한 동작
+- [Amazon ECR 사용 설명서](https://docs.aws.amazon.com/AmazonECR/latest/userguide/) — 로그인·push·이미지 스캔
+- [DynamoDB 개발자 안내서](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/) — PK/GSI 설계, PITR
+- [ALB의 Lambda 대상](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html) — 502를 만드는 응답 포맷 요구사항
+- [boto3 DynamoDB 레퍼런스](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html) — `Query` 인자와 Decimal 타입
+
+## 다음 단계
+
+<LinkButton href="/part-1/09-container-lambda-dynamodb/theory/" icon="right-arrow">이론 읽기</LinkButton>
+<LinkButton href="/part-1/09-container-lambda-dynamodb/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

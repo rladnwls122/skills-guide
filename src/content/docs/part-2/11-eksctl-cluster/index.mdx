@@ -1,0 +1,78 @@
+---
+title: 11. eksctl 클러스터 — ClusterConfig 완전 정복
+description: "eksctl ClusterConfig 5대 블록과 IRSA·노드그룹 2분할·치환 파이프라인 학습 목표."
+sidebar:
+  order: 1
+---
+
+import { LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+## 학습 목표
+
+- [ ] eksctl ClusterConfig의 5대 블록(metadata / vpc / iam / managedNodeGroups / addons)을 백지에 쓸 수 있다
+- [ ] IRSA(OIDC) vs Pod Identity vs Access Entry 3방식의 차이와 **세트별 채점 갈림**을 설명할 수 있다
+- [ ] 노드그룹 2분할(addon/app)의 이유(mark 5-4)와 label/taint 설계를 설명할 수 있다
+- [ ] `${VAR}` 플레이스홀더를 terraform output으로 치환해 클러스터를 생성할 수 있다
+- [ ] `tags.Name` vs `instanceName` 함정, `disableDefaultAddons` 함정을 안다
+- [ ] set-02 구성을 set-07 의 private·Pod Identity 요구로 **직접 이행**할 수 있다
+- [ ] 잘못 만든 값을 만났을 때 **수정 API 가 있는지로** 고칠지 다시 만들지 판정할 수 있다
+- [ ] 파드가 안 뜨거나 AWS 호출이 거부될 때 계층을 좁혀 원인을 짚을 수 있다
+
+## 소요 시간
+
+- 1일치 분량
+- 이론 2h + 실습 4h (클러스터 생성 자체가 ~20분 소요, 대기 중 theory 복습)
+
+## 과금 리소스 & destroy 방침
+
+| 리소스 | 요금(서울) | 비고 |
+|---|---|---|
+| EKS Control Plane | **$0.10/h** | 클러스터 존재하는 동안 계속 과금 |
+| t3.medium x 4 (노드) | 약 $0.21/h | addon 2 + app 2 |
+| NAT Gateway x 2 | 약 $0.118/h (개당) | PART-1 VPC에서 이미 생성 |
+
+:::caution[과금 주의 — destroy 방침 예외]
+**04 → 05는 클러스터를 삭제하지 않고 유지한다.**
+05(워크로드/ALB)는 이 클러스터 위에서 실습하므로 이틀 연속 학습 시 유지가 더 싸고 빠르다.
+하루 이상 쉬면 `eksctl delete cluster -f cluster.rendered.yaml` 후 다음날 재생성(20분)한다.
+클러스터 하루 방치 비용 ≈ $0.10×24 + $0.21×24 ≈ **$7.4/일** — 잊지 말 것.
+:::
+
+## 선행 지식
+
+- 컨트롤 플레인(EKS가 관리) ↔ 노드(EC2) 분담. `kubectl`은 API server로 간다 — [k8s-basics](/start/k8s-basics/)
+- ServiceAccount = 파드의 신원. IRSA·Pod Identity는 여기에 IAM 역할을 붙이는 방식 — [k8s-basics](/start/k8s-basics/)
+- 신뢰 정책(문지기) + 호출자 권한, **둘 다** 통과해야 AssumeRole이 성립 — [iam-basics](/start/iam-basics/)
+- 클러스터를 만든 신원만 기본 kubectl 접근을 갖는다 — [iam-basics](/start/iam-basics/)
+- IRSA 는 OIDC 공급자를, Pod Identity 는 EKS 서비스 주체를 신뢰 근거로 쓴다 — [eks-basics](/start/eks-basics/)
+- VPC CNI 가 파드에 VPC IP 를 직접 준다. 서브넷 IP 와 ENI 상한이 곧 파드 상한 — [eks-basics](/start/eks-basics/)
+- 노드는 프라이빗 서브넷에 있다. NAT 경로가 없으면 이미지 pull부터 실패 — [vpc-basics](/start/vpc-basics/)
+
+막히는 항목이 있으면 그 링크를 먼저 읽는다. 아니면 바로 다음 파일로 간다.
+
+## 선행 모듈
+
+- PART-1 (Terraform 기초: VPC/서브넷/SG/KMS/IAM 정책이 이미 apply 되어 있어야 한다)
+
+## 참고 경로
+
+- `~\skills-2026\set-02\task-1\eksctl\cluster.yaml` (기준본 — IRSA 방식)
+- `~\skills-2026\set-07\task-1\eksctl\cluster.yaml` (변동 타깃 — Pod Identity + private cluster)
+- `~\skills-2026\set-03\task-1\eksctl\cluster.yaml` (Pod Identity + fully private)
+- `~\skills-2026\set-02\task-1\README.md` (배포 순서 1~3 — 기준본 세우기)
+- `~\skills-2026\set-07\task-1\README.md` (배포 순서 3~4 — private 클러스터용 작업 bastion)
+
+## 공식 문서
+
+- [eksctl ClusterConfig 스키마](https://eksctl.io/usage/schema/) — 필드 하나하나의 정본. 버전마다 기본값이 바뀌므로 항상 여기부터
+- [EKS 사용 설명서](https://docs.aws.amazon.com/eks/latest/userguide/) — 클러스터·노드그룹·애드온 전반
+- [IRSA(서비스 계정용 IAM 역할)](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) — OIDC trust 조건 문법
+- [EKS Pod Identity](https://docs.aws.amazon.com/eks/latest/userguide/pod-identity.html) — IRSA와의 차이·에이전트 요구사항
+- [클러스터 액세스 항목(Access entries)](https://docs.aws.amazon.com/eks/latest/userguide/access-entries.html) — 생성자 외 신원에 kubectl 권한 부여
+
+## 다음 단계
+
+<LinkButton href="/part-2/11-eksctl-cluster/theory/" icon="right-arrow">이론 읽기</LinkButton>
+<LinkButton href="/part-2/11-eksctl-cluster/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

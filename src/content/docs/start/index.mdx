@@ -1,6 +1,6 @@
 ---
-title: 00 — 사전 준비 (Day 0, 반나절)
-description: 학습용 AWS 계정·도구·비용 알람을 준비하고 선수 지식을 자가진단하는 Day 0 체크리스트.
+title: 00 — 사전 준비 (반나절)
+description: 학습용 AWS 계정·도구·비용 알람을 준비하고 선수 지식을 자가진단하는 Week 1 체크리스트.
 sidebar:
   order: 0
 ---
@@ -12,11 +12,11 @@ import { Steps, Card, CardGrid, LinkButton, Tabs, TabItem } from '@astrojs/starl
 ## 목표
 
 - 학습용 AWS 계정·도구·비용 알람 준비 완료
-- 선수 지식 자가진단 — **아니오 3개 이상이면 "기초 다지기" 1일 추가**하고 전체 일정 하루 순연
+- 선수 지식 자가진단 — **아니오 3개 이상이면 [PART 0 컴퓨팅 기초](/part-0/01-os-process/)부터 시작**한다. Week 1 은 그 자리다
 
 ## 1. 계정과 신원
 
-학습용 AWS 계정을 준비하고, **root 계정은 상시 사용하지 않는다.** root 로 apply 하면 set-03 유형의 root-less KMS 키 정책에서 이후 KMS 사용이 전부 거부된다(모듈 08에서 체험). 대신 IAM 사용자를 하나 만들어 그 신원만 쓴다.
+학습용 AWS 계정을 준비하고, **root 계정은 상시 사용하지 않는다.** root 로 apply 하면 set-03 유형의 root-less KMS 키 정책에서 이후 KMS 사용이 전부 거부된다(모듈 16에서 체험). 대신 IAM 사용자를 하나 만들어 그 신원만 쓴다.
 
 <Steps>
 
@@ -154,7 +154,7 @@ PowerShell 함정 미리 각인: `curl`은 Invoke-WebRequest 별칭 → 항상 `
 
 2. **모듈 종료 = destroy**
 
-   예외는 모듈 인덱스에 명시된 날만 (D4→D6 클러스터 유지).
+   예외는 모듈 인덱스에 명시된 경우만 (모듈 11→13 클러스터 유지).
 
 3. **매일 학습 종료 시 잔존 리소스 일괄 점검**
 
@@ -229,27 +229,27 @@ Terraform 은 다르다. **채점 대상이 아니다** — 과제지·채점지
 
 <CardGrid>
   <Card title="VPC 기초" icon="bars">
-    자가진단 1 — RTB↔서브넷 매핑 채점, PART-1 모듈 01. 프리픽스 리스트·L3/L7 은 PART-4 모듈 12
+    자가진단 1 — RTB↔서브넷 매핑 채점, PART-1 모듈 06. 프리픽스 리스트·L3/L7 은 PART-4 모듈 22
     [읽기](/start/vpc-basics/)
   </Card>
   <Card title="IAM 기초" icon="approve-check">
-    자가진단 2, 3 — root-less KMS·채점 신원, PART-3 모듈 08
+    자가진단 2, 3 — root-less KMS·채점 신원, PART-3 모듈 16
     [읽기](/start/iam-basics/)
   </Card>
   <Card title="S3 기초" icon="document">
-    자가진단 2 — BPA·버킷 정책·OAC, PART-1 모듈 02
+    자가진단 2 — BPA·버킷 정책·OAC, PART-1 모듈 07
     [읽기](/start/s3-basics/)
   </Card>
   <Card title="KMS 기초" icon="seti:lock">
-    자가진단 8 — 봉투 암호화·키 정책·root-less, PART-1 모듈 02
+    자가진단 8 — 봉투 암호화·키 정책·root-less, PART-1 모듈 07
     [읽기](/start/kms-basics/)
   </Card>
   <Card title="Docker 기초" icon="rocket">
-    자가진단 4 — CloudShell 빌드·ECR, PART-1 모듈 03
+    자가진단 4 — CloudShell 빌드·ECR, PART-1 모듈 09
     [읽기](/start/docker-basics/)
   </Card>
   <Card title="셸 기초" icon="setting">
-    자가진단 5 — 30% 변동 드릴, PART-6 모듈 15
+    자가진단 5 — 30% 변동 드릴, PART-6 모듈 26
     [읽기](/start/shell-basics/)
   </Card>
   <Card title="AWS CLI 기초" icon="magnifier">
@@ -257,15 +257,15 @@ Terraform 은 다르다. **채점 대상이 아니다** — 과제지·채점지
     [읽기](/start/awscli-basics/)
   </Card>
   <Card title="Kubernetes 기초" icon="puzzle">
-    자가진단 7 (권장) — PART-2 모듈 05 k8s 워크로드
+    자가진단 7 (권장) — PART-2 모듈 12 k8s 워크로드
     [읽기](/start/k8s-basics/)
   </Card>
   <Card title="로드밸런서 기초" icon="random">
-    자가진단 11 — ALB 리스너·규칙·타깃그룹·헬스체크, PART-2 모듈 05
+    자가진단 11 — ALB 리스너·규칙·타깃그룹·헬스체크, PART-2 모듈 12
     [읽기](/start/loadbalancer-basics/)
   </Card>
   <Card title="EKS 기초" icon="cloud-download">
-    자가진단 13 — IRSA·VPC CNI·ALB, PART-2 모듈 04
+    자가진단 13 — IRSA·VPC CNI·ALB, PART-2 모듈 11
     [읽기](/start/eks-basics/)
   </Card>
   <Card title="HCL 기초" icon="seti:config">
@@ -273,22 +273,22 @@ Terraform 은 다르다. **채점 대상이 아니다** — 과제지·채점지
     [읽기](/start/hcl-basics/)
   </Card>
   <Card title="DynamoDB 기초" icon="document">
-    자가진단 14 — PK·GSI·Query/Scan·과금 모드·Decimal, PART-1 모듈 03
+    자가진단 14 — PK·GSI·Query/Scan·과금 모드·Decimal, PART-1 모듈 09
     [읽기](/start/dynamodb-basics/)
   </Card>
   <Card title="관측성 기초" icon="magnifier">
-    자가진단 15 — Prometheus pull 수집·exporter·PodMonitor·메트릭 종류, PART-2 모듈 06
+    자가진단 15 — Prometheus pull 수집·exporter·PodMonitor·메트릭 종류, PART-2 모듈 13
     [읽기](/start/observability-basics/)
   </Card>
   <Card title="서버리스·이벤트 기초" icon="random">
-    자가진단 9 — Lambda 호출 방식·EventBridge 룰·CloudTrail 경유·SQS, PART-4 모듈 09
+    자가진단 9 — Lambda 호출 방식·EventBridge 룰·CloudTrail 경유·SQS, PART-4 모듈 17
     [읽기](/start/serverless-basics/)
   </Card>
   <Card title="오토스케일링 기초" icon="up-caret">
-    자가진단 10 — HPA·KEDA·Karpenter·Fargate, PART-4 모듈 10
+    자가진단 10 — HPA·KEDA·Karpenter·Fargate, PART-4 모듈 18
     [읽기](/start/autoscaling-basics/)
   </Card>
 </CardGrid>
 
-<LinkButton href="/part-1/01-terraform-vpc/" icon="right-arrow">PART 1 시작</LinkButton>
+<LinkButton href="/part-1/06-terraform-vpc/" icon="right-arrow">PART 1 시작</LinkButton>
 <LinkButton href="/start/vpc-basics/" variant="minimal">먼저 VPC 기초 보충</LinkButton>

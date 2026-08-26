@@ -89,7 +89,7 @@ argument 와 attribute 를 가르는 예다. `cidr_block` 은 내가 넣는 값�
 위 예에서 서브넷이 `aws_vpc.this.id` 를 참조하므로 Terraform 은 **VPC → 서브넷** 순서를 스스로 세운다. 순서를 내가 쓰는 게 아니라, 참조 관계로 의존성 그래프가 만들어지고 서로 무관한 리소스는 병렬로 생성된다. 참조가 없는데도 순서를 강제해야 할 때만 `depends_on` 을 쓴다 — 남발하면 병렬성이 죽어 배포가 느려진다.
 
 :::danger[함정]
-**A 가 B 를 참조하고 B 가 다시 A 를 참조하면 그래프가 고리가 되어 apply 자체가 거부된다**(순환 참조). PART-1 모듈 02 의 KMS·CloudFront·버킷 정책이 정확히 이 함정이다.
+**A 가 B 를 참조하고 B 가 다시 A 를 참조하면 그래프가 고리가 되어 apply 자체가 거부된다**(순환 참조). PART-1 모듈 07 의 KMS·CloudFront·버킷 정책이 정확히 이 함정이다.
 :::
 
 ### plan 은 세 가지를 비교한다
@@ -444,10 +444,10 @@ IAM 정책을 코드로 쓸 때 `data "aws_iam_policy_document"` 를 `jsonencode
 
 ## ⑦ 다음 단계
 
-여기까지가 PART-1 이 전제하는 문법 기초다 — 모듈 01 이 이 문서의 내용을 그대로 쓴다. PART-1 에 남은 기초는 모듈 03 이 전제하는 DynamoDB 하나이고, 그 뒤로는 PART-2 이후에 필요한 쿠버네티스 계열이다. 곧장 실습으로 넘어가고 싶으면 모듈 01 로 가도 된다.
+여기까지가 PART-1 이 전제하는 문법 기초다 — 모듈 06 이 이 문서의 내용을 그대로 쓴다. PART-1 에 남은 기초는 모듈 09 이 전제하는 DynamoDB 하나이고, 그 뒤로는 PART-2 이후에 필요한 쿠버네티스 계열이다. 곧장 실습으로 넘어가고 싶으면 모듈 06 로 가도 된다.
 
 <LinkButton href="/start/dynamodb-basics/" icon="right-arrow">다음 선수 학습 — DynamoDB 기초</LinkButton>
-<LinkButton href="/part-1/01-terraform-vpc/" variant="minimal">PART-1 모듈 01 로</LinkButton>
+<LinkButton href="/part-1/06-terraform-vpc/" variant="minimal">PART-1 모듈 06 로</LinkButton>
 
 ## 공식 문서
 

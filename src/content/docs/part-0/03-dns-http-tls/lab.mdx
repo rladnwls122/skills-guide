@@ -1,0 +1,275 @@
+---
+title: 03. 이름·요청·인증서를 손으로 확인한다
+description: 이름 해석 경로를 따라가고, HTTP 요청을 직접 만들어 응답을 읽고, 인증서를 열어 이름과 유효기간을 확인하는 실습.
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+원리는 [03 이론](/part-0/03-dns-http-tls/theory/)에 있다.
+
+**과금 없음.** 공개 인터넷의 응답만 읽는다.
+
+## 통과 기준
+
+- [ ] 같은 이름을 두 번 조회해 TTL 이 줄어드는 것을 확인한다
+- [ ] 특정 DNS 서버에 직접 물어 캐시를 건너뛴다
+- [ ] HTTP 요청을 손으로 만들어 응답의 시작 줄과 헤더를 읽는다
+- [ ] 404 와 301 을 각각 만들어 본다
+- [ ] 인증서의 이름·발급자·유효기간을 확인한다
+- [ ] 실패가 어느 겹에서 끝났는지 판정한다
+
+## 1. 이름 해석을 따라간다
+
+<Steps>
+
+1. **두 번 조회한다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Resolve-DnsName example.com -Type A | Select-Object Name, Type, TTL, IPAddress
+     Start-Sleep -Seconds 3
+     Resolve-DnsName example.com -Type A | Select-Object Name, Type, TTL, IPAddress
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     dig +noall +answer example.com
+     sleep 3
+     dig +noall +answer example.com
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: 두 번째 TTL 이 3 정도 줄어 있다. **캐시에서 나오고 있다**는 증거다.
+
+2. **캐시를 건너뛰고 특정 서버에 직접 묻는다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Resolve-DnsName example.com -Server 1.1.1.1 -Type A | Select-Object Name, TTL, IPAddress
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     dig @1.1.1.1 +noall +answer example.com
+     ```
+     </TabItem>
+   </Tabs>
+
+   **이 명령이 진단의 핵심 도구다.** 내 캐시가 이상한지 서버 쪽이 이상한지를 이 한 줄로 가른다.
+
+3. **레코드 종류를 바꿔 본다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Resolve-DnsName www.github.com -Type CNAME | Select-Object Name, NameHost
+     Resolve-DnsName example.com -Type TXT | Select-Object -First 2 Name, Strings
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     dig +noall +answer www.github.com CNAME
+     dig +noall +answer example.com TXT
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: CNAME 은 **다른 이름**을 돌려준다. 클라이언트는 그 이름을 다시 조회해야 하므로 조회가 한 번 더 든다.
+
+</Steps>
+
+## 2. HTTP 요청을 손으로 만든다
+
+브라우저가 대신 해 주던 것을 직접 한다.
+
+<Steps>
+
+1. **응답의 시작 줄과 헤더만 본다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $r = Invoke-WebRequest -Uri 'https://example.com/' -Method Head
+     $r.StatusCode
+     $r.Headers.GetEnumerator() | Select-Object -First 8 Key, Value
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     curl -sI https://example.com/ | head -10
+     ```
+     </TabItem>
+   </Tabs>
+
+2. **없는 경로로 404 를 만든다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     (Invoke-WebRequest -Uri 'https://example.com/no-such-path-abc' -SkipHttpErrorCheck).StatusCode
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     curl -s -o /dev/null -w '%{http_code}\n' https://example.com/no-such-path-abc
+     ```
+     </TabItem>
+   </Tabs>
+
+3. **리디렉션을 따라가지 않고 본다.** 3xx 는 따라가면 안 보인다.
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $r = Invoke-WebRequest -Uri 'http://github.com/' -MaximumRedirection 0 -SkipHttpErrorCheck
+     $r.StatusCode
+     $r.Headers['Location']
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     curl -sI http://github.com/ | head -3
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: `301` 과 `Location` 헤더가 보인다. **브라우저는 이 과정을 감춘다** — 그래서 진단할 때는 감추지 않는 도구로 본다.
+
+4. **시간을 단계별로 쪼개 본다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Measure-Command { Invoke-WebRequest -Uri 'https://example.com/' | Out-Null }
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     curl -s -o /dev/null -w 'dns:%{time_namelookup} connect:%{time_connect} tls:%{time_appconnect} total:%{time_total}\n' https://example.com/
+     ```
+     </TabItem>
+   </Tabs>
+
+   :::tip[Bash 쪽 출력을 꼭 본다]
+   시간을 이름 해석·연결·TLS 핸드셰이크·전체로 쪼개 준다.
+
+   3과제에서 응답 시간이 목표를 넘을 때 이 분해가 **어느 홉이 먹었는지**를 바로 알려 준다. 총 시간만 보면 원인을 못 짚는다.
+   :::
+
+</Steps>
+
+## 3. 인증서를 들여다본다
+
+<Steps>
+
+1. **어떤 이름으로 발급됐는지, 언제까지인지.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $req = [System.Net.HttpWebRequest]::Create('https://example.com/')
+     $req.GetResponse() | Out-Null
+     $cert = $req.ServicePoint.Certificate
+     "Subject : $($cert.Subject)"
+     "Issuer  : $($cert.Issuer)"
+     "Expires : $($cert.GetExpirationDateString())"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     echo | openssl s_client -connect example.com:443 -servername example.com 2>/dev/null | openssl x509 -noout -subject -issuer -dates
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: 이름(Subject), 발급 기관(Issuer), 유효기간이 나온다. **Subject 가 내가 부른 이름과 같아야** 검증이 통과한다.
+
+2. **이름이 안 맞으면 어떻게 되는지** 기억해 둔다. 인증서가 만료되지도 위조되지도 않았는데 실패한다 — 오류 문구에 hostname mismatch 또는 certificate verify failed 가 들어간다.
+
+   로드밸런서의 기본 주소로 접속하면서 내 도메인 인증서를 기대하면 정확히 이 오류가 난다. **이름과 인증서는 짝이다.**
+
+</Steps>
+
+## 4. 진단 훈련 — 어느 겹에서 끝났나
+
+세 가지를 각각 시도하고 어느 겹에서 끝났는지 판정한다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  foreach ($u in @('https://no-such-host-abcxyz.example/','https://example.com:444/','https://example.com/no-such-path')) {
+    try {
+      $c = (Invoke-WebRequest -Uri $u -TimeoutSec 5 -SkipHttpErrorCheck).StatusCode
+      "$u -> $c"
+    } catch {
+      "$u -> 실패"
+    }
+  }
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  for u in https://no-such-host-abcxyz.example/ https://example.com:444/ https://example.com/no-such-path; do
+    printf '%s -> ' "$u"
+    curl -s -o /dev/null -m 5 -w '%{http_code}\n' "$u" || echo 실패
+  done
+  ```
+  </TabItem>
+</Tabs>
+
+| 대상 | 어느 겹에서 끝나는가 |
+|---|---|
+| 없는 이름 | 이름 해석 |
+| 안 듣는 포트 | 연결 |
+| 없는 경로 | HTTP — 여기서만 상태 코드가 돌아온다 |
+
+**상태 코드가 있다는 것은 적어도 서버와 대화는 됐다는 뜻이다.** 이 사실 하나가 진단 범위를 절반으로 줄인다.
+
+## 5. 오독 복구 — 캐시된 옛 주소를 보고 있다
+
+주소를 바꿨는데 나만 옛 서버로 간다. 순서대로 확인한다.
+
+<Steps>
+
+1. **권한 서버에 직접 묻는다** — 캐시를 전부 건너뛴다.
+
+   ```bash
+   dig @1.1.1.1 +noall +answer example.com
+   ```
+
+2. **내 캐시와 비교한다.** 값이 다르면 내 쪽 캐시가 오래된 것이다.
+
+3. **캐시를 비운다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Clear-DnsClientCache
+     Resolve-DnsName example.com -Type A | Select-Object Name, TTL, IPAddress
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     getent hosts example.com
+     ```
+     </TabItem>
+   </Tabs>
+
+4. **그래도 다르면 내 문제가 아니다.** 중간 서버의 캐시가 TTL 만큼 남아 있는 것이고 기다리는 것 말고 할 일이 없다. **그래서 전환 전에 TTL 을 미리 줄인다.**
+
+</Steps>
+
+## 6. 정리
+
+만든 것이 없다. 조회와 요청만 했으므로 지울 리소스도 없다.
+
+## 다음
+
+[04. 리눅스와 셸](/part-0/04-linux-shell/) — 서버 안으로 들어가 앱을 직접 띄운다.

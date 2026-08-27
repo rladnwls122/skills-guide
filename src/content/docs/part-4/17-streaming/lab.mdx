@@ -1,0 +1,292 @@
+---
+title: Lab 17 — Kinesis · Flink Studio · MSK 스트리밍
+description: 유형 5 스트리밍 두 갈래를 정답지·채점 스크립트와 한 줄씩 대조하고, 필요하면 최단 경로로 배포해 즉시 지우는 실습.
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+정답지: `skills-2026/set-02/task-2/module-2-analytics`(Kinesis + Flink Studio) 와 `module-3-msk`(MSK) — 저장소가 아직 없다면 [사전 준비 §4 저장소 클론](/start/#4-저장소-클론)을 먼저 한다.
+
+:::caution[이 모듈만 배포가 선택이다]
+MSK 는 **apply 만 35분, destroy 23분**이 걸리고 그동안 계속 과금된다(실측, 2026-08-16). 그래서 이 모듈의 필수는 **정답지 대조**이고 실제 배포는 시간과 예산이 남을 때의 선택이다.
+
+대조만으로 충분한 이유는 채점 항목이 대부분 **리소스의 구성값**이기 때문이다. 무엇이 어떤 값으로 있어야 하는지를 코드에서 확인하면 그 항목은 재현할 수 있다.
+:::
+
+## 실습 목표
+
+- [ ] 정답지 코드를 `mark.md` 2-1~2-6 · 3-1~3-5 항목과 전부 대조한다
+- [ ] 두 갈래(Kinesis + Flink Studio / MSK + Lambda 컨슈머)의 구성 차이를 설명한다
+- [ ] MSK 의 생성·삭제 소요를 일정에 반영한다
+- [ ] (선택) 최단 경로로 배포하고 확인 즉시 지운다
+- [ ] 세 가지 증상을 코드만 보고 어느 채점 항목이 떨어지는지 판정한다
+
+선행 지식과 목표는 [모듈 개요](/part-4/17-streaming/)에.
+
+---
+
+## 1. 대조와 선택 배포
+
+정답지: `skills-2026/set-02/task-2/`(set-07이 아니다 — 유형 5는 다른 세트). 배포 없이 C-1만 마쳐도 학습 목표를 채울 수 있다. C-2(실제 배포)는 시간·과금 여유가 있을 때만 한다.
+
+### 1-1. 만들지 않고 대조하기 (필수)
+
+<Steps>
+
+1. `mark.md`의 "2) Real-time Data Analytics"·"4) MSK" 절(2-1~2-6, 4-1~4-5-B)을 읽는다 — 채점이 보는 값이 곧 학습 목표다.
+2. `module-2-analytics/terraform/kinesis.tf`·`flink.tf`, `module-3-msk/terraform/msk.tf`·`security.tf`·`lambda.tf`를 정독하며 mark 항목과 한 줄씩 맞춰본다. 예:
+   - mark 2-4 기대값 `wsc2026-analytics-flink READY ZEPPELIN-FLINK-3_0` ↔ `flink.tf`의 `var.flink_app_name`·`var.flink_runtime` 기본값이 정확히 이 값.
+   - mark 4-3 기대값 `... Sasl.Iam.Enabled True` ↔ `msk.tf`의 `client_authentication.sasl.iam = true`(`unauthenticated`는 `producer_auth_mode`로 별도 제어 — mark는 이 값을 보지 않는다).
+3. `module-2-analytics/README.md`·`module-3-msk/README.md`의 "요구사항 ↔ 구현 매핑" 표로 나머지 항목(2-1·2-2·2-5·2-6, 4-1·4-2·4-4·4-5)을 전부 훑는다.
+4. (선택, 콘솔) Managed Apache Flink 콘솔에서 Studio 노트북 생성 마법사를 끝까지 진행해 본다(생성 직전 취소) — 위저드가 자동으로 붙이는 커넥터 체크박스를 확인하면 [이론](/part-4/17-streaming/theory/)의 "커넥터를 Maven으로 명시 주입" 함정이 왜 필요한지 눈으로 이해된다.
+5. (선택, 콘솔) MSK 콘솔에서 클러스터 생성 마법사의 "액세스 제어 방법" 화면까지 진행해 본다(생성 직전 취소) — IAM 역할 기반 인증과 미인증 액세스를 동시에 켜는 체크박스 위치를 확인한다.
+6. `terraform plan`으로 실제 인자만 확인한다(리소스를 만들지 않으므로 과금 없음):
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     cd module-2-analytics\terraform ; terraform init ; terraform plan -var "player_number=$env:NUM"
+     cd ..\..\module-3-msk\terraform ; terraform init ; terraform plan -var "player_number=$env:NUM"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     cd module-2-analytics/terraform && terraform init && terraform plan -var "player_number=$NUM"
+     cd ../../module-3-msk/terraform && terraform init && terraform plan -var "player_number=$NUM"
+     ```
+     </TabItem>
+   </Tabs>
+
+</Steps>
+
+### 1-2. 실제로 만들 경우 — 최단 경로 + 즉시 destroy (선택)
+
+module-2(Kinesis+Flink)는 생성 지연이 없어 부담이 적다. module-4(MSK)는 **생성 ~30분 + 시간당 과금**이 커서 시간 여유가 있을 때만 진행한다. 두 모듈은 독립적이라 하나만 골라도 된다.
+
+<Steps>
+
+1. **module-2**(본 PC): apply → EC2 user_data(pip 설치)·TG 헬스체크까지 2~3분 대기.
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     cd module-2-analytics\terraform
+     terraform apply -var "player_number=$env:NUM"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     cd module-2-analytics/terraform
+     terraform apply -var "player_number=$NUM"
+     ```
+     </TabItem>
+   </Tabs>
+2. Flink 콘솔 → Studio → `wsc2026-analytics-flink` → **Run** → Zeppelin 열기 → `%flink.conf parallelism.default 1`을 **첫 문단**으로 실행 → 베이스 테이블/뷰 DDL → 과제지 두 SQL 쿼리 실행 확인 → **반드시 Stop**(RUNNING이면 mark 2-4 오답).
+3. 확인 즉시:
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     terraform destroy -var "player_number=$env:NUM" -auto-approve
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     terraform destroy -var "player_number=$NUM" -auto-approve
+     ```
+     </TabItem>
+   </Tabs>
+4. **module-4**(본 PC, 시간 여유가 있을 때): 의존성 번들 → apply(**~30분**) → producer 부팅·ESM 안정화 3~5분 대기.
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     cd module-3-msk\terraform
+     py -m pip install -r lambda\sensor_consumer\requirements.txt -t lambda\sensor_consumer\
+     terraform apply -var "player_number=$env:NUM"
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     cd module-3-msk/terraform
+     python3 -m pip install -r lambda/sensor_consumer/requirements.txt -t lambda/sensor_consumer/
+     terraform apply -var "player_number=$NUM"
+     ```
+     </TabItem>
+   </Tabs>
+5. 확인 즉시:
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     terraform destroy -var "player_number=$env:NUM" -auto-approve
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     terraform destroy -var "player_number=$NUM" -auto-approve
+     ```
+     </TabItem>
+   </Tabs>
+
+</Steps>
+
+```bash
+# 채점 스크립트로 한 번에 확인 (set-02/task-2 에서, module-4는 비번호를 물어본다)
+bash mark/mark2-2.sh
+bash mark/mark2-4.sh
+```
+
+Part C를 배포했다면 destroy까지 여기서 끝낸다 — 마지막 "정리" 절의 EKS 목록에는 module-2·module-4가 들어 있지 않다.
+
+### 1-3. :badge[함정]{variant=danger}
+
+1. **Flink Studio는 `aws_kinesisanalyticsv2_application`으로 못 만든다** — zeppelin 설정 블록 미지원(provider issue #41233). `aws_cloudformation_stack`으로 래핑.
+2. **Kinesis SQL 커넥터는 bare CFN에 없다** — `CustomArtifactsConfiguration`에 Maven `flink-sql-connector-kinesis:1.15.4` 명시 주입. 안 하면 `Could not find any factory for identifier 'kinesis'`.
+3. **bare 타임스탬프**(`2026-07-13 08:10:51`, T/Z 없음) — 베이스 테이블 `TIMESTAMP(3)` 파싱 + 뷰에서 `TIMESTAMP_LTZ(3)` CAST로 우회. 자세한 이유는 [이론](/part-4/17-streaming/theory/).
+4. **`%flink.conf parallelism.default 1`은 인터프리터 기동 전, 첫 문단에서만** 먹는다. 세션이 망가지면 인터프리터 재시작.
+5. **채점 직전 Flink 상태는 READY** — mark 2-4는 `wsc2026-analytics-flink READY ZEPPELIN-FLINK-3_0`을 본다. RUNNING이면 오답.
+6. **제공 producer 바이너리는 SASL/IAM 서명 구현이 없다**(리버싱으로 확인) — 9098을 주면 `unexpected EOF: broker appears to be expecting TLS`. 기본값(`producer_auth_mode=tls`)이 실측 정답 경로다.
+7. **DynamoDB는 전 속성 String 저장** — mark 4-5-A가 `temperature.S`/`status.S`로 조회한다. Number로 저장하면 값이 안 잡혀 0점.
+8. **ESM은 `starting_position = LATEST`** — TRIM_HORIZON으로 두면 재배포 시 백로그 재처리가 폭주한다.
+9. **env 이름 한 글자 차이**: producer `BOOTSTRAP_SERVERS`(복수) / consumer `BOOTSTRAP_SERVER`(단수). 통일하면 둘 중 하나가 깨진다.
+10. **4-5-B는 `--output json`**으로 `SENSOR-002`의 `sensorId`·`timestamp`만 조회하고 `timestamp`가 ISO 8601 KST여야 한다(정정 전 `--output table`·`max-items 3`에서 변경 — [정정 내역](/reference/errata/)). 4-1의 S3 버킷 ARN은 비번호를 제외하고 채점한다.
+
+### 1-4. 통과 기준
+
+- [ ] mark.md 2-1~2-6, 4-1~4-5-B 값을 정답지 코드와 전부 대조했다
+- [ ] (배포했다면) mark2-2.sh·mark2-4.sh 전 항목 PASS
+- [ ] (배포했다면) Flink는 Stop 후 READY 확인, MSK 관련 리소스는 destroy까지 완료
+
+---
+
+
+
+## 2. 지면 진단 — 코드를 읽고 채점 결과를 예측한다
+
+MSK 는 생성에만 35분이 걸려 실제로 고장을 내 볼 수 없다. 대신 **정답지 코드와 채점 스크립트를 나란히 놓고 판정한다.** 당일에도 apply 를 걸어 둔 35분 동안 하는 일이 정확히 이것이다.
+
+방식은 셋 다 같다 — 상황을 읽고 **어느 채점 항목이 떨어지는지, 그리고 증상이 어떻게 보일지**를 먼저 적은 뒤 코드로 확인한다.
+
+### 2-1. 프로듀서가 브로커에 못 붙는다
+
+증상: 프로듀서 로그에 `unexpected EOF: broker appears to be expecting TLS`.
+
+<Steps>
+
+1. **먼저 답을 적는다.** 이 증상은 인증 실패인가 연결 실패인가. 어느 채점 항목이 떨어지는가.
+
+2. **코드로 확인한다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'BOOTSTRAP|9092|9094|9098|sasl|tls' `
+       -Path $HOME\skills-2026\set-02\task-2\module-3-msk\terraform\*.tf | Select-Object -First 12
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -rniE 'BOOTSTRAP|9092|9094|9098|sasl|tls' \
+       ~/skills-2026/set-02/task-2/module-3-msk/terraform/*.tf | head -12
+     ```
+     </TabItem>
+   </Tabs>
+
+3. **판정.** 포트마다 기대하는 인증 방식이 다르다. 제공 바이너리가 못 쓰는 방식의 포트를 주면 **연결 단계에서** 끊긴다 — 그래서 증상이 인증 오류가 아니라 연결 오류로 보인다.
+
+   떨어지는 항목은 클러스터 상태가 아니라 **데이터가 흐르는지 보는 항목들**이다. 클러스터는 멀쩡히 `ACTIVE` 라 4-3 은 통과하는데 4-5 가 빈다.
+
+</Steps>
+
+**교훈.** 채점 항목이 통과하는 것과 시스템이 동작하는 것은 다르다. **상태를 보는 항목과 결과를 보는 항목을 갈라서** 어디가 깨졌는지 좁힌다.
+
+### 2-2. 저장은 되는데 조회가 빈다
+
+증상: DynamoDB 에 항목이 쌓이는데 채점 조회가 아무것도 못 찾는다.
+
+<Steps>
+
+1. **먼저 답을 적는다.** 무엇이 다르면 "있는데 못 찾는" 상태가 되는가.
+
+2. **채점이 무엇으로 찾는지 읽는다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'temperature|status|scan|query|\.S|\.N' `
+       -Path $HOME\skills-2026\set-02\task-2\mark\mark2-3.sh | Select-Object -First 10
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -nE 'temperature|status|scan|query|\.S|\.N' \
+       ~/skills-2026/set-02/task-2/mark/mark2-3.sh | head -10
+     ```
+     </TabItem>
+   </Tabs>
+
+3. **판정.** 채점이 **속성 타입까지 지정해** 조회한다. 값이 같아도 타입이 다르면 그 조회는 빈다. 저장하는 쪽 코드가 숫자를 숫자로 넣으면 문자열로 찾는 조회에 안 걸린다.
+
+</Steps>
+
+**교훈.** "데이터가 있다"와 "채점이 찾을 수 있다"는 다른 질문이다. 채점 명령을 **그대로 한 번 돌려 보는 것**이 유일한 확인 방법이다.
+
+### 2-3. destroy 가 끝나지 않는다
+
+증상: `terraform destroy` 가 30분 넘게 한 리소스에서 멈춰 있다.
+
+<Steps>
+
+1. **먼저 답을 적는다.** terraform 이 붙잡고 있는 것인가, 기다리고 있는 것인가.
+
+2. **실측 기록을 읽는다.**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'destroy|ENI|Hyperplane|서브넷|교착' `
+       -Path $HOME\skills-2026\set-02\task-2\NOTES.md | Select-Object -First 8
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -nE 'destroy|ENI|Hyperplane|서브넷|교착' ~/skills-2026/set-02/task-2/NOTES.md | head -8
+     ```
+     </TabItem>
+   </Tabs>
+
+3. **판정.** 프라이빗 서브넷과 VPC 삭제가 **AWS 쪽 네트워크 인터페이스 회수를 기다린다.** terraform state 밖의 일이라 로그에는 원인이 안 보인다. 콘솔에서 남은 인터페이스를 확인하는 것 말고 할 일이 없고, **손으로 지우면 더 나빠진다.**
+
+</Steps>
+
+**교훈.** 도구가 멈춰 있다고 도구 문제가 아니다. **누가 무엇을 기다리는지**를 먼저 묻는다. 이 판단이 당일 23분을 사고로 오인하지 않게 한다.
+
+## 정리
+
+배포하지 않았다면 지울 것이 없다. 배포했다면 **확인 즉시** 지운다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  cd ~skills-2026set-02	ask-2module-2-analytics	erraform ; terraform destroy -auto-approve
+  cd ....module-3-msk	erraform ; terraform destroy -auto-approve
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  cd ~/skills-2026/set-02/task-2/module-2-analytics/terraform && terraform destroy -auto-approve
+  cd ../../module-3-msk/terraform && terraform destroy -auto-approve
+  ```
+  </TabItem>
+</Tabs>
+
+:::danger[MSK destroy 는 23분이 걸리고 중간에 멈출 수 있다]
+프라이빗 서브넷과 VPC 삭제가 **네트워크 인터페이스 회수를 기다리다 교착**할 수 있다. terraform 이 붙잡고 있는 것처럼 보여도 실제로는 AWS 쪽 회수를 기다리는 중이다.
+
+30분 넘게 진행이 없으면 콘솔에서 남은 네트워크 인터페이스를 확인한다. **terraform state 밖의 일**이라 로그만 봐서는 원인이 안 보인다.
+:::
+
+## 다음
+
+PART 4 의 나머지 모듈은 [18. DocumentDB](/part-4/18-documentdb/) · [19. VPC Lattice](/part-4/19-vpc-lattice/) · [20. CDN Function](/part-4/20-cdn-function/) 이다.

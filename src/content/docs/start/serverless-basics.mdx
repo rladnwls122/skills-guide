@@ -10,7 +10,7 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 > 문서 유형: explanation
 
-2과제 모듈의 절반이 이 다섯 서비스 위에 서 있다. [모듈 09](/part-4/09-serverless-event/)·[모듈 10](/part-4/10-scaling-logging-streaming/)의 이론은 "이미 안다"를 전제로 채점 함정만 압축해 두었으므로, 그 문서에서 EventBridge 룰이나 가시성 제한 시간이 낯설게 느껴지면 여기서 먼저 채운다.
+2과제 모듈의 절반이 이 다섯 서비스 위에 서 있다. [모듈 14](/part-4/14-serverless-event/)·[모듈 15](/part-4/15-eks-scaling/)의 이론은 "이미 안다"를 전제로 채점 함정만 압축해 두었으므로, 그 문서에서 EventBridge 룰이나 가시성 제한 시간이 낯설게 느껴지면 여기서 먼저 채운다.
 
 ## ① 학습 목표
 
@@ -169,10 +169,10 @@ aws lambda add-permission --function-name <함수> \
 
 ## ③ 대회에서 어떻게 쓰이나
 
-- **모듈 09 유형 1** — S3 이벤트(비동기) → Lambda → Step Functions → DynamoDB. S3 트리거에 `.csv` suffix 필터를 거는 이유가 "출력이 `.json`이라 매칭되지 않아 재귀가 끊긴다"인데, **이벤트 필터가 루프를 끊는 유일한 장치**라는 사실이 위 ②-1의 비동기 호출 성질에서 나온다.
-- **모듈 09 유형 2** — 네이티브 이벤트와 CloudTrail 경유가 **한 모듈 안에 섞여 있고 지연이 다르다.** 채점이 "망가뜨리고 30초 뒤 원상태 확인"이므로 어느 경로를 타는지 모르면 시간 예산을 못 짠다.
-- **모듈 09 유형 2 변형(set-08)** — 채점이 EventBridge를 우회해 `lambda invoke`로 직접 호출한다. 배선(룰·타깃·리소스 정책)과 동작(함수 로직)이 **따로** 채점되므로, 위 ②-2의 "타깃 호출 권한은 타깃 쪽에" 항목이 그대로 채점 항목이 된다.
-- **모듈 10 유형 3** — SQS 큐 길이가 Pod 수를 정한다. 채점이 메시지를 넣고 `ApproximateNumberOfMessages`가 줄어드는지 본다.
+- **모듈 14 유형 1** — S3 이벤트(비동기) → Lambda → Step Functions → DynamoDB. S3 트리거에 `.csv` suffix 필터를 거는 이유가 "출력이 `.json`이라 매칭되지 않아 재귀가 끊긴다"인데, **이벤트 필터가 루프를 끊는 유일한 장치**라는 사실이 위 ②-1의 비동기 호출 성질에서 나온다.
+- **모듈 14 유형 2** — 네이티브 이벤트와 CloudTrail 경유가 **한 모듈 안에 섞여 있고 지연이 다르다.** 채점이 "망가뜨리고 30초 뒤 원상태 확인"이므로 어느 경로를 타는지 모르면 시간 예산을 못 짠다.
+- **모듈 14 유형 2 변형(set-08)** — 채점이 EventBridge를 우회해 `lambda invoke`로 직접 호출한다. 배선(룰·타깃·리소스 정책)과 동작(함수 로직)이 **따로** 채점되므로, 위 ②-2의 "타깃 호출 권한은 타깃 쪽에" 항목이 그대로 채점 항목이 된다.
+- **모듈 15 유형 3** — SQS 큐 길이가 Pod 수를 정한다. 채점이 메시지를 넣고 `ApproximateNumberOfMessages`가 줄어드는지 본다.
 
 ---
 
@@ -319,7 +319,7 @@ Step Functions로 S3 객체를 다른 접두어로 "이동"시키려 한다. 상
 ## ⑦ 다음 단계
 
 <LinkButton href="/start/autoscaling-basics/" icon="right-arrow">다음 선수 학습 — 오토스케일링 기초</LinkButton>
-<LinkButton href="/part-4/09-serverless-event/" variant="minimal">모듈 09 — 서버리스 워크플로 + 이벤트 자동복구</LinkButton>
+<LinkButton href="/part-4/14-serverless-event/" variant="minimal">모듈 14 — 서버리스 워크플로 + 이벤트 자동복구</LinkButton>
 
 ## 공식 문서
 

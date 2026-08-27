@@ -64,7 +64,7 @@ EKS 가 어디까지 관리하고 사용자 VPC 에 무엇이 남는지를 가�
 
 - **노드는 프라이빗 서브넷**에 둔다. NAT 경로가 없으면 이미지 pull부터 실패하고, 그 실패는 `ImagePullBackOff` 로만 보인다.
 - **서브넷 태그**가 로드밸런서 배치를 결정한다. 퍼블릭 서브넷에 `kubernetes.io/role/elb`, 프라이빗 서브넷에 `kubernetes.io/role/internal-elb` 가 없으면 ALB가 서브넷을 찾지 못하고 Ingress가 주소를 받지 못한다.
-- 이 내용은 **PART-2 모듈 04(eksctl 클러스터)** 와 **모듈 05(k8s 워크로드·ALB)** 의 기반이다.
+- 이 내용은 **PART-2 모듈 09(eksctl 클러스터)** 와 **모듈 10(k8s 워크로드·ALB)** 의 기반이다.
 
 ## ④ 핵심 코드 패턴
 
@@ -317,10 +317,10 @@ Ingress 를 만들었는데 `kubectl get ingress` 의 `ADDRESS` 가 계속 비�
 
 ## ⑦ 다음 단계
 
-모듈 04에서 `eksctl` 로 클러스터를 세우고, 모듈 05에서 워크로드와 ALB를 올린다. 그 뒤 모듈 06 이 전제하는 관측성 기초가 다음 순서다.
+모듈 09에서 `eksctl` 로 클러스터를 세우고, 모듈 10에서 워크로드와 ALB를 올린다. 그 뒤 모듈 11 이 전제하는 관측성 기초가 다음 순서다.
 
 <LinkButton href="/start/observability-basics/" icon="right-arrow">다음 선수 학습 — 관측성 기초</LinkButton>
-<LinkButton href="/part-2/04-eksctl-cluster/" variant="minimal">PART 2 — EKS Core</LinkButton>
+<LinkButton href="/part-2/09-eksctl-cluster/" variant="minimal">PART 2 — EKS Core</LinkButton>
 
 ## 공식 문서
 

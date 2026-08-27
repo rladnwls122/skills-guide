@@ -1,0 +1,266 @@
+---
+title: 05. 이미지를 만들고 레이어를 확인한다
+description: CloudShell 에서 이미지를 빌드해 레이어 캐시가 듣는 지점을 눈으로 보고, 시간대·비루트 사용자·태그 함정을 재현하고 고친다.
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+원리는 [05 이론](/part-0/05-container/theory/)에 있다.
+
+**실습 환경은 AWS CloudShell 이다.** 대회장 PC 에는 Docker 가 없으므로 같은 경로를 미리 익힌다. CloudShell 에는 도커 계열 도구가 준비돼 있다.
+
+**과금 없음.** 이미지를 로컬에만 두고 레지스트리에 올리지 않는다.
+
+## 통과 기준
+
+- [ ] 이미지를 빌드하고 컨테이너로 띄운다
+- [ ] 레이어 캐시가 듣는 지점과 끊기는 지점을 출력으로 확인한다
+- [ ] 시간대가 어긋나는 것을 재현하고 고친다
+- [ ] 루트가 아닌 사용자로 돌린다
+- [ ] 만든 이미지와 컨테이너를 정리한다
+
+## 0. 준비
+
+```bash
+docker version --format '{{.Server.Version}}' 2>/dev/null || echo "docker 없음"
+mkdir -p ~/c-lab && cd ~/c-lab
+```
+
+`docker 없음` 이 나오면 `podman` 이 있는지 본다. 명령은 대부분 같은 이름으로 통한다.
+
+```bash
+command -v podman && alias docker=podman
+```
+
+## 1. 가장 단순한 이미지
+
+<Steps>
+
+1. **앱을 만든다.** [04 실습](/part-0/04-linux-shell/lab/)의 프로그램과 같은 모양이다.
+
+   ```bash
+   cat > app.sh <<'EOF'
+   #!/bin/sh
+   echo "now: $(date '+%Y-%m-%dT%H:%M:%S%z')"
+   echo "user: $(id -un) ($(id -u))"
+   echo "host: ${MYSQL_HOST:-미설정}"
+   EOF
+   chmod +x app.sh
+   ```
+
+2. **Dockerfile 을 쓴다.**
+
+   ```bash
+   cat > Dockerfile <<'EOF'
+   FROM alpine:3.20
+   COPY app.sh /app.sh
+   CMD ["/app.sh"]
+   EOF
+   ```
+
+3. **빌드하고 돌린다.**
+
+   ```bash
+   docker build -t c-lab:0.1 .
+   docker run --rm c-lab:0.1
+   ```
+
+   기대: 시각·사용자·설정값 세 줄이 나온다. **사용자가 `root(0)` 이고 시각이 `+0000`** 일 것이다. 둘 다 고칠 것이다.
+
+</Steps>
+
+## 2. 레이어 캐시를 눈으로 본다
+
+<Steps>
+
+1. **의존성 설치 단계를 넣는다.** 실제 앱과 같은 모양으로 만든다.
+
+   ```bash
+   cat > Dockerfile <<'EOF'
+   FROM alpine:3.20
+   RUN apk add --no-cache curl
+   COPY app.sh /app.sh
+   CMD ["/app.sh"]
+   EOF
+   docker build -t c-lab:0.2 .
+   ```
+
+2. **앱만 고치고 다시 빌드한다.**
+
+   ```bash
+   echo 'echo "build: 2"' >> app.sh
+   docker build -t c-lab:0.3 .
+   ```
+
+   기대: `apk add` 줄에 **CACHED** 가 붙고 `COPY` 부터 다시 만들어진다. 의존성을 다시 안 받는다.
+
+3. **순서를 일부러 뒤집는다.**
+
+   ```bash
+   cat > Dockerfile <<'EOF'
+   FROM alpine:3.20
+   COPY app.sh /app.sh
+   RUN apk add --no-cache curl
+   CMD ["/app.sh"]
+   EOF
+   docker build -t c-lab:0.4 .
+   echo 'echo "build: 3"' >> app.sh
+   docker build -t c-lab:0.5 .
+   ```
+
+   기대: 이번에는 `apk add` 가 **다시 실행된다.** 앞 레이어가 바뀌면 뒤는 전부 무효다.
+
+4. **순서를 되돌린다.**
+
+   ```bash
+   cat > Dockerfile <<'EOF'
+   FROM alpine:3.20
+   RUN apk add --no-cache curl
+   COPY app.sh /app.sh
+   CMD ["/app.sh"]
+   EOF
+   ```
+
+</Steps>
+
+**이 차이가 대회에서 몇 분이 된다.** 배포 직전에 값 하나를 고쳐 다시 빌드할 때, 캐시가 듣느냐 마느냐가 그대로 대기 시간이다.
+
+## 3. 시간대 함정을 고친다
+
+<Steps>
+
+1. **지금 상태를 확인한다.**
+
+   ```bash
+   docker run --rm c-lab:0.5 | grep now
+   ```
+
+   기대: `+0000` — UTC 다. 로그 시각을 한국 시간으로 요구하는 채점에서는 **아홉 시간 어긋난 오답**이다.
+
+2. **환경 변수만 준다.** 이것만으로는 안 된다는 것을 확인한다.
+
+   ```bash
+   docker run --rm -e TZ=Asia/Seoul c-lab:0.5 | grep now
+   ```
+
+   기대: 여전히 `+0000`. **시간대 데이터 자체가 이미지에 없기 때문이다.**
+
+3. **데이터를 넣고 지정한다.**
+
+   ```bash
+   cat > Dockerfile <<'EOF'
+   FROM alpine:3.20
+   RUN apk add --no-cache curl tzdata
+   ENV TZ=Asia/Seoul
+   COPY app.sh /app.sh
+   CMD ["/app.sh"]
+   EOF
+   docker build -t c-lab:0.6 .
+   docker run --rm c-lab:0.6 | grep now
+   ```
+
+   기대: `+0900`. 한국 시간이다.
+
+</Steps>
+
+:::note[왜 이 함정이 반복되나]
+개발할 때는 자기 PC 의 시간대를 쓰므로 문제가 안 보인다. 컨테이너로 옮기는 순간에만 드러나고, 그때는 이미 배포 단계라 원인을 다른 데서 찾게 된다.
+
+**배포 직후 시각을 한 번 찍어 보는 것**을 습관으로 만든다. 확인 비용이 한 줄이고, 놓치면 로그 기반 채점 항목이 통째로 어긋난다.
+:::
+
+## 4. 루트로 돌리지 않는다
+
+<Steps>
+
+1. **사용자를 만들고 지정한다.**
+
+   ```bash
+   cat > Dockerfile <<'EOF'
+   FROM alpine:3.20
+   RUN apk add --no-cache curl tzdata && adduser -D -u 10001 appuser
+   ENV TZ=Asia/Seoul
+   COPY app.sh /app.sh
+   USER appuser
+   CMD ["/app.sh"]
+   EOF
+   docker build -t c-lab:0.7 .
+   docker run --rm c-lab:0.7
+   ```
+
+   기대: `user: appuser (10001)`.
+
+2. **낮은 번호 포트를 열어 본다.** 왜 8080 을 쓰는지 확인한다.
+
+   ```bash
+   docker run --rm c-lab:0.7 sh -c 'nc -l -p 80 2>&1 | head -1 || echo "80번 열기 실패"'
+   docker run --rm c-lab:0.7 sh -c 'timeout 1 nc -l -p 8080 >/dev/null 2>&1; echo "8080 은 열린다"'
+   ```
+
+   **1024 미만은 루트만 열 수 있다.** 비루트로 돌리기로 했으면 앱 포트도 그에 맞춰야 한다.
+
+</Steps>
+
+## 5. 오독 복구 — 태그를 옮겨 붙였다
+
+`latest` 로 두 번 올려 무엇이 배포됐는지 알 수 없게 된 상황을 재현한다.
+
+<Steps>
+
+1. **같은 태그를 서로 다른 내용에 붙인다.**
+
+   ```bash
+   docker tag c-lab:0.6 c-lab:latest
+   docker images c-lab --format '{{.Tag}} {{.ID}}'
+   docker tag c-lab:0.7 c-lab:latest
+   docker images c-lab --format '{{.Tag}} {{.ID}}'
+   ```
+
+   기대: `latest` 가 가리키는 ID 가 **조용히 바뀐다.** 아무 경고도 없다.
+
+2. **다이제스트로 확인한다.** 내용이 다르면 값이 다르다.
+
+   ```bash
+   docker inspect --format '{{.Id}}' c-lab:0.6
+   docker inspect --format '{{.Id}}' c-lab:0.7
+   ```
+
+3. **고친다.** 태그를 버전으로 준다.
+
+   ```bash
+   docker rmi c-lab:latest
+   docker images c-lab --format '{{.Tag}} {{.ID}}'
+   ```
+
+</Steps>
+
+**교훈.** 배포된 것이 무엇인지 답할 수 없는 상태를 만들지 않는다. 이 원칙은 대회 채점에서도 그대로 나온다 — `latest` 태그는 감점 항목으로 등장한다.
+
+## 6. 정리
+
+```bash
+docker ps -a --filter ancestor=c-lab --format '{{.ID}}' | xargs -r docker rm -f
+docker images c-lab --format '{{.Repository}}:{{.Tag}}' | xargs -r docker rmi -f
+docker images | grep -c c-lab || echo "정리 완료"
+cd ~ && rm -rf ~/c-lab
+```
+
+**이미지도 자리를 차지한다.** CloudShell 은 홈 용량이 넉넉하지 않아 이미지를 쌓아 두면 나중에 빌드가 실패한다. 실습 끝에 지우는 습관을 여기서 들인다.
+
+## PART 0 을 마치며
+
+다섯 모듈에서 이런 것을 쌓았다.
+
+| 모듈 | 남은 것 |
+|---|---|
+| 01 | 프로세스·메모리·cgroup — `requests` 와 `OOMKilled` 를 읽는 눈 |
+| 02 | 주소·경로·방화벽 — VPC 문항 전체의 바닥 |
+| 03 | 이름·요청·인증서 — 로드밸런서와 CDN 을 읽는 눈 |
+| 04 | 권한·환경 변수·로그 — 배부물을 띄우는 손 |
+| 05 | 레이어·태그·시간대 — 이미지를 만드는 손 |
+
+이제 [사전 준비](/start/)로 계정과 도구를 갖추고, 서비스별 선수 지식을 훑은 뒤, [PART 1](/part-1/06-terraform-vpc/)에서 이것들을 코드로 옮긴다.

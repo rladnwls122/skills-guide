@@ -1,0 +1,564 @@
+---
+title: 11. 관측성 — 변동 이행 실습
+description: "set-02 의 로그·메트릭 스택을 set-07 요구로 이행하고, 배포 뒤 오독 복구와 장애 진단까지 가는 실습."
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+원리와 채점 관점은 [11 이론 — 로그 파이프라인과 로그 기반 메트릭](/part-2/11-observability/theory/)에 있다.
+
+**방식**: [10 실습](/part-2/10-k8s-workloads-alb/lab/)이 올린 워크로드 위에서 시작한다. set-07 변동 과제지를 읽고 **절차 안내 없이 직접** 고친 뒤, 통과 기준으로 스스로 판정한다.
+
+이 모듈의 변동에는 **다른 모듈에 없는 축이 하나 있다. 시간이다.** 로그와 메트릭은 흘러가는 것이라, 고친 뒤에도 "이미 지나간 것"은 돌아오지 않는다. 그것을 계산에 넣는 것이 여기서 익힐 판단이다.
+
+## 실습 목표
+
+- [ ] 로그 수집 범위를 전체에서 네임스페이스 하나로 좁힌다 — 그 한 줄이 무엇을 바꾸는지 확인한다
+- [ ] 로그 그룹 이름과 출력 형식을 요구대로 맞춘다
+- [ ] Prometheus 저장소를 임시 볼륨에서 실제 디스크로 옮긴다 — [09](/part-2/09-eksctl-cluster/lab/)의 결정이 여기서 열리는 문을 확인한다
+- [ ] 노드 라벨 키 변경이 관측성 스택 안에서 몇 군데를 건드리는지 센다
+- [ ] helm release 이름과 StatefulSet 볼륨처럼 **못 고치는 값**을 판정한다
+- [ ] 로그가 안 올라올 때 수집·신원·목적지 중 어디가 막혔는지 좁힌다
+
+선행 지식과 목표는 [모듈 개요](/part-2/11-observability/)에.
+
+:::note[실전 참조 — 막히면 여는 곳]
+- helm values 키: `helm show values prometheus-community/kube-prometheus-stack > kps.yaml` 뒤 `grep -n`, 브라우저는 [ArtifactHub kube-prometheus-stack](https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack)
+- **values 한 줄이 어디에 박히는지**는 `helm template` 으로 직접 본다 — [11 이론 주제 4](/part-2/11-observability/theory/)의 확인 블록
+- CRD YAML 필드: `kubectl explain prometheusrule.spec.groups` · `kubectl explain servicemonitor.spec` (정본은 [prometheus-operator API](https://prometheus-operator.dev/docs/api-reference/api/))
+- Fluent Bit 설정 키: [Fluent Bit 문서](https://docs.fluentbit.io/manual/pipeline/outputs/cloudwatch)
+- CLI 출력 필드: `aws logs describe-log-groups help` · `aws logs filter-log-events help`
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
+## 0. 기준본 세우기
+
+[10 실습](/part-2/10-k8s-workloads-alb/lab/)을 마쳐 앱이 떠 있고 타깃이 healthy 여야 한다. 로그를 만들어 낼 것이 있어야 이 모듈이 성립한다.
+
+### 기준본은 파일이다
+
+[10](/part-2/10-k8s-workloads-alb/lab/)와 같은 방식이다. 지금 클러스터는 set-07 형태이므로 set-02 관측성 스택을 그대로 올릴 수 없다 — 노드 라벨도 네임스페이스도 안 맞는다. **기준본은 읽는 대상이고, 클러스터에 올라가는 것은 이행본 하나뿐이다.**
+
+<Steps>
+
+1. **기준본** — [set-02 `k8s/monitoring/`](https://github.com/ishs-cloud-computing/skills-2026/tree/main/set-02/task-1/k8s/monitoring). helm values 와 Fluent Bit 이 여기 있다
+
+2. **이행할 사본을 뜬다** — [10](/part-2/10-k8s-workloads-alb/lab/)에서 만든 `~/set07-k8s` 안에 이미 들어 있다. 05 를 건너뛰었다면 아래로 다시 뜬다
+
+</Steps>
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  Copy-Item -Recurse $HOME\skills-2026\set-02\task-1\k8s $HOME\set07-k8s
+  Get-ChildItem $HOME\set07-k8s\monitoring
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  cp -r ~/skills-2026/set-02/task-1/k8s ~/set07-k8s
+  ls ~/set07-k8s/monitoring
+  ```
+  </TabItem>
+</Tabs>
+
+기대: `kube-prometheus-stack-values.yaml` · `fluent-bit.yaml` · `dashboard.json` · `grafana-targetgroupbinding.yaml`.
+
+### 로그가 실제로 나오고 있나 확인한다
+
+관측성은 관측할 것이 있어야 한다. 앱이 요청을 받고 있는지 먼저 본다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl logs -n unicorn -l app --tail=5
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl logs -n unicorn -l app --tail=5
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 액세스 로그가 몇 줄 나온다. 아무것도 없으면 아직 요청이 없는 것이니 앱을 몇 번 호출해 로그를 만든다.
+
+**여기서 나오는 원본 형식을 눈에 담아 둔다.** 2절에서 이 형식을 과제지가 요구하는 형식으로 바꿔야 하고, 둘의 차이가 곧 할 일이다.
+
+:::danger[과금이 이어진다]
+클러스터·NAT·ALB 가 계속 과금 중이다. 이 모듈이 더하는 것은 CloudWatch Logs 저장량과 **Prometheus 용 EBS 볼륨**이다. 볼륨은 파드를 지워도 남는 경우가 있으므로 7절 정리에서 따로 확인한다.
+:::
+
+## 1. 변동 과제지
+
+set-07 요구다. **정답 파일을 먼저 열지 않는다.**
+
+| 항목 | set-02 (기준본) | set-07 (변동) |
+|---|---|---|
+| 로그 수집 범위 | 노드의 컨테이너 로그 전부 | **앱 네임스페이스만** |
+| 자기 로그 제외 | 별도 설정으로 뺀다 | 범위가 좁아 필요 없다 |
+| 로그 그룹 | `/wskorea26/eks/pod-logs` | `/unicorn/eks/book-app` |
+| 로그 형식 | 원본 그대로 | **5개 키로 재조립** — 시각은 ISO8601 `Z`, 상태 코드는 정수 |
+| 헬스체크 로그 | 함께 수집 | **버린다** |
+| 수집기 위치 | `monitoring` 네임스페이스 | **`logging` 으로 분리** |
+| release 이름 | `wskorea26-monitoring` | `unicorn-monitoring` |
+| 노드 라벨 키 | `node-type: addon` | `unicorn: addon` |
+| Prometheus 저장소 | 임시 볼륨 | **실제 디스크 — 플랫폼 키로 암호화** |
+| 알림 컴포넌트 | 끈다 | 끄지 않는다 |
+| 추가 수집기 | 없음 | 로드밸런서 응답 시간을 가져오는 exporter |
+
+### 요구에서 파생되는 것
+
+**"앱 네임스페이스만"** 이 가장 먼저다. 수집 경로는 파일 이름 규칙에 얹혀 있다 — [11 이론 주제 2](/part-2/11-observability/theory/)의 확인 블록이 두 세트의 경로를 나란히 보여 준다. 범위를 좁히면 자기 로그를 따로 뺄 이유도 사라지므로, **지우는 줄도 함께 생긴다.**
+
+**"5개 키로 재조립"** 은 앱을 고치는 것이 아니다. 제공된 바이너리는 손대는 대상이 아니므로, 흘러가는 로그를 중간에서 바꿔야 한다. 원본에 없는 키를 만들어 내는 것이 아니라 **있는 값에서 뽑아 다시 조립**하는 것이고, 타입까지 맞춰야 한다.
+
+**"실제 디스크"** 요구는 이 모듈만으로 못 푼다. 볼륨을 만들려면 클러스터에 그것을 만들 줄 아는 애드온이 있어야 하고, 암호화 키를 지정하려면 그 방식을 선언하는 리소스가 있어야 한다. [09](/part-2/09-eksctl-cluster/lab/)와 [10](/part-2/10-k8s-workloads-alb/lab/)에서 무엇을 넣었는지 확인하고, 없으면 그것부터다.
+
+**"알림 컴포넌트를 끄지 않는다"** 는 요구가 아니라 **제약이 사라진 것**이다. 기준본이 왜 껐는지를 먼저 읽어야 지금 켜도 되는지 알 수 있다. 이론 주제 4 끝의 대조가 그 이유를 다룬다.
+
+## 2. 이행 (타이머 30분)
+
+타이머를 걸고 시작한다. `~/set07-k8s` 의 `monitoring/` 을 고치고 필요하면 파일을 옮긴다. 아래는 절차가 아니라 **스스로 답해야 할 질문 목록**이다.
+
+- 수집 경로에서 네임스페이스를 지정하는 자리는 어디인가. 파일 이름의 어느 부분에 대응하나
+- 헬스체크 요청을 버리는 판단은 어디서 하나. 설정 파일인가 스크립트인가
+- 로그 그룹 이름을 바꾸면 고칠 자리가 몇 군데인가. 수집기 설정 말고 또 어디에 그 이름이 있나
+- 수집기를 다른 네임스페이스로 옮기면 함께 옮겨야 하는 것은 무엇인가. 서비스 계정은 어디에 속하나
+- 노드 라벨 키를 바꾸면 이 values 파일 안에서 몇 군데를 고쳐야 하나. **컴포넌트마다 따로인가**
+- Prometheus 에 디스크를 주는 필드 이름은 무엇이고, 어떤 리소스를 가리키나
+- 로드밸런서 응답 시간은 어디에 있는 값인가. 그것을 Prometheus 로 가져오려면 무엇을 세워야 하나
+
+**다섯 번째 질문을 건너뛰지 않는다.** values 한 줄로 끝날 것 같은데 아니다 — 이론 주제 4 의 확인 블록이 그것을 숫자로 보여 준다.
+
+## 3. 통과 기준
+
+배포 없이 판정되는 것만 여기 있다.
+
+<Steps>
+
+1. **옛 이름 잔존 0건**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     Select-String -Pattern 'wskorea26|node-type' -Path $HOME\set07-k8s\monitoring\*,$HOME\set07-k8s\logging\*
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     grep -rnE 'wskorea26|node-type' ~/set07-k8s/monitoring ~/set07-k8s/logging
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **출력 없음.** values 파일의 컴포넌트별 `nodeSelector` 가 가장 자주 남는다.
+
+2. **helm 렌더가 통과하고 라벨이 전부 박혔나**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     helm template unicorn-monitoring prometheus-community/kube-prometheus-stack `
+       -n monitoring -f $HOME\set07-k8s\monitoring\kube-prometheus-stack-values.yaml |
+       Select-String -Pattern 'unicorn: addon' | Measure-Object | Select-Object -ExpandProperty Count
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     helm template unicorn-monitoring prometheus-community/kube-prometheus-stack \
+       -n monitoring -f ~/set07-k8s/monitoring/kube-prometheus-stack-values.yaml |
+       grep -c 'unicorn: addon'
+     ```
+     </TabItem>
+   </Tabs>
+
+   기대: **1보다 큰 수.** 정확한 값은 values 에 몇 개 컴포넌트를 적었는지에 달렸다. `1` 이 나오면 한 군데만 고친 것이다 — 2절의 다섯 번째 질문으로 돌아간다.
+
+3. **매니페스트가 API 서버 검증을 통과하나**
+
+   ```bash
+   kubectl apply --dry-run=server -R -f ~/set07-k8s/logging
+   ```
+
+   기대: `... created (server dry run)`. `namespaces "logging" not found` 면 네임스페이스를 먼저 실제로 만들어야 한다.
+
+</Steps>
+
+### set-07 채점 대응
+
+[set-07 `mark.sh`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/mark.sh) 의 `11-1-A` · `11-2-A` · `12-1-A` · `12-2-A` 가 이 모듈을 잰다.
+
+| 채점 | 보는 것 | 내 설정의 어디가 정하나 |
+|---|---|---|
+| 11-1-A | 로그 한 줄의 **키 목록을 정렬해 이어 붙인 문자열** | |
+| 11-1-A | 헬스체크 경로가 포함된 로그 **건수** | |
+| 11-2-A | 모니터링 파드들의 이름과 상태 | |
+| 11-2-A | 관리형 컨트롤 플레인용 ServiceMonitor **개수** | |
+| 12-1-A | 방금 만든 요청이 로그에 도착했는지 | |
+| 12-2-A | 부하를 준 뒤의 응답 코드 | |
+
+:::danger[개수를 세는 항목이 둘이다]
+`11-1-A` 의 두 번째 줄과 `11-2-A` 의 두 번째 줄은 **0 이어야 통과**한다. 하나는 헬스체크 로그가 한 건도 없어야 하고, 다른 하나는 관리형 컴포넌트용 ServiceMonitor 가 하나도 없어야 한다.
+
+"만들었으니 점수"가 아니라 **"안 만들었으니 점수"** 인 항목이라, 열심히 할수록 틀리기 쉽다. [10 의 `8-5-A`](/part-2/10-k8s-workloads-alb/lab/)와 같은 종류다.
+:::
+
+`12-1-A` 는 요청을 만든 뒤 **기다렸다가** 확인한다. 로그가 수집기를 거쳐 CloudWatch 에 닿는 데 시간이 걸리기 때문이다. 이 지연을 모르면 "안 된다"고 판단하고 멀쩡한 설정을 고치게 된다.
+
+## 4. 복기
+
+[set-07 `k8s/monitoring/`](https://github.com/ishs-cloud-computing/skills-2026/tree/main/set-07/task-1/k8s/monitoring)과 [`k8s/logging/`](https://github.com/ishs-cloud-computing/skills-2026/tree/main/set-07/task-1/k8s/logging)을 대조한다. **3절을 통과한 뒤에 연다.**
+
+놓친 곳을 셋으로 나눈다.
+
+- **과제지를 못 읽은 것** — 로그 형식의 타입 요구(정수·ISO8601)가 여기 걸린다
+- **읽었는데 어디를 고칠지 못 찾은 것** — 컴포넌트별 `nodeSelector` 를 한 군데만 고쳤다면 여기다
+- **찾았는데 틀린 것** — 렌더나 dry-run 이 잡아 줬을 종류인지 확인한다
+
+**파일을 옮겨야 했던 것을 안 옮겼다면** 두 번째 갈래다. "네임스페이스를 분리하라"는 요구는 값을 바꾸라는 것이 아니라 **파일의 위치와 소속을 바꾸라는 것**이다.
+
+## 5. 배포와 채점 확인
+
+순서가 있다. 네임스페이스 → 모니터링 스택 → 수집기다. 수집기가 먼저 뜨면 보낼 곳이 없어 재시도만 쌓인다.
+
+<Steps>
+
+1. **네임스페이스**
+
+   ```bash
+   kubectl apply -f ~/set07-k8s/00-namespaces.yaml
+   ```
+
+2. **모니터링 스택**
+
+   ```bash
+   helm upgrade --install unicorn-monitoring prometheus-community/kube-prometheus-stack \
+     -n monitoring -f ~/set07-k8s/monitoring/kube-prometheus-stack-values.yaml
+   ```
+
+3. **수집기와 나머지**
+
+   ```bash
+   kubectl apply -R -f ~/set07-k8s/logging
+   ```
+
+</Steps>
+
+### 채점 명령으로 확인
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl get pod -n monitoring -o wide
+  kubectl get pod -n logging -o wide
+  aws logs describe-log-groups --log-group-name-prefix /unicorn `
+    --query "logGroups[].logGroupName" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl get pod -n monitoring -o wide
+  kubectl get pod -n logging -o wide
+  aws logs describe-log-groups --log-group-name-prefix /unicorn \
+    --query "logGroups[].logGroupName" --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 모니터링 파드가 전부 `Running` 이고 **전부 addon 노드 위**에 있다. 수집기는 노드마다 하나씩이므로 app 노드에도 있는 것이 정상이다 — **이 둘을 헷갈리지 않는다.** 로그 그룹 목록에 요구된 이름이 보인다.
+
+로그가 실제로 형식대로 오는지 본다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  $g = "/unicorn/eks/book-app"
+  $s = aws logs describe-log-streams --log-group-name $g --order-by LastEventTime --descending --limit 1 --query "logStreams[0].logStreamName" --output text
+  aws logs get-log-events --log-group-name $g --log-stream-name $s --limit 1 --query "events[-1].message" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  g=/unicorn/eks/book-app
+  s=$(aws logs describe-log-streams --log-group-name $g --order-by LastEventTime --descending --limit 1 --query "logStreams[0].logStreamName" --output text)
+  aws logs get-log-events --log-group-name $g --log-stream-name "$s" --limit 1 --query "events[-1].message" --output text | jq -r 'keys_unsorted | sort | join(",")'
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 요구된 5개 키가 정렬된 순서로 이어져 나온다. 키가 하나라도 다르거나 더 있으면 `11-1-A` 가 틀린다.
+
+**바로 안 나와도 고치지 않는다.** 수집기가 파일을 읽고 묶어 보내는 데 시간이 걸린다. 조금 기다렸다 다시 본다.
+
+## 6. 과제지 오독 복구
+
+배포까지 했는데 값이 다르다. 판정 축이 [10](/part-2/10-k8s-workloads-alb/lab/)와 같되, **여기엔 시간 축이 하나 더 붙는다.**
+
+| 판정 | 무엇으로 아나 | 비용 |
+|---|---|---|
+| 즉시 수정 | 설정만 바꿔 다시 적용하면 된다 | 초 |
+| 재설치 | 이름처럼 못 바꾸는 값 — 지우고 다시 깐다 | 분 — 그 사이 관측이 끊긴다 |
+| 재생성, 데이터 손실 | 저장소가 딸린 것을 다시 만든다 | 분 — **쌓인 것이 사라진다** |
+| **고쳐도 과거는 안 온다** | 설정은 맞는데 이미 흘러간 것이 옛 자리에 있다 | 초 + **재시드 시간** |
+
+마지막 줄이 이 모듈에서 처음 나온다.
+
+### 6-1. 로그 그룹 이름을 잘못 읽었다
+
+**상황.** 수집기 설정의 로그 그룹 이름을 기준본 그대로 뒀다. 고치는 것은 한 줄이다.
+
+**판정.** 설정 파일을 고치고 다시 적용한 뒤 수집기를 재시작한다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl apply -R -f $HOME\set07-k8s\logging
+  kubectl rollout restart daemonset -n logging fluent-bit
+  kubectl rollout status daemonset -n logging fluent-bit
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl apply -R -f ~/set07-k8s/logging
+  kubectl rollout restart daemonset -n logging fluent-bit
+  kubectl rollout status daemonset -n logging fluent-bit
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 수집기 파드가 새로 뜬다. **ConfigMap 만 바꾸고 재시작을 안 하면 옛 설정이 그대로 돈다** — 파드는 시작할 때 설정을 읽기 때문이다.
+
+**파급.** 여기가 핵심이다. 설정은 이제 맞지만 **지금까지 보낸 로그는 옛 그룹에 그대로 있다.** 새 그룹은 방금 만들어져 비어 있고, 채점은 새 그룹을 본다.
+
+**복구가 두 단계다.**
+
+<Steps>
+
+1. 설정을 고치고 수집기를 재시작한다 — 초 단위
+
+2. **앱에 요청을 다시 보내 새 그룹을 채운다** — 그리고 로그가 도착할 때까지 기다린다
+
+</Steps>
+
+**교훈.** **"고쳤다"와 "채점이 볼 수 있다" 사이에 시간이 있다.** 흘러가는 것을 다루는 모듈에서는 수정 시각이 아니라 **데이터가 쌓이기 시작한 시각**이 기준이다. 대회 막판에 이것을 고치면 고쳐도 늦는다.
+
+### 6-2. release 이름을 기준본대로 깔았다
+
+**상황.** helm 으로 설치할 때 이름을 `wskorea26-monitoring` 으로 넣었다. 리소스 이름들이 그 접두어를 달고 만들어졌다.
+
+**판정.** 이름만 바꿔 다시 설치해 본다.
+
+```bash
+helm upgrade --install unicorn-monitoring prometheus-community/kube-prometheus-stack \
+  -n monitoring -f ~/set07-k8s/monitoring/kube-prometheus-stack-values.yaml
+```
+
+기대: **에러 없이 통과하는데, 옛 것이 안 사라진다.** helm 은 이것을 새 release 로 보므로 같은 네임스페이스에 두 벌이 생긴다. `helm -n monitoring list` 로 확인하면 둘이 나란히 있다.
+
+**release 이름은 바꾸는 것이 아니라 다른 release 를 만드는 것이다.** 이것이 이 항목의 요점이다.
+
+**복구.** 옛 것을 지우고 새 것만 남긴다.
+
+```bash
+helm -n monitoring list
+helm -n monitoring uninstall wskorea26-monitoring
+helm -n monitoring list
+```
+
+기대: 마지막 목록에 요구된 이름 하나만 남는다.
+
+**파급.** 지우는 동안 **메트릭 수집이 끊긴다.** 그리고 옛 release 의 Prometheus 가 갖고 있던 데이터도 함께 사라진다. 두 벌이 동시에 떠 있는 동안 노드 자원도 두 배로 쓴다 — addon 노드가 두 대뿐이면 새 파드가 `Pending` 이 될 수 있다.
+
+**교훈.** helm 에서 **이름은 값이 아니라 정체성이다.** `--install` 이 멱등이라는 말은 "같은 이름이면"이라는 전제가 붙는다.
+
+### 6-3. Prometheus 저장소를 임시 볼륨으로 뒀다
+
+**상황.** 다른 것은 다 고쳤는데 저장소 설정을 기준본대로 두어 임시 볼륨으로 떴다. 파드를 다시 뜨면 지금까지의 메트릭이 사라진다.
+
+**판정.** 저장소 설정을 넣고 다시 적용한다.
+
+```bash
+helm upgrade --install unicorn-monitoring prometheus-community/kube-prometheus-stack \
+  -n monitoring -f ~/set07-k8s/monitoring/kube-prometheus-stack-values.yaml
+```
+
+기대: **거부되거나, 적용돼도 볼륨이 안 붙는다.** Prometheus 는 StatefulSet 으로 관리되고 **볼륨 정의는 만든 뒤에 못 바꾼다.** 05 에서 본 Deployment 의 셀렉터와 같은 종류다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl get statefulset -n monitoring
+  kubectl get pvc -n monitoring
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl get statefulset -n monitoring
+  kubectl get pvc -n monitoring
+  ```
+  </TabItem>
+</Tabs>
+
+기대: PVC 목록이 비어 있으면 볼륨이 안 붙은 것이다.
+
+**복구.** Prometheus 리소스를 지우고 다시 만들게 한다. Operator 가 관리하므로 StatefulSet 을 직접 지우면 다시 만들어진다.
+
+**파급.** **지금까지 쌓인 메트릭이 사라진다.** 대시보드의 시간 축이 방금부터 다시 시작하고, 과거 구간을 보는 패널은 빈다.
+
+**교훈.** 저장소는 **나중에 붙일 수 없다.** 세우기 전에 정해야 하는 값이고, 이 모듈의 "VPC CIDR 자리"가 여기다. 그리고 그 값을 쓸 수 있는지는 [09](/part-2/09-eksctl-cluster/lab/)에서 이미 정해졌다 — 볼륨을 만들 줄 아는 애드온이 없으면 이 요구 자체를 못 푼다.
+
+## 7. 장애 진단
+
+정상으로 선 상태에서 일부러 고장을 내고 증상만 보고 좁혀 간다. **주입 명령과 복구 명령이 짝으로 있다.**
+
+### 7-1. 로그가 CloudWatch 에 안 올라온다
+
+**주입.** 수집기의 신원 연결을 끊는다. 연결 ID 는 첫 명령이 알려준다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws eks list-pod-identity-associations --cluster-name unicorn-eks-cluster --namespace logging `
+    --query "associations[].[serviceAccount,associationId]" --output text
+  aws eks delete-pod-identity-association --cluster-name unicorn-eks-cluster --association-id <association-id>
+  kubectl rollout restart daemonset -n logging fluent-bit
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws eks list-pod-identity-associations --cluster-name unicorn-eks-cluster --namespace logging \
+    --query "associations[].[serviceAccount,associationId]" --output text
+  aws eks delete-pod-identity-association --cluster-name unicorn-eks-cluster --association-id <association-id>
+  kubectl rollout restart daemonset -n logging fluent-bit
+  ```
+  </TabItem>
+</Tabs>
+
+**증상.** 로그 그룹에 새 스트림이 안 생긴다. **수집기 파드는 `Running` 이다.** 앱도 멀쩡하고 로그도 계속 찍힌다 — 옮겨지지만 않는다.
+
+**좁히는 순서.** 파이프라인을 따라 앞에서 뒤로 간다.
+
+<Steps>
+
+1. **원본이 있나** — `kubectl logs -n unicorn -l app --tail=5`. 앱이 로그를 안 찍으면 뒤를 볼 이유가 없다
+
+2. **수집기가 읽고 있나** — `kubectl logs -n logging -l app.kubernetes.io/name=fluent-bit --tail=30`. **수집기 자신의 로그가 답을 갖고 있다.** 전송 실패면 여기에 에러가 찍힌다
+
+3. **에러가 무엇이라고 하나** — `AccessDenied` 계열이면 신원 문제이고, `ResourceNotFoundException` 이면 목적지가 없는 것이다. **이 갈림이 방향을 정한다**
+
+4. **신원이 붙어 있나** — `aws eks list-pod-identity-associations --cluster-name <클러스터> --namespace logging`. 비었으면 여기가 원인이다
+
+5. **목적지가 있나** — `aws logs describe-log-groups --log-group-name-prefix /unicorn`. 설정에서 자동 생성을 꺼 두었다면 그룹이 미리 있어야 한다
+
+</Steps>
+
+수집기 로그를 안 보고 설정 파일부터 고치는 것이 가장 흔한 시간 낭비다. **수집기는 자기가 왜 못 보내는지 로그에 적는다.**
+
+**복구.** 연결을 다시 만든다. 역할 ARN 은 Terraform 출력에 있다.
+
+```bash
+aws eks create-pod-identity-association --cluster-name unicorn-eks-cluster \
+  --namespace logging --service-account fluent-bit --role-arn <role-arn>
+kubectl rollout restart daemonset -n logging fluent-bit
+```
+
+기대: 재시작 뒤 곧 새 스트림이 생긴다. **바로 안 생겨도 조금 기다린다.**
+
+### 7-2. 대시보드 패널이 비었다
+
+**주입.** 수집 대상 선언을 지운다. 이름은 첫 명령이 알려준다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  kubectl get servicemonitor -n monitoring
+  kubectl delete servicemonitor -n monitoring <이름>
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  kubectl get servicemonitor -n monitoring
+  kubectl delete servicemonitor -n monitoring <이름>
+  ```
+  </TabItem>
+</Tabs>
+
+**증상.** 대시보드의 해당 패널이 `No Data` 가 된다. Grafana 도 Prometheus 도 정상이고 다른 패널은 잘 나온다.
+
+**좁히는 순서.** 화면에서 데이터 쪽으로 거슬러 간다.
+
+<Steps>
+
+1. **패널이 무엇을 묻고 있나** — 패널의 쿼리를 연다. 메트릭 이름을 그대로 복사한다. **여기서 오타를 발견하는 경우가 실제로 많다**
+
+2. **그 메트릭이 Prometheus 에 있나** — Prometheus 로 포트포워딩해 같은 쿼리를 직접 던진다. 없으면 수집이 안 되는 것이고, 있으면 대시보드 쪽 문제다
+
+3. **Prometheus 가 그 대상을 알고 있나** — Targets 화면이나 `kubectl get servicemonitor,podmonitor -A`. 목록에 없으면 여기가 원인이다
+
+4. **선언은 있는데 안 잡히면 셀렉터를 본다** — Prometheus 가 어떤 라벨을 기준으로 대상을 고르는지와, 내 선언에 그 라벨이 있는지를 맞춰 본다. [11 이론 주제 4](/part-2/11-observability/theory/)가 그 설정 두 개를 다룬다
+
+</Steps>
+
+**복구.**
+
+```bash
+kubectl apply -R -f ~/set07-k8s/monitoring
+```
+
+기대: 선언이 다시 생기고 잠시 뒤 패널에 값이 들어온다.
+
+**교훈.** `No Data` 는 고장이 아니라 **질문과 데이터가 안 만난 상태**다. 어느 쪽이 없는지부터 가른다 — 메트릭이 없는 것인지, 있는데 못 찾는 것인지. 이 둘을 안 가르면 대시보드 JSON 과 수집 설정을 번갈아 고치며 시간을 쓴다.
+
+채점이 `No Data` 패널을 세는 세트에서는 **패널을 지우는 것도 선택지**다. 채우지 못할 패널을 남겨 두는 것보다 낫다 — 다만 과제지가 그 패널을 요구했다면 지우는 것이 더 큰 감점이니 요구부터 다시 읽는다.
+
+## 8. 정리
+
+:::caution[07 로 바로 이어 간다면]
+그대로 둔다. [12 실습](/part-2/12-full-deploy-set02/lab/)이 전체를 한 번에 다시 세우므로, 여기서 지우면 다시 만들어야 한다.
+:::
+
+helm release 를 먼저 지우고 나머지를 지운다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  helm -n monitoring uninstall unicorn-monitoring
+  kubectl delete -R -f $HOME\set07-k8s\logging
+  kubectl get pvc -n monitoring
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  helm -n monitoring uninstall unicorn-monitoring
+  kubectl delete -R -f ~/set07-k8s/logging
+  kubectl get pvc -n monitoring
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 마지막 명령이 `No resources found`.
+
+:::danger[볼륨은 남는다]
+**PVC 가 남아 있으면 EBS 볼륨이 계속 과금된다.** helm uninstall 은 StatefulSet 이 만든 PVC 를 지우지 않는다 — 데이터를 지키려는 기본 동작이다. 목록에 남아 있으면 직접 지운다.
+
+```bash
+kubectl delete pvc -n monitoring --all
+```
+
+지운 뒤 AWS 쪽에도 남은 것이 없는지 본다.
+
+```bash
+aws ec2 describe-volumes --filters Name=status,Values=available --query "Volumes[].VolumeId" --output text
+```
+
+기대: 빈 출력. `available` 은 아무 인스턴스에도 안 붙은 상태인데 **그래도 과금된다.**
+:::
+
+CloudWatch 로그 그룹은 Terraform 이 만든 것이라 `terraform destroy` 로 정리된다. 로그 저장량은 소액이지만 그룹이 남으면 다음 실습에서 옛 로그와 섞인다.
+
+막히면 [트러블슈팅](/reference/troubleshooting/), 계정 전체 점검은 [잔존 리소스 점검](/reference/cleanup-check/)이다.

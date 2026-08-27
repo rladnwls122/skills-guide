@@ -1,0 +1,64 @@
+---
+title: 05. 컨테이너 — 이미지가 담는 것과 담지 않는 것
+description: 모듈 개요 — 레이어, 레지스트리, 런타임, 그리고 Dockerfile 이 실제로 만드는 것. EKS·ECR 모듈 전체의 전제다.
+sidebar:
+  order: 1
+---
+
+import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+[01. 운영체제와 프로세스](/part-0/01-os-process/)에서 컨테이너가 **격리된 프로세스**라는 것을 봤다. 이 모듈은 그 프로세스가 볼 파일시스템을 어떻게 미리 말아 두는지를 다룬다.
+
+1과제와 3과제 모두 이미지를 직접 만들어 올린다. 그리고 그 과정에서 **거의 같은 함정 몇 개**에 걸린다 — 시간대가 안 맞아 로그 시각이 아홉 시간 어긋나거나, 의존성을 안 넣어 파드가 재시작을 반복하거나, `latest` 태그를 써서 무엇이 배포됐는지 알 수 없게 되거나.
+
+## 왜 이 모듈이 중요한가
+
+- 1과제는 제공된 앱을 이미지로 만들어 ECR 에 올리는 것이 배포의 첫 단계다.
+- 3과제는 당일 배부되는 바이너리를 이미지로 만들어야 한다. **제공된 Dockerfile 이 잘못돼 있는 경우가 실제로 있었다.**
+- 이미지 크기가 크면 노드가 새로 뜰 때마다 내려받는 시간이 늘고, 그 시간이 그대로 스케일 지연이 된다.
+
+## 목표
+
+- [ ] 이미지가 레이어의 쌓임이라는 것과, 레이어가 캐시되는 규칙을 안다
+- [ ] 베이스 이미지 선택이 무엇을 바꾸는지 안다(크기·시간대·기본 도구)
+- [ ] `latest` 태그가 왜 금지인지 설명한다
+- [ ] 이미지·컨테이너·레지스트리를 구분해 말한다
+- [ ] Dockerfile 의 각 지시어가 빌드 시점인지 실행 시점인지 구분한다
+
+## 선행 지식
+
+- [01. 운영체제와 프로세스](/part-0/01-os-process/) — 네임스페이스와 cgroup
+- [04. 리눅스와 셸](/part-0/04-linux-shell/) — 권한·환경 변수·표준 출력
+
+## 소요 시간
+
+- 약 3~4시간 (이론 1.5h + 실습 2h). Week 1.
+
+## 과금
+
+**거의 없다.** 실습은 CloudShell 에서 하고, 만든 이미지는 로컬에만 둔다. 레지스트리에 올리는 것은 [08. 컨테이너 + Lambda + DynamoDB](/part-1/08-container-lambda-dynamodb/)에서 다룬다.
+
+:::caution[대회 환경에는 Docker 가 없다]
+대회장 PC 에는 Docker 도 WSL 도 없다. 이미지 빌드는 **CloudShell 에서** 한다.
+
+그래서 이 모듈의 실습도 CloudShell 기준으로 쓰여 있다. 자기 PC 에 Docker 가 깔려 있다면 그쪽으로 해도 되지만, **대회와 같은 경로를 미리 손에 익히는 편**이 낫다.
+:::
+
+<CardGrid>
+  <Card title="이론" icon="open-book">
+    레이어·레지스트리·런타임, 그리고 Dockerfile 이 실제로 하는 일.
+
+    <LinkButton href="/part-0/05-container/theory/" variant="primary">이론으로</LinkButton>
+  </Card>
+  <Card title="실습" icon="rocket">
+    CloudShell 에서 이미지를 만들고, 레이어 캐시를 눈으로 확인하고, 시간대 함정을 재현한다.
+
+    <LinkButton href="/part-0/05-container/lab/" variant="secondary">실습으로</LinkButton>
+  </Card>
+</CardGrid>
+
+## 다음
+
+PART 0 의 마지막이다. [사전 준비](/start/)로 계정과 도구를 갖춘 뒤, [PART 1](/part-1/06-terraform-vpc/)에서 이 개념들을 코드로 옮긴다.

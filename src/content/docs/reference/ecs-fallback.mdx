@@ -97,4 +97,4 @@ k8s 매니페스트(YAML)에 익숙하면 낯선 지점이다. 이 필드 하나
 
 ## ALB 오리진 검증 헤더 패턴은 EKS·ECS 공통
 
-CloudFront가 커스텀 헤더를 심고 ALB 리스너 규칙이 그 헤더를 조건으로 검사하며 기본 액션은 `fixed-response` 403으로 막는 패턴은 이미 [k8s 워크로드·ALB 이론](/part-2/05-k8s-workloads-alb/theory/)에서 배운 것과 **완전히 같다**. 컴퓨트가 파드든 ECS 태스크든 ALB 뒤에 무엇이 있는지는 이 패턴과 무관하다. set-08 `alb.tf`도 헤더 조건 리스너 규칙(우선순위 1) + 기본 액션 403 fixed-response로 동일하게 구성한다.
+CloudFront가 커스텀 헤더를 심고 ALB 리스너 규칙이 그 헤더를 조건으로 검사하며 기본 액션은 `fixed-response` 403으로 막는 패턴은 이미 [k8s 워크로드·ALB 이론](/part-2/10-k8s-workloads-alb/theory/)에서 배운 것과 **완전히 같다**. 컴퓨트가 파드든 ECS 태스크든 ALB 뒤에 무엇이 있는지는 이 패턴과 무관하다. set-08 `alb.tf`도 헤더 조건 리스너 규칙(우선순위 1) + 기본 액션 403 fixed-response로 동일하게 구성한다.

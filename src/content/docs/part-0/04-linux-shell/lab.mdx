@@ -1,0 +1,275 @@
+---
+title: 04. 리눅스 — 배부물을 띄우고 로그를 거른다
+description: CloudShell 에서 작은 프로그램을 만들어 권한을 주고, 환경 변수로 설정을 넘기고, 표준 스트림을 나누고, 로그를 파이프라인으로 분석하는 실습.
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+원리는 [04 이론](/part-0/04-linux-shell/theory/)에 있다.
+
+**실습 환경은 AWS CloudShell 이다.** 브라우저에서 열리는 리눅스 셸이고 무료다. 콘솔 오른쪽 위의 터미널 아이콘으로 연다. 계정이 아직 없다면 [사전 준비](/start/)를 먼저 한다.
+
+**과금 없음.** CloudShell 자체는 무료이고 이 실습은 다른 리소스를 만들지 않는다.
+
+## 통과 기준
+
+- [ ] 파일 권한을 읽고 실행 비트를 준다
+- [ ] 환경 변수로 설정을 넘기고, 새 셸에서 사라지는 것을 확인한다
+- [ ] 표준 출력과 표준 오류를 서로 다른 파일로 보낸다
+- [ ] 로그에서 특정 조건의 줄만 세어 많은 순으로 본다
+- [ ] 3과제 앱과 같은 모양의 환경 변수 파일을 만든다
+
+## 1. 실행 권한
+
+<Steps>
+
+1. **작은 프로그램을 만든다.** 3과제 앱과 같은 모양으로 — 환경 변수를 읽고, 표준 출력에 로그를 찍는다.
+
+   ```bash
+   cat > app.sh <<'EOF'
+   #!/bin/bash
+   echo "starting: host=${MYSQL_HOST:-미설정} port=${MYSQL_PORT:-미설정} db=${MYSQL_DBNAME:-미설정}"
+   if [ -z "$MYSQL_HOST" ]; then
+     echo "FATAL: MYSQL_HOST is required" >&2
+     exit 1
+   fi
+   for i in 1 2 3 4 5; do
+     echo "{\"level\":\"INFO\",\"path\":\"/v1/user\",\"status\":200,\"ms\":$((RANDOM % 300))}"
+     sleep 1
+   done
+   echo "{\"level\":\"ERROR\",\"path\":\"/v1/product\",\"status\":500,\"ms\":4800}"
+   EOF
+   ```
+
+2. **권한을 확인한다.**
+
+   ```bash
+   ls -l app.sh
+   ```
+
+   기대: `-rw-r--r--` — 실행 비트(x)가 **없다.**
+
+3. **그대로 실행해 본다.**
+
+   ```bash
+   ./app.sh
+   ```
+
+   기대: `Permission denied`. **이것이 배부된 바이너리를 받았을 때 처음 만나는 벽이다.**
+
+4. **실행 비트를 주고 다시 한다.**
+
+   ```bash
+   chmod u+x app.sh
+   ls -l app.sh
+   ./app.sh
+   ```
+
+   기대: 이번에는 `FATAL: MYSQL_HOST is required` 로 끝난다. 권한 문제는 풀렸고 이제 **설정 문제**다. 증상이 바뀌면 한 단계 나아간 것이다.
+
+</Steps>
+
+## 2. 환경 변수
+
+<Steps>
+
+1. **값을 주고 실행한다.** 한 번만 쓸 값은 명령 앞에 붙인다.
+
+   ```bash
+   MYSQL_HOST=db.internal MYSQL_PORT=3306 MYSQL_DBNAME=dev ./app.sh
+   ```
+
+   기대: 시작 줄에 값이 찍히고 로그가 흐른다.
+
+2. **셸에 등록해 두고 여러 번 쓴다.**
+
+   ```bash
+   export MYSQL_HOST=db.internal
+   export MYSQL_PORT=3306
+   export MYSQL_DBNAME=dev
+   ./app.sh
+   env | grep MYSQL
+   ```
+
+3. **새 셸에서는 사라진다는 것을 확인한다.**
+
+   ```bash
+   bash -c 'env | grep MYSQL || echo "새 셸에는 없다"'
+   ```
+
+   :::note[방금 것은 왜 보였나]
+   `bash -c` 로 만든 자식은 부모의 환경을 **복사받으므로** `export` 한 값은 보인다. 사라지는 것은 `export` 없이 셸 변수로만 둔 경우다. 아래로 확인한다.
+
+   ```bash
+   PLAIN=value
+   bash -c 'echo "PLAIN=[$PLAIN]"'
+   ```
+
+   기대: 비어 있다. `export` 가 "자식에게 물려줄 것"의 표시다.
+   :::
+
+4. **파일로 모아 둔다.** 대회에서는 재접속할 때마다 다시 치지 않도록 파일에 넣고 불러온다.
+
+   ```bash
+   cat > .env <<'EOF'
+   MYSQL_HOST=db.internal
+   MYSQL_PORT=3306
+   MYSQL_DBNAME=dev
+   EOF
+
+   set -a; . ./.env; set +a     # 파일의 값을 전부 export 한다
+   env | grep MYSQL
+   ```
+
+   :::caution[윈도우에서 만든 파일을 올릴 때]
+   윈도우에서 저장한 텍스트 파일은 줄 끝에 보이지 않는 문자가 하나 더 붙는다. 그 상태로 리눅스에서 읽으면 **마지막 값 뒤에 쓰레기 문자가 붙어** 이름이 안 맞거나 이미지 태그가 깨진다.
+
+   실제 대회 준비 중에 이 문제로 이미지 빌드가 실패한 기록이 있다. 올린 뒤 한 줄로 지운다.
+
+   ```bash
+   sed -i 's/\r$//' .env
+   ```
+   :::
+
+</Steps>
+
+## 3. 표준 출력과 표준 오류
+
+<Steps>
+
+1. **두 갈래를 각각 다른 파일로 보낸다.**
+
+   ```bash
+   ./app.sh > out.log 2> err.log
+   echo "--- out.log"; cat out.log
+   echo "--- err.log"; cat err.log
+   ```
+
+   `MYSQL_HOST` 를 비우고 다시 해 보면 오류 줄만 `err.log` 로 간다.
+
+   ```bash
+   env -u MYSQL_HOST ./app.sh > out2.log 2> err2.log
+   wc -l out2.log err2.log
+   ```
+
+2. **합쳐서 하나로 보낸다.**
+
+   ```bash
+   ./app.sh > all.log 2>&1
+   tail -3 all.log
+   ```
+
+3. **순서를 바꾸면 어떻게 되는지 본다.**
+
+   ```bash
+   env -u MYSQL_HOST ./app.sh 2>&1 > wrong.log
+   # 오류가 파일이 아니라 화면에 나온다
+   grep -c FATAL wrong.log || echo "wrong.log 에는 FATAL 이 없다"
+   ```
+
+   **`2>&1` 은 표준 출력을 옮긴 뒤에 써야 한다.** 앞에 쓰면 그 시점의 표준 출력(화면)에 붙는다.
+
+</Steps>
+
+## 4. 로그를 파이프라인으로 분석한다
+
+3과제에서 실제로 하는 일의 축소판이다.
+
+<Steps>
+
+1. **분석할 로그를 만든다.**
+
+   ```bash
+   for i in $(seq 1 200); do
+     case $((RANDOM % 10)) in
+       0|1) p=/v1/product; s=200 ;;
+       2)   p=/v1/stress;  s=201 ;;
+       3)   p=/v1/none;    s=404 ;;
+       4)   p=/v1/user;    s=403 ;;
+       *)   p=/v1/user;    s=200 ;;
+     esac
+     echo "{\"path\":\"$p\",\"status\":$s,\"ms\":$((RANDOM % 500))}"
+   done > access.log
+   wc -l access.log
+   ```
+
+2. **상태 코드별로 센다.**
+
+   ```bash
+   grep -o '"status":[0-9]*' access.log | cut -d: -f2 | sort | uniq -c | sort -rn
+   ```
+
+   기대: 200 이 가장 많고 403·404 가 뒤따른다.
+
+3. **경로별로 센다.**
+
+   ```bash
+   grep -o '"path":"[^"]*"' access.log | cut -d: -f2 | tr -d '"' | sort | uniq -c | sort -rn
+   ```
+
+4. **`jq` 로 같은 일을 한다.** JSON 로그라면 이쪽이 정확하다.
+
+   ```bash
+   jq -r '.status' access.log | sort | uniq -c | sort -rn
+   jq -r 'select(.status >= 400) | "\(.status) \(.path)"' access.log | sort | uniq -c | sort -rn
+   ```
+
+5. **느린 요청만 뽑는다.** 3과제의 목표가 응답 시간이므로 이 질의를 자주 쓴다.
+
+   ```bash
+   jq -r 'select(.ms > 200) | "\(.ms) \(.path)"' access.log | sort -rn | head -10
+   ```
+
+</Steps>
+
+:::tip[이 다섯 줄이 3과제 분석의 전부다]
+방화벽 로그 72만 건을 분석해 규칙을 정한 실측 기록도 결국 같은 형태의 질의였다 — **무엇이 얼마나 자주, 어떤 판정을 받았는가.**
+
+값이 아니라 **분포**를 본다는 점이 중요하다. 오차단을 찾을 때 필요한 것은 "차단된 요청이 있다"가 아니라 "차단된 것 중 정상 요청이 몇 퍼센트인가"다.
+:::
+
+## 5. 오독 복구 — 로그가 안 남는다
+
+앱을 띄웠는데 로그가 아무 데도 없다. 순서대로 확인한다.
+
+<Steps>
+
+1. **표준 출력으로 내고 있나** — 파일에 쓰고 있다면 그 파일 경로를 찾는다.
+
+   ```bash
+   ./app.sh > /dev/null 2>&1 &
+   sleep 1
+   ls -l out.log err.log 2>/dev/null || echo "이번엔 전부 버렸다"
+   ```
+
+   위 명령은 **일부러 전부 버린 것**이다. `/dev/null` 로 보내면 로그가 사라진다. 스크립트에 이 표현이 남아 있는지부터 본다.
+
+2. **프로세스가 실제로 도나** — 시작하자마자 죽었다면 로그가 짧다.
+
+   ```bash
+   jobs
+   ps -ef | grep -c "[a]pp.sh"
+   ```
+
+3. **버퍼에 갇혀 있나** — 출력이 파이프로 갈 때 프로그램이 모아 두었다가 한꺼번에 내보내는 경우가 있다. 짧은 실행에서는 아무것도 안 보인다.
+
+   실전에서 이 증상은 "파드는 도는데 `kubectl logs` 가 비어 있다"로 나타난다. 앱 쪽에서 버퍼를 끄거나 줄 단위로 내보내게 해야 한다.
+
+</Steps>
+
+## 6. 정리
+
+```bash
+rm -f app.sh .env out.log err.log out2.log err2.log all.log wrong.log access.log
+ls
+```
+
+CloudShell 홈 디렉터리는 세션이 끝나도 얼마간 남는다. **다음 실습에 쓰레기가 섞이지 않도록** 여기서 지운다.
+
+## 다음
+
+[05. 컨테이너](/part-0/05-container/) — 방금 손으로 한 준비를 이미지 한 장에 담는다.

@@ -1,0 +1,794 @@
+---
+title: 07. KMS + S3 + CloudFront — 이론
+description: "alias 역조회·정책 grep·퍼블릭 차단 검사를 통과하는 KMS/S3/CloudFront 구조 정리."
+sidebar:
+  order: 2
+---
+
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: explanation
+
+선행 지식과 학습 경로는 [모듈 개요](/part-1/07-kms-s3-cloudfront/)에.
+
+암호화(KMS)와 정적 웹 서빙(S3+CloudFront)은 거의 모든 세트에 나온다. 채점은 "alias 이름 역조회", "정책 텍스트 grep", "퍼블릭 차단 상태" 같은 기계적 검사이므로, 정확한 구조를 암기 수준으로 익힌다.
+
+:::tip[읽으면서 확인한다]
+1절과 7절 끝에 **지금 확인하기** 블록이 접혀 있다. 둘 다 **아무것도 만들지 않는 조회**라 과금이 0원이고, 리소스를 하나도 안 만든 계정에서도 그대로 된다. 블록을 열지 않고 읽어도 문서는 그대로 이어진다.
+:::
+
+---
+
+## 1. Envelope Encryption 과 CMK
+
+**① 한 줄 정의** — envelope encryption 은 데이터를 데이터 키(DEK)로 암호화하고, 그 DEK 를 다시 KMS 의 CMK 로 암호화해 보관하는 2단 구조다. 봉투 암호화·CMK·키 정책이라는 말 자체가 처음이면 [kms-basics](/start/kms-basics/)를 먼저 읽는다.
+
+**② 왜 필요한가 (채점 관점)** — S3 SSE-KMS, DynamoDB SSE, EKS secrets 암호화가 전부 이 구조다. mark 는 "어떤 CMK 로 암호화됐는가"를 **alias 로 역조회**하므로 alias 이름 정확 일치가 점수다.
+
+**③ 핵심 원리**:
+
+```mermaid
+graph LR
+    subgraph KMS["<span class='icon--logos icon--logos--aws-kms'></span> AWS KMS"]
+        CMK@{ icon: "logos:aws-kms", form: "square", label: "CMK (wskorea26-s3-key)<br/>키 정책이 접근 통제", pos: "b", h: 46, w: 46 }
+    end
+    subgraph 서비스["<span class='icon--mdi icon--mdi--layers-outline'></span> S3 / DynamoDB / EKS"]
+        DEK["데이터 키 DEK"]
+        DATA["실제 데이터"]
+    end
+    CMK -- "GenerateDataKey" --> DEK
+    DEK -- "암호화" --> DATA
+    CMK -- "암호화된 DEK 를 Decrypt" --> DEK
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+봉투 암호화의 구조다. CMK 는 데이터를 직접 암호화하지 않고 `GenerateDataKey` 로 데이터 키(DEK)를 내주며, 서비스가 그 DEK 로 실제 데이터를 암호화한다. 암호화된 DEK 는 데이터 옆에 저장되고, 읽을 때 CMK 로 `Decrypt` 해 되살린다. 그래서 키 정책이 막히면 데이터는 그 자리에 있어도 열 수 없다.
+
+</details>
+
+- 읽기 경로: 암호화된 DEK → `kms:Decrypt` → 평문 DEK → 데이터 복호화. 그래서 소비자에게 필요한 권한은 보통 `kms:Decrypt`(+ 쓰기 시 `kms:GenerateDataKey`).
+- Terraform 기본형 (set-02 실측):
+
+```hcl
+resource "aws_kms_key" "s3" {
+  description             = "wskorea26-s3-key : S3 static objects"
+  enable_key_rotation     = true
+  deletion_window_in_days = 7
+  policy                  = data.aws_iam_policy_document.kms_s3.json
+}
+resource "aws_kms_alias" "s3" {
+  name          = "alias/wskorea26-s3-key"   # mark 가 이 alias 로 키를 역조회
+  target_key_id = aws_kms_key.s3.key_id
+}
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+[`aws_kms_key`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key) 와 [`aws_kms_alias`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias) 로 CMK 와 별칭을 만든다. 키 자체에는 이름이 없고 채점은 `alias/wskorea26-s3-key` 로 역조회하므로 별칭이 사실상 이름 노릇을 한다. `enable_key_rotation` 은 연 1회 자동 교체를, `deletion_window_in_days` 는 삭제 예약 후 되돌릴 수 있는 유예 기간을 정한다.
+
+</details>
+
+**④ 세트별 차이** — set-02 는 CMK 3개(s3/dynamodb/eks), set-03 은 5개(db/ecr/eks/bucket/function). "과제지가 이름을 준 서비스에만 CMK" 가 원칙.
+
+<details class="build-step">
+<summary>지금 확인하기 — 채점이 쓰는 alias 역조회를 그대로 해 본다</summary>
+
+키에는 이름이 없다. 채점이 `alias/...` 로 키를 찾아내는 그 동작을 직접 해 본다. **AWS 관리형 키는 어느 계정에나 이미 있으므로 아무것도 만들지 않아도 된다.**
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws kms describe-key --key-id alias/aws/s3 --query "KeyMetadata.[KeyId,KeyManager,KeySpec]" --output text
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws kms describe-key --key-id alias/aws/s3 --query 'KeyMetadata.[KeyId,KeyManager,KeySpec]' --output text
+  ```
+  </TabItem>
+</Tabs>
+
+기대: UUID 형태의 키 ID 와 `AWS`, `SYMMETRIC_DEFAULT` 가 한 줄로 나온다.
+
+두 번째 열이 이 블록의 요점이다. `KeyManager` 가 `AWS` 면 AWS 가 만들어 준 관리형 키이고, 직접 만든 CMK 는 `CUSTOMER` 로 나온다. **4절의 "CMK 를 만들 것인가 관리형을 쓸 것인가" 판단이 이 한 글자로 드러난다.**
+
+`--key-id` 에 alias 를 그대로 넣을 수 있다는 것도 함께 본다. 채점 스크립트가 키 ID 를 모르는 채로 검사할 수 있는 이유다.
+
+`NotFoundException` 이 나오면 그 계정·리전에 그 alias 가 없는 것이다. `aws kms list-aliases --query "Aliases[].AliasName"` 으로 실재하는 이름을 먼저 본다.
+
+</details>
+
+---
+
+## 2. 키 정책 구조 — admin vs use 분리
+
+**① 한 줄 정의** — 키 정책은 CMK 에 직접 붙는 리소스 정책으로, "키를 관리하는 statement(admin)"와 "키를 사용하는 statement(use)"를 분리해 쓴다.
+
+**② 왜 필요한가 (채점 관점)** — IAM 정책과 달리 KMS 는 **키 정책이 1차 관문이다.** 키 정책에 적힌 만큼만 통과하고, 계정 관리자라도 키 정책이 비어 있으면 그 키를 다루지 못한다.
+
+그래서 이 한 장에 관리 주체와 사용 주체가 함께 적힌다. 두 주체는 필요한 액션이 전혀 다르다 — 관리자는 키 자체를 켜고 끄고 지우고, 소비자는 그 키로 데이터를 암·복호화할 뿐이다. 한 statement 에 몰아 쓰면 소비자에게까지 관리 액션이 새므로 statement 를 둘로 나눈다. 이 admin/use 분리가 최소권한 채점의 기본형이고, set-03 처럼 정책 텍스트 자체를 grep 하는 세트도 있다.
+
+**③ 핵심 원리** — 액션 두 부류:
+
+| 부류 | 대표 액션 | 누구에게 |
+|---|---|---|
+| admin (관리) | `kms:Create*`, `kms:Put*`, `kms:Enable*/Disable*`, `kms:ScheduleKeyDeletion`, `kms:TagResource` ... | 계정 root 또는 배포자 IAM 신원 |
+| use (사용) | `kms:Encrypt`, `kms:Decrypt`, `kms:GenerateDataKey*`, `kms:DescribeKey`, `kms:CreateGrant` | 키를 실제로 쓰는 역할/서비스 principal |
+
+set-02 기본형 — root 전체 위임 + 필요 use statement 합성:
+
+```hcl
+data "aws_iam_policy_document" "kms_root" {
+  statement {
+    sid       = "EnableRoot"
+    actions   = ["kms:*"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${local.account_id}:root"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "kms_s3" {
+  source_policy_documents = [data.aws_iam_policy_document.kms_root.json]  # 상속·합성
+
+  statement {
+    sid     = "AllowCloudFrontDecrypt"
+    actions = ["kms:Decrypt", "kms:GenerateDataKey"]
+    resources = ["*"]              # 키 정책에서는 항상 "*" (자기 자신)
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [local.account_id]
+    }
+  }
+}
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+키 정책을 두 조각으로 나눠 합친다. 위쪽은 계정 root 에 전권을 주는 기본 구문이고, 아래쪽이 CloudFront 서비스에 복호화만 허용하는 구문이다. `source_policy_documents` 가 둘을 한 문서로 합성한다. 키 정책의 `resources` 가 항상 `"*"` 인 이유는 그 정책이 붙은 키 자신을 뜻하기 때문이고([kms-basics 의 실물 JSON 절](/start/kms-basics/#1-root-less-키-정책-실물--적용된-json)이 이 표기를 IAM 정책의 `"Resource": "*"` 와 나란히 놓고 푼다), `aws:SourceAccount` 조건이 다른 계정의 CloudFront 가 이 키를 쓰지 못하게 막는다.
+
+</details>
+
+`EnableRoot` statement 의 root principal 은 "이 계정의 IAM 정책에 판단을 위임한다"는 뜻이다. 이 statement 를 넣어 두면 키 정책을 매번 고치지 않고도 배포자의 IAM 정책만으로 키를 관리할 수 있다.
+
+**④ 세트별 차이** — set-02 는 root 위임 허용. set-03 은 root·`kms:*` 금지(3절).
+
+---
+
+## 3. 심화 — set-03 root-less 키 정책
+
+**① 한 줄 정의** — 유의사항이 "키 정책에 root principal 과 `kms:*` 액션 금지"를 걸면, 관리자 principal 을 `"*"` 로 두고 `kms:CallerAccount` 조건으로 계정 하나에 가둔 뒤 액션을 전부 나열해야 한다.
+
+**② 왜 필요한가 (채점 관점)** — set-03 mark 의 check_kms 가 **정책 텍스트를 grep** 해서 `:root` 나 `kms:*` 가 있으면 실격 처리한다. 동시에 KMS 의 lockout safety check 를 통과해야 하는데, 이 검사가 보는 것은 **호출한 신원 본인에게 `kms:PutKeyPolicy` 가 허용되는가** 하나다. 그래서 관리 statement 에 `kms:Put*` 를 반드시 포함시키고, 나머지 관리·운영 액션도 개별 나열한다.
+
+principal 을 배포자 한 사람의 ARN 으로 좁히지 않는 이유는 채점 쪽에 있다. 과제지가 "미리 IAM 사용자를 만들어 그 신원으로 진행하라"고 말하지 않으면 채점자는 지급받은 root 로 접속한다. KMS 는 IAM 정책이 아니라 키 정책이 1차 관문이라, 관리자를 배포자 신원 하나로 잠그면 채점 스크립트 자신이 `describe-key`·`get-key-policy` 조차 못 해 KMS 항목이 통째로 0점이 된다. `"*"` + `kms:CallerAccount` 는 계정 밖 principal 을 막으면서 계정 안 신원 판단은 각자의 IAM 정책에 맡기므로, root 로 채점해도 통과한다.
+
+**③ 핵심 원리** — set-03 kms.tf 실측:
+
+```hcl
+locals {
+  # "kms:*" 문자열 없이 전체 권한과 동등하게 나열
+  kms_admin_actions = [
+    "kms:Create*", "kms:Describe*", "kms:Enable*", "kms:List*",
+    "kms:Put*",    "kms:Update*",   "kms:Revoke*", "kms:Disable*",
+    "kms:Get*",    "kms:Delete*",   "kms:TagResource", "kms:UntagResource",
+    "kms:ScheduleKeyDeletion", "kms:CancelKeyDeletion", "kms:RotateKeyOnDemand",
+    "kms:Encrypt", "kms:Decrypt",   "kms:ReEncrypt*",  "kms:GenerateDataKey*",
+    "kms:CreateGrant", "kms:RetireGrant",
+  ]
+}
+
+data "aws_iam_policy_document" "kms_admin" {
+  statement {
+    sid       = "KeyAdministration"
+    effect    = "Allow"
+    actions   = local.kms_admin_actions
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["*"]
+    }
+    # 이 조건이 principal "*" 의 범위를 이 계정으로 좁힌다. 빠지면 전 세계 공개다
+    condition {
+      test     = "StringEquals"
+      variable = "kms:CallerAccount"
+      values   = [local.account_id]
+    }
+  }
+}
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+root 없이 키를 관리하는 set-03 방식이다. `kms:*` 라는 문자열을 쓰지 않고 접두어를 나열해 사실상 같은 권한을 만든다 — 채점이 정책 본문에서 `kms:*` 와 root principal 을 문자열로 찾기 때문이다. principal 은 `"*"` 지만 전 세계 공개가 아니다. 바로 아래 `kms:CallerAccount` 조건이 이 계정에서 온 호출로 범위를 좁히고, 계정 안에서 누가 실제로 쓸 수 있는지는 각 신원의 IAM 정책이 정한다. 액션 목록에 `kms:Put*` 가 들어 있어야 KMS 의 잠김 방지 검사가 apply 를 통과시킨다.
+
+</details>
+
+```mermaid
+flowchart TD
+    A@{ icon: "logos:aws-kms", form: "square", label: "키 정책 작성", pos: "b", h: 46, w: 46 }
+    A --> B{"root principal<br/>또는 kms:* 포함?"}
+    B -- "예" --> C["mark grep 실격"]
+    B -- "아니오" --> D{"호출 신원에게<br/>kms:PutKeyPolicy 허용?"}
+    D -- "아니오" --> E["KMS lockout safety check 거부<br/>→ apply 실패"]
+    D -- "예" --> F["통과: 배포자 admin<br/>+ 사용자별 use statement"]
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+root-less 키 정책이 통과하는 조건을 판정 순서로 그렸다. 첫 관문은 채점 쪽이다 — root principal 이나 `kms:*` 가 정책에 있으면 그 자리에서 실격이다.
+
+둘째 관문은 KMS 쪽이다. KMS 는 새 키 정책을 받을 때 "이 정책을 넣는 신원이 다음에도 이 키 정책을 고칠 수 있는가"를 확인한다. 그 신원에게 `kms:PutKeyPolicy` 를 허용해 두면 통과하고, 빠뜨리면 apply 가 거부된다 — 정책을 넣은 순간 키를 되돌릴 수 있는 사람이 사라지기 때문이다.
+
+두 관문을 함께 통과하는 형태가 관리 권한은 `kms:CallerAccount` 조건으로 계정 전체에 위임하고, 서비스에는 사용 권한만 따로 주는 구성이다.
+
+</details>
+
+:::danger[치명 함정]
+관리 statement 하나로 끝나지 않는다. AWS 서비스가 **자기 이름으로**(서비스 principal 로) 키를 부르는 경로는 `kms:CallerAccount` 조건으로 덮이지 않으므로, 그 소비자마다 **별도 statement 를 직접** 써야 한다. set-03 은 bucket 키에 `cloudfront.amazonaws.com`(`aws:SourceAccount` 조건), function 키에 `lambda.amazonaws.com`(`kms:EncryptionContext` 조건)을 명시하고, db 키에도 사용 주체인 `book_pod`·`book_function` 역할을 최소 액션으로 따로 적어 둔다.
+
+관리자 principal 을 배포자 ARN 하나로 좁혔다면 함정이 하나 더 붙는다 — 그 신원이 아닌 자격증명으로 apply·eksctl·kubectl 을 실행하는 순간 그 키의 모든 작업이 거부된다. set-03 정답지가 계정 위임을 쓰는 이상 이 제약은 없지만, 배포자 고정 방식을 골랐다면 도구 전부를 같은 자격증명으로 돌려야 한다.
+:::
+
+**④ 세트별 차이** — root-less 는 set-03 유형의 유의사항이 있을 때만. 평상시(set-02)는 root 위임이 단순하고 안전하다. 과제지 유의사항을 먼저 읽고 결정한다.
+
+---
+
+## 4. 서비스별 CMK 분리 vs 관리형 키 — 불필요 리소스 감점
+
+**① 한 줄 정의** — 과제지가 이름을 준 서비스에만 CMK 를 만들고, 나머지는 AWS 관리형 키를 쓴다.
+
+**② 왜 필요한가 (채점 관점)** — set-02 유의사항 10 은 "불필요 리소스 생성 감점". mark 3-1(ECR)은 `encryptionType == KMS` 만 검사하고 과제에 ECR 용 CMK 이름이 없다 → CMK 를 만들면 오히려 감점.
+
+**③ 핵심 원리** — set-02 실측 판단:
+
+| 서비스 | 키 | 근거 |
+|---|---|---|
+| S3 | CMK `wskorea26-s3-key` | 과제지에 이름 명시 |
+| DynamoDB | CMK `wskorea26-dynamodb-key` | 과제지에 이름 명시 |
+| EKS secrets | CMK `wskorea26-eks-key` | 과제지에 이름 명시 |
+| ECR | **관리형 `aws/ecr`** | 이름 없음 + mark 는 encryptionType 만 검사 |
+
+```hcl title="ecr.tf"
+# encryption_type 만 KMS, kms_key 미지정 = aws/ecr 관리형
+encryption_configuration {
+  encryption_type = "KMS"
+}
+```
+
+**④ 세트별 차이** — set-03 은 ECR 용 CMK 이름(`wsc2026-ecr-kms`)이 과제에 있어 CMK 를 만든다. **판단 기준은 항상 과제지의 이름 명시 여부.**
+
+### set-07 은 키를 나누는 축 자체가 다르다 :badge[실측]{variant=note}
+
+여기까지는 "서비스 하나에 키 하나"를 전제로 한다. [set-07 `kms.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/terraform/kms.tf)는 그 전제를 버린다.
+
+| | set-02 | set-07 |
+|---|---|---|
+| 나누는 기준 | **리소스별** | **용도별** |
+| 키 1 | `s3-key` → S3 | `unicorn-kms-app` → DynamoDB · Secrets Manager |
+| 키 2 | `dynamodb-key` → DynamoDB | `unicorn-kms-data` → S3 · ECR |
+| 키 3 | `eks-key` → EKS Secret | `unicorn-kms-platform` → EKS Secret · EBS · 로그 · WAF 로그 |
+| 회전 | `enable_key_rotation` 만 | `rotation_period_in_days = 90` |
+| 리전 | 단일 | **platform 은 다중 리전 키(MRK)** |
+
+키 개수는 셋으로 같은데 **어느 서비스가 어느 키를 쓰는지가 전부 다르다.** set-02 는 S3 와 DynamoDB 가 다른 키를 쓰고, set-07 은 S3 와 ECR 이 같은 키를 쓴다. "리소스마다 키 하나"를 규칙으로 외우면 set-07 에서 키를 여섯 개 만들어 놓고 왜 틀렸는지 모른다.
+
+**platform 키가 다중 리전인 이유는 WAF 다.** CloudFront 용 WAF 는 `us-east-1` 에만 존재하는데 그 로그도 같은 키로 암호화해야 하고, 단일 리전 키는 다른 리전에서 못 쓴다. 그래서 서울에 원본 키를 두고 `us-east-1` 에 복제 키를 만든다. **리전을 넘는 요구가 키 설계를 바꾼 사례다** — 7절이 WAF 쪽에서 같은 이야기를 반대편에서 한다.
+
+회전 주기도 채점 대상이다. `mark 2-1-A` 가 세 키를 alias 로 역조회해 `[KeyRotationEnabled, RotationPeriodInDays]` 를 함께 뽑는다. 회전만 켜고 주기를 안 적으면 기본 365일이 나와 틀린다.
+
+---
+
+## 5. S3 보안 구성 — 퍼블릭 차단 4종 + SSE-KMS + BucketKey
+
+**① 한 줄 정의** — 정적 웹 버킷은 퍼블릭 액세스 4종을 전부 차단하고, CMK 로 SSE-KMS 암호화하되 BucketKey 로 KMS 호출을 줄인다.
+
+퍼블릭 액세스 차단이 접근 통제 4층 중 어디에 해당하는지, SSE-KMS 가 다른 암호화 방식과 무엇이 다른지는 [s3-basics](/start/s3-basics/)에 있다.
+
+**② 왜 필요한가 (채점 관점)** — mark 2-2 가 퍼블릭 차단 상태와 암호화 키를 검사하고, `get-bucket-policy-status` 가 `IsPublic: false` 를 반환하려면 OAC 버킷 정책이 있어야 한다. 버킷 이름은 `wskorea26-concert-bucket-<비번호>` — 비번호 변수화 필수.
+
+**③ 핵심 원리** — set-02 s3.tf 실측:
+
+```hcl
+resource "aws_s3_bucket_public_access_block" "web" {
+  bucket                  = aws_s3_bucket.web.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true   # 4종 전부 true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "web" {
+  bucket = aws_s3_bucket.web.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3.arn
+    }
+    bucket_key_enabled = true   # 버킷 수준 DEK 재사용 → KMS 호출/비용 절감
+  }
+}
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+버킷 두 속성을 [`aws_s3_bucket_public_access_block`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_public_access_block) 과 [`aws_s3_bucket_server_side_encryption_configuration`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_server_side_encryption_configuration) 이라는 별도 리소스로 각각 건다. 퍼블릭 차단은 네 항목을 모두 true 로 두어야 채점을 통과하고, 기본 암호화는 알고리즘을 `aws:kms` 로 두고 어느 키인지까지 지정한다. `bucket_key_enabled` 는 객체마다 KMS 를 부르는 대신 버킷 수준에서 DEK 를 재사용하게 해 호출 수와 비용을 줄인다.
+
+</details>
+
+객체 업로드도 Terraform 으로 (mark 2-1 이 키 경로 `web/main/index.html` 등을 정확히 검사):
+
+```hcl
+resource "aws_s3_object" "static" {
+  for_each               = toset(["index.html", "main.jpeg"])
+  bucket                 = aws_s3_bucket.web.id
+  key                    = "web/main/${each.value}"
+  source                 = "${local.provided_dir}/${each.value}"
+  source_hash            = filemd5("${local.provided_dir}/${each.value}")
+  content_type           = lookup(local.content_types, regex("[^.]+$", each.value), "application/octet-stream")
+  server_side_encryption = "aws:kms"
+  kms_key_id             = aws_kms_key.s3.arn
+}
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+정적 파일 두 개를 [`aws_s3_object`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_object) 로 올린다. `for_each` 의 각 값이 파일명이 되고 키는 `web/main/` 접두어가 붙는다. `source_hash` 는 파일 내용이 바뀌었을 때만 다시 올리게 하고, `content_type` 은 확장자를 `regex` 로 뽑아 매핑에서 찾되 없으면 기본값으로 떨어진다 — 이 값이 틀리면 브라우저가 HTML 을 파일로 내려받는다.
+
+</details>
+
+:::caution
+`content_type` 을 안 주면 브라우저가 html 을 다운로드해 버린다.
+:::
+
+**④ 세트별 차이** — 객체 경로(prefix)·파일 목록·버킷 이름 규칙이 바뀐다. 전부 변수/locals 로 처리.
+
+---
+
+## 6. CloudFront OAC + 버킷 정책 + 순환 참조 우회
+
+**① 한 줄 정의** — OAC(Origin Access Control)는 CloudFront 가 S3 에 SigV4 서명으로 접근하게 하는 장치이고, 버킷 정책은 `AWS:SourceArn = 배포 ARN` 조건으로 그 배포에게만 GetObject 를 허용한다. OAC 가 원본을 비공개로 유지하는 구조 자체는 [s3-basics 의 OAC 절](/start/s3-basics/#cloudfront-oac--원본을-비공개로-유지하는-구조)에 있다.
+
+**② 왜 필요한가 (채점 관점)** — "버킷 직접 접근 불가 + CloudFront 경유만 가능"이 정적 웹 채점의 표준형. 퍼블릭 차단 4종과 양립하는 유일한 정상 경로가 OAC 다.
+
+**③ 핵심 원리**:
+
+```mermaid
+sequenceDiagram
+    participant U as 사용자
+    participant CF as CloudFront (OAC, 배포 ARN)
+    participant S3 as S3 버킷 (퍼블릭 차단)
+    participant K as KMS wskorea26-s3-key
+
+    U->>CF: GET / (https)
+    CF->>S3: GetObject web/main/index.html (SigV4 서명)
+    Note over S3: 버킷 정책: principal=cloudfront.amazonaws.com<br/>+ AWS:SourceArn = 배포 ARN
+    S3->>K: Decrypt (SSE-KMS 객체)
+    Note over K: 키 정책: cloudfront.amazonaws.com<br/>+ aws:SourceAccount 조건
+    K-->>S3: 평문 DEK
+    S3-->>CF: 객체
+    CF-->>U: 200
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+요청 한 건이 통과하는 관문 둘이다. CloudFront 가 OAC 로 SigV4 서명을 붙여 S3 를 부르면 버킷 정책이 서비스 주체와 `AWS:SourceArn`(배포 ARN)을 확인하고, 객체가 SSE-KMS 라 S3 가 이어서 KMS 에 복호화를 요청하면 키 정책이 `aws:SourceAccount` 를 확인한다. 둘 중 하나만 막혀도 사용자는 403 을 본다 — 버킷 정책만 고쳐 두고 키 정책을 빠뜨리는 실수가 여기서 드러난다.
+
+</details>
+
+버킷 정책 (set-02 실측 — 여기는 배포 ARN 직접 참조가 맞다):
+
+```hcl
+data "aws_iam_policy_document" "web_bucket" {
+  statement {
+    sid       = "AllowCloudFrontOAC"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.web.arn}/*"]
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.cdn.arn]
+    }
+  }
+}
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+OAC 를 받는 버킷 정책이다. `principals` 가 사람이 아니라 CloudFront 서비스이고, `AWS:SourceArn` 조건이 그 배포 하나로 범위를 좁힌다. 키 정책과 달리 여기서는 배포 ARN 을 직접 참조해도 순환이 생기지 않는다 — 버킷 정책은 배포가 만들어진 뒤에 붙기 때문이다.
+
+</details>
+
+**순환 참조 함정** — 같은 방식으로 **KMS 키 정책**에도 배포 ARN 을 넣으면:
+
+```mermaid
+graph LR
+    K@{ icon: "logos:aws-kms", form: "square", label: "KMS key<br/>(정책이 배포 ARN 참조)", pos: "b", h: 46, w: 46 }
+    D@{ icon: "logos:aws-cloudfront", form: "square", label: "CloudFront distribution<br/>(origin 이 bucket 참조)", pos: "b", h: 46, w: 46 }
+    B@{ icon: "logos:aws-s3", form: "square", label: "S3 bucket<br/>(SSE 설정이 key 참조)", pos: "b", h: 46, w: 46 }
+    K --> D
+    D --> B
+    B --> K
+```
+
+<details class="diagram-note">
+<summary>이 도식이 보여주는 것</summary>
+
+apply 가 거부되는 순환 참조의 모양이다. 키 정책이 배포 ARN 을, 배포가 버킷을, 버킷의 암호화 설정이 다시 키를 참조해 화살표가 한 바퀴 돈다. Terraform 은 참조 관계로 생성 순서를 정하므로 시작점이 없는 이 고리를 만들 수 없다. 고리를 끊는 자리는 키 정책이다 — 배포 ARN 대신 계정 조건으로 바꾼다.
+
+</details>
+
+:::danger[순환 참조]
+`key → distribution → bucket → key` 순환으로 plan 이 실패한다. **우회: 키 정책은 배포 ARN 대신 `aws:SourceAccount = 계정ID` 조건**을 쓴다 (버킷 정책은 bucket→distribution 단방향이라 ARN 직접 참조 가능).
+:::
+
+OAC 리소스와 오리진 연결 (set-02 실측):
+
+```hcl
+resource "aws_cloudfront_origin_access_control" "s3" {
+  name                              = "wskorea26-s3-oac"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+origin {
+  origin_id                = var.s3_origin_id
+  domain_name              = aws_s3_bucket.web.bucket_regional_domain_name
+  origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
+  origin_path              = "/web/main"   # 루트(/) → web/main/index.html
+}
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+[`aws_cloudfront_origin_access_control`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_origin_access_control) 로 OAC 를 만들고 오리진에 붙이는 부분이다. `signing_behavior = "always"` 는 CloudFront 가 모든 요청에 SigV4 서명을 붙인다는 뜻이라 버킷을 비공개로 둘 수 있다. `domain_name` 은 웹사이트 엔드포인트가 아니라 리전 도메인이어야 하고, `origin_path` 가 `/web/main` 이라 사용자의 `/` 요청이 `web/main/index.html` 로 이어진다.
+
+</details>
+
+배포 식별: mark 는 `comment` 값(`wskorea26-concert-cf`)으로 배포를 찾는다 — comment 도 채점 대상.
+
+**④ 세트별 차이** — set-02/03 공통으로 OAC + SourceArn 버킷 정책 + SourceAccount 키 정책. 오리진 수(S3 단독 vs S3+ALB), behavior(경로 패턴, CloudFront Function), price class 가 세트마다 다르다.
+
+---
+
+## 7. WAF — Web ACL 구조와 스코프
+
+**① 한 줄 정의** — WAF Web ACL은 priority(우선순위)가 매겨진 규칙(rule) 목록이다. 각 규칙은 매치 조건(statement)과 처리(action)를 갖고, CloudFront에 붙이면 scope는 `CLOUDFRONT`(항상 us-east-1), ALB에 직접 붙이면 `REGIONAL`(보호 대상과 같은 리전)이다.
+
+**② 왜 필요한가 (채점 관점)** — 후보 세트 중 set-03·set-07 은 WAF를 채점하고 set-02 는 아예 없다. 그런데 확인 방식이 다르다.
+
+set-03 mark 10-1 은 세 가지를 본다. `aws wafv2 list-web-acls`로 리소스 자체를 조회하고, SQLi/XSS payload(`booking_id=1' OR 1=1--`, `<script>alert(1)</script>`)를 실제로 던져 403을 확인하고, rate 규칙의 `Limit` 값을 API로 읽어 200 이하인지 본다.
+
+set-07 은 `aws wafv2` 호출이 전혀 없다. XSS 프로브 상태 코드와 연속 요청 후 상태만 보는 curl 블랙박스 테스트다.
+
+두 세트 모두 이름만 맞고 실제로 안 막으면 감점이다.
+
+**③ 핵심 원리**
+
+Scope 비교:
+
+| 항목 | `CLOUDFRONT` | `REGIONAL` |
+|---|---|---|
+| 붙는 대상 | CloudFront 배포 | ALB·API Gateway·AppSync 등 |
+| Web ACL 생성 리전 | 항상 `us-east-1` (provider alias 필수) | 보호 리소스와 같은 리전(서울) |
+| 후보 세트 실측 | set-03·set-07 전부 이 방식 — S3+ALB+Lambda 를 CloudFront 하나로 묶어 앞단 1곳만 보호 | 후보 세트엔 없음 — CloudFront 없이 ALB 를 단독 노출하면 이 스코프 |
+
+us-east-1 provider alias 는 [hcl-basics](/start/hcl-basics/)에서 다룬 패턴 그대로다 — CloudFront 용 ACM 인증서와 같은 이유로 고정된다.
+
+<details class="build-step">
+<summary>지금 확인하기 — `CLOUDFRONT` 스코프가 정말 us-east-1 에만 있나</summary>
+
+표의 둘째 줄은 외울 것이 아니라 확인할 것이다. **조회만 하므로 아무것도 만들지 않고 과금도 없다.** Web ACL 이 하나도 없는 계정에서도 된다.
+
+먼저 맞는 리전에서.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 --query "WebACLs[].Name" --output json
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 --query 'WebACLs[].Name' --output json
+  ```
+  </TabItem>
+</Tabs>
+
+기대: 이름 배열이 나온다. 아직 만든 것이 없으면 `[]` 다. **에러가 아니라 빈 배열이 정상이다.**
+
+이번엔 리전만 서울로 바꿔 같은 것을 묻는다.
+
+<Tabs syncKey="shell">
+  <TabItem label="PowerShell">
+  ```powershell
+  aws wafv2 list-web-acls --scope CLOUDFRONT --region ap-northeast-2 --query "WebACLs[].Name" --output json
+  ```
+  </TabItem>
+  <TabItem label="Bash (Linux/CloudShell)">
+  ```bash
+  aws wafv2 list-web-acls --scope CLOUDFRONT --region ap-northeast-2 --query 'WebACLs[].Name' --output json
+  ```
+  </TabItem>
+</Tabs>
+
+기대: **빈 배열이 아니라 에러다.** :badge[실측]{variant=note}
+
+```
+An error occurred (WAFInvalidParameterException) when calling the ListWebACLs operation:
+Error reason: The scope is not valid., field: SCOPE_VALUE, parameter: CLOUDFRONT
+```
+
+"서울에는 없다"가 아니라 **"서울에서는 그 스코프를 물을 수조차 없다"** 는 뜻이다. `CLOUDFRONT` 스코프는 리전을 넘나드는 개념이 아니라 `us-east-1` 이라는 한 곳에만 존재한다.
+
+이 사실이 `provider = aws.use1` 한 줄의 근거다. 그리고 4절에서 본 platform 키가 다중 리전이어야 하는 이유이기도 하다 — WAF 로그가 여기 있으니 키도 여기까지 따라와야 한다.
+
+`Could not connect to the endpoint URL` 이 나오면 리전 이름 오타다.
+
+</details>
+
+Web ACL 내부 구조 — set-07 실측(관리형 규칙 그룹 사용):
+
+```hcl title="waf.tf (set-07)"
+resource "aws_wafv2_web_acl" "unicorn" {
+  provider = aws.use1          # CLOUDFRONT scope는 반드시 us-east-1
+  scope    = "CLOUDFRONT"
+  default_action {
+    allow {}                   # 어떤 rule 도 안 걸리면 통과
+  }
+
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 1                # 숫자가 작을수록 먼저 평가
+    override_action {
+      none {}                   # 그룹 안 각 규칙이 자기 action 그대로 수행
+    }
+    statement {
+      managed_rule_group_statement {
+        vendor_name = "AWS"
+        name        = "AWSManagedRulesCommonRuleSet"
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "common-rule-set"
+      sampled_requests_enabled   = true
+    }
+  }
+  # priority 2: AWSManagedRulesKnownBadInputsRuleSet (구조 동일)
+  # priority 3: rate_based_statement(limit=50, IP, 60초) → custom_response(403)
+}
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+[`aws_wafv2_web_acl`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/wafv2_web_acl) 로 만든 set-07 방식의 Web ACL 이다. CloudFront 에 붙이는 ACL 은 반드시 us-east-1 에 만들어야 해서 별칭 프로바이더를 쓴다. 기본 액션이 `allow` 라 규칙에 걸린 요청만 막히고, 규칙은 priority 오름차순으로 평가된다. `override_action.none` 은 관리형 그룹 안 각 규칙이 자기 동작을 그대로 수행하라는 뜻이다 — `count` 로 바꾸면 차단 대신 집계만 한다.
+
+`visibility_config` 는 이 규칙의 관측 설정이고 세 필드가 필수다. `cloudwatch_metrics_enabled` 는 규칙별 매치 수를 CloudWatch 메트릭으로 내보낼지, `metric_name` 은 그 메트릭에 붙일 이름, `sampled_requests_enabled` 는 매치된 요청 표본을 콘솔에서 볼 수 있게 남길지 정한다. 오탐 대응이 이 표본에서 시작하므로 두 값을 `true` 로 켜 둔다.
+
+</details>
+
+- **priority**: 숫자가 작을수록 먼저 평가한다. 먼저 매치되고 **terminating action**(Block·Allow — Count 는 non-terminating)을 낸 규칙에서 평가가 즉시 끝난다.
+- **action 자리는 두 종류**: 직접 짠 매치 조건(리프 규칙)엔 `action { block{} / allow{} / count{} }`, 관리형 규칙 그룹·규칙 그룹 참조엔 `override_action { none{} / count{} }` — 그룹 전체를 통으로 Count 전환할 때만 쓴다.
+- **RuleActionOverrides**: 그룹 안의 특정 하위 규칙 하나만 Count 로 바꾸는 세 번째 계층. `managed_rule_group_statement` 안에 이름을 지정해 넣는다(`rule_action_override { name = "SizeRestrictions_BODY"; action_to_use { count {} } }`). 그룹 전체가 아니라 오탐을 낸 그 규칙 하나만 죽이므로 나머지 보호는 유지된다.
+
+:::note[정상 요청이 403 이 나올 때]
+관리형 규칙 그룹이 정상 요청을 오차단하면 이 순서로 좁힌다.
+
+1. CloudWatch sampled requests 로 원인 규칙을 특정한다.
+2. 그 규칙만 RuleActionOverrides 로 Count 전환한다.
+3. 정상 요청이 통과하는지 검증한다.
+4. 문제가 해결됐으면 다시 Block 으로 되돌린다.
+
+명령어 수준 절차는 [트러블슈팅](/reference/troubleshooting/)의 "정상 요청이 403" 항목에 있다.
+:::
+
+set-03 은 관리형 규칙 그룹을 아예 쓰지 않는다 — SQLi/XSS 를 리프 규칙(`sqli_match_statement`/`xss_match_statement`)으로 직접 짜고 action 도 자기 것이다:
+
+```hcl title="waf.tf (set-03)"
+rule {
+  name     = "${var.name_prefix}-sqli"
+  priority = 1
+  action {
+    block {}
+  }
+  statement {
+    sqli_match_statement {
+      field_to_match {
+        query_string {}
+      }
+      sensitivity_level = "HIGH"
+      text_transformation {
+        priority = 0
+        type     = "URL_DECODE"
+      }
+    }
+  }
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${var.name_prefix}-sqli"
+    sampled_requests_enabled   = true
+  }
+}
+# priority 2: xss_match_statement (구조 동일, text_transformation 2단: URL_DECODE → HTML_ENTITY_DECODE)
+# priority 3: rate_based_statement(limit=200, IP, 60초) → block
+```
+
+<details class="diagram-note">
+<summary>이 블록이 하는 일</summary>
+
+set-03 방식은 관리형 그룹 대신 매치 구문을 직접 쓴다. 검사 대상이 `query_string` 이고 동작이 `block` 이며, `text_transformation` 이 검사 전에 값을 정규화한다 — URL 인코딩으로 우회하는 페이로드를 잡기 위해서다. XSS 규칙은 같은 구조에 변환을 2단(`URL_DECODE` 다음 `HTML_ENTITY_DECODE`)으로 쓴다.
+
+</details>
+
+이 경우는 규칙을 직접 소유하므로 오탐이 나면 `action`을 바로 `count{}`로 바꿔 검증하면 된다 — 관리형 그룹처럼 RuleActionOverrides 가 따로 필요 없다.
+
+**로깅**: set-07 은 `aws_wafv2_web_acl_logging_configuration` 리소스로 평가 로그를 CloudWatch Logs 에 남긴다. 로그 그룹 이름은 반드시 `aws-waf-logs-` 로 시작하고, us-east-1 에 Platform CMK 암호화로 만든다.
+
+로그 배달 주체(`delivery.logs.amazonaws.com`)가 그 로그 그룹에 쓸 수 있도록 리소스 정책을 별도로 붙여야 로깅 설정 자체가 성공한다.
+
+set-03 은 과제지에 로깅 요구가 없어 로깅 설정을 만들지 않는다 — **과제지에 없으면 안 만드는 원칙(4절)은 여기도 동일**하다.
+
+**④ 세트별 차이**:
+
+| | set-02 | set-03 | set-07 |
+|---|---|---|---|
+| WAF | 없음 | 커스텀 SQLi/XSS 매치 + Rate(200/60s), 로깅 없음 | 관리형 규칙 그룹(Common+KnownBadInputs) + Rate(50/60s) + 커스텀 응답(403) + 로깅 |
+| 배점(30점 만점) | — | 1.5 | 2.5 (Managed Rule Test 1.0 + Rate limit 1.5, 두 항목에 분산) |
+| 채점 방식 | — | `list-web-acls` API 조회 + 실제 payload curl + `Limit` 값 조회 | 순수 curl 블랙박스(상태 코드만, API 조회 없음) |
+
+관리형 규칙 그룹은 후보 세트에 `AWSManagedRulesCommonRuleSet`·`AWSManagedRulesKnownBadInputsRuleSet` 둘만 나온다 — `AWSManagedRulesSQLiRuleSet`은 후보 세트 어디에도 없다(set-03 이 SQLi 를 커스텀 매치로 직접 구현하는 이유). set-06(후보 밖)의 커스텀 응답(405/403) 패턴은 [변동 드릴](/reference/variation-drill/)에 별도로 있다.
+
+---
+
+## 자기 점검 퀴즈
+
+<Quiz title="키 정책 — use 액션 골라내기">
+키 정책의 **use(사용)** statement 에 들어가는 액션을 모두 고르라.
+
+- [x] `kms:Decrypt`
+- [x] `kms:GenerateDataKey*`
+- [x] `kms:Encrypt`
+- [ ] `kms:ScheduleKeyDeletion`
+  > 키 삭제 예약은 관리(admin) 액션이다. 사용자 역할에 이걸 주면 최소권한이 깨지고, 채점도 이 구조를 본다.
+- [ ] `kms:PutKeyPolicy`
+  > 키 정책 자체를 갈아끼우는 관리(admin) 액션. use 쪽에 섞이면 "키를 쓰는 역할이 키 정책을 다시 쓸 수 있다"는 권한 상승이 된다.
+
+**use**: `kms:Encrypt`, `kms:Decrypt`, `kms:GenerateDataKey*`, `kms:DescribeKey`, `kms:CreateGrant` — 키를 실제로 쓰는 역할/서비스 principal 에게.
+**admin**: `kms:Create*`, `kms:Put*`, `kms:Enable*`/`Disable*`, `kms:ScheduleKeyDeletion`, `kms:TagResource` — 계정 root 또는 배포자 IAM 신원에게.
+
+관리 주체와 사용 주체가 다르므로 분리해 최소권한을 만든다. IAM 정책과 달리 KMS 는 **키 정책이 없으면 그 누구도(관리자 포함) 키에 접근하지 못한다**는 점이 분리의 전제다. 소비자에게 보통 필요한 최소 조합은 읽기면 `kms:Decrypt`, 쓰기까지면 `+ kms:GenerateDataKey`.
+</Quiz>
+
+<Quiz title="ECR 에 CMK 를 만들면 안 되는 이유">
+set-02 에서 ECR 에 전용 CMK 를 만들면 안 되는 이유는?
+
+- [x] 과제지에 ECR 용 CMK 이름이 없고 mark 3-1 은 `encryptionType == KMS` 만 검사한다 — CMK 를 만들면 유의사항 10 "불필요 리소스 생성" 감점
+- [ ] ECR 은 고객 관리 키(CMK)를 지원하지 않는다
+  > 지원한다. set-03 은 실제로 `wsc2026-ecr-kms` CMK 를 만들어 지정한다. 판단 기준은 기술적 가능 여부가 아니라 **과제지의 이름 명시 여부**다.
+- [ ] CMK 를 지정하면 `encryptionType` 이 `KMS` 가 아닌 값으로 나와 mark 3-1 검사에 실패한다
+  > 그럴듯하지만 사실이 아니다. CMK 를 지정해도 `encryptionType` 은 `KMS` 다. 감점 사유는 순전히 "요구되지 않은 리소스를 만들었다"는 것.
+- [ ] 계정당 CMK 개수 제한에 걸려 s3/dynamodb/eks 키를 못 만든다
+
+과제에 ECR 용 CMK 이름이 없고 mark 3-1 은 `encryptionType == KMS` 만 검사한다. 관리형 `aws/ecr` 로 충분하며, CMK 를 만들면 "불필요 리소스 생성" 감점(유의사항 10)이다.
+
+```hcl
+# ecr.tf — encryption_type 만 KMS, kms_key 미지정 = aws/ecr 관리형
+encryption_configuration {
+  encryption_type = "KMS"
+}
+```
+
+set-02 에서 CMK 를 만드는 대상은 과제지에 이름이 있는 셋뿐이다: `wskorea26-s3-key`, `wskorea26-dynamodb-key`, `wskorea26-eks-key`.
+</Quiz>
+
+<Quiz title="set-03 root-less 키 정책">
+set-03 유형(키 정책에 root principal·`kms:*` 금지)에 대해 옳은 것을 모두 고르라.
+
+- [x] `kms:*` 를 못 쓰므로 관리 액션을 개별 나열하되, 관리 statement 에 `kms:Put*` 가 있어야 KMS lockout safety check(호출 신원의 후속 `PutKeyPolicy` 가능 여부 검사)를 통과한다
+- [x] 관리자 principal 을 `"*"` 로 두고 `kms:CallerAccount` 조건으로 계정을 못 박으면, `:root` 문자열 없이 계정 위임과 같은 효과를 낸다
+- [ ] root principal 을 넣되 Condition 으로 제한하면 mark 의 grep 을 피할 수 있다
+  > set-03 mark 의 check_kms 는 정책 **텍스트를 grep** 한다. Condition 이 붙어 있든 말든 `:root` 문자열이 남으면 실격이다.
+- [ ] 관리 액션을 전부 빼면 "최소권한"이 되어 lockout safety check 도 함께 통과한다
+  > 정반대다. KMS 는 키 정책에 관리 액션이 남아 있어야 apply 를 받아 준다. 관리 액션을 전부 빼면 그 키를 되돌릴 수 있는 신원이 사라지므로 KMS 가 정책 자체를 거부한다.
+- [ ] 계정 위임만 있으면 서비스 principal 은 자동으로 키를 쓸 수 있다
+  > `kms:CallerAccount` 조건은 서비스가 자기 이름으로 부르는 경로를 덮지 못한다. 키 소비자(EKS Pod 역할, Lambda 실행 역할, 서비스 principal)를 키 정책에 **직접** 나열해야 한다. set-03 은 db 키에 `book_pod`/`book_function` 역할을, bucket 키에 `cloudfront.amazonaws.com`(SourceAccount 조건)을, function 키에 `lambda.amazonaws.com`(EncryptionContext 조건)을 명시한다.
+
+`kms:*` 를 못 쓰는 조건에서 관리 액션을 개별 나열해야 KMS lockout safety check 를 통과한다. 그리고 관리자 principal 은 `arn:...:root` 대신 `"*"` + `kms:CallerAccount` 조건으로 쓴다 — 문자열 `:root` 를 남기지 않으면서 계정 위임과 같은 효과를 낸다.
+
+계정 위임을 고르는 실무 이유: 과제지가 별도 IAM 사용자를 지시하지 않으면 채점자는 지급 계정 root 로 접속한다. 관리자를 배포자 신원 하나로 좁히면 채점 스크립트가 `get-key-policy` 조차 못 해 KMS 항목이 통째로 날아간다.
+
+root-less 는 set-03 유형의 유의사항이 있을 때만 쓴다. 평상시(set-02)는 root 위임이 단순하고 안전하다 — 과제지 유의사항을 먼저 읽고 결정할 것.
+</Quiz>
+
+<Quiz title="순환 참조 우회">
+KMS 키 정책에 CloudFront 배포 ARN 을 직접 넣으면 `key → distribution → bucket → key` 순환 참조로 plan 이 실패한다. 우회책은 배포 ARN 대신 principal 을 `cloudfront.amazonaws.com` 으로 두고 계정 ID 를 거는 조건 키를 쓰는 것이다. 그 조건 키 이름은 [[aws:SourceAccount]] 다.
+
+---
+
+키 정책은 `aws:SourceAccount = 계정ID` 조건으로 우회한다.
+
+- **왜 순환인가**: 키 정책이 배포 ARN 참조 → 배포의 origin 이 버킷 참조 → 버킷의 SSE 설정이 키 참조 → 고리 완성. Terraform 은 그래프에 고리가 생기면 apply 를 거부한다.
+- **버킷 정책은 왜 괜찮은가**: bucket → distribution 단방향이라 배포 ARN 을 직접 참조해도 고리가 안 생긴다. 그래서 버킷 정책 쪽은 `AWS:SourceArn = 배포 ARN` 이 맞다.
+</Quiz>
+
+<Quiz title="퍼블릭 차단 4종과 OAC">
+퍼블릭 액세스 차단 4종이 전부 true 인 버킷을 CloudFront 가 읽을 수 있는 이유는?
+
+- [x] OAC 가 SigV4 로 서명한 요청은 "퍼블릭"이 아니라 인증된 서비스 요청이고, 버킷 정책의 `AWS:SourceArn = 배포 ARN` Allow statement 가 그 요청만 허용하기 때문
+- [ ] OAI(Origin Access Identity)가 특별 IAM 사용자로서 퍼블릭 차단을 우회하기 때문
+  > OAI 는 구형 방식이고 SSE-KMS 와 궁합이 나쁘다. 현행 표준은 OAC(SigV4 서명)이며, 어느 쪽도 차단을 "우회"하는 게 아니라 정식 인증 요청으로 통과하는 것이다.
+- [ ] `block_public_policy` 만 false 로 두어야 CloudFront 용 버킷 정책을 붙일 수 있기 때문
+  > 4종 **전부 true** 가 mark 2-2 검사 대상이다. 하나라도 false 면 감점이고, OAC 버킷 정책은 애초에 퍼블릭 정책이 아니라 차단되지 않는다.
+- [ ] CloudFront 가 S3 웹사이트 호스팅 엔드포인트로 접근하기 때문
+  > 웹사이트 엔드포인트는 퍼블릭 접근이 전제라 차단 4종과 양립하지 않는다. set-02 오리진은 `bucket_regional_domain_name`(REST 엔드포인트) + OAC 다.
+
+OAC 가 SigV4 로 서명한 요청은 인증된 서비스 요청이며, 버킷 정책의 `AWS:SourceArn = 배포 ARN` Allow statement 가 그 요청만 허용한다. 퍼블릭 차단 4종과 양립하는 유일한 정상 경로가 OAC 다.
+
+`get-bucket-policy-status` 가 `IsPublic: false` 를 반환하는 것도 이 구조 덕분이다. SSE-KMS 객체이므로 S3 가 대신 `kms:Decrypt` 를 호출하고, 그건 키 정책의 `cloudfront.amazonaws.com` + `aws:SourceAccount` statement 가 받아준다.
+</Quiz>
+
+<Quiz title="WAF 스코프 고르기">
+CloudFront 배포에 WAF Web ACL을 연결하려 한다. scope와 생성 리전으로 옳은 것은?
+
+- [x] scope `CLOUDFRONT`, us-east-1에 생성(provider alias 필수)
+- [ ] scope `CLOUDFRONT`, 리소스가 있는 서울(ap-northeast-2)에 생성
+  > scope는 맞지만 리전이 틀렸다. `CLOUDFRONT` scope Web ACL은 **항상 us-east-1**에서만 만들 수 있다 — CloudFront가 글로벌 서비스이기 때문이다.
+- [ ] scope `REGIONAL`, us-east-1에 생성
+  > `REGIONAL`은 ALB·API Gateway처럼 특정 리전에 있는 리소스에 붙일 때 쓴다. CloudFront는 글로벌 리소스이므로 `CLOUDFRONT` scope다.
+- [ ] scope `REGIONAL`, 리소스가 있는 서울에 생성
+  > scope 자체가 틀렸다. ALB에 직접 붙이는 경우라면 맞는 조합이지만, 질문은 **CloudFront** 배포 기준이다.
+
+CloudFront는 글로벌 서비스라 Web ACL도 `scope = "CLOUDFRONT"`, 리전은 항상 `us-east-1`(provider alias 필요)이다. ALB처럼 특정 리전 리소스에 직접 붙일 때만 `REGIONAL` + 그 리소스와 같은 리전을 쓴다. set-03·set-07은 둘 다 S3+ALB+Lambda를 CloudFront 하나로 묶어 앞단만 보호하므로 전부 `CLOUDFRONT` scope다.
+</Quiz>
+
+<Quiz title="관리형 규칙 오탐 대응">
+set-07 스타일로 `AWSManagedRulesCommonRuleSet`을 붙였는데, 정상적인 예약 요청 하나가 그룹 안의 `SizeRestrictions_BODY` 규칙에 걸려 403이 난다. 그룹의 나머지 보호(XSS·SQLi 등)는 그대로 유지하면서 이 규칙만 무력화하려면?
+
+- [x] `managed_rule_group_statement` 안에 `rule_action_override`로 `SizeRestrictions_BODY` 하나만 지정해 `count`로 바꾼다
+- [ ] 그 규칙 그룹의 `override_action`을 `count`로 바꾼다
+  > `override_action`은 그룹 전체에 적용된다. `CommonRuleSet` 전체가 Count로 빠지면 XSS·SQLi 등 나머지 보호까지 전부 무력화된다.
+- [ ] Web ACL의 `default_action`은 `allow`로 유지한 채 그 규칙만 삭제한다
+  > 관리형 규칙 그룹 안의 개별 규칙은 삭제할 수 없다 — 벤더(AWS)가 관리하는 그룹이라 규칙 목록 자체를 편집할 수 없고, override로만 행동을 바꿀 수 있다.
+- [ ] rate_based_statement의 limit 값을 올린다
+  > rate 규칙은 요청 빈도를 다루는 별개 규칙이다. `SizeRestrictions_BODY`는 요청 본문 크기를 보는 `CommonRuleSet` 안의 규칙이라 rate 규칙과 무관하다.
+
+WAF 의 action 은 세 층이다.
+
+| 층 | 필드 | 범위 |
+|---|---|---|
+| 리프 규칙 | `action { block{} / count{} }` | 직접 짠 규칙 하나 |
+| 그룹 | `override_action { none{} / count{} }` | 관리형 규칙 그룹 전체 |
+| 그룹 안 규칙 | `rule_action_override`(API 이름 `RuleActionOverrides`) | 그룹 안 이름 있는 규칙 하나 |
+
+오탐이 난 규칙 하나만 Count 로 돌리고 나머지는 Block 을 유지하는 것이 표준 절차다. 문제 규칙을 CloudWatch sampled requests 로 특정하고, Count 로 바꾼 뒤 정상 요청이 통과하는지 검증하고, 다시 Block 으로 되돌린다.
+
+set-03처럼 직접 짠 리프 규칙(`sqli_match_statement` 등)은 규칙을 자기가 소유하므로 `action` 을 바로 `count` 로 바꾸면 된다. 이 계층 구분이 필요 없다.
+</Quiz>
+
+<QuizResults confetti />

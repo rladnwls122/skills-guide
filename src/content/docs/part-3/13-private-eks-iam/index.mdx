@@ -1,0 +1,97 @@
+---
+title: 13. Fully-Private EKS + IAM 심화
+description: "fully-private EKS 운용, 머신 3분할, audit role 이중 평가 등 하드모드 학습 목표."
+sidebar:
+  order: 1
+---
+
+import { FileTree, LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+## 학습 목표
+
+- [ ] fully-private EKS의 생성 메커니즘(생성 중 퍼블릭 엔드포인트 임시 on → 완료 시 off)과 중단 시 잔존 위험을 설명할 수 있다
+- [ ] 이미지 pull 경로 2가지(NAT vs VPC Endpoint s3/ecr.api/ecr.dkr)와 **eks/eks-auth Endpoint가 Pod Identity를 깨는 함정**을 안다
+- [ ] 머신 3분할(본 PC / 일반 CloudShell / VPC CloudShell·SSM bastion)과 S3 `_transfer/` 릴레이 + 멱등(여러 번 실행해도 결과가 같은 성질) 셋업을 운용할 수 있다
+- [ ] "생성자 신원 = 채점 신원" 원칙을 설명하고 access entry로 예외 처리할 수 있다
+- [ ] CoreDNS 커스텀 도메인(kubelet clusterDomain + Corefile 패치 양쪽)을 구성할 수 있다
+- [ ] `:root` trust + `sts:ExternalId` audit role을 만들고 **assume 성공/실패를 양쪽 다 재현**할 수 있다 (이중 평가 원리)
+- [ ] 리소스 레벨 ARN 미지원 액션의 `Resource "*"` 처리와 최소권한 분리를 판단할 수 있다
+- [ ] CloudFront VPC Origin(internal ALB) + prefix list SG(403/000), KMS Multi-Region Key 구조를 안다
+
+- [ ] set-07 구성을 set-03 요구로 **직접 이행**할 수 있다 — 이 모듈만 방향이 반대다
+- [ ] 작업 호스트를 손으로 만드는 방식과 코드로 관리하는 방식의 차이를 설명할 수 있다
+- [ ] taint 와 toleration 처럼 **막는 설정과 통과하는 설정이 짝**인 것을 판정할 수 있다
+- [ ] 부팅 때만 읽는 값이 왜 노드그룹 교체인지 안다
+- [ ] **기준본에 있던 것을 지우는 판단**을 할 수 있다 — 도구가 안 잡아 주는 유일한 종류다
+- [ ] 닫힌 환경에서 이름 해석과 경로 차단을 구분해 좁힐 수 있다
+
+## 소요 시간
+
+- 1일치 분량
+- 이론 3h + 실습 4h (실습 A는 IAM만 — 과금 없음. 실습 B는 클러스터 필요 — 15 완주에서 전부 지웠으므로 새로 만든다)
+
+## 과금 리소스 & destroy 방침
+
+| 리소스 | 요금 | 비고 |
+|---|---|---|
+| IAM 역할/사용자 (실습 A) | **무료** | 실습 후 삭제 (계정 위생) |
+| EKS + 노드 (실습 B) | 약 $0.31/h | 이 모듈에서 새로 생성, 실습 후 destroy |
+| VPC Interface Endpoint | 개당 약 $0.013/h + AZ당 | 실습 B에서 만들면 반드시 삭제 |
+
+:::tip
+실습 A(IAM audit role)는 클러스터 없이 즉시 가능하고 무료 — 먼저 한다.
+:::
+
+## 선행 지식
+
+- AssumeRole은 신뢰 정책과 호출자 권한을 **양쪽 다** 평가한다 — audit role 드릴의 핵심 — [iam-basics](/start/iam-basics/)
+- 역할·권한 정책·신뢰 정책의 구분, 명시적 Deny 우선 — [iam-basics](/start/iam-basics/)
+- NAT 없는 프라이빗 서브넷에서 나가는 유일한 길은 VPC Endpoint — [vpc-basics](/start/vpc-basics/)
+- ServiceAccount = 파드의 신원 (Pod Identity가 깨지는 지점을 이해하는 전제) — [k8s-basics](/start/k8s-basics/)
+- 재접속마다 다시 도는 멱등 셋업 스크립트 작성 — [shell-basics](/start/shell-basics/)
+
+막히는 항목이 있으면 그 링크를 먼저 읽는다. 아니면 바로 다음 파일로 간다.
+
+## 선행 모듈
+
+- PART-1 (Terraform/VPC/KMS — 특히 02의 root-less KMS 키 정책, 이 모듈에서 재확인)
+- PART-2 (eksctl 클러스터 — 실습 B의 private 전환 드릴에 필요)
+- 06 관측성 · 07 1과제 완주 (private 환경에서의 배포 순서를 이해하는 배경)
+
+## 참고 경로
+
+정답지 저장소를 홈 아래(`~`)에 클론한 기준이다.
+
+<FileTree>
+
+- skills-2026
+  - set-03/task-1
+    - eksctl
+      - **cluster.yaml** privateCluster + overrideBootstrapCommand
+    - terraform
+      - **endpoints.tf** eks/eks-auth Endpoint 함정 주석
+      - **kms.tf** root-less 키 정책
+  - set-07/task-1
+    - terraform
+      - **iam.tf** audit role 완본
+    - **README.md** 머신 3분할·bastion 런북
+  - docs/src/content/docs/setlist/set-03/task-1
+    - **notes.md** 실측 함정 기록
+
+</FileTree>
+
+## 공식 문서
+
+- [EKS 프라이빗 클러스터](https://docs.aws.amazon.com/eks/latest/userguide/private-clusters.html) — 요구 엔드포인트 목록과 제약
+- [ECR용 VPC 엔드포인트](https://docs.aws.amazon.com/AmazonECR/latest/userguide/vpc-endpoints.html) — s3/ecr.api/ecr.dkr 조합
+- [IAM 정책 평가 로직](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html) — 신뢰 정책·권한 정책 이중 평가의 근거
+- [`sts:ExternalId`](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html) — audit role 실습 원문
+- [클러스터 DNS 커스터마이즈](https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/) — CoreDNS Corefile 수정
+- [CloudFront 개발자 안내서](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/) — VPC origins·prefix list 절 참조
+
+## 다음 단계
+
+<LinkButton href="/part-3/13-private-eks-iam/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-3/13-private-eks-iam/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

@@ -1,100 +1,110 @@
 <script>
-	/* 15일 척도 — 랜딩의 중심축.
+	/* 4주 척도 — 랜딩의 중심축.
 	 *
-	 * 커리큘럼은 D0 에서 D14 까지 이어지는 한 줄이다. 그래서 PART 를 카드로 흩지 않고
-	 * 페이지 한가운데를 지나는 한 줄에 꿴다. 스크롤 위치가 곧 일차 위치다.
+	 * 커리큘럼은 Week 1 에서 Week 4 까지 이어지는 한 줄이다. 그래서 PART 를 카드로 흩지 않고
+	 * 페이지 한가운데를 지나는 한 줄에 꿴다. 스크롤 위치가 곧 주차 위치다.
 	 *
 	 * GSAP ScrollTrigger 가 스크롤 진행(0~1)을 하나 만들고, 나머지는 전부 그 값에서
-	 * 파생된다 — 지금 몇 일차인지, 어느 마디까지 지나왔는지. 마디마다 트리거를 달지
+	 * 파생된다 — 지금 몇 주차인지, 어느 마디까지 지나왔는지. 마디마다 트리거를 달지
 	 * 않는 이유다. 계산이 한 군데에만 있다.
 	 *
-	 * 일차 카운터가 이 컴포넌트가 자바스크립트를 쓰는 이유다. 선이 차는 것까지는 CSS
+	 * 주차 카운터가 이 컴포넌트가 자바스크립트를 쓰는 이유다. 선이 차는 것까지는 CSS
 	 * 스크롤 구동 애니메이션으로도 되지만, 숫자를 세는 것은 안 된다.
 	 */
 	import { onMount } from 'svelte';
 
-	/** days: 눈금 개수 = 일수. from: 그 PART 가 시작하는 일차. */
+	/** ticks: 눈금 개수 = 모듈 수. from: 그 PART 가 시작하는 주차. */
 	const STOPS = [
 		{
-			part: 'PART 0',
-			day: 'D0',
-			from: 0,
+			part: '시작',
+			day: 'Week 1',
+			from: 1,
 			days: 1,
-			title: '시작',
-			body: '계정·도구·비용 가드레일을 세우고 자가진단을 통과한다.',
+			title: '준비',
+			body: '계정·도구·비용 가드레일을 세우고 선수 지식을 자가진단한다.',
 			done: '자가진단 통과',
 			href: '/start/',
 		},
 		{
-			part: 'PART 1',
-			day: 'D1~3',
+			part: 'PART 0',
+			day: 'Week 1',
 			from: 1,
+			days: 5,
+			title: '컴퓨팅 기초',
+			body: '운영체제·네트워크·DNS/HTTP·리눅스·컨테이너의 원리부터 쌓는다. AWS 계정 없이 돌아가고, 뒤의 모든 파트가 여기에 기댄다.',
+			done: '개념 자가진단 통과',
+			href: '/part-0/01-os-process/',
+		},
+		{
+			part: 'PART 1',
+			day: 'Week 2',
+			from: 2,
 			days: 3,
 			title: 'Foundation · IaC',
 			body: 'Terraform 으로 VPC·KMS·S3/CloudFront·컨테이너·Lambda·DynamoDB 를 한 스택에 올린다.',
 			done: '미니 스택 배포',
-			href: '/part-1/01-terraform-vpc/',
+			href: '/part-1/06-terraform-vpc/',
 		},
 		{
 			part: 'PART 2',
-			day: 'D4~8',
-			from: 4,
-			days: 5,
+			day: 'Week 2',
+			from: 2,
+			days: 4,
 			title: '1과제 — EKS 와 관측성',
 			body: 'eksctl·k8s·LBC·관측성을 거쳐 1과제를 완주한다. 커리큘럼의 중심축이고, 여기서 점수가 나와야 나머지가 의미를 갖는다.',
 			done: 'mark.sh 80%+ · No Data 0개',
-			href: '/part-2/04-eksctl-cluster/',
+			href: '/part-2/09-eksctl-cluster/',
 		},
 		{
 			part: 'PART 3',
-			day: 'D9',
-			from: 9,
+			day: 'Week 3',
+			from: 3,
 			days: 1,
 			title: 'Hard Mode',
 			body: 'fully-private EKS·IAM 심화·CoreDNS 커스텀 도메인. 1과제가 어렵게 나올 때의 보험이다.',
 			done: '부분 재현',
-			href: '/part-3/08-private-eks-iam/',
+			href: '/part-3/13-private-eks-iam/',
 		},
 		{
 			part: 'PART 4',
-			day: 'D10~12',
-			from: 10,
-			days: 3,
+			day: 'Week 3',
+			from: 3,
+			days: 7,
 			title: '2과제 모듈',
 			body: '서버리스·스케일링·로깅·스트리밍에 DocumentDB·VPC Lattice·CDN Function 을 더한다.',
 			done: '모듈별 1회 배포',
-			href: '/part-4/09-serverless-event/',
+			href: '/part-4/14-serverless-event/',
 		},
 		{
 			part: 'PART 5',
-			day: 'D13~14',
-			from: 13,
+			day: 'Week 4',
+			from: 4,
 			days: 2,
 			title: '3과제 운영',
 			body: '부하 아래에서 가용성·성능·비용 ratio 를 지킨다. 배점 40점으로 세 과제 중 가장 크다.',
 			done: '부하 드릴 3회',
-			href: '/part-5/14-task3-load-ops/',
+			href: '/part-5/21-task3-deploy/',
 		},
 	];
 
-	/* 일차가 없는 PART. 척도에서 떼어 놓는다 — 일정 안에 자리가 없다는 사실 그대로다. */
+	/* 고정 주차가 없는 PART. 척도에서 떼어 놓는다 — 일정 안에 자리가 없다는 사실 그대로다. */
 	const DETACHED = {
 		part: 'PART 6',
-		day: '일차 없음',
+		day: '고정 주차 없음',
 		title: 'Battle Drills',
-		body: '30% 변동 드릴·파괴/복구 12종·4시간 모의 대회. 일차를 따로 주지 않고 위 일정 안에 끼워 넣는다.',
+		body: '30% 변동 드릴·파괴/복구 12종·4시간 모의 대회. 주차를 따로 주지 않고 위 일정 안에 끼워 넣는다.',
 		done: '모의 대회 90%+',
-		href: '/part-6/15-mutation-drill/',
+		href: '/part-6/23-mutation-drill/',
 	};
 
-	const LAST_DAY = 14;
+	const LAST_WEEK = 4;
 
 	let track = $state(null);
 	let progress = $state(0);
 
-	/* 지금 몇 일차인가. 정지 상태(움직임 최소화·스크립트 실패)에서는 0 이 아니라
+	/* 지금 몇 주차인가. 정지 상태(움직임 최소화·스크립트 실패)에서는 1 이 아니라
 	   끝까지 온 것으로 둔다 — 내용을 감추지 않는 쪽이 안전하다. */
-	let day = $derived(Math.round(progress * LAST_DAY));
+	let day = $derived(1 + Math.round(progress * (LAST_WEEK - 1)));
 
 	onMount(() => {
 		const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -133,7 +143,7 @@
 </script>
 
 <div class="not-content" id="roadmap">
-	<!-- 지금 몇 일차인지. 스크롤을 따라 올라간다.
+	<!-- 지금 몇 주차인지. 스크롤을 따라 올라간다.
 	     배경을 깔아야 한다 — 카드가 이 아래를 지나가므로 글자끼리 겹친다. -->
 	<p
 		class="sticky top-[calc(var(--sl-nav-height))] z-20 m-0 py-3 text-center
@@ -144,7 +154,7 @@
 				bg-[var(--sl-color-bg)] px-3 py-1 font-mono text-xs tracking-widest
 				text-[var(--sl-color-gray-3)]"
 		>
-			<span class="text-[var(--sl-color-text-accent)]">D{day}</span> / D{LAST_DAY}
+			<span class="text-[var(--sl-color-text-accent)]">Week {day}</span> / Week {LAST_WEEK}
 		</span>
 	</p>
 
@@ -179,7 +189,7 @@
 						<p class="m-0 flex items-center justify-center gap-2.5 font-mono text-xs leading-none">
 							<span class="tracking-widest text-[var(--sl-color-gray-3)]">{stop.part}</span>
 							<span class="text-[var(--sl-color-text-accent)]">{stop.day}</span>
-							<!-- 눈금 하나가 하루다 -->
+							<!-- 눈금 하나가 모듈 하나다 -->
 							<span class="flex gap-[3px]" aria-hidden="true">
 								{#each { length: stop.days } as _, i (i)}
 									<i class="block h-2 w-0.5 bg-[var(--sl-color-gray-4)]"></i>

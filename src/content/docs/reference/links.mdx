@@ -5,19 +5,36 @@ description: 각 모듈이 참조하는 skills-2026 정답지 경로와 대회�
 
 > 문서 유형: reference
 
-## 2과제 모듈 지도 — 후보 3세트 × 4모듈
+## 2과제 모듈 지도 — 후보 3세트, 모듈 11개
 
-2과제는 세트마다 **독립 모듈 4개**(각 7.5점)다. 후보가 set-02·07·08 셋이므로 사정권은 **12개 모듈** 전체다. 추첨된 1인의 세트 4개가 전부 출제되고, 협의회 공지대로 최대 2개가 더 붙어 최대 6개를 푼다 — 어느 세트가 뽑히든 그 세트의 1·2·3·4모듈을 다 풀어야 한다. **6개가 되어도 추가 시간은 없다**([대회 운영 규칙](/reference/competition-rules/)).
+2과제는 세트마다 **독립 모듈**로 나뉘고 모듈 하나가 7.5점이다. 기본은 4개지만 **set-02 는 RC 판(2026-08-23)에서 모듈 하나가 삭제돼 3개**다(합계 22.5점). 후보가 set-02·07·08 셋이므로 사정권은 **11개 모듈** 전체다.
+
+추첨된 세트의 모듈이 전부 출제되고, 협의회 공지대로 최대 2개가 더 붙어 최대 6개를 푼다 — 어느 세트가 뽑히든 그 세트의 모듈을 다 풀어야 한다. **6개가 되어도 추가 시간은 없다**([대회 운영 규칙](/reference/competition-rules/)).
 
 | 세트 | 1모듈 | 2모듈 | 3모듈 | 4모듈 |
 |---|---|---|---|---|
-| **set-02** | 서버리스 워크플로<br/>[모듈 09](/part-4/09-serverless-event/) · 정답지 O | Kinesis + Flink Studio<br/>[모듈 10](/part-4/10-scaling-logging-streaming/) · 정답지 O | 이벤트 자동복구<br/>[모듈 09](/part-4/09-serverless-event/) · 정답지 O | MSK<br/>[모듈 10](/part-4/10-scaling-logging-streaming/) · 정답지 O |
-| **set-07** | DynamoDB NoSQL<br/>[모듈 03](/part-1/03-container-lambda-dynamodb/) · 정답지 O | CDN Function<br/>[모듈 13](/part-4/13-cdn-function/) · 정답지 O | KEDA + Karpenter<br/>[모듈 10](/part-4/10-scaling-logging-streaming/) · 정답지 O | OTel + Loki 로깅<br/>[모듈 10](/part-4/10-scaling-logging-streaming/) · **정답지 X** |
-| **set-08** | DocumentDB<br/>[모듈 11](/part-4/11-documentdb/) · 정답지 O | VPC Lattice<br/>[모듈 12](/part-4/12-vpc-lattice/) · 정답지 O | Cloud Event Handling<br/>[모듈 09](/part-4/09-serverless-event/) · 정답지 O | Fargate + SQS 스케일링<br/>[모듈 10](/part-4/10-scaling-logging-streaming/) · 정답지 O |
+| **set-02** (3개) | 서버리스 워크플로<br/>[모듈 14](/part-4/14-serverless-event/) · 정답지 O | Kinesis + Flink Studio<br/>[모듈 17](/part-4/17-streaming/) · 정답지 O | MSK<br/>[모듈 17](/part-4/17-streaming/) · 정답지 O | — |
+| **set-07** (4개) | DynamoDB NoSQL<br/>[모듈 08](/part-1/08-container-lambda-dynamodb/) · 정답지 O | CDN Function<br/>[모듈 20](/part-4/20-cdn-function/) · 정답지 O | KEDA + Karpenter<br/>[모듈 15](/part-4/15-eks-scaling/) · 정답지 O | OTel + Loki 로깅<br/>[모듈 16](/part-4/16-container-logging/) · 정답지 O |
+| **set-08** (4개) | DocumentDB<br/>[모듈 18](/part-4/18-documentdb/) · 정답지 O | VPC Lattice<br/>[모듈 19](/part-4/19-vpc-lattice/) · 정답지 O | Cloud Event Handling<br/>[모듈 14](/part-4/14-serverless-event/) · 정답지 O | Fargate + SQS 스케일링<br/>[모듈 15](/part-4/15-eks-scaling/) · 정답지 O |
 
-"정답지 X"는 `skills-2026`에 구현이 없다는 뜻이고, 그 모듈의 근거는 과제지·채점지·채점 스크립트뿐이다. 리전이 모듈마다 다르고 **틀리면 그 모듈은 0점**이다.
+11개 모듈 모두 `skills-2026`에 구현이 있다. 마지막 공백이던 set-07 4모듈(OTel + Loki)도 `module-4-container-logging` 으로 들어왔다.
 
-set-08 2과제 4모듈은 2026-08-01에 구현이 들어와 근거가 코드로 바뀌었다. **`main` 에 병합돼 있으므로 클론만 하면 보인다**(2026-08-14 확인 — 전에는 별도 브랜치였다). 항목별 판정 기준은 같은 날 배포된 정정본이 정본이다([정정 내역](/reference/errata/)).
+set-02 에서 사라진 것은 옛 3모듈 **Cloud Event Handling(EC2 정책 위반 자동복구)** 이고, 그 자리를 MSK 가 3번으로 올라와 메웠다. 같은 유형이 set-08 3모듈(보안 그룹 자동복구)에 남아 있으므로 **자동복구 유형 자체가 사정권에서 빠진 것은 아니다.** 다만 **구현이 있다는 것과 그 구현이 실채점을 통과했다는 것은 다르다** — 아래 검증 상태를 함께 본다. 리전이 모듈마다 다르고 **틀리면 그 모듈은 0점**이다.
+
+set-08 2과제 네 모듈은 2026-08-01에 구현이 들어와 근거가 코드로 바뀌었다. **`main` 에 병합돼 있으므로 클론만 하면 보인다**(2026-08-14 확인 — 전에는 별도 브랜치였다). 항목별 판정 기준은 같은 날 배포된 정정본이 정본이다([정정 내역](/reference/errata/)).
+
+### 검증 상태 — 무엇을 믿고 대조할 것인가
+
+구현이 저장소에 있다는 것과 그 구현이 채점을 통과했다는 것은 다르다. 대조하기 전에 어느 쪽인지 확인한다.
+
+| 대상 | 상태 |
+|---|---|
+| set-08 2과제 4모듈 | **실채점 통과**(2026-08-02·08-04). 네 모듈 모두 `mark` 전 항목 통과 |
+| set-07 2과제 4모듈 | **실채점 통과.** 4/4 |
+| set-07 1과제 | 설계와 정정 반영은 끝났으나 **실제 배포로 검증되지 않았다.** apply 실측 시간이 없고, 채점 13-1-A는 과제지 스크린샷과의 육안 비교다 |
+| set-02 1과제 · set-03 1과제 | 배포·채점 확인됨. set-03은 저장소에서 함정 기록이 가장 두꺼운 과제다 |
+
+실채점을 통과한 구현은 "이 형태면 점수가 나온다"의 증거다. 미검증 구현은 **설계 참고**이므로 그대로 베끼기 전에 자기 계정에서 한 번 돌린다.
 
 같은 번호라고 같은 주제가 아니다 — 3모듈만 봐도 set-02는 EC2 정책 위반 자동복구, set-07은 KEDA/Karpenter 스케일링, set-08은 Security Group 자동복구다. 세트가 확정되면 번호가 아니라 **주제로** 해당 문서를 연다.
 
@@ -27,14 +44,14 @@ set-08 2과제 4모듈은 2026-08-01에 구현이 들어와 근거가 코드로 
 
 | 모듈 | 기준본 | 변동 타깃 | 변동의 성격 | 판정 축 |
 |---|---|---|---|---|
-| [01](/part-1/01-terraform-vpc/lab/) | set-02 | set-07 | CIDR 규칙 계산 · 3 AZ 6서브넷 · Endpoint · Flow Log | `plan` 의 `forces replacement` |
-| [02](/part-1/02-kms-s3-cloudfront/lab/) | set-02 | set-07 | 키 분류 축이 리소스별 → 용도별 · 90일 회전 · 다중 리전 키 · WAF 신설 | 같음 |
-| [03](/part-1/03-container-lambda-dynamodb/lab/) | set-02 | set-07 | 파티션 키 · GSI 축 · PITR · 태그 정책 | 같음 + **프로바이더 버전** |
-| [04](/part-2/04-eksctl-cluster/lab/) | set-02 | set-07 | IRSA → Pod Identity · private 클러스터 · CMK 볼륨 · KST | **수정 API 유무** |
-| [05](/part-2/05-k8s-workloads-alb/lab/) | set-02 | set-07 | 인터넷 ALB → internal ALB + VPC Origin · SA 직접 생성 | k8s 불변 필드 + AWS 불변 속성 |
-| [06](/part-2/06-observability/lab/) | set-02 | set-07 | 수집 범위 · 로그 형식 · 저장소 · 네임스페이스 분리 | 위 + **시간 축** |
-| [07](/part-2/07-full-deploy-set02/lab/) | set-02 | set-07 | 위 여섯을 한 번에 · 타이머 | 순서와 배점 |
-| [08](/part-3/08-private-eks-iam/lab/) | **set-07** | **set-03** | 작업 호스트가 수동 → IaC · taint · 커스텀 도메인 | 수정 API 유무 + **삭제 판단** |
+| [06](/part-1/06-terraform-vpc/lab/) | set-02 | set-07 | CIDR 규칙 계산 · 3 AZ 6서브넷 · Endpoint · Flow Log | `plan` 의 `forces replacement` |
+| [07](/part-1/07-kms-s3-cloudfront/lab/) | set-02 | set-07 | 키 분류 축이 리소스별 → 용도별 · 90일 회전 · 다중 리전 키 · WAF 신설 | 같음 |
+| [08](/part-1/08-container-lambda-dynamodb/lab/) | set-02 | set-07 | 파티션 키 · GSI 축 · PITR · 태그 정책 | 같음 + **프로바이더 버전** |
+| [09](/part-2/09-eksctl-cluster/lab/) | set-02 | set-07 | IRSA → Pod Identity · private 클러스터 · CMK 볼륨 · KST | **수정 API 유무** |
+| [10](/part-2/10-k8s-workloads-alb/lab/) | set-02 | set-07 | 인터넷 ALB → internal ALB + VPC Origin · SA 직접 생성 | k8s 불변 필드 + AWS 불변 속성 |
+| [11](/part-2/11-observability/lab/) | set-02 | set-07 | 수집 범위 · 로그 형식 · 저장소 · 네임스페이스 분리 | 위 + **시간 축** |
+| [12](/part-2/12-full-deploy-set02/lab/) | set-02 | set-07 | 위 여섯을 한 번에 · 타이머 | 순서와 배점 |
+| [13](/part-3/13-private-eks-iam/lab/) | **set-07** | **set-03** | 작업 호스트가 수동 → IaC · taint · 커스텀 도메인 | 수정 API 유무 + **삭제 판단** |
 
 08 만 방향이 반대다. 1과제 수상 후보 중 fully-private 클러스터를 쓰는 것은 set-03 과 set-07 둘뿐이라, 기준본이 set-07 이면 타깃이 하나로 결정된다.
 
@@ -46,11 +63,11 @@ set-08 2과제 4모듈은 2026-08-01에 구현이 들어와 근거가 코드로 
 
 | 모듈 | 기준본 | 리전 | 변동 타깃 | 리전 | 변동의 성격 | 판정 축 |
 |---|---|---|---|---|---|---|
-| [09](/part-4/09-serverless-event/lab/) | set-02 모듈3 | `eu-west-1` | set-08 모듈3 | `ap-southeast-1` | 탐지 수단이 **상태 감시 → 호출 감시** · 함수 4→1 | 리전 오독 + 삭제 판단 |
-| [10](/part-4/10-scaling-logging-streaming/lab/) | set-07 모듈3 | `ap-northeast-2` | set-08 모듈4 | `us-west-2` | 유휴 파드 1→0 이 **다른 필드의 유효성을 뒤집는다** | 조합 오류(웹훅 경고) |
-| [11](/part-4/11-documentdb/lab/) | set-08 모듈1 | `ap-northeast-2` | set-07 모듈1 | `ap-southeast-1` | **엔진 교체** — 서버 있음 → 서버 없음 | 재생성 + 시간 축 |
-| [12](/part-4/12-vpc-lattice/lab/) | set-08 모듈2 | `ap-northeast-1` | :badge[자체 제작]{variant=caution} 인증 켜기 | `ap-southeast-2` | 서버 한 곳이 **클라이언트 세 곳**을 바꾼다 | 짝 세기 |
-| [13](/part-4/13-cdn-function/lab/) | set-07 모듈2 | `us-east-1` | :badge[자체 제작]{variant=caution} 결정적 배정 | 동일 | 무작위 제거 = **채점 가능성 요구** | 격리 실행(로그 없음) |
+| [14](/part-4/14-serverless-event/lab/) | set-02 모듈3 | `eu-west-1` | set-08 모듈3 | `ap-southeast-1` | 탐지 수단이 **상태 감시 → 호출 감시** · 함수 4→1 | 리전 오독 + 삭제 판단 |
+| [15](/part-4/15-eks-scaling/lab/) | set-07 모듈3 | `ap-northeast-2` | set-08 모듈4 | `us-west-2` | 유휴 파드 1→0 이 **다른 필드의 유효성을 뒤집는다** | 조합 오류(웹훅 경고) |
+| [18](/part-4/18-documentdb/lab/) | set-08 모듈1 | `ap-northeast-2` | set-07 모듈1 | `ap-southeast-1` | **엔진 교체** — 서버 있음 → 서버 없음 | 재생성 + 시간 축 |
+| [19](/part-4/19-vpc-lattice/lab/) | set-08 모듈2 | `ap-northeast-1` | :badge[자체 제작]{variant=caution} 인증 켜기 | `ap-southeast-2` | 서버 한 곳이 **클라이언트 세 곳**을 바꾼다 | 짝 세기 |
+| [20](/part-4/20-cdn-function/lab/) | set-07 모듈2 | `us-east-1` | :badge[자체 제작]{variant=caution} 결정적 배정 | 동일 | 무작위 제거 = **채점 가능성 요구** | 격리 실행(로그 없음) |
 
 :::danger[PART-4 는 리전이 공통 변동이다]
 **짝마다 리전이 다르고, 틀리면 그 모듈이 0점이다.** 리소스는 멀쩡히 만들어지고 `apply` 도 성공하는데 채점이 지정 리전만 조회한다. `plan` 도 `validate` 도 알려 주지 않는 유일한 종류다.
@@ -82,17 +99,18 @@ PART-1~3 은 서울 고정이라 이 축이 없었다. 파트를 넘어갈 때�
 | 06 | `set-02/task-1/k8s/monitoring/` | 기준본 — Grafana provisioning, Fluent Bit |
 | 06 | `set-07/task-1/k8s/{monitoring,logging}/` | **변동 타깃** — PVC 저장소, 5키 재조립, 네임스페이스 분리 |
 | 06 | `set-03/task-1/k8s/logging/` | log_to_metrics 패턴 (개념 대조) |
-| 06 | docs `setlist/set-03/task-1/{notes,runbook}.md` | 함정 원문 |
 | 07 | `set-02/task-1/README.md`, `mark.md` | 기준본 — 완주 런북·채점 기준 |
 | 07 | `set-07/task-1/{README.md,mark.sh}` | **변동 타깃** — 전체 이행 대상·채점 |
 | 07 | `set-02/task-1/terraform/cloudfront/book-rewrite.js` | CF Function rewrite |
 | 08 | `set-07/task-1/{README.md,terraform/iam.tf}` | 기준본 — 머신 3분할, S3 릴레이, audit role(9-1/9-2) |
 | 08 | `set-03/task-1/{terraform/bastion.tf,eksctl/cluster.yaml}` | **변동 타깃** — bastion 을 IaC 로, taint, 커스텀 도메인 |
 | 08 | `set-03/task-1/terraform/kms.tf` | root-less KMS |
-| 09 | `set-02/task-2/module-1-*`, `module-3-*` | Step Functions, EventBridge/Config |
+| 09 | `set-02/task-2/module-1-workflow` | Step Functions + Lambda + S3 이벤트 알림 + DynamoDB, `mark/mark2-1.sh` |
 | 09 | `set-08/task-2/module-3-event-handling` | SG 자동복구 정답(CloudTrail·EventBridge·Lambda), `mark/mark2-3.sh` |
-| 10 | `set-07/task-2/module-3-eks-scaling` | KEDA/Karpenter 정답, `mark3.sh` (module-4 로깅은 미착수 — `mark4.sh`·task.md 모듈 4 절만) |
-| 10 | `set-02/task-2/module-2-*`, `module-4-*` | Flink Studio, MSK (개념 위주) |
+| 10 | `set-07/task-2/module-3-eks-scaling` | KEDA/Karpenter 정답, `mark3.sh` |
+| 10 | `set-07/task-2/module-4-container-logging` | OTel Collector(공식 Helm 차트 대신 원시 매니페스트) + Loki 정답, `mark4.sh` |
+| 10 | `set-02/task-2/module-2-analytics` | Kinesis Data Streams + Glue 카탈로그 + Flink Studio, `mark/mark2-2.sh` |
+| 10 | `set-02/task-2/module-3-msk` | MSK + Lambda ESM + DynamoDB + SNS, `mark/mark2-3.sh`. apply 35분·destroy 23분 |
 | 10 | `set-08/task-2/module-4-sqs-scaling` | Fargate 컨트롤러 + KEDA/Karpenter 정답(`k8s/`·`app/Dockerfile`), `mark/mark2-4.sh` |
 | 11 | `set-08/task-2/module-1-nosql` | DocumentDB 정답(클러스터·Secret·클라이언트 EC2·인덱스 부트스트랩), `mark/mark2-1.sh` |
 | 12 | `set-08/task-2/module-2-lattice` | VPC Lattice 정답(2 VPC·서비스 네트워크·프리픽스 리스트 SG), `mark/mark2-2.sh` |
@@ -100,12 +118,13 @@ PART-1~3 은 서울 고정이라 이 축이 없었다. 파트를 넘어갈 때�
 | 09–12 | `set-08/task-2/NOTES.md`, `HANDOFF.md` | 함정·결정 로그 |
 | 13 | `set-07/task-2/module-2-cdn-function` | KVS + CloudFront Functions 정답, `mark2.sh` |
 | 14 | `task-3/README.md`, `ARCHITECTURE.md` | 3과제 런북·설계 근거(튜닝 표·당일 변경 시나리오) |
-| 14 | `task-3/k8s/{01-nodepool,10-user}.yaml` | NodePool 상한·consolidation, HPA behavior·CPU limit 부재 |
-| 14 | `task-3/script/load.js` | k6 부하 스크립트 (임계값 = 채점표) |
+| 14 | `task-3/k8s/` | `00-nodeclass`·`01-nodepool`(상한·consolidation), `10-user`·`11-product`·`12-stress`(HPA behavior·CPU limit 부재), `20-ingress`(ALB 라우팅·기본 404) |
+| 14 | `task-3/terraform/`, `task-3/waf/scanner-ua.json` | RDS Proxy·CloudFront·WAF 규칙. 스캐너 UA 규칙은 당일 콘솔로 넣는 값이라 terraform 밖에 있다 |
+| 14 | `task-3/scripts/{karpenter,lbc,teardown}.sh` | Karpenter·LBC 설치와 역순 teardown |
+| 14 | `task-3/{task-sample.md,mark-sample.md}` | 샘플 과제지·채점지 — SLO(user·product 0.2초, stress 1초, 가용성 상한 5초)와 채점 축의 근거. **k6 부하 스크립트는 저장소에 없다.** 직접 쓴다 |
 | 15–17 | 각 과제 `mark/`, `mark.md`, `mark.sh` | 변동 드릴·모의 대회 채점 |
-| 17 | `set-07/task-2/` docs `setlist/set-07/task-2/*` | 모의 대회 대체 세트 |
 
-문서 사이트(Astro Starlight): `skills-2026/docs/` — set-03·set-06·set-07 task-2에 notes/runbook 상세.
+함정·결정 로그는 각 과제 디렉터리의 `NOTES.md` 에 있다 — `set-03/task-1/NOTES.md`(저장소에서 가장 두껍다), `set-08/task-2/NOTES.md`(전용 "함정" 절), `task-3/NOTES.md`(WAF 오탐 실측). 실행 절차는 같은 디렉터리의 `README.md` 다.
 
 ## 공식 문서 (Q 출력을 대조하는 정본)
 

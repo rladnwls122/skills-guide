@@ -32,6 +32,10 @@ import DayRail from '../../components/DayRail.svelte';
    원인을 스스로 짚고, 필요한 리소스를 **콘솔·manifest·tf 혼합**으로 직접 만든다.
 3. 과제지 30% 변동을 **30분 내 반영** (grep/sed 드릴).
 4. 대표 장애 12종을 확인 명령→원인→조치 순서로 해결.
+5. **제공물을 스스로 읽어 낸다** — 수정 불가 Go 바이너리에서 라우트·환경변수를 뽑고,
+   Lambda 를 백지에서 쓰고, 느린 질의를 인덱스로 잡는다.
+
+근거는 [실기출 분해](/reference/past-exams/)에 있다. 2024·2025 두 해의 시행문제·채점지·채점 스크립트를 대조해 **매년 나오는 축과 한 해만 나온 축**을 갈라 두었다. 무엇을 먼저 붙잡을지는 그 배점표가 정한다.
 
 ## 모듈 사용법 (매 모듈 동일 순서)
 
@@ -71,6 +75,7 @@ EKS 를 이어서 쓰는 구간(모듈 09→12→13)만 예외이고, 그것도 
 ## Reference
 
 <CardGrid>
+  <LinkCard title="실기출 분해 — 2024·2025" href="/reference/past-exams/" description="실제로 시행된 두 해의 요구사항·배점·채점 스크립트. 매년 나오는 축과 한 해만 나온 축을 가른다." />
   <LinkCard title="대회 당일 실행 순서" href="/reference/day-of/" description="도착 직후부터 채점 직전까지 — 종이 과제지 대조, 추가 문항 키트 선택, 마지막 점검." />
   <LinkCard title="AI 학습 활용 가이드" href="/reference/ai-study-guide/" description="질문 공식·패턴 5종·의존 방지. 학습용 AI로 개념을 채우고 Q 출력을 검증하는 눈을 기른다." />
   <LinkCard title="명령 치트시트" href="/reference/cheatsheet/" description="kubectl·eksctl·helm·aws·terraform — 손가락 반사로 치는 명령." />

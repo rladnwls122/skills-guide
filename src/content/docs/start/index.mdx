@@ -206,6 +206,11 @@ PowerShell 함정 미리 각인: `curl`은 Invoke-WebRequest 별칭 → 항상 `
 | 13 | EKS 클러스터가 IAM 과 어떻게 엮이는지(IRSA·클러스터 생성자 신원) 설명할 수 있다 | [eks-basics](/start/eks-basics/)로 보충 |
 | 14 | DynamoDB 의 파티션 키·GSI 로 조회 패턴을 설계할 수 있다 | [dynamodb-basics](/start/dynamodb-basics/)로 보충 |
 | 15 | Prometheus 가 메트릭을 어떻게 모으고 PodMonitor 가 무엇인지 안다 | [observability-basics](/start/observability-basics/)로 보충 |
+| 16 | Lambda 핸들러가 받는 `event` 에서 값을 꺼내고 응답 형식을 만들 수 있다 | [python-basics](/start/python-basics/)로 보충 |
+| 17 | 제공된 Go 바이너리에서 라우트와 환경변수를 알아낼 수 있다 | [go-app-basics](/start/go-app-basics/)로 보충 |
+| 18 | `EXPLAIN` 출력을 읽고 인덱스가 쓰이는지 판단할 수 있다 | [mysql-basics](/start/mysql-basics/)로 보충 |
+
+16~18번은 **언어 축**이다. 대회가 주는 앱은 Go 로 만들어져 수정할 수 없지만, **Lambda 는 선수가 직접 쓴다.** 그리고 3과제 성능 점수는 인덱스에서 갈린다. 두 해 실기출이 무엇을 요구했는지는 [실기출 분해](/reference/past-exams/)에 있다.
 
 9·10번은 **2과제 전용**이다. PART-4에 들어가기 전까지는 몰라도 진도가 막히지 않으므로, 자가진단 "아니오" 개수에는 넣되 보충은 PART-4 직전에 해도 된다.
 
@@ -287,6 +292,18 @@ Terraform 은 다르다. **채점 대상이 아니다** — 과제지·채점지
   <Card title="오토스케일링 기초" icon="up-caret">
     자가진단 10 — HPA·KEDA·Karpenter·Fargate, PART-4 모듈 15
     [읽기](/start/autoscaling-basics/)
+  </Card>
+  <Card title="Python·boto3 기초" icon="seti:python">
+    자가진단 16 — 실제 과제 Lambda 셋을 줄 단위로 해부, PART-1 모듈 08 · PART-4 모듈 31
+    [읽기](/start/python-basics/)
+  </Card>
+  <Card title="Go·Gin 앱 읽기" icon="seti:go">
+    자가진단 17 — 수정 불가 바이너리에서 라우트·환경변수 역추적, PART-5 모듈 32
+    [읽기](/start/go-app-basics/)
+  </Card>
+  <Card title="MySQL 기초" icon="seti:db">
+    자가진단 18 — 인덱스와 EXPLAIN 이 3과제 성능 12점을 가른다, PART-5 모듈 32
+    [읽기](/start/mysql-basics/)
   </Card>
 </CardGrid>
 

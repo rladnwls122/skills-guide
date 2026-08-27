@@ -1,0 +1,154 @@
+---
+title: 32. 3과제 ECS 경로 — 실기출 기준
+description: 2025 실기출이 ECS 를 강제하고 EKS·Lambda 를 금지한 3과제를, c5.large 제약과 비용 ratio 채점까지 그대로 재현하는 모듈 개요.
+sidebar:
+  order: 1
+---
+
+import { FileTree, LinkButton, Card, CardGrid } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+[21. 3과제 배포](/part-5/21-task3-deploy/)와 [22. 부하 운영](/part-5/22-task3-tuning/)은 **EKS 경로**다. 이 모듈은 **ECS 경로**다.
+
+:::caution[왜 두 경로를 다 준비하나]
+[2025 실기출](/reference/past-exams/#3-3-2025-3과제--운영-40점)이 ECS 를 강제하고 EKS 를 금지했다.
+
+> 컨테이너를 활용해야 하며 컨테이너 오케스트레이션 툴로는 ECS 를 사용합니다. **EKS 를 사용할 수 없습니다.**
+
+한편 EKS 기반 3과제도 출제된 적이 있다. **어느 쪽이 나올지 모르므로 둘 다 준비한다.** 아키텍처 사고는 같고 도구만 다르다.
+:::
+
+<CardGrid>
+  <Card title="EKS 경로" icon="kubernetes">
+  [21. 배포](/part-5/21-task3-deploy/) · [22. 부하 운영](/part-5/22-task3-tuning/)
+
+  HPA·Karpenter·TargetGroupBinding 으로 푼다.
+  </Card>
+  <Card title="ECS 경로 (이 모듈)" icon="cloud-download">
+  실기출 2025 기준. 서비스 오토스케일링·캐패시티 공급자·c5.large 고정.
+  </Card>
+</CardGrid>
+
+## 2025 실기출이 정한 제약
+
+| 항목 | 제약 |
+|---|---|
+| 오케스트레이션 | **ECS**. EKS 불가 |
+| 컴퓨팅 | **EC2 c5.large 만**. Fargate·Lambda 불가 |
+| RDS | `db.t3.micro` Multi-AZ **한 대**. 읽기 전용 복제본 금지 |
+| DynamoDB | 테이블 **하나** |
+| 리전 | 글로벌 리소스를 뺀 전부 `ap-northeast-2` |
+| Lambda | **리전 무관 생성 시 감점** |
+
+**제약이 곧 문제다.** 인스턴스 타입을 바꿔 성능을 사는 길, 복제본으로 읽기를 나누는 길, Lambda 로 우회하는 길이 전부 막혀 있다.
+
+## 채점 구조
+
+40점이 전부 측정형이고 임계값 사다리다.
+
+| 항목 | 배점 | 무엇을 재나 |
+|---|---|---|
+| 비정상 요청 처리 | 4 | 이메일 형식 검증률, 비정상 요청 차단율 |
+| 고가용성 및 안정성 | 12 | 세 API 각각의 로드 처리율 |
+| 성능 효율성 | 12 | 세 API 각각의 목표 시간 내 응답 비율 |
+| 비용 최적화 | 12 | 인스턴스 비용 ratio |
+
+**비용 ratio 의 하한이 0.5 다.** 무작정 줄이면 한 칸도 못 얻는다. 자세한 것은 [실기출 분해 2-3](/reference/past-exams/#2-3-2025년-3과제-40점)에 있다.
+
+## 애플리케이션
+
+| 앱 | 저장소 | 목표 응답 | 경로 |
+|---|---|---|---|
+| `user` | MySQL (RDS) | 0.2초 | `/v1/user` |
+| `product` | DynamoDB | 0.2초 | `/v1/product` |
+| `stress` | 없음 | 1.0초 | `/v1/stress` |
+
+전부 TCP 8080 에 바인딩하고 Go 1.22 로 빌드됐다. 상태 검사 경로는 바이너리에서 확인한다 — 2025 3과제 바이너리는 `/healthcheck` 였다([Go·Gin 앱 읽기](/start/go-app-basics/#3-2-라우트를-뽑는다)).
+
+`product` 바이너리에 `TABLE_INDEX` 환경변수가 있다. **문제지에 없는 정보이고 GSI 설계가 필요하다는 신호다.**
+
+## 애플리케이션에 없는 로직
+
+> 만약 /v1/user POST 요청 시 email 주소의 포맷이 xxxx@xxxx.xxxx 가 아닌 경우 403 에러가 발생하도록 구성하세요. **이는 어플리케이션 로직으로 구현되어 있지 않습니다.**
+
+앱을 고칠 수 없으므로 인프라 계층에서 만들어야 한다. 이 한 항목이 비정상 요청 처리 4점의 절반을 차지한다.
+
+## 학습 목표
+
+- [ ] ECS 의 클러스터·태스크 정의·서비스·캐패시티 공급자를 구분해 설명할 수 있다
+- [ ] EKS 의 개념들이 ECS 의 무엇에 대응하는지 짚을 수 있다
+- [ ] c5.large 한 대에 태스크를 몇 개 올릴지 CPU·메모리로 계산할 수 있다
+- [ ] 서비스 오토스케일링과 캐패시티 공급자 스케일링이 어떻게 맞물리는지 안다
+- [ ] 비용 ratio 하한 0.5 를 고려해 최소 대수를 정할 수 있다
+- [ ] WAF 로 이메일 형식 검증을 구현할 수 있다
+- [ ] 403 과 404 를 어느 계층에서 낼지 정할 수 있다
+- [ ] `user` 의 0.2초를 인덱스로, `product` 를 키 설계로 맞출 수 있다
+- [ ] 부하 중 지표를 보고 조정하는 순환을 돌릴 수 있다
+
+## 소요 시간
+
+약 8~10시간 (이론 3h + 배포 2h + 부하 운영 3~4h)
+
+## 과금 리소스와 destroy 방침
+
+:::danger[이 모듈이 사이트에서 가장 비싸다]
+| 리소스 | 과금 |
+|---|---|
+| EC2 c5.large × N | 시간당. 대수만큼 배 |
+| RDS db.t3.micro Multi-AZ | 시간당 (단일 AZ 의 두 배) |
+| ALB | 시간당 + LCU |
+| NAT Gateway | 시간당 + 처리량 |
+| DynamoDB 온디맨드 | 요청당 |
+| CloudFront·WAF | 요청당 |
+
+**드릴 1회를 3시간 안에 끝내고 당일 정리한다.** 부하를 멈추는 것이 먼저다.
+:::
+
+정리 순서 — 부하 중지 → 서비스 desired 0 → `terraform destroy` → [잔존 리소스 점검](/reference/cleanup-check/).
+
+## 선행 지식
+
+:::tip[개념이 낯설면 여기부터]
+- 컨테이너 이미지와 레지스트리 — [docker-basics](/start/docker-basics/)
+- 대상 그룹 상태 검사와 라우팅 규칙 — [loadbalancer-basics](/start/loadbalancer-basics/)
+- 인덱스가 조회를 빠르게 하는 이유 — [mysql-basics](/start/mysql-basics/)
+- 파티션 키와 GSI — [dynamodb-basics](/start/dynamodb-basics/)
+:::
+
+- Go 바이너리에서 라우트와 환경변수 뽑기 — [go-app-basics](/start/go-app-basics/)
+- `EXPLAIN` 으로 인덱스 사용 확인 — [mysql-basics](/start/mysql-basics/#3-3-explain-으로-확인한다)
+- 오토스케일링의 지표·목표값·쿨다운 — [autoscaling-basics](/start/autoscaling-basics/)
+- WAF Web ACL 의 규칙과 우선순위 — [07. KMS·S3·CloudFront](/part-1/07-kms-s3-cloudfront/theory/)
+
+## 선행 모듈
+
+- PART 4 — 28. CI/CD (이미지를 ECR 에 올린다)
+- PART 5 — 21·22 (같은 문제의 EKS 경로. 사고 방식이 공유된다)
+
+## 실기출 근거
+
+<FileTree>
+
+- 2025 전국 3과제
+  - **문제지 3~7** RDBMS · DynamoDB · 웹 애플리케이션 · 트래픽 처리
+  - **채점기준 1~4** 40점의 임계값 사다리
+  - **배포파일** `user` · `product` · `stress` · `load_user.dump`
+- 2024 부산 3과제
+  - **문제지** t3.micro, 오케스트레이션 자유, 앱 둘
+
+</FileTree>
+
+## 공식 문서
+
+- [Amazon ECS 개발자 안내서](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/) — 클러스터·태스크·서비스
+- [ECS 캐패시티 공급자](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/cluster-auto-scaling.html) — 노드 자동 조절
+- [ECS 서비스 오토스케일링](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-auto-scaling.html) — 태스크 수 조절
+- [WAF 정규식 패턴 세트](https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-type-regex-pattern-set.html) — 이메일 형식 검증
+- [aws_ecs_service](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_service) — Terraform 리소스
+- [aws_ecs_capacity_provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_capacity_provider) — Terraform 리소스
+
+## 다음 단계
+
+<LinkButton href="/part-5/32-task3-ecs/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-5/32-task3-ecs/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

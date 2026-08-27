@@ -103,7 +103,11 @@ Macie 를 활성화하면 S3 자동 검색이 기본으로 켜져 계정의 버�
 
    ```hcl title="main.tf"
    terraform {
-     required_providers { aws = { source = "hashicorp/aws", version = "~> 5.0" } }
+     required_providers {
+       aws     = { source = "hashicorp/aws", version = "~> 5.0" }
+       random  = { source = "hashicorp/random", version = "~> 3.0" }
+       archive = { source = "hashicorp/archive", version = "~> 2.0" }
+     }
    }
    provider "aws" { region = var.region }
 

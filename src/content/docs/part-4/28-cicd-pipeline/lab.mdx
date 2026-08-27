@@ -60,15 +60,21 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
    COPY index.html /usr/share/nginx/html/index.html
    ```
 
-3. **ECR 저장소를 만든다.**
+3. **레지스트리 주소를 변수에 담아 둔다.**
 
    ```bash
    export AWS_DEFAULT_REGION=ap-northeast-2
-   aws ecr create-repository --repository-name app-repo \
-     --image-scanning-configuration scanOnPush=true
    ```
 
-   레지스트리 주소를 변수에 담아 둔다.
+   :::note[ECR 저장소는 아래 Terraform 이 만든다]
+   `aws ecr create-repository` 로 미리 만들지 않는다. 2절의 `aws_ecr_repository.app` 이 같은 이름(`app-repo`)을 만들므로, 손으로 먼저 만들면 `RepositoryAlreadyExistsException` 으로 `apply` 가 실패한다.
+
+   이미 만들었다면 지우거나 상태로 가져온다.
+
+   ```bash
+   terraform import aws_ecr_repository.app app-repo
+   ```
+   :::
 
    ```bash
    export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -126,7 +132,10 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
    ```hcl title="pipeline.tf"
    terraform {
-     required_providers { aws = { source = "hashicorp/aws", version = "~> 5.0" } }
+     required_providers {
+       aws = { source = "hashicorp/aws", version = "~> 5.0" }
+       tls = { source = "hashicorp/tls", version = "~> 4.0" }   # 3절 OIDC 에서 쓴다
+     }
    }
    provider "aws" { region = var.region }
 

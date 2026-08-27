@@ -236,7 +236,7 @@ id  select_type  table  type  possible_keys  key        rows  Extra
 3과제라면 앱이 던지는 질의를 어떻게 아는가. 세 가지 방법이 있다.
 
 1. 문제지의 API 표를 본다. `GET /v1/user?email=...` 이면 `WHERE email = ?` 다
-2. 바이너리에서 SQL 문자열을 뽑는다([Go·Gin 앱 읽기](/start/go-app-basics/#3-컴파일된-바이너리-읽기))
+2. 바이너리에서 SQL 문자열을 뽑는다([Go·Gin 앱 읽기](/start/go-app-basics/#3-2-라우트를-뽑는다))
 3. **느린 질의 로그를 켜서 실제로 들어온 것을 본다** — 가장 확실하다
 
 ### 3-5. 느린 질의 로그

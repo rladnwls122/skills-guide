@@ -536,7 +536,7 @@ CloudWatch Logs 의 `API-Gateway-Execution-Logs_<ID>/v1` 에 변환 전후가 �
 />
 
 <Quiz
-  question="`\"N\": \"$.sales\"` 라고 썼더니 DynamoDB 에 `$.sales` 라는 글자가 저장됐다. 원인은?"
+  question="ExpressionAttributeValues 의 N 값을 $.sales 로 썼더니 DynamoDB 에 `$.sales` 라는 글자가 그대로 저장됐다. 원인은?"
   options={[
     '숫자 타입이 잘못됐다',
     '키 이름에 `.$` 를 붙이지 않아 경로가 아니라 문자열로 해석됐다',
@@ -544,7 +544,7 @@ CloudWatch Logs 의 `API-Gateway-Execution-Logs_<ID>/v1` 에 변환 전후가 �
     'ResultPath 문제다',
   ]}
   correct={1}
-  explanation="경로로 해석시키려면 키 이름을 \"N.$\" 로 써야 한다. 붙이지 않으면 오류 없이 글자 그대로 들어가므로 발견이 늦다."
+  explanation="경로로 해석시키려면 키 이름 끝에 .$ 를 붙여 N.$ 로 써야 한다. 붙이지 않으면 오류 없이 글자 그대로 들어가므로 발견이 늦다."
 />
 
 <Quiz

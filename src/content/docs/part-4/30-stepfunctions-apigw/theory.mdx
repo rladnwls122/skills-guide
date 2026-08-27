@@ -1,0 +1,586 @@
+---
+title: Lambda 없이 잇기 — ASL 상태 · 서비스 프록시 · VTL
+description: Step Functions 의 상태 타입과 데이터 흐름 필드, SDK 통합으로 DynamoDB 를 직접 부르는 법, API Gateway AWS 서비스 프록시와 VTL 매핑 템플릿을 정리한다.
+sidebar:
+  order: 2
+---
+
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: explanation
+
+선행 지식과 학습 경로는 [모듈 개요](/part-4/30-stepfunctions-apigw/)에.
+
+---
+
+## 1. Lambda 를 못 쓰면 무엇이 곤란한가
+
+Lambda 로 풀면 이렇게 끝난다.
+
+```python
+def handler(event, context):
+    sales = event["sales"]
+    balance = table.get_item(Key={"name": "balance"})["Item"]["value"]
+    stock   = table.get_item(Key={"name": "stock"})["Item"]["value"]
+    table.put_item(Item={"name": "stock",   "value": stock - sales})
+    table.put_item(Item={"name": "balance", "value": balance + sales * 10})
+```
+
+읽고, 계산하고, 쓴다. 한 함수 안에서 순서대로 한다.
+
+Lambda 를 못 쓰면 셋이 각각 다른 곳으로 흩어진다.
+
+| 하던 일 | 대신 |
+|---|---|
+| 읽기 | Step Functions 의 `Task` 가 DynamoDB `GetItem` 을 직접 호출 |
+| 계산 | ASL 의 내장 함수(`States.MathAdd` 등)나 `Choice` 분기 |
+| 쓰기 | 또 다른 `Task` 가 `UpdateItem` 을 호출 |
+| 조회 API | API Gateway 가 DynamoDB 를 직접 호출 |
+
+**서비스가 서비스를 직접 부른다.** 그 사이에 코드를 실행하는 자리가 없다.
+
+:::note[Step Functions 는 컴퓨팅인가]
+아니다. 상태 전이를 조율하는 관리형 서비스이고 사용자 코드를 실행하지 않는다. 그래서 컴퓨팅 금지 제약에 걸리지 않는다. 문제지도 Step Functions 를 쓰라고 명시했다.
+:::
+
+---
+
+## 2. Step Functions 상태 타입
+
+상태 머신은 상태들의 그래프다. 각 상태가 하나의 일을 하고 다음 상태를 가리킨다.
+
+| 타입 | 하는 일 |
+|---|---|
+| `Task` | 실제 작업 하나. AWS API 를 부른다 |
+| `Choice` | 조건에 따라 갈래를 고른다 |
+| `Pass` | 아무것도 하지 않고 데이터를 다듬어 넘긴다 |
+| `Wait` | 정해진 시간 기다린다 |
+| `Succeed` · `Fail` | 끝낸다 |
+| `Parallel` · `Map` | 여러 갈래를 동시에 · 목록을 순회 |
+
+:::danger[`Task` 하나가 API 하나다]
+"읽고 계산해서 쓴다"를 한 `Task` 에 담을 수 없다. 읽기 `Task`, 계산 `Pass`, 쓰기 `Task` 로 나뉜다. 이 제약이 상태 머신이 길어지는 이유다.
+:::
+
+### 2-1. 최소 예시
+
+```json
+{
+  "Comment": "재고 갱신",
+  "StartAt": "GetStock",
+  "States": {
+    "GetStock": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:dynamodb:getItem",
+      "Parameters": {
+        "TableName": "inventory",
+        "Key": { "name": { "S": "stock" } }
+      },
+      "ResultPath": "$.stockResult",
+      "Next": "CheckStock"
+    },
+    "CheckStock": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.stockResult.Item.value.N",
+          "IsPresent": true,
+          "Next": "Done"
+        }
+      ],
+      "Default": "Fail"
+    },
+    "Done": { "Type": "Succeed" },
+    "Fail": { "Type": "Fail", "Error": "NoStock" }
+  }
+}
+```
+
+---
+
+## 3. SDK 통합 — Lambda 없이 AWS API 부르기
+
+`Resource` 필드의 ARN 형식이 무엇을 부를지 정한다.
+
+| ARN 형태 | 뜻 |
+|---|---|
+| `arn:aws:states:::aws-sdk:dynamodb:getItem` | **SDK 통합.** 거의 모든 AWS API |
+| `arn:aws:states:::dynamodb:updateItem` | 최적화 통합. 일부 서비스만, 편의 기능 있음 |
+| `arn:aws:lambda:...:function:name` | Lambda 호출 |
+
+**`aws-sdk:` 가 붙은 것이 SDK 통합이다.** 200개 넘는 서비스의 API 를 직접 부를 수 있다. 서비스 이름과 API 이름을 소문자 카멜케이스로 쓴다.
+
+```
+arn:aws:states:::aws-sdk:dynamodb:getItem
+arn:aws:states:::aws-sdk:dynamodb:updateItem
+arn:aws:states:::aws-sdk:s3:putObject
+arn:aws:states:::aws-sdk:sns:publish
+```
+
+:::caution[대소문자가 정확해야 한다]
+`getItem` 이 맞고 `GetItem` 이나 `get_item` 은 틀리다. 서비스 이름은 소문자, API 이름은 첫 글자만 소문자인 카멜케이스다.
+:::
+
+### 3-1. `Parameters` 는 AWS API 요청 그대로
+
+```json
+"Parameters": {
+  "TableName": "inventory",
+  "Key": { "name": { "S": "stock" } }
+}
+```
+
+**DynamoDB 저수준 API 형식이다.** boto3 의 `resource` 가 아니라 `client` 를 쓸 때의 그 형식이다([Python·boto3 기초](/start/python-basics/#2-5-boto3--client-와-resource)). 값마다 타입 표기가 붙는다.
+
+| 표기 | 뜻 |
+|---|---|
+| `{"S": "kim"}` | 문자열 |
+| `{"N": "100"}` | 숫자. **따옴표 안에 쓴다** |
+| `{"BOOL": true}` | 참·거짓 |
+| `{"L": [...]}` | 목록 |
+| `{"M": {...}}` | 맵 |
+
+숫자를 `{"N": 100}` 처럼 따옴표 없이 쓰면 오류다. JSON 문자열이어야 한다.
+
+### 3-2. 입력에서 값을 끌어오기
+
+키 이름 끝에 `.$` 를 붙이면 값이 아니라 경로로 해석된다.
+
+```json
+"Parameters": {
+  "TableName": "inventory",
+  "Key": { "name": { "S": "stock" } },
+  "UpdateExpression": "SET #v = #v - :sales",
+  "ExpressionAttributeNames": { "#v": "value" },
+  "ExpressionAttributeValues": {
+    ":sales": { "N.$": "States.Format('{}', $.sales)" }
+  }
+}
+```
+
+`$.sales` 는 상태 머신 입력의 `sales` 를 가리킨다. `States.Format` 이 그것을 문자열로 바꾼다. **`N` 은 문자열이어야 하는데 입력은 숫자이므로 이 변환이 필요하다.**
+
+:::danger[`.$` 를 빼면 문자열 그대로 들어간다]
+`"N": "$.sales"` 라고 쓰면 값이 `$.sales` 라는 글자 그대로 저장된다. 오류가 나지 않고 잘못된 값이 들어가므로 발견이 늦다.
+:::
+
+### 3-3. `UpdateExpression` 이 계산을 대신한다
+
+계산할 자리가 없다고 했는데 사실 우회가 있다. **DynamoDB 가 계산해 준다.**
+
+```
+SET #v = #v - :sales
+```
+
+현재 값에서 빼라는 뜻이다. 읽어 와서 빼고 다시 쓸 필요가 없다. 한 `Task` 로 끝난다.
+
+`#v` 는 속성 이름 자리표시자다. `value` 가 DynamoDB 예약어라 직접 쓸 수 없어 이렇게 우회한다. `:sales` 는 값 자리표시자다.
+
+:::note[이 방식이 동시성 문제도 푼다]
+읽고 쓰는 사이에 다른 요청이 값을 바꾸면 덮어쓰기가 생긴다. `UpdateExpression` 은 원자적이라 그 문제가 없다.
+:::
+
+---
+
+## 4. 데이터 흐름 세 필드
+
+상태끼리 데이터를 넘기는 방식이 헷갈리는 지점이다. 필드 셋을 구분한다.
+
+| 필드 | 언제 | 하는 일 |
+|---|---|---|
+| `InputPath` | 상태에 들어오기 전 | 입력에서 일부만 고른다 |
+| `Parameters` | Task 실행 직전 | API 요청을 만든다 |
+| `ResultPath` | Task 결과가 나온 뒤 | 결과를 입력의 어디에 붙일지 |
+| `OutputPath` | 상태를 떠나기 전 | 최종 출력에서 일부만 고른다 |
+
+**`ResultPath` 가 가장 자주 문제를 만든다.**
+
+```json
+"ResultPath": "$.stockResult"
+```
+
+원래 입력이 `{"sales": 20}` 이고 결과가 `{"Item": {...}}` 이면 다음 상태로 가는 값은 이렇게 된다.
+
+```json
+{ "sales": 20, "stockResult": { "Item": {...} } }
+```
+
+**입력이 보존된다.** `ResultPath` 를 쓰지 않으면 결과가 입력을 통째로 덮어써 `sales` 를 잃는다.
+
+| `ResultPath` 값 | 결과 |
+|---|---|
+| 생략(기본 `$`) | 결과가 입력을 대체 |
+| `"$.어떤이름"` | 입력에 그 이름으로 붙는다 |
+| `null` | **결과를 버리고 입력을 그대로** |
+
+`null` 이 유용하다. 쓰기 Task 의 결과는 필요 없고 원래 입력을 다음으로 넘기고 싶을 때 쓴다.
+
+---
+
+## 5. `Choice` 로 분기
+
+```json
+"CheckSales": {
+  "Type": "Choice",
+  "Choices": [
+    {
+      "Variable": "$.sales",
+      "NumericGreaterThan": 30,
+      "Next": "RejectTooMany"
+    },
+    {
+      "Variable": "$.sales",
+      "NumericLessThanEquals": 0,
+      "Next": "RejectInvalid"
+    }
+  ],
+  "Default": "UpdateStock"
+}
+```
+
+**`Choices` 는 위에서부터 평가하고 처음 참인 것을 따른다.** 아무것도 참이 아니면 `Default` 로 간다. `Default` 가 없는데 아무것도 안 맞으면 실행이 실패한다.
+
+비교 연산자가 타입별로 있다.
+
+| 타입 | 연산자 |
+|---|---|
+| 숫자 | `NumericEquals` · `NumericGreaterThan` · `NumericLessThanEquals` |
+| 문자열 | `StringEquals` · `StringMatches`(와일드카드) |
+| 참거짓 | `BooleanEquals` |
+| 존재 | `IsPresent` · `IsNull` |
+| 조합 | `And` · `Or` · `Not` |
+
+:::caution[DynamoDB 에서 읽은 숫자는 문자열이다]
+`$.stockResult.Item.value.N` 은 `"100"` 이라는 문자열이다. `NumericGreaterThan` 으로 비교하면 타입이 맞지 않아 실패한다. `States.StringToJson` 이나 `States.MathAdd` 로 변환하거나 `StringEquals` 계열을 쓴다.
+:::
+
+---
+
+## 6. API Gateway 통합 유형
+
+| 유형 | 뒤에 무엇이 | 매핑 |
+|---|---|---|
+| `AWS_PROXY` | Lambda | 없음. 요청 전체가 그대로 Lambda 로 |
+| `AWS` | **AWS 서비스 API** | **매핑 템플릿 필요** |
+| `HTTP` · `HTTP_PROXY` | 외부 HTTP 엔드포인트 | 선택 |
+| `MOCK` | 없음 | 고정 응답 |
+
+2025 2과제 요구를 그대로 읽는다.
+
+> /inventory API 는 GET 요청만 지원하며 integration type 은 AWS Service Proxy 로 지정해야 합니다.
+
+곧 **`AWS`** 유형이다. Lambda 없이 API Gateway 가 DynamoDB 를 직접 부른다.
+
+### 6-1. 통합 설정
+
+```hcl
+resource "aws_api_gateway_integration" "get_inventory" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  resource_id = aws_api_gateway_resource.inventory.id
+  http_method = aws_api_gateway_method.get.http_method
+
+  type                    = "AWS"
+  integration_http_method = "POST"        # DynamoDB API 는 언제나 POST
+  uri                     = "arn:aws:apigateway:${var.region}:dynamodb:action/GetItem"
+  credentials             = aws_iam_role.apigw.arn
+  ...
+}
+```
+
+세 가지를 본다.
+
+**`integration_http_method` 가 `POST` 다.** 클라이언트는 GET 으로 부르지만 DynamoDB API 는 모든 작업을 POST 로 받는다. 앞뒤가 다른 것이 정상이다.
+
+**`uri` 에 `action/GetItem` 이 들어간다.** 어느 API 를 부를지 여기서 정한다.
+
+**`credentials` 에 역할 ARN 이 있다.** API Gateway 가 그 역할을 Assume 해 DynamoDB 를 부른다. 이 역할에 `dynamodb:GetItem` 권한이 있어야 한다.
+
+---
+
+## 7. VTL 매핑 템플릿
+
+`AWS` 통합은 요청과 응답을 직접 만들어야 한다. 그 언어가 VTL(Velocity Template Language) 이다.
+
+### 7-1. 요청 템플릿
+
+```velocity
+{
+  "TableName": "inventory",
+  "Key": {
+    "name": { "S": "$input.params('item')" }
+  }
+}
+```
+
+`$input.params('item')` 이 쿼리스트링 `item` 값을 꺼낸다. 결과가 DynamoDB `GetItem` 요청 본문이 된다.
+
+| VTL 변수 | 꺼내는 것 |
+|---|---|
+| `$input.params('이름')` | 경로·쿼리·헤더 중 그 이름 |
+| `$input.params().querystring.이름` | 쿼리스트링만 |
+| `$input.path('$.필드')` | 요청 본문의 필드 |
+| `$input.json('$')` | 본문 전체를 JSON 으로 |
+| `$context.requestId` | 요청 ID |
+
+### 7-2. 403 분기
+
+요구는 이렇다.
+
+> 만약 /inventory 의 query string(item) 으로 mysecret 으로 시작하는 문자열을 받을 경우 HTTP status code 가 403 이고 body 가 "403 Forbidden" 인 응답을 반환하도록 합니다.
+
+VTL 에서 조건을 쓰고 상태코드를 바꾸도록 신호를 보낸다.
+
+```velocity
+#set($item = $input.params('item'))
+#if($item.startsWith("mysecret"))
+  #set($context.responseOverride.status = 403)
+  #set($context.responseOverride.header.X-Blocked = "true")
+{}
+#else
+{
+  "TableName": "inventory",
+  "Key": { "name": { "S": "$item" } }
+}
+#end
+```
+
+:::caution[요청 템플릿에서 상태코드를 바꾸는 것이 항상 통하지는 않는다]
+`$context.responseOverride` 는 응답 단계에서 확실히 동작한다. 요청 단계에서는 통합이 먼저 실행되므로 빈 요청이 DynamoDB 로 가 오류가 날 수 있다.
+
+**더 확실한 방법 둘.**
+
+1. **응답 템플릿에서 판정한다.** 통합은 그대로 두고, 응답 매핑에서 `item` 을 다시 보고 override 한다.
+2. **경로를 나눈다.** `Choice` 없이 API Gateway 요청 검증기나 별도 리소스로 분기한다.
+
+실습에서는 1번을 쓴다. 통합 요청에는 항상 유효한 키를 넣고 응답에서 가린다.
+:::
+
+### 7-3. 응답 템플릿 — 타입 표기 벗기기
+
+DynamoDB 가 주는 응답은 이렇다.
+
+```json
+{ "Item": { "name": { "S": "balance" }, "value": { "N": "1000" } } }
+```
+
+요구는 이렇다.
+
+> 요청 예시 (응답은 큰 따옴표를 출력하지 않아야 함)
+>
+> `GET /inventory?item=balance` → `1000`
+
+곧 `1000` 이라는 숫자만, 따옴표 없이 내야 한다.
+
+```velocity
+#set($item = $input.params('item'))
+#if($item.startsWith("mysecret"))
+#set($context.responseOverride.status = 403)
+403 Forbidden
+#else
+#set($v = $input.path('$.Item.value.N'))
+$v
+#end
+```
+
+**마지막 줄의 `$v` 가 그대로 응답 본문이 된다.** JSON 을 만들지 않고 값만 쓴다. 따옴표를 붙이면 `"1000"` 이 되어 요구와 다르다.
+
+:::danger[`Content-Type` 을 확인한다]
+`application/json` 으로 두고 본문이 `1000` 이면 유효한 JSON 숫자라 문제없다. 하지만 `403 Forbidden` 은 유효한 JSON 이 아니다. 채점이 본문 문자열만 보면 통하지만, 엄격한 클라이언트가 파싱하면 실패한다. 요구가 그 본문을 명시했으므로 그대로 낸다.
+:::
+
+### 7-4. 메서드 응답과 통합 응답
+
+API Gateway 는 응답을 두 단계로 정의한다.
+
+| 단계 | 정하는 것 |
+|---|---|
+| 통합 응답(Integration Response) | 뒤에서 온 것을 어떻게 변환할지 |
+| 메서드 응답(Method Response) | 클라이언트에게 어떤 상태코드·헤더가 가능한지 |
+
+**메서드 응답에 선언하지 않은 상태코드는 낼 수 없다.** 403 을 내려면 메서드 응답에 403 을 등록해야 한다.
+
+```hcl
+resource "aws_api_gateway_method_response" "ok" {
+  status_code = "200"
+  ...
+}
+
+resource "aws_api_gateway_method_response" "forbidden" {
+  status_code = "403"     # 이것이 없으면 403 을 못 낸다
+  ...
+}
+```
+
+---
+
+## 8. 실패를 좁히는 순서
+
+### 8-1. Step Functions 실행이 실패했다
+
+콘솔의 그래프 보기가 가장 빠르다. 빨간 상태를 클릭하면 입력·출력·오류가 나온다. CLI 로도 본다.
+
+```bash
+aws stepfunctions describe-execution --execution-arn <ARN> \
+  --query '{status:status,error:error,cause:cause}'
+```
+
+```bash
+aws stepfunctions get-execution-history --execution-arn <ARN> \
+  --query 'events[?type==`TaskFailed`].taskFailedEventDetails'
+```
+
+| 오류 | 원인 |
+|---|---|
+| `States.Runtime` | ASL 문법이나 경로 오류. `.$` 경로가 없는 필드를 가리킴 |
+| `AccessDeniedException` | 상태 머신 역할에 그 API 권한이 없다 |
+| `ValidationException` | `Parameters` 형식 오류. 숫자에 따옴표 빠짐 등 |
+| `ResourceNotFoundException` | 테이블 이름·리전 |
+| `States.NoChoiceMatched` | `Choice` 에 `Default` 가 없다 |
+
+### 8-2. API Gateway 가 이상한 것을 낸다
+
+| 증상 | 원인 |
+|---|---|
+| 500 Internal server error | 매핑 템플릿 오류 또는 통합 권한 |
+| 본문이 `{"Item":...}` 그대로 | 응답 템플릿이 없다 |
+| 403 이 안 나온다 | 메서드 응답에 403 미등록 |
+| 배포해도 안 바뀐다 | **스테이지에 다시 배포하지 않았다** |
+
+마지막이 흔하다. API Gateway 는 변경을 배포해야 반영된다.
+
+```bash
+aws apigateway create-deployment --rest-api-id <ID> --stage-name v1
+```
+
+Terraform 이라면 `aws_api_gateway_deployment` 에 `triggers` 를 걸어 자동 재배포시킨다.
+
+```hcl
+resource "aws_api_gateway_deployment" "this" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  triggers = {
+    redeploy = sha1(jsonencode([
+      aws_api_gateway_integration.get_inventory,
+      aws_api_gateway_integration_response.ok,
+    ]))
+  }
+  lifecycle { create_before_destroy = true }
+}
+```
+
+실행 로그를 켜면 매핑 템플릿 결과를 볼 수 있다.
+
+```bash
+aws apigateway update-stage --rest-api-id <ID> --stage-name v1 \
+  --patch-operations op=replace,path=/*/*/logging/loglevel,value=INFO \
+                     op=replace,path=/*/*/logging/dataTrace,value=true
+```
+
+CloudWatch Logs 의 `API-Gateway-Execution-Logs_<ID>/v1` 에 변환 전후가 남는다.
+
+---
+
+## 9. 30% 변형에 대비하기
+
+| 변형 | 무엇이 바뀌나 |
+|---|---|
+| POST 도 지원 | 메서드와 통합을 하나 더, 요청 템플릿에 `$input.path` |
+| 여러 항목 조회 | `Scan` 이나 `Query` 로 바꾸고 응답에서 `$input.path('$.Items')` |
+| S3 에 쓰기 | `arn:aws:states:::aws-sdk:s3:putObject` |
+| SNS 알림 | `aws-sdk:sns:publish` 를 Task 로 |
+| HTTP API 로 | 매핑 템플릿이 없다. 통합 방식이 다르다 |
+| 차단 조건이 다름 | VTL `#if` 조건만 |
+
+**HTTP API 로 바꾸라는 요구가 나오면 주의한다.** HTTP API 는 REST API 보다 싸고 빠르지만 매핑 템플릿을 지원하지 않는다. AWS 서비스 프록시도 제한적이다. 문제지가 `API Type: REST API` 를 명시한 이유다.
+
+---
+
+## 정리
+
+- 컴퓨팅 금지는 **서비스 통합을 아느냐**를 묻는 제약이다
+- Step Functions `Task` 하나가 AWS API 하나다. `aws-sdk:` ARN 으로 부른다
+- `Parameters` 는 저수준 API 형식이다. 숫자도 **문자열로** 쓴다
+- `.$` 를 붙여야 경로로 해석된다. 빼면 글자 그대로 저장된다
+- `ResultPath` 를 안 쓰면 결과가 입력을 덮어써 원래 값을 잃는다
+- 계산은 `UpdateExpression` 에 맡긴다. 원자적이라 동시성 문제도 없다
+- API Gateway `AWS` 통합은 매핑 템플릿으로 요청과 응답을 만든다
+- **메서드 응답에 없는 상태코드는 낼 수 없다**
+- 바꾼 뒤 **스테이지에 다시 배포**하지 않으면 반영되지 않는다
+
+---
+
+## 자기 점검 퀴즈
+
+<Quiz
+  question="Step Functions 에서 DynamoDB 를 Lambda 없이 부르려면 `Resource` 에 무엇을 쓰나?"
+  options={[
+    'arn:aws:lambda:...:function:dynamodb',
+    'arn:aws:states:::aws-sdk:dynamodb:getItem',
+    'arn:aws:dynamodb:...:table/inventory',
+    'https://dynamodb.ap-northeast-2.amazonaws.com',
+  ]}
+  correct={1}
+  explanation="aws-sdk: 접두사가 SDK 통합이다. 서비스 이름은 소문자, API 이름은 첫 글자만 소문자인 카멜케이스로 쓴다. getItem 이 맞고 GetItem 은 틀리다."
+/>
+
+<Quiz
+  question="`ResultPath` 를 지정하지 않으면 어떻게 되나?"
+  options={[
+    '결과가 버려진다',
+    'Task 결과가 입력을 통째로 대체해 원래 입력값을 잃는다',
+    '오류가 난다',
+    '입력과 결과가 자동으로 합쳐진다',
+  ]}
+  correct={1}
+  explanation="기본값이 $ 라 결과가 상태의 출력 전체가 된다. 원래 입력의 sales 같은 값이 사라져 다음 상태에서 참조하면 실패한다. ResultPath 로 이름을 주면 입력에 붙는다."
+/>
+
+<Quiz
+  question="`\"N\": \"$.sales\"` 라고 썼더니 DynamoDB 에 `$.sales` 라는 글자가 저장됐다. 원인은?"
+  options={[
+    '숫자 타입이 잘못됐다',
+    '키 이름에 `.$` 를 붙이지 않아 경로가 아니라 문자열로 해석됐다',
+    '권한이 없다',
+    'ResultPath 문제다',
+  ]}
+  correct={1}
+  explanation="경로로 해석시키려면 키 이름을 \"N.$\" 로 써야 한다. 붙이지 않으면 오류 없이 글자 그대로 들어가므로 발견이 늦다."
+/>
+
+<Quiz
+  question="API Gateway 에서 GET 으로 DynamoDB 를 부르는데 `integration_http_method` 가 POST 인 이유는?"
+  options={[
+    '설정 오류다',
+    'DynamoDB API 는 모든 작업을 POST 로 받기 때문이다',
+    'GET 은 본문을 보낼 수 없어서다',
+    '캐싱 때문이다',
+  ]}
+  correct={1}
+  explanation="클라이언트가 보는 메서드와 통합이 백엔드를 부를 때 쓰는 메서드는 별개다. DynamoDB 는 작업 종류를 URI 의 action 으로 구분하고 전송은 언제나 POST 다."
+/>
+
+<Quiz
+  question="응답 템플릿에서 403 을 내도록 썼는데 여전히 200 이 나온다. 가장 가능성 높은 원인은?"
+  options={[
+    'VTL 문법 오류',
+    '메서드 응답에 403 을 등록하지 않았다',
+    'DynamoDB 권한 부족',
+    '쿼리스트링이 전달되지 않는다',
+  ]}
+  correct={1}
+  explanation="메서드 응답에 선언한 상태코드만 낼 수 있다. 403 을 등록하지 않으면 responseOverride 가 무시되거나 500 이 난다."
+/>
+
+<Quiz
+  question="상태 머신에서 재고를 빼는 계산을 어디서 하는 것이 가장 간단한가?"
+  options={[
+    'Pass 상태에서 States 내장 함수로',
+    'DynamoDB UpdateExpression 의 `SET #v = #v - :sales` 로',
+    'Choice 상태로 값을 나눠',
+    'Lambda 를 하나만 쓴다',
+  ]}
+  correct={1}
+  explanation="읽고 계산해 쓰는 세 단계를 UpdateExpression 한 번으로 줄인다. 원자적이라 동시 요청에서 덮어쓰기도 생기지 않는다. Lambda 는 이 문제에서 금지다."
+/>
+
+<QuizResults />

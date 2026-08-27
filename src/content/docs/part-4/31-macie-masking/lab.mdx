@@ -1,0 +1,691 @@
+---
+title: Lab 31 — 여섯 유형을 가리고 Macie 로 검증하기
+description: S3 두 접두사와 트리거 Lambda 를 만들어 민감정보 여섯 종을 마스킹하고, grep 으로 잔존을 세어 고친 뒤 Macie 작업으로 최종 확인하는 실습.
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+선행 지식과 목표는 [모듈 개요](/part-4/31-macie-masking/)에. 개념은 [이론](/part-4/31-macie-masking/theory/)에 있다.
+
+[2025 2과제 Storage data protect 모듈](/reference/past-exams/#3-2-2025-2과제--small-challenge-4시간)을 재현한다. 리전은 `ap-northeast-2` 다.
+
+:::danger[Macie 가 켜져 있으면 계속 과금될 수 있다]
+Macie 를 활성화하면 S3 자동 검색이 기본으로 켜져 계정의 버킷을 지속적으로 훑는다. 이 실습은 **자동 검색을 끄고 시작**하고 끝나면 Macie 를 비활성화한다.
+:::
+
+## 실습 목표
+
+- [ ] 버킷과 두 접두사를 만든다
+- [ ] 샘플 데이터를 만들어 `incoming/` 에 올린다
+- [ ] 마스킹 Lambda 를 만들고 S3 트리거를 건다
+- [ ] 무한루프를 두 겹으로 막는다
+- [ ] 여섯 유형 정규식을 쓴다
+- [ ] `grep` 으로 잔존을 세어 고친다
+- [ ] Macie 분류 작업을 한 번만 돌린다
+- [ ] 발견 항목이 없는지 확인한다
+- [ ] 실기출 채점 명령으로 확인한다
+- [ ] Macie 를 끄고 전부 정리한다
+
+---
+
+## 1. 샘플 데이터
+
+배포 파일이 없으면 같은 형식으로 만든다. 실기출 파일이 있다면 그것을 쓴다.
+
+<Steps>
+
+1. **작업 디렉터리와 데이터를 만든다.**
+
+   ```bash
+   mkdir -p ~/lab31/data && cd ~/lab31
+   export AWS_DEFAULT_REGION=ap-northeast-2
+   ```
+
+   ```bash
+   python3 - <<'EOF'
+   import random, uuid
+
+   random.seed(31)   # 매번 같은 데이터가 나오게
+
+   first = ["Nicole", "Crystal", "Brianna", "David", "Ashley", "Jesus"]
+   last  = ["Huff", "White", "Rodriguez", "Brooks", "Davis", "Kim"]
+   title = ["", "", "", "Mrs. ", "Dr. "]      # 경칭이 붙는 경우도 섞는다
+
+   with open("data/names.txt", "w") as f:
+       for _ in range(300):
+           f.write(f"{random.choice(title)}{random.choice(first)} {random.choice(last)}\n")
+
+   with open("data/emails.txt", "w") as f:
+       for i in range(300):
+           f.write(f"{random.choice(first).lower()}{i}@example.{random.choice(['org','net','com'])}\n")
+
+   with open("data/phones.txt", "w") as f:
+       for _ in range(300):
+           f.write(f"010-{random.randint(1000,9999)}-{random.randint(1000,9999)}\n")
+
+   with open("data/ssns.txt", "w") as f:
+       for _ in range(300):
+           f.write(f"{random.randint(100,899)}-{random.randint(10,99):02d}-{random.randint(1000,9999)}\n")
+
+   with open("data/credit_cards.txt", "w") as f:
+       for _ in range(300):
+           f.write("-".join(f"{random.randint(1000,9999)}" for _ in range(4)) + "\n")
+
+   with open("data/uuids.txt", "w") as f:
+       for _ in range(300):
+           f.write(str(uuid.UUID(int=random.getrandbits(128))) + "\n")
+
+   print("done")
+   EOF
+   ```
+
+   ```bash
+   head -3 data/*.txt
+   ```
+
+   :::note[경칭이 섞여 있다]
+   `Mrs. Brianna Rodriguez` 같은 세 토막 이름이 들어간다. 실기출 배포 파일에도 있었다. 두 토막만 가정하고 만든 정규식이 여기서 걸린다.
+   :::
+
+</Steps>
+
+---
+
+## 2. 버킷과 Lambda
+
+<Steps>
+
+1. **버킷을 만든다.**
+
+   ```hcl title="main.tf"
+   terraform {
+     required_providers { aws = { source = "hashicorp/aws", version = "~> 5.0" } }
+   }
+   provider "aws" { region = var.region }
+
+   variable "region" { default = "ap-northeast-2" }
+
+   resource "random_string" "suffix" {
+     length  = 4
+     special = false
+     upper   = false
+     numeric = false
+   }
+
+   resource "aws_s3_bucket" "sensitive" {
+     bucket        = "wsc2025-sensitive-${random_string.suffix.result}"
+     force_destroy = true
+   }
+
+   resource "aws_s3_bucket_public_access_block" "sensitive" {
+     bucket                  = aws_s3_bucket.sensitive.id
+     block_public_acls       = true
+     block_public_policy     = true
+     ignore_public_acls      = true
+     restrict_public_buckets = true
+   }
+
+   output "bucket" { value = aws_s3_bucket.sensitive.bucket }
+   ```
+
+   이름이 `wsc2025-sensitive-<임의 4개 영문>` 이다. 실기출 요구 형식이다.
+
+2. **Lambda 코드를 쓴다.**
+
+   ```python title="lambda/index.py"
+   import re
+
+   import boto3
+
+   s3 = boto3.client("s3")
+
+   # 긴 형식부터. \b 로 경계를 명시해 긴 숫자열 안쪽에서 부분 일치가 나지 않게 한다.
+   PATTERNS = [
+       # UUID — 마지막 12자리
+       (re.compile(r"\b([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-)[0-9a-fA-F]{12}\b"),
+        r"\1************"),
+       # 카드 — 네 마디
+       (re.compile(r"\b(\d{4}-\d{4}-\d{4}-)\d{4}\b"), r"\1****"),
+       # 전화 — 세 마디
+       (re.compile(r"\b(\d{2,3}-\d{3,4}-)\d{4}\b"), r"\1****"),
+       # 주민번호 — 세 마디
+       (re.compile(r"\b(\d{3}-\d{2}-)\d{4}\b"), r"\1****"),
+   ]
+
+   EMAIL = re.compile(r"\b([\w.+-]+)@([\w.-]+\.[\w.-]+)\b")
+   # 경칭이 앞에 붙을 수 있다. 마지막 두 토막을 이름으로 본다.
+   NAME = re.compile(r"\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\s*$")
+
+
+   def mask_email(text):
+       def repl(m):
+           local, domain = m.group(1), m.group(2)
+           return local[0] + "*" * (len(local) - 1) + "@" + domain
+       return EMAIL.sub(repl, text)
+
+
+   def mask_name(text):
+       def repl(m):
+           first, last = m.group(1), m.group(2)
+           return first + " " + "*" * len(last)
+       return NAME.sub(repl, text)
+
+
+   def mask_all(line):
+       for pattern, replacement in PATTERNS:
+           line = pattern.sub(replacement, line)
+       line = mask_email(line)
+       line = mask_name(line)
+       return line
+
+
+   def handler(event, context):
+       results = []
+       for record in event.get("Records", []):
+           bucket = record["s3"]["bucket"]["name"]
+           key = record["s3"]["object"]["key"]
+
+           # 무한루프 차단 둘째 겹. 이벤트 필터가 빠져도 여기서 막는다.
+           if not key.startswith("incoming/"):
+               results.append({"key": key, "skipped": True})
+               continue
+
+           body = s3.get_object(Bucket=bucket, Key=key)["Body"]
+           out = [mask_all(raw.decode("utf-8", errors="replace")) for raw in body.iter_lines()]
+
+           target = key.replace("incoming/", "masked/", 1)
+           s3.put_object(
+               Bucket=bucket,
+               Key=target,
+               Body=("\n".join(out) + "\n").encode("utf-8"),
+               ContentType="text/plain; charset=utf-8",
+           )
+           print(f"[masking] {key} -> {target} lines={len(out)}")
+           results.append({"key": target, "lines": len(out)})
+
+       return {"statusCode": 200, "results": results}
+   ```
+
+   :::caution[이름 정규식은 첫 시도다]
+   `NAME` 이 줄 끝(`$`)의 두 토막을 잡는다. `Mrs. Brianna Rodriguez` 면 `Brianna Rodriguez` 가 걸려 `Brianna *********` 가 된다. **이것으로 Macie 를 통과하는지가 이 실습의 핵심 질문**이다. 통과하지 못하면 5절에서 고친다.
+   :::
+
+3. **Lambda 와 트리거를 만든다.**
+
+   ```hcl title="lambda.tf"
+   data "archive_file" "masking" {
+     type        = "zip"
+     source_dir  = "${path.module}/lambda"
+     output_path = "${path.module}/masking.zip"
+   }
+
+   resource "aws_iam_role" "lambda" {
+     name = "wsc2025-masking-role"
+     assume_role_policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [{
+         Effect    = "Allow"
+         Principal = { Service = "lambda.amazonaws.com" }
+         Action    = "sts:AssumeRole"
+       }]
+     })
+   }
+
+   resource "aws_iam_role_policy" "lambda" {
+     role = aws_iam_role.lambda.id
+     policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [
+         {
+           Effect   = "Allow"
+           Action   = ["s3:GetObject", "s3:PutObject"]
+           Resource = "${aws_s3_bucket.sensitive.arn}/*"
+         },
+         {
+           Effect   = "Allow"
+           Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+           Resource = "arn:aws:logs:*:*:*"
+         },
+       ]
+     })
+   }
+
+   resource "aws_lambda_function" "masking" {
+     function_name    = "wsc2025-masking-start"
+     role             = aws_iam_role.lambda.arn
+     handler          = "index.handler"
+     runtime          = "python3.12"
+     filename         = data.archive_file.masking.output_path
+     source_code_hash = data.archive_file.masking.output_base64sha256
+
+     timeout     = 60     # 기본 3초로는 부족하다
+     memory_size = 512    # 메모리를 늘리면 CPU 도 늘어 정규식이 빨라진다
+   }
+
+   # S3 가 Lambda 를 부를 수 있게 한다. 없으면 알림 설정 자체가 실패한다.
+   resource "aws_lambda_permission" "s3" {
+     statement_id  = "AllowS3Invoke"
+     action        = "lambda:InvokeFunction"
+     function_name = aws_lambda_function.masking.function_name
+     principal     = "s3.amazonaws.com"
+     source_arn    = aws_s3_bucket.sensitive.arn
+   }
+
+   resource "aws_s3_bucket_notification" "this" {
+     bucket = aws_s3_bucket.sensitive.id
+
+     lambda_function {
+       lambda_function_arn = aws_lambda_function.masking.arn
+       events              = ["s3:ObjectCreated:*"]
+       filter_prefix       = "incoming/"    # 무한루프 차단 첫째 겹
+     }
+
+     depends_on = [aws_lambda_permission.s3]
+   }
+   ```
+
+4. **적용한다.**
+
+   ```bash
+   terraform init && terraform apply
+   export BUCKET=$(terraform output -raw bucket)
+   echo $BUCKET
+   ```
+
+</Steps>
+
+---
+
+## 3. 올리고 결과 보기
+
+<Steps>
+
+1. **`incoming/` 에 올린다.**
+
+   ```bash
+   aws s3 cp data/ s3://$BUCKET/incoming/ --recursive
+   ```
+
+2. **`masked/` 에 생겼는지 본다.**
+
+   ```bash
+   sleep 15
+   aws s3 ls s3://$BUCKET/masked/
+   ```
+
+   여섯 파일이 나와야 한다. 없으면 로그를 본다.
+
+   ```bash
+   aws logs tail /aws/lambda/wsc2025-masking-start --since 10m
+   ```
+
+3. **눈으로 확인한다.**
+
+   ```bash
+   for f in names emails phones ssns credit_cards uuids; do
+     echo "=== $f ==="
+     aws s3 cp s3://$BUCKET/masked/$f.txt - | head -3
+   done
+   ```
+
+   [모듈 개요의 표](/part-4/31-macie-masking/)와 형태가 같은지 본다.
+
+</Steps>
+
+---
+
+## 4. 잔존을 센다
+
+**Macie 를 돌리기 전에 여기서 대부분을 잡는다.** 훨씬 빠르다.
+
+<details class="build-step">
+<summary>자가채점 — 원본 형식이 남았는지 세기</summary>
+
+```bash
+echo "--- 카드 (0 이어야 함) ---"
+aws s3 cp s3://$BUCKET/masked/credit_cards.txt - | grep -cE '[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{4}'
+
+echo "--- 전화 (0) ---"
+aws s3 cp s3://$BUCKET/masked/phones.txt - | grep -cE '[0-9]{2,3}-[0-9]{3,4}-[0-9]{4}'
+
+echo "--- 주민번호 (0) ---"
+aws s3 cp s3://$BUCKET/masked/ssns.txt - | grep -cE '[0-9]{3}-[0-9]{2}-[0-9]{4}'
+
+echo "--- UUID (0) ---"
+aws s3 cp s3://$BUCKET/masked/uuids.txt - | grep -cE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+echo "--- 이메일 로컬부가 2글자 이상 남았는지 (0) ---"
+aws s3 cp s3://$BUCKET/masked/emails.txt - | grep -cE '^[A-Za-z0-9]{2,}@'
+
+echo "--- 이름 두 단어가 그대로 (0) ---"
+aws s3 cp s3://$BUCKET/masked/names.txt - | grep -cE '[A-Z][a-z]+ [A-Z][a-z]+$'
+```
+
+**기대 출력** — 여섯 줄 모두 `0`.
+
+**안 나올 때 볼 곳** — 0이 아니면 그 줄을 직접 본다.
+
+```bash
+aws s3 cp s3://$BUCKET/masked/credit_cards.txt - \
+  | grep -nE '[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{4}' | head -5
+```
+
+남은 줄의 형태를 보면 정규식의 어느 부분이 안 맞는지 드러난다.
+
+</details>
+
+고칠 때는 로컬에서 먼저 시험한다. 배포할 필요가 없어 되먹임이 빠르다.
+
+```bash
+python3 - <<'EOF'
+import sys
+sys.path.insert(0, "lambda")
+from index import mask_all
+
+for s in [
+    "4468-6779-7028-4776",
+    "010-7658-5153",
+    "887-07-7325",
+    "665ef2db-cd63-4086-81e9-661ccaf8dd20",
+    "davisjesus@example.org",
+    "Crystal White",
+    "Mrs. Brianna Rodriguez",
+]:
+    print(f"{s:45} -> {mask_all(s)}")
+EOF
+```
+
+기대하는 출력이다.
+
+```
+4468-6779-7028-4776                           -> 4468-6779-7028-****
+010-7658-5153                                 -> 010-7658-****
+887-07-7325                                   -> 887-07-****
+665ef2db-cd63-4086-81e9-661ccaf8dd20          -> 665ef2db-cd63-4086-81e9-************
+davisjesus@example.org                        -> d*********@example.org
+Crystal White                                 -> Crystal *****
+Mrs. Brianna Rodriguez                        -> Mrs. Brianna *********
+```
+
+고쳤으면 다시 배포하고 올린다.
+
+```bash
+terraform apply
+aws s3 rm s3://$BUCKET/masked/ --recursive
+aws s3 cp data/ s3://$BUCKET/incoming/ --recursive
+```
+
+---
+
+## 5. Macie
+
+<Steps>
+
+1. **활성화하고 자동 검색은 끈다.**
+
+   ```bash
+   aws macie2 enable-macie
+   aws macie2 update-automated-discovery-configuration --status DISABLED
+   ```
+
+   :::danger[자동 검색을 반드시 끈다]
+   켜져 있으면 계정의 모든 버킷을 지속적으로 훑어 과금이 계속 는다. 이 실습은 지정한 작업만 돌린다.
+   :::
+
+2. **UUID 용 사용자 지정 식별자를 만든다.**
+
+   ```bash
+   aws macie2 create-custom-data-identifier \
+     --name wsc2025-uuid \
+     --regex '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}' \
+     --query 'customDataIdentifierId' --output text
+   ```
+
+   ```bash
+   export CDI_ID=$(aws macie2 list-custom-data-identifiers \
+     --query "items[?name=='wsc2025-uuid'].id | [0]" --output text)
+   echo $CDI_ID
+   ```
+
+   관리형 식별자 목록에 UUID 가 없을 수 있어 직접 만든다.
+
+3. **분류 작업을 만든다. 범위는 `masked/`, 유형은 한 번만.**
+
+   ```bash
+   export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+   cat > job.json <<EOF
+   {
+     "name": "wsc2025-sensor-job",
+     "jobType": "ONE_TIME",
+     "customDataIdentifierIds": ["${CDI_ID}"],
+     "s3JobDefinition": {
+       "bucketDefinitions": [
+         { "accountId": "${ACCOUNT_ID}", "buckets": ["${BUCKET}"] }
+       ],
+       "scoping": {
+         "includes": {
+           "and": [{
+             "simpleScopeTerm": {
+               "comparator": "STARTS_WITH",
+               "key": "OBJECT_KEY",
+               "values": ["masked/"]
+             }
+           }]
+         }
+       }
+     }
+   }
+   EOF
+
+   aws macie2 create-classification-job --cli-input-json file://job.json
+   ```
+
+   `jobType` 이 `ONE_TIME` 이다. `SCHEDULED` 로 두면 반복 실행된다.
+
+4. **끝날 때까지 기다린다.**
+
+   ```bash
+   export JOB_ID=$(aws macie2 list-classification-jobs \
+     --query "items[?name=='wsc2025-sensor-job'].jobId | [0]" --output text)
+
+   aws macie2 describe-classification-job --job-id $JOB_ID --query 'jobStatus' --output text
+   ```
+
+   `RUNNING` 에서 `COMPLETE` 가 될 때까지 몇 분 걸린다.
+
+5. **발견 항목을 본다.**
+
+   ```bash
+   aws macie2 list-findings --query 'findingIds'
+   ```
+
+   **빈 목록이면 통과다.** 있으면 유형을 본다.
+
+   ```bash
+   FID=$(aws macie2 list-findings --query 'findingIds[0]' --output text)
+   aws macie2 get-findings --finding-ids $FID \
+     --query 'findings[0].{key:resourcesAffected.s3Object.key, data:classificationDetails.result.sensitiveData}'
+   ```
+
+   어느 파일의 어느 유형이 남았는지 나온다. 그 정규식만 고쳐 4절로 돌아간다.
+
+</Steps>
+
+---
+
+## 6. 자가채점
+
+<details class="build-step">
+<summary>자가채점 — 2025 2과제 `2_storage_data_protect.sh` 2-1 ~ 2-3</summary>
+
+```bash
+# 2-1 버킷 이름
+aws s3api list-buckets --query "Buckets[?starts_with(Name, 'wsc2025-sensitive-')].Name" --output text
+
+# 2-2 Macie 작업
+aws macie2 list-classification-jobs \
+  --query "items[?name=='wsc2025-sensor-job'].name" --output text
+
+# 2-3 Lambda 함수
+aws lambda list-functions \
+  --query "Functions[?FunctionName=='wsc2025-masking-start'].FunctionName" --output text
+```
+
+**기대 출력** — 세 명령이 각각 버킷 이름, `wsc2025-sensor-job`, `wsc2025-masking-start`.
+
+**안 나올 때 볼 곳** — 비면 이름이나 리전을 확인한다. 버킷 이름은 `wsc2025-sensitive-` 로 시작해야 한다.
+
+</details>
+
+<details class="build-step">
+<summary>자가채점 — 2-4 ~ 2-7 (수동 채점 항목)</summary>
+
+원본 채점 스크립트에서 `Manual` 로 표시된 항목이다. 사람이 눈으로 본다. 아래로 대신한다.
+
+```bash
+# 두 접두사가 있는가
+aws s3 ls s3://$BUCKET/incoming/ | head -3
+aws s3 ls s3://$BUCKET/masked/   | head -3
+
+# 마스킹 형태가 표와 같은가
+for f in names emails phones ssns credit_cards uuids; do
+  printf '%-14s ' "$f"
+  aws s3 cp s3://$BUCKET/masked/$f.txt - | head -1
+done
+
+# Macie 발견 항목이 없는가
+aws macie2 list-findings --query 'length(findingIds)'
+```
+
+**기대 출력** — 두 접두사에 각각 여섯 파일. 마스킹 형태가 표와 일치. 발견 항목 수가 `0`.
+
+**안 나올 때 볼 곳** — 발견 항목이 0이 아니면 5절 5번으로 유형을 확인한다. 파일이 없으면 3절 2번의 로그를 본다.
+
+</details>
+
+---
+
+## 7. 막혔을 때
+
+### 7-1. `masked/` 에 아무것도 안 생긴다
+
+```bash
+aws s3api get-bucket-notification-configuration --bucket $BUCKET
+```
+
+비어 있으면 알림이 설정되지 않은 것이다. `aws_lambda_permission` 이 먼저 만들어졌는지 확인한다.
+
+설정은 있는데 안 불린다면 Lambda 로그 그룹 자체가 없는지 본다.
+
+```bash
+aws logs describe-log-groups --log-group-name-prefix /aws/lambda/wsc2025-masking-start
+```
+
+### 7-2. Lambda 가 실패한다
+
+```bash
+aws logs tail /aws/lambda/wsc2025-masking-start --since 15m --filter-pattern "ERROR"
+```
+
+| 오류 | 고침 |
+|---|---|
+| `AccessDenied` | 역할 정책의 `s3:GetObject` · `s3:PutObject` |
+| `Task timed out` | `timeout` 을 늘린다 |
+| `MemoryError` | `memory_size` 를 늘린다 |
+| `KeyError: 'Records'` | 콘솔 테스트 이벤트가 S3 형식이 아니다 |
+
+### 7-3. 무한루프가 났다
+
+Lambda 호출 수가 이상하게 많으면 즉시 끊는다.
+
+```bash
+aws lambda put-function-concurrency \
+  --function-name wsc2025-masking-start --reserved-concurrent-executions 0
+```
+
+이것이 가장 빠르다. 원인을 고친 뒤 되돌린다.
+
+```bash
+aws lambda delete-function-concurrency --function-name wsc2025-masking-start
+```
+
+호출 수를 확인한다.
+
+```bash
+aws cloudwatch get-metric-statistics --namespace AWS/Lambda --metric-name Invocations \
+  --dimensions Name=FunctionName,Value=wsc2025-masking-start \
+  --start-time $(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%S) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+  --period 300 --statistics Sum --query 'Datapoints[*].Sum'
+```
+
+### 7-4. Macie 작업이 `USER_PAUSED` 나 오류
+
+무료 평가판 한도를 넘었거나 권한 문제일 수 있다.
+
+```bash
+aws macie2 describe-classification-job --job-id $JOB_ID \
+  --query '{status:jobStatus, statistics:statistics}'
+```
+
+작업을 다시 만들어야 한다면 이름을 바꾼다. 같은 이름으로는 다시 만들 수 없다.
+
+---
+
+## 8. 정리
+
+:::danger[Macie 를 반드시 끈다]
+켜 둔 채 두면 자동 검색이나 이후 작업으로 과금될 수 있다.
+:::
+
+<Steps>
+
+1. **Macie 를 끈다.**
+
+   ```bash
+   aws macie2 update-automated-discovery-configuration --status DISABLED
+   aws macie2 delete-custom-data-identifier --id $CDI_ID
+   aws macie2 disable-macie
+   ```
+
+   `disable-macie` 는 계정에서 Macie 를 완전히 끈다. 발견 항목과 작업 기록도 사라진다.
+
+2. **나머지를 지운다.**
+
+   ```bash
+   terraform destroy
+   ```
+
+   `force_destroy = true` 로 두어 객체가 있어도 버킷이 지워진다.
+
+3. **확인한다.**
+
+   ```bash
+   aws s3 ls | grep wsc2025-sensitive
+   aws lambda list-functions --query "Functions[?starts_with(FunctionName,'wsc2025')].FunctionName"
+   aws macie2 get-macie-session --query 'status' 2>/dev/null || echo "Macie disabled"
+   ```
+
+   앞 둘이 비고 마지막이 비활성이어야 한다.
+
+4. **로그 그룹도 지운다.**
+
+   ```bash
+   aws logs delete-log-group --log-group-name /aws/lambda/wsc2025-masking-start 2>/dev/null || true
+   ```
+
+</Steps>
+
+전체 점검은 [정리 체크리스트](/reference/cleanup-check/)에 있다.
+
+---
+
+## 다음 단계
+
+- 3과제 운영으로 — [32. 3과제 ECS 경로](/part-5/32-task3-ecs/)
+- 이 모듈의 근거 — [실기출 분해](/reference/past-exams/)

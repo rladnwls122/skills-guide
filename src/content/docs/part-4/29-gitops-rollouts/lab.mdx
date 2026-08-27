@@ -1,0 +1,779 @@
+---
+title: Lab 29 — ArgoCD 로 커밋에서 Blue/Green 까지
+description: EKS 에 ArgoCD 와 Argo Rollouts 와 External Secrets 를 올리고, gitops 브랜치 커밋 하나로 Blue/Green 전환이 3분 안에 끝나게 만든 뒤 실기출 명령으로 확인하는 실습.
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+선행 지식과 목표는 [모듈 개요](/part-4/29-gitops-rollouts/)에. 개념은 [이론](/part-4/29-gitops-rollouts/theory/)에 있다.
+
+[28. CI/CD](/part-4/28-cicd-pipeline/lab/) 에서 만든 저장소와 ECR 을 이어 쓴다. 없다면 그 실습을 먼저 한다.
+
+:::danger[EKS 가 시간당 과금한다]
+클러스터가 존재하는 것만으로 컨트롤 플레인 요금이 붙고 노드는 별도다. **한 번에 끝내고 지운다.** 중간에 멈춰야 하면 노드그룹을 0으로 줄인다.
+
+```bash
+eksctl scale nodegroup --cluster gj2025-eks-cluster --name app-ng --nodes 0
+```
+:::
+
+## 실습 목표
+
+- [ ] EKS 클러스터와 노드그룹을 만든다
+- [ ] ArgoCD 를 설치하고 대시보드에 접속한다
+- [ ] Argo Rollouts 컨트롤러와 kubectl 플러그인을 깐다
+- [ ] External Secrets 를 IRSA 로 Secrets Manager 에 연결한다
+- [ ] Rollout 과 서비스 둘을 만들어 Blue/Green 을 구성한다
+- [ ] 분석 템플릿으로 `/health` 검증을 넣는다
+- [ ] gitops 브랜치 커밋으로 전환이 자동으로 일어나게 만든다
+- [ ] 3분 안에 끝나도록 폴링 주기를 줄인다
+- [ ] 손으로 바꾼 것이 자동 복구되는지 확인한다
+- [ ] 실기출 채점 명령으로 확인한다
+- [ ] 전부 정리한다
+
+---
+
+## 1. 클러스터
+
+<Steps>
+
+1. **클러스터를 만든다.**
+
+   ```yaml title="cluster.yaml"
+   apiVersion: eksctl.io/v1alpha5
+   kind: ClusterConfig
+
+   metadata:
+     name: gj2025-eks-cluster
+     region: ap-northeast-2
+     version: "1.32"
+
+   iam:
+     withOIDC: true          # IRSA 의 첫 고리. 반드시 켠다
+
+   managedNodeGroups:
+     - name: app-ng
+       instanceType: t3.medium
+       desiredCapacity: 2
+       minSize: 2
+       maxSize: 3
+       labels: { role: app }
+
+   addons:
+     - name: vpc-cni
+     - name: coredns
+     - name: kube-proxy
+   ```
+
+   ```bash
+   eksctl create cluster -f cluster.yaml
+   ```
+
+   15분쯤 걸린다.
+
+   :::danger[`withOIDC: true` 를 빠뜨리지 않는다]
+   IRSA 의 첫 고리다. 나중에 붙일 수도 있지만 여기서 켜 두는 편이 간단하다.
+
+   ```bash
+   eksctl utils associate-iam-oidc-provider --cluster gj2025-eks-cluster --approve
+   ```
+   :::
+
+2. **연결을 확인한다.**
+
+   ```bash
+   aws eks update-kubeconfig --name gj2025-eks-cluster --region ap-northeast-2
+   kubectl get nodes
+   ```
+
+3. **네임스페이스를 만든다.**
+
+   ```bash
+   kubectl create namespace skills
+   ```
+
+</Steps>
+
+---
+
+## 2. 도구 셋 설치
+
+<Steps>
+
+1. **ArgoCD**
+
+   ```bash
+   kubectl create namespace argocd
+   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+   kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
+   ```
+
+2. **NLB 로 노출한다.**
+
+   ```yaml title="argocd-nlb.yaml"
+   apiVersion: v1
+   kind: Service
+   metadata:
+     name: argocd-server-nlb
+     namespace: argocd
+     annotations:
+       service.beta.kubernetes.io/aws-load-balancer-type: external
+       service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+       service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+   spec:
+     type: LoadBalancer
+     selector:
+       app.kubernetes.io/name: argocd-server
+     ports:
+       - port: 80
+         targetPort: 8080
+   ```
+
+   ```bash
+   kubectl apply -f argocd-nlb.yaml
+   ```
+
+   :::caution[HTTPS 리다이렉션을 끈다]
+   ArgoCD 서버가 기본으로 HTTP 를 HTTPS 로 돌려 NLB 뒤에서 무한 리다이렉션이 난다.
+
+   ```bash
+   kubectl -n argocd patch configmap argocd-cmd-params-cm \
+     --type merge -p '{"data":{"server.insecure":"true"}}'
+   kubectl -n argocd rollout restart deploy/argocd-server
+   ```
+   :::
+
+3. **암호를 확인하고 바꾼다.**
+
+   ```bash
+   kubectl -n argocd get secret argocd-initial-admin-secret \
+     -o jsonpath="{.data.password}" | base64 -d; echo
+   ```
+
+   접속 주소를 얻는다.
+
+   ```bash
+   kubectl -n argocd get svc argocd-server-nlb \
+     -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'; echo
+   ```
+
+   브라우저로 열어 `admin` 과 위 암호로 들어간다. 대회 요구 암호로 바꾸려면 CLI 를 쓴다.
+
+   ```bash
+   argocd login <NLB주소> --username admin --password <초기암호> --insecure
+   argocd account update-password --current-password <초기암호> --new-password 'Skills53'
+   ```
+
+4. **폴링 주기를 줄인다. 3분 제약의 핵심이다.**
+
+   ```bash
+   kubectl -n argocd patch configmap argocd-cm \
+     --type merge -p '{"data":{"timeout.reconciliation":"30s"}}'
+   kubectl -n argocd rollout restart deploy/argocd-repo-server statefulset/argocd-application-controller
+   ```
+
+   기본 3분을 30초로 줄인다. **이것을 하지 않으면 감지만으로 예산을 다 쓴다.**
+
+5. **Argo Rollouts 컨트롤러**
+
+   ```bash
+   kubectl create namespace argo-rollouts
+   kubectl apply -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+   kubectl -n argo-rollouts rollout status deploy/argo-rollouts --timeout=300s
+   ```
+
+6. **kubectl 플러그인**
+
+   ```bash
+   curl -sSLo kubectl-argo-rollouts \
+     https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-linux-amd64
+   chmod +x kubectl-argo-rollouts
+   sudo mv kubectl-argo-rollouts /usr/local/bin/
+   kubectl argo rollouts version
+   ```
+
+   :::danger[채점 명령이 이 플러그인을 쓴다]
+   `kubectl argo rollouts get rollout ...` 이 채점 스크립트에 있다. 없으면 그 명령이 실행되지 않아 항목을 잃는다. 2025 1과제 문제지도 Bastion 필수 패키지에 명시했다.
+   :::
+
+7. **External Secrets Operator**
+
+   ```bash
+   helm repo add external-secrets https://charts.external-secrets.io
+   helm repo update
+   helm install external-secrets external-secrets/external-secrets \
+     -n external-secrets --create-namespace --wait
+   ```
+
+</Steps>
+
+---
+
+## 3. 시크릿과 IRSA
+
+<Steps>
+
+1. **Secrets Manager 에 값을 넣는다.**
+
+   ```bash
+   aws secretsmanager create-secret \
+     --name gj2025-eks-cluster-catalog-secret \
+     --secret-string '{"DB_USER":"admin","DB_PASSWORD":"Skills53#$%","DB_URL":"gj2025-rds-proxy.proxy-xxx.ap-northeast-2.rds.amazonaws.com:3309"}'
+   ```
+
+   ARN 을 받아 둔다.
+
+   ```bash
+   export SECRET_ARN=$(aws secretsmanager describe-secret \
+     --secret-id gj2025-eks-cluster-catalog-secret --query ARN --output text)
+   echo $SECRET_ARN
+   ```
+
+   **끝에 하이픈과 임의 6자가 붙어 있다.** 정책에 이 ARN 을 그대로 쓴다.
+
+2. **IRSA 역할과 서비스 계정을 만든다.**
+
+   ```bash
+   cat > es-policy.json <<EOF
+   {
+     "Version": "2012-10-17",
+     "Statement": [{
+       "Effect": "Allow",
+       "Action": ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
+       "Resource": "${SECRET_ARN}"
+     }]
+   }
+   EOF
+
+   aws iam create-policy \
+     --policy-name gj2025-external-secrets-policy \
+     --policy-document file://es-policy.json
+
+   export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+   eksctl create iamserviceaccount \
+     --cluster gj2025-eks-cluster \
+     --namespace skills \
+     --name external-secrets-sa \
+     --attach-policy-arn arn:aws:iam::${ACCOUNT_ID}:policy/gj2025-external-secrets-policy \
+     --approve
+   ```
+
+   `eksctl create iamserviceaccount` 가 IRSA 네 고리 중 셋을 한 번에 만든다. 역할을 만들고, 신뢰 정책에 OIDC 와 `sub` 조건을 넣고, 서비스 계정에 annotation 을 붙인다.
+
+   확인한다.
+
+   ```bash
+   kubectl get sa external-secrets-sa -n skills \
+     -o jsonpath='{.metadata.annotations.eks\.amazonaws\.com/role-arn}'; echo
+   ```
+
+   :::caution[Resource 를 `*` 로 두지 않는다]
+   위 정책이 `$SECRET_ARN` 하나만 담는다. 채점이 이 값을 펼쳐 보고 `*` 가 있으면 감점한다.
+   :::
+
+3. **SecretStore 와 ExternalSecret 을 적용한다.**
+
+   ```yaml title="external-secret.yaml"
+   apiVersion: external-secrets.io/v1beta1
+   kind: SecretStore
+   metadata:
+     name: aws-secretsmanager
+     namespace: skills
+   spec:
+     provider:
+       aws:
+         service: SecretsManager
+         region: ap-northeast-2
+         auth:
+           jwt:
+             serviceAccountRef:
+               name: external-secrets-sa
+   ---
+   apiVersion: external-secrets.io/v1beta1
+   kind: ExternalSecret
+   metadata:
+     name: db-secret            # 채점이 이 이름으로 찾는다
+     namespace: skills
+   spec:
+     refreshInterval: 1m
+     secretStoreRef:
+       name: aws-secretsmanager
+       kind: SecretStore
+     target:
+       name: db-secret
+     data:
+       - secretKey: DB_USER
+         remoteRef: { key: gj2025-eks-cluster-catalog-secret, property: DB_USER }
+       - secretKey: DB_PASSWORD
+         remoteRef: { key: gj2025-eks-cluster-catalog-secret, property: DB_PASSWORD }
+       - secretKey: DB_URL
+         remoteRef: { key: gj2025-eks-cluster-catalog-secret, property: DB_URL }
+   ```
+
+   ```bash
+   kubectl apply -f external-secret.yaml
+   kubectl get externalsecret db-secret -n skills
+   ```
+
+   `STATUS` 가 `SecretSynced` 여야 한다.
+
+   ```bash
+   kubectl get secret db-secret -n skills -o jsonpath='{.data.DB_USER}' | base64 -d; echo
+   ```
+
+   `admin` 이 나오면 연결이 살아 있다.
+
+</Steps>
+
+---
+
+## 4. Rollout 구성
+
+<Steps>
+
+1. **gitops 브랜치를 만든다.**
+
+   28번 실습의 저장소에서 한다.
+
+   ```bash
+   cd gj2025-repository
+   git checkout -b gitops-red
+   mkdir -p gitops
+   ```
+
+2. **서비스 둘과 Rollout 을 쓴다.**
+
+   ```yaml title="gitops/rollout.yaml"
+   apiVersion: v1
+   kind: Service
+   metadata:
+     name: red-active
+     namespace: skills
+   spec:
+     selector: { app: red }
+     ports: [{ port: 80, targetPort: 80 }]
+   ---
+   apiVersion: v1
+   kind: Service
+   metadata:
+     name: red-preview
+     namespace: skills
+   spec:
+     selector: { app: red }
+     ports: [{ port: 80, targetPort: 80 }]
+   ---
+   apiVersion: argoproj.io/v1alpha1
+   kind: AnalysisTemplate
+   metadata:
+     name: health-check
+     namespace: skills
+   spec:
+     metrics:
+       - name: health
+         count: 2
+         interval: 5s
+         successCondition: result == "true"
+         failureLimit: 1
+         provider:
+           job:
+             spec:
+               backoffLimit: 0
+               template:
+                 spec:
+                   restartPolicy: Never
+                   containers:
+                     - name: check
+                       image: curlimages/curl:latest
+                       command: ["sh", "-c"]
+                       args:
+                         - |
+                           code=$(curl -s -o /dev/null -w '%{http_code}' http://red-preview.skills.svc.cluster.local/)
+                           [ "$code" = "200" ] && echo "true" || echo "false"
+   ---
+   apiVersion: argoproj.io/v1alpha1
+   kind: Rollout
+   metadata:
+     name: red-rollout           # 채점이 이 이름으로 찾는다
+     namespace: skills
+   spec:
+     replicas: 2
+     selector:
+       matchLabels: { app: red }
+     template:
+       metadata:
+         labels: { app: red }
+       spec:
+         containers:
+           - name: red
+             image: PLACEHOLDER_IMAGE
+             ports: [{ containerPort: 80 }]
+             envFrom:
+               - secretRef: { name: db-secret }
+             readinessProbe:
+               httpGet: { path: /, port: 80 }
+               initialDelaySeconds: 3
+               periodSeconds: 2
+     strategy:
+       blueGreen:
+         activeService: red-active
+         previewService: red-preview
+         autoPromotionEnabled: true          # 분석 성공 후 자동 승격
+         scaleDownDelaySeconds: 30
+         prePromotionAnalysis:
+           templates:
+             - templateName: health-check
+   ```
+
+   :::note[실습에서는 상태 검사 경로가 `/` 다]
+   nginx 이미지로 실습하므로 `/health` 가 없다. 대회에서는 [바이너리에서 실제 경로를 뽑아](/start/go-app-basics/#3-2-라우트를-뽑는다) 그것을 쓴다. 2025 1과제 앱은 `/health`, 3과제 앱은 `/healthcheck` 였다.
+   :::
+
+3. **이미지 자리를 실제 값으로 채우고 커밋한다.**
+
+   ```bash
+   export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+   export ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com"
+   sed -i "s|PLACEHOLDER_IMAGE|${ECR_REGISTRY}/app-repo:v1.0.1|" gitops/rollout.yaml
+   git add -A && git commit -m "add rollout" && git push -u origin gitops-red
+   ```
+
+4. **ArgoCD Application 을 만든다.**
+
+   ```yaml title="argocd-app.yaml"
+   apiVersion: argoproj.io/v1alpha1
+   kind: Application
+   metadata:
+     name: wsc2025-argo-app
+     namespace: argocd
+   spec:
+     project: default
+     source:
+       repoURL: https://github.com/<계정>/gj2025-repository.git
+       targetRevision: gitops-red
+       path: gitops
+     destination:
+       server: https://kubernetes.default.svc
+       namespace: skills
+     syncPolicy:
+       automated:
+         prune: true
+         selfHeal: true          # 손으로 바꾼 것을 되돌린다
+       syncOptions:
+         - CreateNamespace=true
+   ```
+
+   ```bash
+   kubectl apply -f argocd-app.yaml
+   kubectl -n argocd get application wsc2025-argo-app
+   ```
+
+   `SYNC STATUS` 가 `Synced`, `HEALTH` 가 `Healthy` 가 될 때까지 기다린다.
+
+5. **롤아웃 상태를 본다.**
+
+   ```bash
+   kubectl argo rollouts get rollout red-rollout -n skills --watch
+   ```
+
+   `Strategy: BlueGreen` 과 stable 리비전이 `Healthy` 로 보이면 첫 배포가 끝난 것이다. `Ctrl+C` 로 나온다.
+
+</Steps>
+
+---
+
+## 5. Blue/Green 전환을 실제로 일으키기
+
+<Steps>
+
+1. **새 이미지를 준비한다.**
+
+   28번 실습의 CI 가 이미 `v1.0.2` 를 만들어 두었다면 그것을 쓴다. 없다면 만든다.
+
+   ```bash
+   git checkout main
+   echo '<h1>v1.0.3</h1>' > index.html
+   echo '1.0.3' > version
+   git add -A && git commit -m "bump to 1.0.3" && git push
+   ```
+
+   ECR 에 올라올 때까지 기다린다.
+
+   ```bash
+   aws ecr describe-images --repository-name app-repo \
+     --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags'
+   ```
+
+2. **gitops 브랜치의 이미지 태그를 바꾼다. 여기서 시간을 잰다.**
+
+   ```bash
+   git checkout gitops-red
+   date +%T   # 시작 시각
+   sed -i "s|app-repo:.*|app-repo:v1.0.3|" gitops/rollout.yaml
+   git commit -am "bump image to v1.0.3" && git push
+   ```
+
+3. **전환을 지켜본다.**
+
+   ```bash
+   kubectl argo rollouts get rollout red-rollout -n skills --watch
+   ```
+
+   순서대로 이렇게 진행된다.
+
+   | 보이는 것 | 무슨 일 |
+   |---|---|
+   | 새 ReplicaSet 이 생기고 파드가 뜬다 | 미리보기 배포 |
+   | `AnalysisRun` 이 생긴다 | `/` 를 두 번 확인 |
+   | `stable` 표시가 새 리비전으로 옮겨간다 | 활성 전환 |
+   | 이전 ReplicaSet 이 0으로 | `scaleDownDelaySeconds` 뒤 |
+
+   ```bash
+   date +%T   # 끝난 시각
+   ```
+
+   두 시각의 차이가 3분 안이어야 한다.
+
+4. **활성 서비스가 새 버전을 주는지 확인한다.**
+
+   ```bash
+   kubectl run curl-test --rm -it --image=curlimages/curl --restart=Never -n skills \
+     -- curl -s http://red-active.skills.svc.cluster.local/
+   ```
+
+   `<h1>v1.0.3</h1>` 가 나와야 한다.
+
+</Steps>
+
+---
+
+## 6. 자동 복구 확인
+
+<Steps>
+
+1. **손으로 이미지를 바꾼다.**
+
+   ```bash
+   kubectl -n skills patch rollout red-rollout --type merge \
+     -p '{"spec":{"template":{"spec":{"containers":[{"name":"red","image":"nginx:alpine"}]}}}}'
+   kubectl -n skills get rollout red-rollout -o jsonpath='{.spec.template.spec.containers[0].image}'; echo
+   ```
+
+   `nginx:alpine` 로 바뀐 것을 본다.
+
+2. **기다렸다 다시 본다.**
+
+   ```bash
+   kubectl -n skills get rollout red-rollout \
+     -o jsonpath='{.spec.template.spec.containers[0].image}'; echo
+   ```
+
+   폴링 주기(30초) 안에 원래 ECR 이미지로 되돌아온다. **`selfHeal` 이 하는 일이다.**
+
+   되돌아오지 않으면 Application 의 `syncPolicy` 를 확인한다.
+
+   ```bash
+   kubectl -n argocd get application wsc2025-argo-app -o jsonpath='{.spec.syncPolicy}'; echo
+   ```
+
+</Steps>
+
+---
+
+## 7. 자가채점
+
+<details class="build-step">
+<summary>자가채점 — 2025 1과제 `mark1.sh` 7-3 · 7-4 · 12-2</summary>
+
+```bash
+# 7-3 롤아웃 파드 수
+kubectl get rollout red-rollout -n skills \
+  | awk 'NR==2 {print $1; if ($2 == $3 && $2 > 0) print "True"; else print "False"}'
+
+# 7-4 ExternalSecret 상태
+kubectl get externalsecret db-secret -n skills | awk 'NR==2 {print $(NF-1) "\n" $NF}'
+
+# 12-2 전략과 stable 상태
+kubectl argo rollouts get rollout red-rollout -n skills | egrep "Strategy"
+kubectl argo rollouts get rollout red-rollout -n skills | egrep "stable" | grep "Healthy" | awk '{print $6,$8}'
+```
+
+**기대 출력**
+
+| 항목 | 기대 |
+|---|---|
+| 7-3 | `red-rollout` 과 `True` |
+| 7-4 | `SecretSynced` 계열 상태 |
+| 12-2 | `Strategy: BlueGreen` 과 stable 리비전이 `Healthy` |
+
+**안 나올 때 볼 곳** — 7-3 이 `False` 면 파드가 원하는 수만큼 안 떴다. `kubectl describe rollout` 으로 이벤트를 본다. 12-2 가 아무것도 안 내면 `kubectl argo rollouts` 플러그인이 없는 것이다.
+
+</details>
+
+<details class="build-step">
+<summary>자가채점 — 시크릿과 IRSA 최소 권한 (8-1 · 8-2)</summary>
+
+```bash
+# 8-1 시크릿 존재
+aws secretsmanager describe-secret \
+  --secret-id gj2025-eks-cluster-catalog-secret --region ap-northeast-2 \
+  --query "Name" --output text
+
+# 8-2 IRSA 정책의 Resource 펼치기
+ROLE=$(kubectl get sa external-secrets-sa -n skills \
+  -o jsonpath="{.metadata.annotations.eks\.amazonaws\.com/role-arn}" | awk -F '/' '{print $2}')
+for arn in $(aws iam list-attached-role-policies --role-name "$ROLE" \
+    --query 'AttachedPolicies[*].PolicyArn' --output text); do
+  aws iam get-policy-version --policy-arn "$arn" \
+    --version-id $(aws iam get-policy --policy-arn "$arn" --query 'Policy.DefaultVersionId' --output text) \
+    --query 'PolicyVersion.Document.Statement[*].Resource' --output text
+done | tr '\t' '\n'
+```
+
+**기대 출력** — 8-1 이 시크릿 이름. 8-2 가 시크릿 ARN 하나만. **`*` 가 보이면 감점 항목이다.**
+
+**안 나올 때 볼 곳** — 8-2 가 비면 서비스 계정 annotation 이 없는 것이다. `*` 가 나오면 정책을 좁혀 다시 만든다.
+
+</details>
+
+<details class="build-step">
+<summary>자가채점 — 3분 안에 끝났는가</summary>
+
+```bash
+# 커밋 시각
+git log -1 --format=%cd --date=format:%T gitops-red
+
+# 현재 활성 리비전의 이미지
+kubectl -n skills get rollout red-rollout \
+  -o jsonpath='{.status.currentPodHash}{"\n"}'
+kubectl run t --rm -it --image=curlimages/curl --restart=Never -n skills \
+  -- curl -s http://red-active.skills.svc.cluster.local/
+```
+
+**기대** — 커밋 시각으로부터 3분 안에 활성 서비스가 새 버전을 낸다.
+
+**안 나올 때 볼 곳** — 넘겼다면 어디서 시간이 갔는지 나눈다. ArgoCD 감지가 늦으면 `timeout.reconciliation` 을 확인하고, 분석이 길면 `count × interval` 을 줄이고, 파드 기동이 늦으면 `initialDelaySeconds` 를 본다.
+
+</details>
+
+---
+
+## 8. 막혔을 때
+
+### 8-1. ExternalSecret 이 동기화 안 된다
+
+```bash
+kubectl describe externalsecret db-secret -n skills | tail -20
+kubectl logs -n external-secrets -l app.kubernetes.io/name=external-secrets --tail=30
+```
+
+| 로그에 | 원인 | 고침 |
+|---|---|---|
+| `AccessDeniedException` | 정책의 Resource 나 Action | ARN 이 정확한지, 끝의 6자 포함 |
+| `AssumeRoleWithWebIdentity` 실패 | 신뢰 정책 `sub` | 네임스페이스·서비스계정 이름 |
+| `ResourceNotFoundException` | 시크릿 이름·리전 | `describe-secret` 으로 확인 |
+| `property ... not found` | JSON 키 이름 | 시크릿 값의 실제 키 확인 |
+
+### 8-2. 롤아웃이 승격 안 된다
+
+```bash
+kubectl argo rollouts get rollout red-rollout -n skills
+kubectl get analysisrun -n skills
+kubectl logs -n skills -l job-name=$(kubectl get job -n skills -o name | head -1 | cut -d/ -f2) 2>/dev/null
+```
+
+| 상태 | 원인 |
+|---|---|
+| `Paused` | `autoPromotionEnabled: false` |
+| `Degraded` + 분석 실패 | `/` 경로나 서비스 이름이 틀림 |
+| `Progressing` 에서 멈춤 | 이미지 pull 실패 — `kubectl describe pod` |
+
+분석이 계속 실패하면 미리보기 서비스를 직접 불러 본다.
+
+```bash
+kubectl run t --rm -it --image=curlimages/curl --restart=Never -n skills \
+  -- curl -sv http://red-preview.skills.svc.cluster.local/
+```
+
+### 8-3. ArgoCD 가 커밋을 못 본다
+
+```bash
+kubectl -n argocd get application wsc2025-argo-app \
+  -o jsonpath='{.status.sync.status} {.status.sync.revision}{"\n"}'
+kubectl -n argocd logs deploy/argocd-repo-server --tail=30
+```
+
+저장소가 private 이면 자격증명이 필요하다. 실습 저장소는 public 으로 만들어 이 문제를 피한다.
+
+---
+
+## 9. 정리
+
+:::danger[EKS 를 반드시 지운다]
+시간당 과금이 계속된다.
+:::
+
+<Steps>
+
+1. **애플리케이션 리소스부터.**
+
+   ```bash
+   kubectl delete -f argocd-app.yaml --ignore-not-found
+   kubectl delete namespace skills --ignore-not-found
+   ```
+
+   `skills` 네임스페이스를 지우면 서비스와 함께 NLB 도 지워진다.
+
+2. **IRSA 와 정책.**
+
+   ```bash
+   eksctl delete iamserviceaccount --cluster gj2025-eks-cluster \
+     --namespace skills --name external-secrets-sa
+   aws iam delete-policy --policy-arn arn:aws:iam::${ACCOUNT_ID}:policy/gj2025-external-secrets-policy
+   ```
+
+3. **시크릿을 즉시 삭제한다.**
+
+   ```bash
+   aws secretsmanager delete-secret \
+     --secret-id gj2025-eks-cluster-catalog-secret \
+     --force-delete-without-recovery
+   ```
+
+   `--force-delete-without-recovery` 를 빼면 7일간 같은 이름을 못 쓴다.
+
+4. **클러스터.**
+
+   ```bash
+   eksctl delete cluster --name gj2025-eks-cluster --region ap-northeast-2
+   ```
+
+5. **남은 것을 확인한다.**
+
+   ```bash
+   aws eks list-clusters --query 'clusters'
+   aws elbv2 describe-load-balancers --query 'LoadBalancers[*].LoadBalancerName'
+   aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" \
+     --query 'Reservations[*].Instances[*].InstanceId' --output text
+   ```
+
+   전부 비어야 한다.
+
+</Steps>
+
+:::caution[클러스터 삭제가 실패하면]
+NLB 나 보안 그룹이 남아 VPC 삭제가 막히는 경우가 흔하다. 서비스를 먼저 지워 로드밸런서를 정리한 뒤 다시 시도한다. 그래도 남으면 콘솔에서 로드밸런서와 그 보안 그룹을 손으로 지운다.
+:::
+
+전체 점검은 [정리 체크리스트](/reference/cleanup-check/)에 있다.
+
+---
+
+## 다음 단계
+
+- 컴퓨팅 없이 푸는 서버리스 — [30. Step Functions · API Gateway](/part-4/30-stepfunctions-apigw/)
+- 이 모듈의 근거 — [실기출 분해](/reference/past-exams/)

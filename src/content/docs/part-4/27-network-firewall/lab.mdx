@@ -1,0 +1,712 @@
+---
+title: Lab 27 — 방화벽 서브넷 배치부터 차단 확인까지
+description: Egress VPC 에 Network Firewall 을 세우고 라우팅으로 트래픽을 지나게 만든 뒤 ICMP·DNS·도메인 차단을 Suricata 로 구현하고 실기출 채점 명령으로 확인하는 실습.
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+선행 지식과 목표는 [모듈 개요](/part-4/27-network-firewall/)에. 개념은 [이론](/part-4/27-network-firewall/theory/)에 있다.
+
+이 실습은 [2025 2과제 Secure networking 모듈](/reference/past-exams/#3-2-2025-2과제--small-challenge-4시간)을 그대로 재현한다. 원래 리전은 `eu-west-1` 이지만 **연습에서는 서울(`ap-northeast-2`)을 써도 된다.** 대회 당일에는 문제지의 리전을 그대로 따른다.
+
+:::danger[과금이 큰 실습이다]
+방화벽 엔드포인트가 AZ 마다 시간당 과금하고 NAT Gateway 도 그렇다. 두 AZ 로 만들면 엔드포인트가 둘이다. **끝나면 즉시 `terraform destroy` 한다.** 반나절 켜 두면 실습 하나에 커피값이 넘는다.
+:::
+
+## 실습 목표
+
+- [ ] Egress VPC 와 App VPC 를 만들고 피어링으로 잇는다
+- [ ] 방화벽 전용 서브넷에 Network Firewall 을 세운다
+- [ ] 라우팅 네 개를 배치해 App 트래픽이 방화벽을 지나게 만든다
+- [ ] Stateless 규칙으로 ICMP 를 차단한다
+- [ ] Stateful Suricata 규칙으로 외부 DNS 와 특정 도메인을 차단한다
+- [ ] FLOW 로깅을 CloudWatch Logs 로 보낸다
+- [ ] 실기출 채점 명령으로 차단을 확인한다
+- [ ] 차단이 안 될 때 라우팅부터 좁힌다
+- [ ] 전부 정리한다
+
+:::note[실전 참조 — 막히면 여는 곳]
+- Suricata 규칙 문법: [Suricata Rules](https://docs.suricata.io/en/latest/rules/intro.html)
+- Terraform 인자: `terraform providers schema -json | jq` 또는 [aws_networkfirewall_rule_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/networkfirewall_rule_group)
+- 찾는 법 자체가 막히면 [실전 문서 검색 가이드](/reference/search-guide/)
+:::
+
+---
+
+## 1. 네트워크 골격
+
+<Steps>
+
+1. **작업 디렉터리를 만든다.**
+
+   ```bash
+   mkdir -p ~/lab27 && cd ~/lab27
+   ```
+
+2. **`main.tf` 에 VPC 둘과 서브넷을 쓴다.**
+
+   ```hcl title="main.tf"
+   terraform {
+     required_providers {
+       aws = { source = "hashicorp/aws", version = "~> 5.0" }
+     }
+   }
+
+   provider "aws" {
+     region = var.region
+   }
+
+   variable "region" { default = "ap-northeast-2" }
+   variable "prefix" { default = "wsc2025" }
+
+   data "aws_availability_zones" "this" { state = "available" }
+
+   # ---------- Egress VPC ----------
+   resource "aws_vpc" "egress" {
+     cidr_block           = "10.0.0.0/16"
+     enable_dns_hostnames = true
+     enable_dns_support   = true
+     tags = { Name = "${var.prefix}-egress-vpc" }
+   }
+
+   resource "aws_subnet" "egress_public" {
+     count             = 2
+     vpc_id            = aws_vpc.egress.id
+     cidr_block        = cidrsubnet(aws_vpc.egress.cidr_block, 8, count.index)
+     availability_zone = data.aws_availability_zones.this.names[count.index]
+     tags = { Name = "${var.prefix}-egress-public-sn-${count.index == 0 ? "a" : "b"}" }
+   }
+
+   resource "aws_subnet" "egress_peering" {
+     count             = 2
+     vpc_id            = aws_vpc.egress.id
+     cidr_block        = cidrsubnet(aws_vpc.egress.cidr_block, 8, count.index + 2)
+     availability_zone = data.aws_availability_zones.this.names[count.index]
+     tags = { Name = "${var.prefix}-egress-peering-sn-${count.index == 0 ? "a" : "b"}" }
+   }
+
+   resource "aws_subnet" "egress_firewall" {
+     count             = 2
+     vpc_id            = aws_vpc.egress.id
+     cidr_block        = cidrsubnet(aws_vpc.egress.cidr_block, 8, count.index + 4)
+     availability_zone = data.aws_availability_zones.this.names[count.index]
+     tags = { Name = "${var.prefix}-egress-firewall-sn-${count.index == 0 ? "a" : "b"}" }
+   }
+
+   # ---------- App VPC ----------
+   resource "aws_vpc" "app" {
+     cidr_block           = "172.16.0.0/16"
+     enable_dns_hostnames = true
+     enable_dns_support   = true
+     tags = { Name = "${var.prefix}-app-vpc" }
+   }
+
+   resource "aws_subnet" "app_private" {
+     count             = 2
+     vpc_id            = aws_vpc.app.id
+     cidr_block        = cidrsubnet(aws_vpc.app.cidr_block, 8, count.index)
+     availability_zone = data.aws_availability_zones.this.names[count.index]
+     tags = { Name = "${var.prefix}-app-private-sn-${count.index == 0 ? "a" : "b"}" }
+   }
+   ```
+
+   `cidrsubnet(범위, 추가비트, 순번)` 이 CIDR 을 쪼갠다. `10.0.0.0/16` 에 8비트를 더해 `/24` 로 만들고 순번대로 `10.0.0.0/24` · `10.0.1.0/24` 로 나온다.
+
+   :::caution[이름 태그가 채점 대상이다]
+   실기출 채점 스크립트가 이름 태그로 서브넷을 찾는다. 대소문자와 하이픈까지 정확히 맞춘다. 하나라도 틀리면 그 항목이 `null` 로 나온다.
+   :::
+
+3. **인터넷 게이트웨이와 NAT 를 붙인다.**
+
+   ```hcl title="gateway.tf"
+   resource "aws_internet_gateway" "egress" {
+     vpc_id = aws_vpc.egress.id
+     tags   = { Name = "${var.prefix}-egress-igw" }
+   }
+
+   resource "aws_eip" "nat" {
+     count  = 2
+     domain = "vpc"
+     tags   = { Name = "${var.prefix}-nat-eip-${count.index}" }
+   }
+
+   resource "aws_nat_gateway" "this" {
+     count         = 2
+     allocation_id = aws_eip.nat[count.index].id
+     subnet_id     = aws_subnet.egress_public[count.index].id
+     tags          = { Name = "${var.prefix}-nat-${count.index}" }
+     depends_on    = [aws_internet_gateway.egress]
+   }
+   ```
+
+4. **VPC 피어링으로 둘을 잇는다.**
+
+   ```hcl title="peering.tf"
+   resource "aws_vpc_peering_connection" "this" {
+     vpc_id      = aws_vpc.app.id
+     peer_vpc_id = aws_vpc.egress.id
+     auto_accept = true
+     tags        = { Name = "${var.prefix}-peering" }
+   }
+   ```
+
+   같은 계정·같은 리전이라 `auto_accept` 로 끝난다. 다른 계정이면 상대가 수락해야 한다.
+
+</Steps>
+
+---
+
+## 2. 방화벽 세우기
+
+<Steps>
+
+1. **규칙 그룹 둘을 쓴다.**
+
+   ```hcl title="firewall-rules.tf"
+   # Stateless — ICMP 전부 차단
+   resource "aws_networkfirewall_rule_group" "stateless" {
+     name     = "${var.prefix}-stateless-icmp"
+     type     = "STATELESS"
+     capacity = 100
+
+     rule_group {
+       rules_source {
+         stateless_rules_and_custom_actions {
+           stateless_rule {
+             priority = 1
+             rule_definition {
+               actions = ["aws:drop"]
+               match_attributes {
+                 protocols = [1] # ICMP
+                 source      { address_definition = "0.0.0.0/0" }
+                 destination { address_definition = "0.0.0.0/0" }
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+
+   # Stateful — Suricata
+   resource "aws_networkfirewall_rule_group" "stateful" {
+     name     = "${var.prefix}-stateful-suricata"
+     type     = "STATEFUL"
+     capacity = 200
+
+     rule_group {
+       rules_source {
+         rules_string = <<-EOT
+           drop udp $HOME_NET any -> $EXTERNAL_NET 53 (msg:"block external DNS udp"; sid:1000010; rev:1;)
+           drop tcp $HOME_NET any -> $EXTERNAL_NET 53 (msg:"block external DNS tcp"; sid:1000011; rev:1;)
+           drop http $HOME_NET any -> $EXTERNAL_NET any (http.host; content:"ifconfig.io"; msg:"block ifconfig http"; sid:1000020; rev:1;)
+           drop tls $HOME_NET any -> $EXTERNAL_NET any (tls.sni; content:"ifconfig.io"; msg:"block ifconfig tls"; sid:1000021; rev:1;)
+         EOT
+       }
+     }
+   }
+   ```
+
+   `capacity` 는 규칙이 쓸 수 있는 용량이고 **만든 뒤 바꿀 수 없다.** 규칙을 더 넣을 여지를 두고 넉넉히 잡는다.
+
+   :::danger[HTTP 와 TLS 를 한 쌍으로]
+   `http.host` 규칙만 쓰면 HTTPS 로 새어 나간다. `tls.sni` 규칙이 반드시 함께 있어야 한다. 실습에서 가장 많이 하는 실수다.
+   :::
+
+2. **정책과 방화벽을 만든다.**
+
+   ```hcl title="firewall.tf"
+   resource "aws_networkfirewall_firewall_policy" "this" {
+     name = "${var.prefix}-firewall-policy"
+
+     firewall_policy {
+       stateless_default_actions          = ["aws:forward_to_sfe"]
+       stateless_fragment_default_actions = ["aws:forward_to_sfe"]
+
+       stateless_rule_group_reference {
+         priority     = 1
+         resource_arn = aws_networkfirewall_rule_group.stateless.arn
+       }
+       stateful_rule_group_reference {
+         resource_arn = aws_networkfirewall_rule_group.stateful.arn
+       }
+     }
+   }
+
+   resource "aws_networkfirewall_firewall" "this" {
+     name                = "${var.prefix}-firewall"
+     firewall_policy_arn = aws_networkfirewall_firewall_policy.this.arn
+     vpc_id              = aws_vpc.egress.id
+
+     dynamic "subnet_mapping" {
+       for_each = aws_subnet.egress_firewall
+       content { subnet_id = subnet_mapping.value.id }
+     }
+
+     tags = { Name = "${var.prefix}-firewall" }
+   }
+   ```
+
+   `stateless_default_actions` 가 `aws:forward_to_sfe` 다. Stateless 규칙에 안 걸린 것을 Stateful 엔진으로 넘긴다는 뜻이다. `aws:drop` 으로 두면 허용 목록 방식이 된다.
+
+3. **FLOW 로깅을 켠다.**
+
+   ```hcl title="logging.tf"
+   resource "aws_cloudwatch_log_group" "firewall" {
+     name              = "/${var.prefix}/firewall"
+     retention_in_days = 1
+   }
+
+   resource "aws_networkfirewall_logging_configuration" "this" {
+     firewall_arn = aws_networkfirewall_firewall.this.arn
+
+     logging_configuration {
+       log_destination_config {
+         log_type             = "FLOW"
+         log_destination_type = "CloudWatchLogs"
+         log_destination      = { logGroup = aws_cloudwatch_log_group.firewall.name }
+       }
+     }
+   }
+   ```
+
+   `log_destination_config` 블록이 **하나뿐**이다. `ALERT` 를 함께 넣으면 "FLOW 만" 요구를 어긴다.
+
+   `retention_in_days = 1` 은 실습용이다. 로그가 쌓여 과금되는 것을 막는다.
+
+4. **`apply` 한다.**
+
+   ```bash
+   terraform init && terraform apply
+   ```
+
+   방화벽 생성에 몇 분 걸린다. 상태가 `READY` 가 되어야 트래픽을 처리한다.
+
+   ```bash
+   aws network-firewall describe-firewall --firewall-name wsc2025-firewall \
+     --query 'FirewallStatus.Status' --output text
+   ```
+
+   `READY` 가 나올 때까지 기다린다.
+
+</Steps>
+
+---
+
+## 3. 라우팅 — 방화벽 위를 지나게 만들기
+
+**여기가 이 실습의 핵심이다.** 앞까지는 리소스를 만든 것이고, 라우팅이 그것들을 길 위에 세운다.
+
+<Steps>
+
+1. **방화벽 엔드포인트 ID 를 꺼낸다.**
+
+   서브넷마다 엔드포인트가 하나씩 생긴다. 어느 서브넷의 것인지 짝을 맞춰야 한다.
+
+   ```hcl title="routing.tf"
+   locals {
+     # 서브넷 ID -> 방화벽 엔드포인트 ID 로 대응시킨다
+     fw_endpoints = {
+       for s in tolist(aws_networkfirewall_firewall.this.firewall_status[0].sync_states) :
+       s.availability_zone => s.attachment[0].endpoint_id
+     }
+   }
+   ```
+
+2. **App 서브넷 — 기본 경로를 피어링으로.**
+
+   ```hcl title="routing.tf"
+   resource "aws_route_table" "app_private" {
+     count  = 2
+     vpc_id = aws_vpc.app.id
+     tags   = { Name = "${var.prefix}-app-private-rtb-${count.index}" }
+   }
+
+   resource "aws_route" "app_to_egress" {
+     count                     = 2
+     route_table_id            = aws_route_table.app_private[count.index].id
+     destination_cidr_block    = "0.0.0.0/0"
+     vpc_peering_connection_id = aws_vpc_peering_connection.this.id
+   }
+
+   resource "aws_route_table_association" "app_private" {
+     count          = 2
+     subnet_id      = aws_subnet.app_private[count.index].id
+     route_table_id = aws_route_table.app_private[count.index].id
+   }
+   ```
+
+3. **Egress peering 서브넷 — 방화벽 엔드포인트로.**
+
+   ```hcl title="routing.tf"
+   resource "aws_route_table" "egress_peering" {
+     count  = 2
+     vpc_id = aws_vpc.egress.id
+     tags   = { Name = "${var.prefix}-egress-peering-rtb-${count.index}" }
+   }
+
+   resource "aws_route" "peering_to_firewall" {
+     count                  = 2
+     route_table_id         = aws_route_table.egress_peering[count.index].id
+     destination_cidr_block = "0.0.0.0/0"
+     vpc_endpoint_id        = local.fw_endpoints[data.aws_availability_zones.this.names[count.index]]
+   }
+
+   resource "aws_route_table_association" "egress_peering" {
+     count          = 2
+     subnet_id      = aws_subnet.egress_peering[count.index].id
+     route_table_id = aws_route_table.egress_peering[count.index].id
+   }
+   ```
+
+   **같은 AZ 의 엔드포인트를 가리킨다.** AZ 를 섞으면 나갈 때와 돌아올 때 다른 엔드포인트를 지나 Stateful 규칙이 연결 상태를 잃는다.
+
+4. **Firewall 서브넷 — NAT 로.**
+
+   ```hcl title="routing.tf"
+   resource "aws_route_table" "egress_firewall" {
+     count  = 2
+     vpc_id = aws_vpc.egress.id
+     tags   = { Name = "${var.prefix}-egress-firewall-rtb-${count.index}" }
+   }
+
+   resource "aws_route" "firewall_to_nat" {
+     count                  = 2
+     route_table_id         = aws_route_table.egress_firewall[count.index].id
+     destination_cidr_block = "0.0.0.0/0"
+     nat_gateway_id         = aws_nat_gateway.this[count.index].id
+   }
+
+   resource "aws_route_table_association" "egress_firewall" {
+     count          = 2
+     subnet_id      = aws_subnet.egress_firewall[count.index].id
+     route_table_id = aws_route_table.egress_firewall[count.index].id
+   }
+   ```
+
+5. **Public 서브넷 — IGW 로, 그리고 돌아오는 길.**
+
+   ```hcl title="routing.tf"
+   resource "aws_route_table" "egress_public" {
+     count  = 2
+     vpc_id = aws_vpc.egress.id
+     tags   = { Name = "${var.prefix}-egress-public-rtb-${count.index}" }
+   }
+
+   resource "aws_route" "public_to_igw" {
+     count                  = 2
+     route_table_id         = aws_route_table.egress_public[count.index].id
+     destination_cidr_block = "0.0.0.0/0"
+     gateway_id             = aws_internet_gateway.egress.id
+   }
+
+   # 돌아오는 길 — App VPC 로 향하는 응답을 방화벽으로
+   resource "aws_route" "public_to_firewall" {
+     count                  = 2
+     route_table_id         = aws_route_table.egress_public[count.index].id
+     destination_cidr_block = aws_vpc.app.cidr_block
+     vpc_endpoint_id        = local.fw_endpoints[data.aws_availability_zones.this.names[count.index]]
+   }
+
+   resource "aws_route_table_association" "egress_public" {
+     count          = 2
+     subnet_id      = aws_subnet.egress_public[count.index].id
+     route_table_id = aws_route_table.egress_public[count.index].id
+   }
+   ```
+
+   마지막 `aws_route` 가 돌아오는 길이다. 이것이 없으면 나갈 때만 검사되고 돌아올 때는 방화벽을 건너뛴다.
+
+6. **Egress VPC 쪽 피어링 경로도 잊지 않는다.**
+
+   ```hcl title="routing.tf"
+   resource "aws_route" "firewall_to_app" {
+     count                     = 2
+     route_table_id            = aws_route_table.egress_firewall[count.index].id
+     destination_cidr_block    = aws_vpc.app.cidr_block
+     vpc_peering_connection_id = aws_vpc_peering_connection.this.id
+   }
+   ```
+
+7. **`apply` 한다.**
+
+   ```bash
+   terraform apply
+   ```
+
+</Steps>
+
+---
+
+## 4. 확인용 인스턴스
+
+<Steps>
+
+1. **App VPC 에 Bastion 을 띄운다.**
+
+   ```hcl title="bastion.tf"
+   data "aws_ami" "al2023" {
+     most_recent = true
+     owners      = ["amazon"]
+     filter {
+       name   = "name"
+       values = ["al2023-ami-*-x86_64"]
+     }
+   }
+
+   resource "aws_iam_role" "ssm" {
+     name = "${var.prefix}-bastion-role"
+     assume_role_policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [{
+         Effect    = "Allow"
+         Principal = { Service = "ec2.amazonaws.com" }
+         Action    = "sts:AssumeRole"
+       }]
+     })
+   }
+
+   resource "aws_iam_role_policy_attachment" "ssm" {
+     role       = aws_iam_role.ssm.name
+     policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+   }
+
+   resource "aws_iam_instance_profile" "ssm" {
+     name = "${var.prefix}-bastion-profile"
+     role = aws_iam_role.ssm.name
+   }
+
+   resource "aws_security_group" "bastion" {
+     name   = "${var.prefix}-bastion-sg"
+     vpc_id = aws_vpc.app.id
+     egress {
+       from_port   = 0
+       to_port     = 0
+       protocol    = "-1"
+       cidr_blocks = ["0.0.0.0/0"]
+     }
+   }
+
+   resource "aws_instance" "bastion" {
+     ami                  = data.aws_ami.al2023.id
+     instance_type        = "t3.micro"
+     subnet_id            = aws_subnet.app_private[0].id
+     iam_instance_profile = aws_iam_instance_profile.ssm.name
+     vpc_security_group_ids = [aws_security_group.bastion.id]
+     tags = { Name = "app-bastion" }
+   }
+   ```
+
+   이름 태그가 `app-bastion` 이다. 실기출 채점 스크립트가 이 이름으로 찾는다.
+
+   :::note[SSM 으로 붙는다]
+   사설 서브넷이라 SSH 로 직접 붙을 수 없다. Session Manager 를 쓴다. `AmazonSSMManagedInstanceCore` 정책이 그것을 가능하게 한다.
+
+   SSM 이 붙으려면 인스턴스가 SSM 엔드포인트에 닿아야 한다. 방화벽이 그것까지 막으면 접속 자체가 안 되므로, 막힌다면 VPC 엔드포인트(`ssm` · `ssmmessages` · `ec2messages`)를 App VPC 에 추가한다.
+   :::
+
+2. **`apply` 하고 붙는다.**
+
+   ```bash
+   terraform apply
+   aws ssm start-session --target $(terraform output -raw bastion_id 2>/dev/null || aws ec2 describe-instances --filters "Name=tag:Name,Values=app-bastion" --query 'Reservations[0].Instances[0].InstanceId' --output text)
+   ```
+
+</Steps>
+
+---
+
+## 5. 자가채점
+
+<details class="build-step">
+<summary>자가채점 — 2025 2과제 `2_secure_networking.sh` 발췌</summary>
+
+Bastion 안에서 실행한다. **원본 채점 스크립트의 4-1 ~ 4-8 항목**이다.
+
+```bash
+# 4-1 VPC CIDR
+aws ec2 describe-vpcs \
+  --filters "Name=tag:Name,Values=wsc2025-egress-vpc,wsc2025-app-vpc" \
+  --query "Vpcs[*].CidrBlock" --output text
+
+# 4-2 서브넷 CIDR
+aws ec2 describe-subnets \
+  --filters "Name=tag:Name,Values=wsc2025-egress-public-sn-a,wsc2025-egress-public-sn-b,wsc2025-egress-peering-sn-a,wsc2025-egress-peering-sn-b,wsc2025-egress-firewall-sn-a,wsc2025-egress-firewall-sn-b,wsc2025-app-private-sn-a,wsc2025-app-private-sn-b" \
+  --query "Subnets[*].CidrBlock" --output text
+
+# 4-3 Bastion
+aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=app-bastion" \
+  --query "Reservations[*].Instances[*].Tags[?Key=='Name'].Value|[0]" --output text
+
+# 4-4 방화벽과 서브넷 매핑
+aws network-firewall describe-firewall \
+  --firewall-name wsc2025-firewall \
+  --query "[Firewall.FirewallName, Firewall.SubnetMappings[*].SubnetId]" --output text
+
+# 4-5·4-6 규칙 그룹
+aws network-firewall list-rule-groups --type STATELESS --query "RuleGroups[*].Arn" --output text
+aws network-firewall list-rule-groups --type STATEFUL  --query "RuleGroups[*].Arn" --output text
+
+# 4-7 ICMP 차단 확인 — 실패해야 정답
+ping -c 3 1.1.1.1
+
+# 4-8 외부 DNS 차단 확인 — 실패해야 정답
+nslookup google.com 8.8.8.8
+```
+
+**기대 출력**
+
+| 항목 | 기대 |
+|---|---|
+| 4-1 | `10.0.0.0/16` 과 `172.16.0.0/16` 두 줄 |
+| 4-2 | 여덟 개 CIDR |
+| 4-3 | `app-bastion` |
+| 4-4 | 방화벽 이름과 서브넷 ID 둘 |
+| 4-5·4-6 | 각각 ARN 하나 이상 |
+| 4-7 | `100% packet loss` — **통하면 오답** |
+| 4-8 | `connection timed out` 또는 응답 없음 — **통하면 오답** |
+
+**안 나올 때 볼 곳** — 4-1 부터 4-6 이 비면 이름 태그나 리전을 확인한다. 4-7 과 4-8 이 통하면 [이론 8-1](/part-4/27-network-firewall/theory/#8-1-차단했는데-통한다)의 순서로 좁힌다.
+
+</details>
+
+<details class="build-step">
+<summary>자가채점 — 도메인 차단 (2025 1과제 4-4 유형)</summary>
+
+Bastion 안에서 실행한다.
+
+```bash
+# 막혀야 하는 것 — 타임아웃이 정답
+curl -m 5 -sS https://ifconfig.io ; echo "exit=$?"
+curl -m 5 -sS http://ifconfig.io  ; echo "exit=$?"
+
+# 통해야 하는 것 — 200 이 정답
+curl -m 5 -s -o /dev/null -w '%{http_code}\n' https://aws.amazon.com
+```
+
+**기대 출력** — 앞 둘은 `exit=28`(타임아웃), 마지막은 `200`.
+
+**안 나올 때 볼 곳** — HTTPS 만 통하면 `tls.sni` 규칙이 빠진 것이다. 둘 다 통하면 라우팅을 본다. 마지막 줄까지 막히면 규칙 범위가 너무 넓거나 DNS 차단이 내부 이름 해석까지 잡은 것이다.
+
+</details>
+
+<details class="build-step">
+<summary>자가채점 — FLOW 로깅</summary>
+
+```bash
+aws network-firewall describe-logging-configuration \
+  --firewall-name wsc2025-firewall \
+  --query 'LoggingConfiguration.LogDestinationConfigs' --output json \
+  | jq -r '.[] | "\(.LogType)\n\(.LogDestinationType)\n\(.LogDestination.logGroup)"'
+
+aws logs describe-log-streams --log-group-name /wsc2025/firewall \
+  --order-by LastEventTime --descending --limit 1 \
+  --query 'logStreams[0].logStreamName' --output text
+```
+
+**기대 출력** — 첫 명령이 `FLOW` · `CloudWatchLogs` · `/wsc2025/firewall` 세 줄. `ALERT` 가 함께 나오면 요구 초과다. 둘째 명령이 로그 스트림 이름을 낸다.
+
+**안 나올 때 볼 곳** — 로그 스트림이 없으면 트래픽이 아직 방화벽을 지나지 않은 것이다. 위 확인 명령을 먼저 몇 번 실행하고 1분쯤 기다린다.
+
+</details>
+
+---
+
+## 6. 막혔을 때
+
+### 6-1. 차단이 안 된다
+
+FLOW 로그에 그 트래픽이 있는지부터 본다.
+
+```bash
+LS=$(aws logs describe-log-streams --log-group-name /wsc2025/firewall \
+  --order-by LastEventTime --descending --limit 1 \
+  --query 'logStreams[0].logStreamName' --output text)
+aws logs get-log-events --log-group-name /wsc2025/firewall --log-stream-name "$LS" \
+  --limit 20 --query 'events[*].message' --output text
+```
+
+| 로그에 | 뜻 | 다음 |
+|---|---|---|
+| 아예 없다 | 방화벽을 지나지 않는다 | 라우팅을 본다 |
+| 있는데 통과했다 | 규칙이 안 걸렸다 | 규칙 문자열을 본다 |
+
+라우팅 확인은 이렇게 한다.
+
+```bash
+aws ec2 describe-route-tables \
+  --filters "Name=tag:Name,Values=wsc2025-egress-peering-rtb-0" \
+  --query 'RouteTables[0].Routes[?DestinationCidrBlock==`0.0.0.0/0`]'
+```
+
+`VpcEndpointId` 가 나와야 한다. `NatGatewayId` 가 나오면 방화벽을 비켜 가는 것이다.
+
+### 6-2. 전부 막힌다
+
+DNS 차단이 내부 이름 해석까지 잡았을 가능성이 높다.
+
+```bash
+# 내부 리졸버로는 되는지
+nslookup aws.amazon.com
+```
+
+이것마저 실패하면 규칙의 목적지 범위를 좁힌다. `$EXTERNAL_NET` 을 명시하고 VPC CIDR 을 제외한다.
+
+### 6-3. 가끔 되고 가끔 안 된다
+
+AZ 비대칭이다. 라우팅 테이블이 **같은 AZ 의** 엔드포인트를 가리키는지 확인한다.
+
+```bash
+aws network-firewall describe-firewall --firewall-name wsc2025-firewall \
+  --query 'FirewallStatus.SyncStates' --output json
+```
+
+AZ 별 엔드포인트 ID 가 나온다. 각 라우팅 테이블의 `VpcEndpointId` 와 대조한다.
+
+---
+
+## 7. 정리
+
+:::danger[반드시 실행한다]
+방화벽 엔드포인트와 NAT Gateway 가 시간당 과금한다.
+:::
+
+```bash
+terraform destroy
+```
+
+지워졌는지 확인한다.
+
+```bash
+aws network-firewall list-firewalls --query 'Firewalls[*].FirewallName'
+aws ec2 describe-nat-gateways --filter "Name=state,Values=available" \
+  --query 'NatGateways[*].NatGatewayId'
+aws logs describe-log-groups --log-group-name-prefix /wsc2025 \
+  --query 'logGroups[*].logGroupName'
+```
+
+셋 다 빈 목록이어야 한다.
+
+:::caution[destroy 가 방화벽에서 멈추면]
+방화벽을 참조하는 라우팅이 남아 있으면 삭제가 막힌다. 라우팅을 먼저 지운 뒤 다시 `destroy` 한다.
+
+```bash
+terraform destroy -target=aws_route.peering_to_firewall
+terraform destroy -target=aws_route.public_to_firewall
+terraform destroy
+```
+:::
+
+전체 점검은 [정리 체크리스트](/reference/cleanup-check/)에 있다.
+
+---
+
+## 다음 단계
+
+- 실기출의 다른 결손 축 — [28. CI/CD 파이프라인](/part-4/28-cicd-pipeline/)
+- 이 모듈의 근거 — [실기출 분해](/reference/past-exams/)

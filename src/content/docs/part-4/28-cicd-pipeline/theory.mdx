@@ -1,0 +1,551 @@
+---
+title: CI/CD 가 자동화하는 것 — buildspec · 파이프라인 · Actions
+description: CI 와 CD 의 경계에서 시작해 buildspec 단계, CodeBuild 권한과 Docker 설정, CodePipeline 아티팩트, GitHub 연결 방식, Actions 워크플로와 OIDC 를 정리한다.
+sidebar:
+  order: 2
+---
+
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: explanation
+
+선행 지식과 학습 경로는 [모듈 개요](/part-4/28-cicd-pipeline/)에.
+
+---
+
+## 1. CI 와 CD 의 경계
+
+두 단어가 붙어 다녀 하나처럼 보이지만 하는 일이 다르다.
+
+| | CI (Continuous Integration) | CD (Continuous Delivery) |
+|---|---|---|
+| 입력 | 소스 코드 커밋 | 새 이미지 또는 매니페스트 |
+| 하는 일 | 빌드하고 이미지를 만들어 레지스트리에 올린다 | 그 이미지를 실제 환경에 배포한다 |
+| 끝나는 지점 | ECR 에 태그가 붙은 이미지 | 파드가 새 이미지로 돌고 있음 |
+| 2025 1과제 배점 | 2.5 | 4.5 |
+
+**경계는 레지스트리다.** ECR 에 이미지가 올라가는 순간까지가 CI 이고, 그 이미지를 클러스터에 반영하는 것이 CD 다.
+
+2025 1과제가 이 경계를 구조로 강제한다. 브랜치를 넷 만들라고 요구한다.
+
+| 브랜치 | 내용 |
+|---|---|
+| `app-red` · `app-green` | 바이너리 · Dockerfile · buildspec.yaml **세 가지만** |
+| `gitops-red` · `gitops-green` | 쿠버네티스 매니페스트 |
+
+CI 는 `app-*` 브랜치를 보고 이미지를 만들고, CD 는 `gitops-*` 브랜치를 보고 배포한다. **한 저장소 안에서 두 관심사가 브랜치로 갈린다.**
+
+:::note[왜 브랜치로 나누나]
+CI 가 이미지를 만든 뒤 매니페스트의 이미지 태그를 고쳐 `gitops-*` 에 push 한다. 그러면 CD 가 그 커밋을 감지해 배포한다. **파이프라인이 서로를 직접 부르지 않고 git 커밋으로 신호를 주고받는다.** 이 방식을 GitOps 라고 부르고 [29 번 모듈](/part-4/29-gitops-rollouts/)에서 다룬다.
+:::
+
+---
+
+## 2. buildspec.yaml
+
+CodeBuild 가 무엇을 할지 적는 파일이다. 저장소 최상단에 둔다.
+
+```yaml title="buildspec.yaml"
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+      - IMAGE_TAG=$(cat version)
+  build:
+    commands:
+      - echo Building the Docker image...
+      - docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+  post_build:
+    commands:
+      - echo Pushing the Docker image...
+      - docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+      - printf '[{"name":"app","imageUri":"%s"}]' $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG > imagedefinitions.json
+
+artifacts:
+  files:
+    - imagedefinitions.json
+```
+
+### 2-1. 단계 넷
+
+| 단계 | 언제 | 무엇을 |
+|---|---|---|
+| `install` | 가장 먼저 | 런타임·도구 설치 |
+| `pre_build` | 빌드 직전 | 로그인, 변수 준비 |
+| `build` | 본작업 | 컴파일·이미지 빌드 |
+| `post_build` | 끝난 뒤 | push, 아티팩트 준비 |
+
+단계는 순서대로 돈다. **어느 명령이든 0 아닌 종료 코드를 내면 그 자리에서 빌드가 실패한다.**
+
+:::caution[`post_build` 는 빌드가 실패해도 실행된다]
+`build` 가 실패해도 `post_build` 는 돈다. 정리 작업을 두라는 뜻이다. 그래서 `post_build` 에 push 를 두면 **실패한 빌드의 이미지를 올릴 위험**이 있다. `$CODEBUILD_BUILD_SUCCEEDING` 변수가 1 인지 확인하거나, push 를 `build` 단계로 옮긴다.
+:::
+
+### 2-2. `artifacts` 가 넘기는 것
+
+빌드가 끝난 뒤 다음 단계로 넘길 파일이다. CodePipeline 이 이것을 S3 아티팩트 버킷에 담아 다음 작업에 전달한다.
+
+`imagedefinitions.json` 은 CodeDeploy 나 ECS 배포 작업이 읽는 형식이다. "어느 컨테이너에 어느 이미지를"을 담는다.
+
+```json
+[{"name":"app","imageUri":"123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/red:1.0.0"}]
+```
+
+`name` 은 태스크 정의의 컨테이너 이름과 정확히 같아야 한다.
+
+### 2-3. ECR 로그인
+
+```bash
+aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+```
+
+ECR 은 아무나 push 할 수 없다. 임시 암호를 받아 `docker login` 한다. 사용자 이름은 언제나 `AWS` 이고 암호가 그 임시 토큰이다.
+
+`--password-stdin` 은 암호를 명령줄이 아니라 표준 입력으로 넘긴다. 명령줄에 쓰면 프로세스 목록과 로그에 남는다.
+
+---
+
+## 3. CodeBuild 가 필요로 하는 것
+
+### 3-1. 권한 둘
+
+CodeBuild 서비스 역할에 두 갈래가 필요하다.
+
+| 무엇을 위해 | 필요한 권한 |
+|---|---|
+| ECR 로그인 | `ecr:GetAuthorizationToken` — **리소스는 반드시 `*`** |
+| 이미지 push | `ecr:BatchCheckLayerAvailability` · `ecr:PutImage` · `ecr:InitiateLayerUpload` · `ecr:UploadLayerPart` · `ecr:CompleteLayerUpload` — 대상 저장소 ARN |
+| 로그 기록 | `logs:CreateLogStream` · `logs:PutLogEvents` — 로그 그룹 ARN |
+
+:::danger[`GetAuthorizationToken` 만은 리소스를 좁힐 수 없다]
+이 API 는 특정 저장소를 대상으로 하지 않는다. 계정 전체에 대한 토큰을 발급받는 것이라 리소스를 `*` 로 둬야 한다. 좁히면 로그인 자체가 실패한다.
+
+최소 권한 요구가 있어도 이 항목만은 예외다. 나머지 ECR 권한은 저장소 ARN 으로 좁힌다.
+:::
+
+### 3-2. Docker 를 쓰려면 특권 모드
+
+```hcl
+environment {
+  compute_type    = "BUILD_GENERAL1_SMALL"
+  image           = "aws/codebuild/amazonlinux2-x86_64-standard:5.0"
+  type            = "LINUX_CONTAINER"
+  privileged_mode = true
+}
+```
+
+CodeBuild 자체가 컨테이너 안에서 돈다. 그 안에서 다시 Docker 를 돌리려면 **`privileged_mode = true`** 가 필요하다.
+
+빠뜨리면 이 오류가 난다.
+
+```
+Cannot connect to the Docker daemon at unix:///var/run/docker.sock
+```
+
+### 3-3. 환경변수
+
+```hcl
+environment_variable {
+  name  = "ECR_REPOSITORY"
+  value = aws_ecr_repository.red.name
+}
+environment_variable {
+  name  = "DB_PASSWORD"
+  type  = "SECRETS_MANAGER"
+  value = "gj2025-eks-cluster-catalog-secret:password"
+}
+```
+
+`type` 이 셋이다.
+
+| 타입 | 값이 어디서 |
+|---|---|
+| `PLAINTEXT`(기본) | 그대로 |
+| `PARAMETER_STORE` | SSM 파라미터 스토어 |
+| `SECRETS_MANAGER` | Secrets Manager. `시크릿이름:키` 형식 |
+
+2025 1과제 채점 스크립트가 이것을 확인한다.
+
+```bash
+aws codebuild batch-get-projects --names gj2025-app-red-build \
+  --query "projects[0].[source.type, source.location, source.auth.type, environment.environmentVariables[].type, logsConfig.cloudWatchLogs.groupName]" \
+  --output text | xargs -n1
+```
+
+`environmentVariables[].type` 이 출력된다. 민감한 값을 `PLAINTEXT` 로 두면 여기서 드러난다.
+
+### 3-4. 로깅
+
+```hcl
+logs_config {
+  cloudwatch_logs {
+    group_name  = "/gj2025/build/red"
+    stream_name = "build"
+  }
+}
+```
+
+2025 1과제가 "로깅을 반드시 활성화" 하고 CloudWatch Logs 로 보내라고 요구했다. 로그 그룹 이름이 지정돼 있고 채점이 그 이름을 본다.
+
+---
+
+## 4. CodePipeline
+
+### 4-1. 구조
+
+```
+파이프라인
+  └ 단계(Stage)  예: Source · Build · Deploy
+      └ 작업(Action)  예: GitHub 소스 가져오기
+          └ 입력 아티팩트 / 출력 아티팩트
+```
+
+**단계 사이를 잇는 것이 아티팩트다.** Source 단계가 소스를 S3 버킷에 담아 출력하면, Build 단계가 그것을 입력으로 받는다.
+
+```hcl
+stage {
+  name = "Source"
+  action {
+    name             = "Source"
+    category         = "Source"
+    owner            = "ThirdParty"
+    provider         = "GitHub"
+    version          = "1"
+    output_artifacts = ["source_output"]
+    configuration = {
+      Owner      = var.github_owner
+      Repo       = var.github_repo
+      Branch     = "app-red"
+      OAuthToken = var.github_token
+    }
+  }
+}
+
+stage {
+  name = "Build"
+  action {
+    name             = "Build"
+    category         = "Build"
+    owner            = "AWS"
+    provider         = "CodeBuild"
+    version          = "1"
+    input_artifacts  = ["source_output"]
+    output_artifacts = ["build_output"]
+    configuration = { ProjectName = aws_codebuild_project.red.name }
+  }
+}
+```
+
+`output_artifacts` 의 이름과 다음 단계의 `input_artifacts` 이름이 **정확히 같아야** 한다. 다르면 파이프라인 생성이 실패한다.
+
+### 4-2. 아티팩트 버킷
+
+CodePipeline 은 아티팩트를 담을 S3 버킷이 필요하다.
+
+```hcl
+artifact_store {
+  location = aws_s3_bucket.artifacts.bucket
+  type     = "S3"
+}
+```
+
+파이프라인 서비스 역할이 이 버킷에 읽고 쓸 수 있어야 한다.
+
+### 4-3. 채점이 보는 것
+
+```bash
+aws codepipeline get-pipeline --name gj2025-app-red-pipeline \
+  --query 'pipeline.[stages[?name==`Source`].actions[0].[actionTypeId.provider, configuration.[OAuthToken != null, Repo]], stages[?name==`Build`].actions[0].configuration.ProjectName]' \
+  --output text | tr '\t' '\n'
+```
+
+세 가지를 본다.
+
+1. Source 작업의 공급자가 무엇인가
+2. `OAuthToken` 이 설정돼 있는가(`true`/`false`)
+3. Build 작업이 어느 CodeBuild 프로젝트를 부르는가
+
+**단계 이름이 `Source` 와 `Build` 여야 한다.** 쿼리가 이름으로 찾는다. 다른 이름을 쓰면 결과가 비어 항목을 잃는다.
+
+---
+
+## 5. GitHub 을 잇는 세 방법
+
+| 방법 | 무엇 | 2025 1과제 |
+|---|---|---|
+| OAuth 토큰 | 개인 액세스 토큰을 파이프라인 설정에 직접 | **소스 작업에 이것** |
+| CodeConnections | AWS 가 관리하는 연결. 콘솔에서 승인 | 최신 권장 방식 |
+| GitHub Actions | AWS 밖에서 돌고 결과만 AWS 로 | 2과제에 이것 |
+
+2025 1과제 요구를 그대로 읽는다.
+
+> Code Pipeline 소스 작업 외 모든 작업은 GitHub AccessToken 을 사용해 자격증명을 하는 방식을 통해 작업을 수행해야합니다.
+
+곧 **소스 작업만 OAuth 이고 나머지는 토큰**이다. 그 토큰은 Secrets Manager 에 넣어야 한다(`gj2025-github-token`).
+
+:::danger[토큰을 코드에 쓰지 않는다]
+Terraform 변수로 받되 `.tfvars` 를 git 에 올리지 않는다. 저장소가 public 이면 즉시 노출되고, GitHub 이 감지해 토큰을 자동 폐기하기도 한다. 그러면 파이프라인이 조용히 멈춘다.
+:::
+
+---
+
+## 6. GitHub Actions
+
+### 6-1. 워크플로 골격
+
+`.github/workflows/build.yml` 에 둔다.
+
+```yaml title=".github/workflows/build.yml"
+name: build-and-push
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/gh-actions-role
+          aws-region: ap-southeast-1
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          TAG=$(cat version)
+          docker build -t $REGISTRY/app-repo:$TAG .
+          docker push $REGISTRY/app-repo:$TAG
+
+      - name: Update manifest
+        run: |
+          TAG=$(cat version)
+          sed -i "s|image: .*|image: ${{ steps.ecr.outputs.registry }}/app-repo:$TAG|" manifest/deploy.yaml
+          git config user.name github-actions
+          git config user.email actions@github.com
+          git commit -am "bump image to $TAG"
+          git push
+```
+
+### 6-2. `paths` 가 요구사항이다
+
+2025 2과제 요구다.
+
+> 단 Github Action 은 index.html 이 변경되었을 때만 동작해야 합니다.
+
+`on.push.paths` 가 그것을 표현한다. 이 필터가 없으면 아무 파일이나 고쳐도 워크플로가 돈다.
+
+:::caution[마지막 단계의 push 가 워크플로를 다시 부른다]
+매니페스트를 고쳐 push 하면 그것도 `push` 이벤트다. `paths` 필터가 `index.html` 로 좁혀져 있어 `manifest/deploy.yaml` 변경은 걸리지 않는다. **필터가 무한루프도 함께 막는다.**
+
+필터 없이 만들면 워크플로가 끝없이 돌며 무료 할당량을 태운다.
+:::
+
+### 6-3. AWS 자격증명 두 방법
+
+| 방법 | 어떻게 | 장단 |
+|---|---|---|
+| 액세스 키를 Secrets 에 | `AWS_ACCESS_KEY_ID` 등을 저장소 Secrets 에 | 간단하지만 장기 자격증명이 남는다 |
+| **OIDC 로 역할 Assume** | GitHub 이 발급한 토큰으로 IAM 역할을 맡는다 | 장기 키가 없다. 권장 |
+
+OIDC 를 쓰려면 셋이 필요하다.
+
+1. IAM OIDC 공급자 등록 (`token.actions.githubusercontent.com`)
+2. 그 공급자를 신뢰하는 IAM 역할
+3. 워크플로에 `permissions: id-token: write`
+
+역할의 신뢰 정책에 조건을 건다.
+
+```json
+{
+  "Condition": {
+    "StringLike": {
+      "token.actions.githubusercontent.com:sub": "repo:내계정/내저장소:*"
+    }
+  }
+}
+```
+
+:::danger[`sub` 조건을 빼면 누구나 그 역할을 맡는다]
+조건이 없으면 **아무 GitHub 저장소의 워크플로**가 이 역할을 Assume 할 수 있다. 저장소를 특정하는 조건이 반드시 있어야 한다.
+:::
+
+### 6-4. 채점이 보는 것
+
+2025 2과제 채점은 결과를 본다.
+
+```bash
+aws ecr list-images --repository-name app-repo \
+  --query 'imageIds[?imageTag!=`null`].imageTag' --output text
+kubectl get deploy -n wsc2025
+curl http://$ENDPOINT/
+```
+
+**워크플로 자체를 보지 않고 이미지 태그와 배포 결과를 본다.** 태그 형식이 `vX.X.X` 여야 한다는 요구가 여기서 검사된다.
+
+시간 제약도 있다. 커밋 후 빌드 완료까지 5분, Actions 종료 후 페이지 로딩까지 5분이다.
+
+---
+
+## 7. 실패를 좁히는 순서
+
+### 7-1. CodeBuild
+
+로그를 먼저 본다.
+
+```bash
+aws logs tail /gj2025/build/red --follow
+```
+
+| 로그의 마지막 | 원인 |
+|---|---|
+| `Cannot connect to the Docker daemon` | `privileged_mode` 가 꺼져 있다 |
+| `denied: User ... is not authorized to perform: ecr:GetAuthorizationToken` | 그 권한의 리소스를 `*` 로 두지 않았다 |
+| `name unknown: The repository ... does not exist` | ECR 저장소 이름이 다르거나 리전이 다르다 |
+| `COMMAND_EXECUTION_ERROR` 인데 로그가 없다 | 로그 설정이 안 됐다. 콘솔의 빌드 상세를 본다 |
+| `YAML_FILE_ERROR` | `buildspec.yaml` 문법 오류 또는 위치가 최상단이 아니다 |
+
+### 7-2. CodePipeline
+
+각 단계의 실패 상세를 본다.
+
+```bash
+aws codepipeline get-pipeline-state --name gj2025-app-red-pipeline \
+  --query 'stageStates[*].{stage:stageName,status:latestExecution.status,detail:actionStates[0].latestExecution.errorDetails.message}'
+```
+
+| 증상 | 원인 |
+|---|---|
+| Source 가 실패 | 토큰 만료·권한 부족, 브랜치 이름 오타 |
+| Source 는 성공인데 Build 입력이 없음 | 아티팩트 이름 불일치 |
+| 전체가 돌지 않음 | 웹훅이 안 걸렸다. 수동 실행으로 확인 |
+
+### 7-3. GitHub Actions
+
+Actions 탭에서 실패한 작업을 연다.
+
+| 오류 | 원인 |
+|---|---|
+| `Credentials could not be loaded` | `permissions: id-token: write` 누락 |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | 신뢰 정책의 `sub` 조건이 저장소와 안 맞는다 |
+| 워크플로가 아예 안 돈다 | `paths` 필터에 안 걸렸거나 브랜치가 다르다 |
+| `permission denied` (git push) | `permissions: contents: write` 누락 |
+
+---
+
+## 8. 30% 변형에 대비하기
+
+| 변형 | 무엇이 바뀌나 |
+|---|---|
+| CodeCommit 대신 GitHub | Source 작업의 공급자와 설정만 |
+| 배포 대상이 ECS | `imagedefinitions.json` 을 쓰는 ECS 배포 작업 추가 |
+| 배포 대상이 EKS | 매니페스트를 고쳐 push, 나머지는 [29 번](/part-4/29-gitops-rollouts/) |
+| 승인 단계 요구 | Manual approval 작업 추가 |
+| 태그를 커밋 해시로 | `buildspec` 의 `IMAGE_TAG` 만 |
+| 앱이 둘 | 파이프라인·프로젝트·브랜치를 각각 둘씩 |
+
+마지막이 2025 1과제다. `red` 와 `green` 에 대해 모든 것이 두 벌이다. **Terraform 의 `for_each` 로 한 벌만 쓰고 두 벌을 만든다.**
+
+---
+
+## 정리
+
+- CI 는 이미지를 만들어 ECR 까지, CD 는 그 이미지를 환경에 반영한다
+- `buildspec.yaml` 은 `install` · `pre_build` · `build` · `post_build` 순서로 돈다
+- CodeBuild 에서 Docker 를 쓰려면 **`privileged_mode`**, ECR 로그인 권한은 **리소스 `*`**
+- CodePipeline 은 아티팩트 이름으로 단계를 잇는다. 단계 이름이 채점 대상이다
+- GitHub Actions 는 `paths` 필터로 조건을 만들고, 그것이 무한루프도 막는다
+- Actions 의 AWS 자격증명은 **OIDC 로 역할 Assume** 이 안전하다. `sub` 조건 필수
+- 배점이 가장 큰 축이다. 여기서 시간을 아끼지 않는다
+
+---
+
+## 자기 점검 퀴즈
+
+<Quiz
+  question="CodeBuild 에서 `Cannot connect to the Docker daemon` 이 나온다. 원인은?"
+  options={[
+    'ECR 권한이 없다',
+    'privileged_mode 가 꺼져 있다',
+    'buildspec.yaml 위치가 틀렸다',
+    '이미지 태그가 없다',
+  ]}
+  correct={1}
+  explanation="CodeBuild 자체가 컨테이너에서 돈다. 그 안에서 Docker 를 실행하려면 privileged_mode 를 켜야 한다."
+/>
+
+<Quiz
+  question="최소 권한 요구가 있는데 `ecr:GetAuthorizationToken` 의 Resource 를 저장소 ARN 으로 좁혔더니 로그인이 실패한다. 어떻게 하나?"
+  options={[
+    '저장소 ARN 에 와일드카드를 붙인다',
+    '이 API 는 특정 저장소를 대상으로 하지 않으므로 Resource 를 `*` 로 둔다',
+    'ECR 저장소를 다시 만든다',
+    '권한을 지우고 관리형 정책을 붙인다',
+  ]}
+  correct={1}
+  explanation="GetAuthorizationToken 은 계정 단위 토큰 발급이라 리소스를 좁힐 수 없다. 이 항목만 예외이고 나머지 ECR 권한은 저장소 ARN 으로 좁힌다."
+/>
+
+<Quiz
+  question="CodePipeline 에서 Source 는 성공했는데 Build 가 입력 아티팩트를 찾지 못한다. 원인은?"
+  options={[
+    'S3 버킷 권한',
+    'Source 의 output_artifacts 이름과 Build 의 input_artifacts 이름이 다르다',
+    'CodeBuild 프로젝트가 없다',
+    '브랜치가 비어 있다',
+  ]}
+  correct={1}
+  explanation="단계는 아티팩트 이름으로 이어진다. 이름이 정확히 일치해야 하고 다르면 파이프라인이 연결을 찾지 못한다."
+/>
+
+<Quiz
+  question="GitHub Actions 가 매니페스트를 고쳐 push 하는데, 그 push 가 다시 워크플로를 부르지 않는 이유는?"
+  options={[
+    'Actions 는 자기 커밋을 무시한다',
+    'on.push.paths 가 index.html 로 좁혀져 있어 매니페스트 변경은 걸리지 않는다',
+    'GitHub 이 자동으로 막는다',
+    'permissions 설정 때문이다',
+  ]}
+  correct={1}
+  explanation="paths 필터가 조건이자 무한루프 차단이다. 필터 없이 만들면 워크플로가 끝없이 돌며 무료 할당량을 태운다."
+/>
+
+<Quiz
+  question="Actions 에서 OIDC 로 IAM 역할을 맡을 때 신뢰 정책에 `sub` 조건을 넣지 않으면?"
+  options={[
+    '역할을 맡을 수 없다',
+    '아무 GitHub 저장소의 워크플로가 그 역할을 맡을 수 있게 된다',
+    '토큰이 만료되지 않는다',
+    '리전이 고정된다',
+  ]}
+  correct={1}
+  explanation="OIDC 공급자만 신뢰하고 저장소를 특정하지 않으면 조건을 만족하는 모든 워크플로가 Assume 할 수 있다. repo:소유자/저장소:* 형태로 반드시 좁힌다."
+/>
+
+<Quiz
+  question="2025 1과제에서 CI 와 CD 배점을 합치면 30점 중 몇 점인가?"
+  options={['3점', '5점', '7점', '10점']}
+  correct={2}
+  explanation="Continuous Integration 2.5 와 Continuous Delivery 4.5 를 더해 7점이다. 1과제 최대 묶음이고 Network Configuration(1.5)의 네 배가 넘는다."
+/>
+
+<QuizResults />

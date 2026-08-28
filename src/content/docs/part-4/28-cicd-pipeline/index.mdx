@@ -1,0 +1,105 @@
+---
+title: 28. CI/CD — Code 시리즈와 GitHub Actions
+description: 2025 1과제 배점 1위(CI 2.5 + CD 4.5 = 7점)이자 2024·2025 두 해 모두 나온 CI/CD 축을 CodeBuild·CodePipeline·GitHub Actions 로 잡는 모듈 개요.
+sidebar:
+  order: 1
+---
+
+import { FileTree, LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+**배점이 가장 큰 축이다.** [2025 1과제 배점](/reference/past-exams/#2-1-2025년-1과제-30점)에서 Continuous Integration 2.5 점과 Continuous Delivery 4.5 점을 더하면 7점으로, 30점 만점 중 가장 큰 묶음이다. Network Configuration 이 1.5 점인 것과 비교된다.
+
+두 해 모두 나왔고 **도구만 바뀌었다.**
+
+| 해 | 도구 |
+|---|---|
+| 2024 2과제 | CodeCommit → CodeBuild → ECR → CodeDeploy(In-place) → CodePipeline |
+| 2025 1과제 | GitHub(OAuth) → CodeBuild → ECR → CodePipeline |
+| 2025 2과제 | GitHub Actions → ECR → ArgoCD |
+
+이 모듈은 CI 까지 다룬다. **CD(ArgoCD·Rollouts)는 [29 번 모듈](/part-4/29-gitops-rollouts/)** 이다.
+
+:::caution[CodeCommit 은 신규 생성이 막혀 있다]
+AWS 가 2024년 7월 이후 신규 고객에게 CodeCommit 저장소 생성을 열지 않는다. 2024 과제가 CodeCommit 을 요구했지만 지금 계정에서는 만들지 못할 수 있다.
+
+**그래서 이 모듈은 GitHub 기준으로 쓴다.** 파이프라인의 소스 단계만 바뀌고 나머지는 같다. 당일 CodeCommit 이 열려 있다면 소스 공급자만 바꾼다.
+:::
+
+## 학습 목표
+
+- [ ] CI 와 CD 가 각각 무엇을 자동화하는지 구분해 설명할 수 있다
+- [ ] `buildspec.yaml` 의 단계별 역할과 `artifacts` 가 무엇을 넘기는지 안다
+- [ ] CodeBuild 가 ECR 에 이미지를 올리려면 필요한 권한 두 가지를 짚을 수 있다
+- [ ] CodeBuild 에서 Docker 를 쓰려면 필요한 설정을 안다
+- [ ] CodePipeline 의 단계·작업·아티팩트 구조를 설명할 수 있다
+- [ ] GitHub 연결 방식 셋(OAuth·개인 토큰·CodeConnections)의 차이를 안다
+- [ ] GitHub Actions 워크플로를 쓰고 특정 파일 변경에만 돌게 만들 수 있다
+- [ ] Actions 에서 AWS 자격증명을 안전하게 얻는 두 방법을 비교할 수 있다
+- [ ] 빌드 실패를 로그에서 좁힐 수 있다
+
+## 소요 시간
+
+약 6~7시간 (이론 2h + 실습 4~5h)
+
+## 과금 리소스와 destroy 방침
+
+| 리소스 | 과금 | 방침 |
+|---|---|---|
+| CodeBuild | 빌드 분당 과금. `BUILD_GENERAL1_SMALL` 은 매우 저렴 | 프로젝트는 두어도 무방, 정리 시 destroy |
+| CodePipeline | 활성 파이프라인당 월 과금(첫 파이프라인 무료) | 실습 후 destroy |
+| ECR | 저장 용량당 과금 | 이미지까지 삭제 |
+| S3 아티팩트 버킷 | 저장량당 소액 | 비우고 삭제 |
+| GitHub Actions | 공개 저장소는 무료 | — |
+
+:::caution[GitHub Actions 무료 할당량]
+2025 2과제 유의사항이 "Github Action 의 무료 할당량을 소진하여 채점 시 불이익을 받지 않도록" 경고한다. **저장소를 public 으로 만들면 Actions 가 무제한 무료**다. 문제지도 `Repository Type: Public` 을 지정했다.
+:::
+
+## 선행 지식
+
+:::tip[개념이 낯설면 여기부터]
+- 컨테이너 이미지와 레지스트리 — [docker-basics](/start/docker-basics/)
+- IAM 역할과 신뢰 정책 — [iam-basics](/start/iam-basics/)
+- `git` 브랜치와 push — 이 모듈은 브랜치를 넷 만든다
+:::
+
+- Dockerfile 작성과 `docker build` · `docker push` — [docker-basics](/start/docker-basics/)
+- 역할을 서비스가 Assume 한다는 개념 — [iam-basics](/start/iam-basics/)
+- ECR 로그인이 왜 필요한지 — [docker-basics](/start/docker-basics/)
+
+## 선행 모듈
+
+- PART 1 — 08. 컨테이너·Lambda·DynamoDB (ECR 에 이미지 올리기)
+- PART 2 — 10. K8s 워크로드·ALB (배포 대상이 되는 클러스터)
+
+## 실기출 근거
+
+<FileTree>
+
+- 2025 전국 1과제
+  - **문제지 14~16** Version Control · CI · CD
+  - **mark1.sh 11-1, 11-2** CodeBuild·CodePipeline 검사 명령
+- 2025 전국 2과제
+  - **문제지 1) CI/CD** GitHub Actions + ArgoCD
+  - **2_cicd.sh 1-1 ~ 1-11** ECR·EKS·ALB 확인
+- 2024 부산 2과제
+  - **제3과제 (CICD).hwp** CodeCommit 4종 구성
+  - **mark.sh 1-1 ~ 4-2** 파이프라인 단계 확인
+
+</FileTree>
+
+## 공식 문서
+
+- [CodeBuild buildspec 참조](https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html) — 단계와 문법
+- [CodePipeline 구조](https://docs.aws.amazon.com/codepipeline/latest/userguide/reference-pipeline-structure.html) — 단계·작업·아티팩트
+- [GitHub Actions 워크플로 문법](https://docs.github.com/actions/reference/workflow-syntax-for-github-actions) — `on` · `jobs` · `steps`
+- [aws-actions/configure-aws-credentials](https://github.com/aws-actions/configure-aws-credentials) — OIDC 로 자격증명 얻기
+- [aws_codebuild_project](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/codebuild_project) — Terraform 리소스
+- [aws_codepipeline](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/codepipeline) — Terraform 리소스
+
+## 다음 단계
+
+<LinkButton href="/part-4/28-cicd-pipeline/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-4/28-cicd-pipeline/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

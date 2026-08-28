@@ -366,7 +366,134 @@ set-02 는 "누구나 ALB 에 닿을 수 있지만 **비밀 헤더**가 없으�
 
 ---
 
-## 5. 자기 점검 퀴즈
+## 5. 파드끼리 못 만나게 하기 — NetworkPolicy :badge[실기출]{variant=note}
+
+지금까지는 **밖에서 들어오는** 트래픽을 다뤘다. [2024 실기출 1과제](/reference/past-exams/#3-4-2024-1과제--web-service-provisioning-4시간)는 **안에서 옆으로 가는** 트래픽을 막으라고 했다.
+
+> 네트워크 격리를 위해 Calico 를 사용합니다. **애플리케이션 컨테이너끼리는 쿠버네티스 네트워크 내에서 서로 통신이 불가능**해야 합니다. 외부로의 DNS, HTTP, HTTPS 접근은 허용합니다.
+
+### 5-1. 기본값이 전부 열림이다
+
+쿠버네티스는 기본적으로 **모든 파드가 모든 파드와 통신할 수 있다.** 보안 그룹처럼 막혀 있다가 여는 것이 아니라, 열려 있다가 막는 구조다.
+
+그래서 `customer` 파드에서 `order` 파드로 `curl` 하면 그냥 된다. 요구는 그것을 막으라는 것이다.
+
+### 5-2. NetworkPolicy 는 선택된 파드에만 적용된다
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-pod-to-pod
+  namespace: skills
+spec:
+  podSelector:
+    matchLabels:
+      wsi: skills          # 이 라벨을 가진 파드에 적용
+  policyTypes:
+    - Ingress
+    - Egress
+  # ingress 를 비워 두면 들어오는 것이 전부 차단
+  ingress: []
+  egress:
+    # DNS 는 허용해야 한다 — 막으면 이름 해석이 죽는다
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # 외부로 나가는 HTTP·HTTPS 는 허용
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/16     # VPC 안쪽은 제외 — 곧 파드끼리는 여전히 차단
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+```
+
+세 가지를 본다.
+
+**첫째, `podSelector` 가 대상을 고른다.** 라벨이 맞는 파드에만 걸린다. 라벨이 없는 파드는 여전히 전부 열려 있다.
+
+**둘째, `policyTypes` 에 적힌 방향만 통제한다.** `Ingress` 만 적으면 나가는 것은 건드리지 않는다.
+
+**셋째, 정책이 하나라도 걸리면 그 방향은 기본 차단이 된다.** 그래서 허용할 것을 명시적으로 적어야 한다.
+
+:::danger[DNS 를 막으면 전부 멈춘다]
+`egress` 를 통제하면서 UDP·TCP 53 을 허용하지 않으면 파드가 이름을 해석하지 못한다. 외부 API 호출도, 서비스 이름 접근도 전부 실패한다.
+
+증상이 "아무것도 안 되는데 오류가 이상하다"로 나타나 원인을 찾기 어렵다. **`egress` 정책을 쓰면 DNS 허용을 가장 먼저 적는다.**
+:::
+
+:::caution[`except` 로 VPC 대역을 빼는 것이 요구의 핵심이다]
+`0.0.0.0/0` 을 그냥 허용하면 파드 IP 도 그 안에 포함돼 파드끼리 통신이 다시 열린다. VPC CIDR 을 `except` 로 빼야 "외부는 되고 안쪽은 안 되는" 상태가 된다.
+:::
+
+### 5-3. VPC CNI 로는 안 되고 Calico 가 필요한 이유
+
+EKS 기본 네트워크 플러그인인 VPC CNI 는 **NetworkPolicy 를 오래 지원하지 않았다.** 매니페스트를 적용해도 아무 일이 일어나지 않고 오류도 나지 않는다. 그래서 문제지가 Calico 를 명시한다.
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/aws/amazon-vpc-cni-k8s/master/config/master/calico-operator.yaml
+kubectl apply -f https://raw.githubusercontent.com/aws/amazon-vpc-cni-k8s/master/config/master/calico-crs.yaml
+```
+
+설치를 확인한다.
+
+```bash
+kubectl get pods -n calico-system
+```
+
+:::danger[정책이 적용되지 않아도 조용하다]
+NetworkPolicy 를 강제할 플러그인이 없으면 `kubectl apply` 는 성공하고 `kubectl get networkpolicy` 도 목록을 보여 준다. **그런데 실제로는 아무것도 막히지 않는다.**
+
+"만들었다"와 "동작한다"가 다른 대표적인 사례다. 반드시 실제로 통신을 시도해 확인한다.
+:::
+
+### 5-4. 확인하는 법
+
+채점 스크립트가 하는 그대로다.
+
+```bash
+POD=$(kubectl get pod -l wsi=skills -n skills --no-headers -o custom-columns=":metadata.name" | grep customer | head -n 1)
+
+# 파드끼리 — 실패해야 한다
+kubectl exec -it $POD -n skills -- curl -X GET "http://wsi-customer-service.skills.svc.cluster.local/healthcheck" --max-time 10
+
+# 외부 HTTP — 성공해야 한다
+kubectl exec -it $POD -n skills -- curl -X GET "http://naver.com" --max-time 10
+```
+
+**두 결과가 반대여야 한다.** 둘 다 되면 정책이 적용되지 않은 것이고, 둘 다 안 되면 너무 넓게 막은 것이다.
+
+:::note[`--max-time` 이 붙어 있는 이유]
+차단된 연결은 오류를 내지 않고 그냥 응답이 오지 않는다. 시간 제한이 없으면 명령이 멈춘 채로 있는다. 채점 스크립트도 이 옵션을 붙인다.
+:::
+
+### 5-5. 세 계층을 구분한다
+
+같은 "막는다"라도 계층이 셋이고 서로를 대체하지 않는다.
+
+| 계층 | 도구 | 막는 것 |
+|---|---|---|
+| 네트워크 | NetworkPolicy · 보안 그룹 | 패킷이 오가는 것 |
+| API | RBAC | `kubectl` 로 오브젝트를 다루는 것 |
+| VPC 경계 | Network Firewall | 밖으로 나가는 트래픽의 내용 |
+
+[2024 1과제](/reference/past-exams/#3-4-2024-1과제--web-service-provisioning-4시간)는 셋 중 둘을 함께 요구했다 — Calico 로 네트워크를, assume-role 로 API 를 나눴다. 하나를 막아도 다른 하나는 열려 있으므로 각각 구성해야 한다. API 계층은 [13. Private EKS·IAM 주제 6](/part-3/13-private-eks-iam/theory/#주제-6-리눅스-계정을-iam-역할로-갈라-kubectl-권한을-나눈다)에 있다.
+
+---
+
+## 6. 자기 점검 퀴즈
 
 <Quiz title="readiness vs liveness">
 readinessProbe 와 livenessProbe 가 실패했을 때 동작 차이는?
@@ -473,6 +600,52 @@ graceful shutdown 흐름:
 5. 종료를 마친다.
 
 `terminationGracePeriodSeconds` 카운트다운은 **preStop 훅보다 먼저 시작**해 preStop 실행과 컨테이너 종료를 통틀어 잰다. 45초 유예에 `sleep 15` 면 SIGTERM 이후 몫은 약 30초이지 45초가 아니다. 그래서 두 값은 항상 `preStop sleep < terminationGracePeriodSeconds` 여야 하고, 여유도 그 차이만큼만 있다.
+</Quiz>
+
+<Quiz title="정책을 넣었더니 파드가 전부 멈췄다">
+파드끼리 통신을 막으려고 `policyTypes` 에 `Ingress` 와 `Egress` 를 넣고 egress 에 TCP 80·443 만 허용했다. 그랬더니 외부 호출까지 전부 실패한다. 빠진 것은?
+
+- [x] UDP·TCP 53 — DNS 허용
+- [ ] `ingress` 에 `0.0.0.0/0`
+  > 들어오는 것을 막는 것이 요구다. 열면 요구가 깨진다.
+- [ ] 파드 라벨 수정
+  > 라벨이 안 맞으면 정책이 적용되지 않아 증상이 "전부 된다"로 나온다. 지금은 적용됐고 너무 좁은 것이다.
+- [ ] Calico 재설치
+  > 정책이 실제로 걸렸다는 증거가 이 증상이다. 강제자가 없으면 아무것도 막히지 않는다.
+
+**DNS 다.** egress 를 통제하는 순간 이름 해석도 통제 대상이 된다. 53 을 열지 않으면 주소를 얻지 못해 80·443 허용이 소용없고, 서비스 이름 접근까지 함께 죽는다.
+
+증상이 "아무것도 안 되는데 오류가 이상하다"로 나타나 원인을 찾기 어렵다. **`egress` 정책을 쓰면 DNS 허용을 가장 먼저 적는다.**
+</Quiz>
+
+<Quiz title="0.0.0.0/0 을 열었더니 격리가 풀렸다">
+egress 에 `ipBlock: 0.0.0.0/0` 으로 80·443 을 허용했다. 외부는 잘 나가는데 파드끼리도 다시 통신된다. 왜인가?
+
+- [x] 파드 IP 도 `0.0.0.0/0` 안에 있다 — VPC CIDR 을 `except` 로 빼야 한다
+- [ ] `ingress: []` 가 무시됐다
+  > 빈 배열은 그 방향 전부 차단이라는 올바른 표기다. 다만 정책은 상대 파드에는 걸리지 않는다.
+- [ ] 서비스 이름으로 부르면 정책이 적용되지 않는다
+  > 이름은 DNS 로 파드·서비스 IP 가 된다. 정책은 그 IP 로 판단한다.
+- [ ] 80·443 말고 전체 포트를 열어야 한다
+  > 방향이 반대다. 지금 문제는 너무 넓게 열린 것이다.
+
+**대역이 겹친다.** `except` 로 VPC CIDR 을 빼야 "밖으로는 되고 안쪽으로는 안 되는" 상태가 된다. 이 한 줄이 요구의 핵심이다.
+</Quiz>
+
+<Quiz title="정책을 적용했는데 아무것도 안 막힌다">
+`kubectl apply` 가 성공했고 `kubectl get networkpolicy` 에도 목록이 나온다. 그런데 파드끼리 `curl` 이 그대로 된다. 가장 먼저 볼 것은?
+
+- [x] 정책을 강제할 플러그인이 있는지 — `kubectl get pods -n calico-system`
+- [ ] 매니페스트의 오타
+  > 형식이 틀리면 `apply` 에서 거절된다. 통과했다면 문법은 맞다.
+- [ ] 정책이 퍼지기를 기다린다
+  > 지연으로 설명할 시간이 아니다. 강제자가 없으면 영원히 안 막힌다.
+- [ ] `podSelector` 를 빈 값으로 바꾼다
+  > 대상 범위를 넓히는 것이지 강제 여부와는 관계없다.
+
+**강제할 플러그인이다.** EKS 기본 VPC CNI 는 NetworkPolicy 를 오래 지원하지 않았고, 없으면 **오류 없이 조용히 무시된다.** 그래서 문제지가 Calico 를 명시한다.
+
+"만들었다"와 "동작한다"가 다른 대표 사례다. 확인은 목록이 아니라 실제 통신으로 한다.
 </Quiz>
 
 <QuizResults confetti />

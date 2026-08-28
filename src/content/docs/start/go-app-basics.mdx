@@ -1,0 +1,471 @@
+---
+title: Go·Gin 앱 읽기 (선수 학습, 약 1시간)
+description: 대회가 주는 수정 불가 Go 바이너리에서 라우트·환경변수·동작을 역추적하는 법과, 그러기 위해 필요한 최소한의 Gin 문법.
+sidebar:
+  order: 17
+---
+
+import { Quiz, QuizResults } from 'starlight-quiz/components';
+import { LinkButton, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: explanation
+
+## ① 학습 목표
+
+- [ ] Gin 으로 만든 웹 앱의 소스가 어떻게 생겼는지 읽을 수 있다
+- [ ] 라우트 등록·핸들러·환경변수 읽기·DB 연결 네 부분을 소스에서 짚을 수 있다
+- [ ] 컴파일된 Go 바이너리에서 라우트 경로를 뽑아낼 수 있다
+- [ ] 바이너리가 읽는 환경변수 이름을 뽑아낼 수 있다
+- [ ] 앱이 뜨지 않을 때 로그에서 원인을 좁힐 수 있다
+- [ ] 문제지와 바이너리가 다를 때 무엇을 믿어야 하는지 안다
+
+:::note[Go 를 쓸 일은 없다. 읽을 일만 있다]
+대회는 **컴파일된 Go 바이너리**를 주고 수정을 금지한다. [실기출 분해](/reference/past-exams/#5-배포-파일)를 보면 2024·2025 두 해의 배포 파일이 전부 Go 로 빌드된 실행 파일이다. 소스는 주지 않는다.
+
+그래서 이 문서의 목표는 Go 를 쓰는 것이 아니라 **주어진 바이너리가 무엇을 하는지 알아내는 것**이다. 앞의 절반은 그러기 위해 필요한 최소한의 문법이고, 뒤의 절반이 본론이다.
+:::
+
+---
+
+## ② Gin 앱은 이렇게 생겼다
+
+대회 앱은 전부 Gin 프레임워크로 만들어져 있다. 문제지 소프트웨어 스택 표에 `Golang / Gin` 이 적혀 있고, 바이너리 안에도 `gin-gonic` 문자열이 300개 넘게 들어 있다.
+
+아래는 대회 앱과 같은 구조를 가진 예시 소스다. 실제 배포 바이너리의 소스가 아니라, 그 바이너리가 하는 일을 소스로 옮기면 이렇게 생겼으리라는 재구성이다.
+
+```go
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"net/http"
+	"os"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/gin-gonic/gin"
+)
+
+var db *sql.DB
+
+type User struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}
+
+func main() {
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s",
+		os.Getenv("MYSQL_USER"),
+		os.Getenv("MYSQL_PASSWORD"),
+		os.Getenv("MYSQL_HOST"),
+		os.Getenv("MYSQL_PORT"),
+		os.Getenv("MYSQL_DBNAME"),
+	)
+
+	var err error
+	db, err = sql.Open("mysql", dsn)
+	if err != nil {
+		panic(err)
+	}
+
+	r := gin.Default()
+	r.GET("/healthcheck", healthcheck)
+	r.GET("/v1/user", getUser)
+	r.POST("/v1/user", createUser)
+	r.Run(":8080")
+}
+
+func healthcheck(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func getUser(c *gin.Context) {
+	email := c.Query("email")
+
+	var u User
+	err := db.QueryRow("SELECT id, username, email FROM user WHERE email = ?", email).
+		Scan(&u.ID, &u.Username, &u.Email)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(http.StatusOK, u)
+}
+```
+
+한 줄씩 무엇인지만 짚는다. Go 를 쓸 것이 아니므로 문법을 외울 필요는 없다.
+
+### 2-1. 환경변수 읽기
+
+```go
+os.Getenv("MYSQL_USER")
+```
+
+파이썬의 `os.environ.get(...)` 과 같다. 없으면 빈 문자열을 준다. **오류를 내지 않는다는 점이 중요하다.** 환경변수를 빼먹으면 앱은 뜨지만 빈 값으로 접속을 시도하다 실패한다.
+
+### 2-2. DB 접속 문자열
+
+```go
+dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user, pass, host, port, dbname)
+```
+
+MySQL 드라이버가 요구하는 형식이다. 다섯 환경변수가 여기서 하나로 합쳐진다. 완성되면 이런 모양이다.
+
+```
+admin:Skills53#$%@tcp(apdev-rds.cluster-xxx.ap-northeast-2.rds.amazonaws.com:3306)/day1
+```
+
+`:=` 는 변수를 새로 만들면서 값을 넣는다는 뜻이다. `%s` 는 파이썬 f-문자열의 중괄호와 같은 자리 표시다.
+
+### 2-3. 라우트 등록
+
+```go
+r := gin.Default()
+r.GET("/healthcheck", healthcheck)
+r.GET("/v1/user", getUser)
+r.POST("/v1/user", createUser)
+r.Run(":8080")
+```
+
+**이 다섯 줄이 앱의 명세다.** 어떤 메서드로 어떤 경로가 오면 어떤 함수를 부를지 정한다. 마지막 줄이 8080 포트에서 듣기 시작한다.
+
+여기에 없는 경로로 요청이 오면 Gin 이 자동으로 404 를 낸다. **앱이 404 를 내는 것과 로드밸런서가 404 를 내는 것은 다르다.** 3과제에서 "정의되지 않은 경로는 404" 요구를 만족시킬 때 어느 쪽이 낼지 정해야 한다.
+
+### 2-4. 핸들러
+
+```go
+func getUser(c *gin.Context) {
+	email := c.Query("email")
+	...
+	c.JSON(http.StatusOK, u)
+}
+```
+
+`c` 하나로 요청을 읽고 응답을 쓴다.
+
+| 하는 일 | Gin | 파이썬 Lambda 대응 |
+|---|---|---|
+| 쿼리스트링 읽기 | `c.Query("email")` | `event["queryStringParameters"]["email"]` |
+| 경로 변수 읽기 | `c.Param("id")` | `event["pathParameters"]["id"]` |
+| 본문 읽기 | `c.BindJSON(&u)` | `json.loads(event["body"])` |
+| JSON 응답 | `c.JSON(200, u)` | `return {"statusCode": 200, "body": ...}` |
+
+### 2-5. SQL 질의
+
+```go
+db.QueryRow("SELECT id, username, email FROM user WHERE email = ?", email).Scan(&u.ID, ...)
+```
+
+물음표 자리에 `email` 값이 들어간다. 값을 문자열로 이어 붙이지 않고 이렇게 넘기는 것이 SQL 주입을 막는 방법이다.
+
+**이 한 줄이 3과제 성능의 전부다.** `WHERE email = ?` 로 찾는데 `email` 열에 인덱스가 없으면 MySQL 은 테이블 전체를 훑는다. 행이 수십만이면 0.2초 목표를 넘긴다. 자세한 것은 [MySQL 기초](/start/mysql-basics/)에 있다.
+
+---
+
+## ③ 컴파일된 바이너리 읽기
+
+여기부터가 본론이다. 소스가 없을 때 무엇을 할 수 있는지 본다.
+
+### 3-1. 먼저 무엇인지 확인한다
+
+```bash
+file user
+```
+
+```
+user: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked,
+Go BuildID=..., with debug_info, not stripped
+```
+
+세 가지를 읽는다.
+
+| 표시 | 뜻 |
+|---|---|
+| `ELF 64-bit ... x86-64` | 리눅스 x86-64 실행 파일. ARM 인스턴스에서는 돌지 않는다 |
+| `statically linked` | 필요한 라이브러리를 전부 안에 품었다. 어느 리눅스에서도 돈다 |
+| `not stripped` · `with debug_info` | 심볼과 디버그 정보가 남아 있다. **읽을 것이 많다** |
+
+:::caution[정적 링크가 Dockerfile 을 정한다]
+`statically linked` 면 `FROM gcr.io/distroless/base-debian13` 같은 최소 이미지에 바이너리만 복사해도 돈다. 반면 2024 배포 파일은 `dynamically linked` 였다. 그 경우 최소 이미지에서 공유 라이브러리를 찾지 못해 실행되지 않는다. **`file` 출력이 베이스 이미지 선택의 근거다.**
+:::
+
+### 3-2. 라우트를 뽑는다
+
+Go 는 문자열을 한 덩어리로 이어 붙여 저장한다. 그래서 `strings` 로 통째로 보면 붙어 나온다. 원하는 모양만 골라내는 편이 낫다.
+
+<Tabs syncKey="shell">
+  <TabItem label="Bash (Linux/CloudShell)">
+
+  ```bash
+  strings user | grep -oE '/v1/[a-z]+|/health[a-z]*' | sort -u
+  ```
+
+  </TabItem>
+  <TabItem label="Python (어디서나)">
+
+  ```python
+  import re
+
+  data = open("user", "rb").read()
+  for pat in (rb"/v1/[a-z]{3,10}", rb"/health[a-z]*"):
+      print(sorted(set(m.decode() for m in re.findall(pat, data))))
+  ```
+
+  </TabItem>
+</Tabs>
+
+2025 3과제 배포 바이너리 셋에 실제로 돌린 결과다.
+
+| 바이너리 | 나온 경로 |
+|---|---|
+| `user` | `/v1/user` · `/healthcheck` |
+| `product` | `/v1/product` · `/healthcheck` |
+| `stress` | `/v1/stress` · `/healthcheck` |
+
+:::danger[상태 검사 경로는 `/health` 가 아니라 `/healthcheck` 다]
+문제지 본문만 읽고 `/health` 로 대상 그룹 상태 검사를 걸면 전부 비정상으로 뜬다. 상태 검사가 실패하면 로드밸런서가 트래픽을 보내지 않고, 겉으로는 "앱이 안 뜬다"로 보인다.
+
+**바이너리가 문제지보다 정확하다.** 실제로 2025 1과제 앱은 `/health` 였고 3과제 앱은 `/healthcheck` 였다. 해마다 다르니 매번 확인한다.
+:::
+
+### 3-3. 환경변수 이름을 뽑는다
+
+```python
+import re
+
+data = open("product", "rb").read()
+for pat in (rb"MYSQL_[A-Z]+", rb"TABLE_[A-Z]+", rb"DYNAMODB"):
+    print(sorted(set(m.decode() for m in re.findall(pat, data))))
+```
+
+같은 바이너리 셋에서 나온 결과다.
+
+| 바이너리 | 환경변수 |
+|---|---|
+| `user` | `MYSQL_USER` · `MYSQL_PASSWORD` · `MYSQL_HOST` · `MYSQL_PORT` · `MYSQL_DBNAME` |
+| `product` | `TABLE_NAME` · `TABLE_INDEX` (그리고 `DYNAMODB`) |
+| `stress` | 없음 |
+
+**`product` 에 `TABLE_INDEX` 가 있다는 사실이 설계를 바꾼다.** 앱이 GSI 이름을 환경변수로 받는다는 뜻이고, 곧 조회 축이 파티션 키가 아닐 수 있다는 뜻이다. 문제지 어디에도 이 이름은 없다. 바이너리를 열어야만 나온다.
+
+:::note[결과에 잡음이 섞인다]
+`MYSQL_USERMYSQL` 이나 `TABLE_NAMEU` 처럼 이상한 것이 함께 나온다. Go 가 문자열을 이어 붙여 저장한 탓에 경계가 뭉개진 것이다. 실제 이름은 그중 말이 되는 것들이고, `-h` 도움말이나 실제 실행으로 확인하면 확실하다.
+:::
+
+### 3-4. 도움말을 물어본다
+
+바이너리가 도움말을 지원하기도 한다. 2025 1과제 문제지가 직접 안내한다.
+
+```bash
+./red -h
+```
+
+가장 확실한 방법이다. 다만 리눅스 x86-64 에서만 실행되므로 Windows 본 PC 가 아니라 CloudShell 이나 EC2 에서 해야 한다.
+
+### 3-5. 그냥 실행해 본다
+
+```bash
+chmod +x user
+./user
+```
+
+환경변수 없이 실행하면 대개 접속 실패로 죽는다. **그 오류 메시지가 가장 값싼 정보원이다.**
+
+| 오류 메시지 | 뜻 |
+|---|---|
+| `dial tcp 127.0.0.1:3306: connect: connection refused` | 호스트 환경변수를 못 읽어 기본값을 씀 |
+| `Access denied for user 'xxx'@'...'` | 접속은 됐고 사용자·암호가 틀림 |
+| `Unknown database 'xxx'` | 접속·인증은 됐고 DB 이름이 틀림 |
+| `Error 1146: Table 'day1.user' doesn't exist` | 전부 맞고 테이블이 없음 |
+| `listen tcp :8080: bind: address already in use` | 8080 을 이미 다른 것이 쓰고 있음 |
+
+**이 목록이 곧 진단 순서다.** 오류가 아래로 내려갈수록 설정이 더 많이 맞은 것이다.
+
+### 3-6. 심볼로 확인한다
+
+`not stripped` 이므로 함수 이름이 남아 있다. Go 도구가 있으면 이렇게 본다.
+
+```bash
+go tool nm user | grep -i 'main\.' | head -20
+```
+
+```
+  4a1c20 T main.main
+  4a2340 T main.getUser
+  4a2680 T main.createUser
+  4a2a10 T main.healthcheck
+```
+
+`main.` 으로 시작하는 것이 앱이 직접 쓴 함수다. 나머지는 표준 라이브러리와 Gin 이다. 함수 이름만으로도 앱이 무슨 일을 하는지 윤곽이 잡힌다.
+
+---
+
+## ④ 심화 — 파드가 안 뜰 때
+
+바이너리를 컨테이너에 넣어 배포했는데 뜨지 않는 상황이 실습에서 가장 자주 만나는 벽이다. 순서대로 좁힌다.
+
+### 4-1. 로그부터 본다
+
+```bash
+kubectl logs <파드이름>
+kubectl logs <파드이름> --previous   # 이미 재시작했으면 이전 것
+```
+
+ECS 라면 이렇다.
+
+```bash
+aws logs tail /ecs/<서비스이름> --follow
+```
+
+앱이 stdout 과 stderr 로 로그를 내므로 컨테이너 로그에 그대로 나온다.
+
+### 4-2. 증상별 원인
+
+| 증상 | 원인 | 확인 |
+|---|---|---|
+| `exec format error` | 아키텍처 불일치. ARM 노드에 x86-64 바이너리 | `file` 출력의 `x86-64`, 노드 인스턴스 타입 |
+| `permission denied` | 실행 권한 없음 | Dockerfile 에서 `COPY --chmod=0755` |
+| `no such file or directory` (파일은 있음) | 동적 링크인데 최소 이미지 | `file` 출력의 `dynamically linked` |
+| 즉시 종료, 로그에 DB 오류 | 환경변수 누락·오설정 | `kubectl exec ... -- env` |
+| 뜨는데 상태 검사 실패 | 상태 검사 경로가 틀림 | 3-2 로 뽑은 실제 경로 |
+| 뜨는데 접속 안 됨 | 보안 그룹·포트 매핑 | 8080 이 열려 있나 |
+
+### 4-3. 환경변수가 실제로 들어갔는지 본다
+
+```bash
+kubectl exec <파드이름> -- env | sort
+```
+
+**매니페스트에 썼다고 들어간 것이 아니다.** Secret 이나 ConfigMap 을 참조했는데 그 이름이 틀리면 조용히 빈 값이 되거나 파드가 아예 뜨지 않는다. 실제로 들어간 값을 보는 것이 유일한 확인이다.
+
+### 4-4. Dockerfile 이 하는 일
+
+2025 3과제 예상 Dockerfile 은 이렇게 생겼다.
+
+```dockerfile
+FROM gcr.io/distroless/base-debian13:nonroot
+WORKDIR /app
+COPY --chmod=0755 user ./server
+ENV key=value
+ENTRYPOINT ["/app/server"]
+```
+
+네 줄이 각각 하는 일이 있다.
+
+- `FROM ... distroless` — 셸도 패키지 관리자도 없는 최소 이미지. 정적 링크 바이너리라 가능하다
+- `COPY --chmod=0755` — 복사하면서 실행 권한을 준다. 이것이 없으면 `permission denied`
+- `ENV key=value` — **채워 넣으라는 빈칸이다.** 여기에 3-3 에서 뽑은 이름을 쓴다
+- `ENTRYPOINT` — 컨테이너가 시작할 때 실행할 것
+
+:::caution[distroless 에는 셸이 없다]
+`kubectl exec ... -- sh` 가 되지 않는다. 진단은 로그와 `env` 로만 해야 한다. 실습 중 디버깅이 답답하면 일시적으로 `FROM golang:1.22-alpine` 같은 셸 있는 이미지로 바꿔 원인을 찾고, 찾은 뒤 되돌린다.
+:::
+
+---
+
+## ⑤ 문제지와 바이너리가 다르면
+
+**바이너리를 믿는다.** 채점은 실제 동작을 보지 문제지 문장을 보지 않는다.
+
+다만 두 가지는 예외다.
+
+| 상황 | 무엇을 따르나 |
+|---|---|
+| 상태 검사 경로, 환경변수 이름, 응답 형식 | 바이너리 |
+| 리소스 이름·태그, 인스턴스 타입, 리전 | 문제지 |
+| 채점 스크립트가 있으면 | **채점 스크립트가 최우선** |
+
+채점 스크립트는 문제지보다도 정확하다. 문제지가 애매하게 쓴 것도 스크립트는 정확한 값으로 검사한다. 읽는 법은 [실기출 분해 4절](/reference/past-exams/#4-채점-스크립트가-실제로-치는-명령)에 있다.
+
+---
+
+## ⑥ 손으로 해 보기
+
+배포 바이너리가 손에 있다면 순서대로 해 본다. AWS 리소스를 만들지 않으므로 과금이 없다.
+
+1. `file <바이너리>` 로 아키텍처와 링크 방식을 확인한다
+2. 3-2 의 명령으로 라우트를 뽑는다. 문제지에 적힌 것과 같은가
+3. 3-3 의 명령으로 환경변수를 뽑는다. 문제지에 없는 것이 있는가
+4. 환경변수 없이 실행해 오류 메시지를 본다. 3-5 표의 어디에 해당하는가
+5. `./바이너리 -h` 가 도움말을 내는지 본다
+
+<details>
+<summary>2025 3과제 바이너리로 하면 이런 결과가 나온다</summary>
+
+1. `ELF 64-bit ... x86-64, statically linked, ... not stripped` — x86-64 전용, 최소 이미지 가능
+2. `/v1/user` · `/healthcheck`. 문제지 본문에 `/healthcheck` 가 뚜렷하지 않아 **여기서 처음 확인된다**
+3. `user` 는 `MYSQL_*` 다섯 개, `product` 는 `TABLE_NAME` 과 `TABLE_INDEX`. **`TABLE_INDEX` 는 문제지에 없다** — GSI 를 쓰라는 신호다
+4. 대개 `connection refused`. 호스트 환경변수가 비어 기본값으로 붙으려 한 것
+5. 지원 여부는 해마다 다르다. 2025 1과제 문제지는 `-h` 를 명시적으로 안내했다
+
+</details>
+
+---
+
+## ⑦ 자기 점검 퀴즈
+
+<Quiz title="statically linked 가 말해 주는 것">
+`file` 출력에 `statically linked` 가 있으면 무엇을 알 수 있나?
+
+- [ ] 어떤 아키텍처에서도 실행된다
+- [x] 필요한 라이브러리를 전부 품고 있어 셸 없는 최소 이미지에도 넣을 수 있다
+- [ ] 소스 코드가 함께 들어 있다
+- [ ] 컨테이너에서만 실행된다
+
+정적 링크는 라이브러리 의존이 없다는 뜻이라 distroless 같은 최소 이미지에서도 돈다. 다만 아키텍처는 별개다 — x86-64 바이너리는 ARM 노드에서 exec format error 를 낸다.
+</Quiz>
+
+<Quiz title="exec format error">
+파드가 `exec format error` 로 죽는다. 원인은?
+
+- [ ] 실행 권한이 없다
+- [ ] 환경변수가 비었다
+- [x] 바이너리 아키텍처와 노드 아키텍처가 다르다
+- [ ] 포트가 이미 사용 중이다
+
+x86-64 바이너리를 ARM(Graviton) 노드에서 실행하면 이 오류가 난다. file 출력의 아키텍처와 노드 인스턴스 타입을 대조한다. 실행 권한 문제라면 permission denied 가 난다.
+</Quiz>
+
+<Quiz title="문제지와 바이너리가 다르다">
+문제지에는 상태 검사 경로가 `/health` 라고 적혀 있는데 바이너리에서는 `/healthcheck` 만 나왔다. 어떻게 하나?
+
+- [ ] 문제지를 따라 /health 로 건다
+- [x] 바이너리에서 나온 /healthcheck 로 걸고, 채점 스크립트가 있으면 그것을 최우선으로 본다
+- [ ] 둘 다 걸어 둔다
+- [ ] 상태 검사를 끈다
+
+채점은 실제 동작을 본다. 없는 경로로 상태 검사를 걸면 대상이 전부 비정상이 되어 트래픽이 흐르지 않는다. 채점 스크립트가 있으면 그것이 문제지보다도 정확한 근거다.
+</Quiz>
+
+<Quiz title="바이너리에만 있는 TABLE_INDEX">
+바이너리에서 문제지에 없는 환경변수 `TABLE_INDEX` 가 나왔다. 이것이 시사하는 바는?
+
+- [ ] 무시해도 되는 잡음이다
+- [x] 앱이 GSI 이름을 받는다는 뜻이라 조회 축이 파티션 키가 아닐 수 있다
+- [ ] 테이블을 두 개 만들어야 한다
+- [ ] 환경변수 이름을 바꿔야 한다
+
+인덱스 이름을 환경변수로 받는다는 것은 앱이 GSI 로 조회한다는 뜻이다. 그 인덱스를 만들지 않으면 조회가 실패하거나 Scan 으로 떨어져 느려진다. 문제지에 없는 정보를 바이너리에서만 얻는 사례다.
+</Quiz>
+
+<Quiz title="distroless 에서 앱이 안 뜬다">
+distroless 이미지에 넣은 앱이 뜨지 않는다. 가장 먼저 할 일은?
+
+- [ ] kubectl exec 로 셸에 들어가 본다
+- [x] 컨테이너 로그를 본다
+- [ ] 이미지를 다시 빌드한다
+- [ ] 노드를 재시작한다
+
+distroless 에는 셸이 없어 exec 로 들어갈 수 없다. 앱이 stdout·stderr 로 로그를 내므로 kubectl logs 나 CloudWatch 로그가 유일한 창이다. 이미 재시작했다면 --previous 를 붙인다.
+</Quiz>
+
+<QuizResults />
+
+---
+
+## 다음 단계
+
+<LinkButton href="/start/mysql-basics/" icon="open-book">MySQL 기초</LinkButton>
+<LinkButton href="/start/docker-basics/" variant="minimal" icon="right-arrow">Docker 기초</LinkButton>
+<LinkButton href="/reference/past-exams/" variant="minimal" icon="document">실기출 분해</LinkButton>

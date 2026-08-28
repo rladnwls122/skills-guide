@@ -1,0 +1,94 @@
+---
+title: 30. 컴퓨팅 없는 서버리스 — Step Functions · API Gateway 프록시
+description: Lambda·EC2·ECS 를 전부 금지한 2025 2과제 Serverless Inventory 모듈을 Step Functions 의 SDK 통합과 API Gateway AWS 서비스 프록시로 푸는 모듈 개요.
+sidebar:
+  order: 1
+---
+
+import { FileTree, LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+[2025 2과제](/reference/past-exams/#3-2-2025-2과제--small-challenge-4시간) Serverless Inventory 모듈의 제약이 이 모듈의 전부다.
+
+> Step Functions, API Gateway, DynamoDB 등을 사용해 별도의 컴퓨팅 서비스를 사용하지 않고 다음의 요구사항을 만족할 수 있는 시스템을 구축해야 합니다. **Lambda 를 포함한 EC2, ECS 등의 컴퓨팅 서비스의 사용이 불가합니다.**
+
+Lambda 를 쓸 수 없다는 제약이 문제의 성격을 뒤집는다. 평소라면 Lambda 한 장으로 끝날 일을 서비스끼리 직접 잇는 방법으로 풀어야 한다.
+
+:::note[왜 이런 제약을 내나]
+서비스 통합을 아느냐를 보는 문제다. Lambda 는 무엇이든 할 수 있으니 Lambda 로 풀면 각 서비스가 제공하는 통합 기능을 몰라도 된다. 그것을 막으면 Step Functions 의 SDK 통합과 API Gateway 의 서비스 프록시를 알아야만 풀린다.
+:::
+
+## 학습 목표
+
+- [ ] Step Functions 의 상태 타입 다섯 가지를 구분하고 쓸 자리를 안다
+- [ ] ASL(Amazon States Language) 의 `Parameters` · `ResultPath` · `OutputPath` 가 각각 무엇을 하는지 설명할 수 있다
+- [ ] Lambda 없이 DynamoDB 를 읽고 쓰는 Task 를 쓸 수 있다
+- [ ] `Choice` 상태로 조건 분기를 만들 수 있다
+- [ ] API Gateway 통합 유형 셋의 차이를 안다
+- [ ] AWS 서비스 프록시 통합의 요청·응답 매핑 템플릿을 쓸 수 있다
+- [ ] VTL 로 조건에 따라 403 을 내는 방법을 안다
+- [ ] DynamoDB 응답의 타입 표기를 벗겨 값만 내보낼 수 있다
+- [ ] 실행이 실패했을 때 어느 상태에서 왜 실패했는지 찾을 수 있다
+
+## 소요 시간
+
+약 5~6시간 (이론 2.5h + 실습 3h)
+
+## 과금 리소스와 destroy 방침
+
+| 리소스 | 과금 | 방침 |
+|---|---|---|
+| DynamoDB (온디맨드) | 요청당. 실습 규모는 무시 가능 | destroy |
+| Step Functions (Standard) | 상태 전이당. 매우 저렴 | destroy |
+| API Gateway REST | 요청당 + 캐시 사용 시 시간당 | **캐시를 켜지 않는다** |
+| CloudWatch Logs | 저장량 | 보존 기간 짧게 |
+
+이 모듈은 과금이 가장 작다. **컴퓨팅이 없어서다.** 그것이 이 아키텍처의 장점이기도 하다.
+
+:::caution[API Gateway 캐시는 시간당 과금이다]
+스테이지 설정에서 캐싱을 켜면 켜 둔 시간만큼 과금된다. 실습에서 켤 이유가 없다.
+:::
+
+## 선행 지식
+
+:::tip[개념이 낯설면 여기부터]
+- DynamoDB 의 파티션 키와 항목 — [dynamodb-basics](/start/dynamodb-basics/)
+- IAM 역할을 서비스가 Assume 한다는 개념 — [iam-basics](/start/iam-basics/)
+- JSON 구조 읽기 — 이 모듈은 JSON 을 많이 다룬다
+:::
+
+- Step Functions 의 `Task` 하나가 API 하나에 대응한다는 제약 — [serverless-basics](/start/serverless-basics/)
+- DynamoDB 항목의 타입 표기(`{"S": "kim"}`) — [dynamodb-basics](/start/dynamodb-basics/)
+- REST API 의 쿼리스트링과 상태코드 — [03. DNS·HTTP·TLS](/part-0/03-dns-http-tls/theory/)
+
+## 선행 모듈
+
+- PART 4 — 14. 서버리스 워크플로 (Step Functions 기본)
+- PART 1 — 08. 컨테이너·Lambda·DynamoDB (DynamoDB 조작)
+
+## 실기출 근거
+
+<FileTree>
+
+- 2025 전국 2과제
+  - **문제지 5) Serverless Inventory** 컴퓨팅 금지, 상태 머신, REST API
+  - **2_serverless_inventory-v2.sh 5-1 ~ 5-6** 실행·조회·403 확인
+- 2024 부산 1과제
+  - **문제지 14. CloudFront** Lambda@Edge presigned URL (같은 API Gateway 계열)
+
+</FileTree>
+
+## 공식 문서
+
+- [Amazon States Language](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-amazon-states-language.html) — 상태 타입과 필드
+- [Step Functions 의 AWS SDK 통합](https://docs.aws.amazon.com/step-functions/latest/dg/supported-services-awssdk.html) — Lambda 없이 서비스 부르기
+- [API Gateway REST API 통합 유형](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-api-integration-types.html) — AWS · AWS_PROXY · HTTP
+- [API Gateway 매핑 템플릿](https://docs.aws.amazon.com/apigateway/latest/developerguide/models-mappings.html) — VTL 문법
+- [aws_api_gateway_integration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration) — Terraform 리소스
+- [aws_sfn_state_machine](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sfn_state_machine) — Terraform 리소스
+
+## 다음 단계
+
+<LinkButton href="/part-4/30-stepfunctions-apigw/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-4/30-stepfunctions-apigw/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

@@ -1,0 +1,1195 @@
+---
+title: Lab 32 — ECS 로 세 앱을 띄우고 부하 아래에서 조정하기
+description: c5.large 제약 아래 ECS 클러스터와 세 서비스를 세우고, 인덱스·캐싱·WAF 를 붙인 뒤 부하를 걸어 네 축을 측정하며 조정하는 드릴.
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: how-to
+
+선행 지식과 목표는 [모듈 개요](/part-5/32-task3-ecs/)에. 개념은 [이론](/part-5/32-task3-ecs/theory/)에 있다.
+
+[2025 3과제](/reference/past-exams/#3-3-2025-3과제--운영-40점) 제약을 그대로 재현하는 드릴이다. **한 번에 3시간 안에 끝내고 당일 정리한다.**
+
+:::danger[사이트에서 가장 비싼 실습이다]
+c5.large 여러 대 + RDS Multi-AZ + ALB + NAT + CloudFront 가 동시에 돈다. 드릴을 시작하기 전에 끝낼 시간을 정하고, 그 시간에 알람이 울리게 해 둔다.
+
+중단해야 하면 부하부터 멈추고 서비스 desired 를 0으로 내린다.
+:::
+
+## 드릴 목표
+
+- [ ] 네트워크와 RDS·DynamoDB 를 만든다 (T+20분)
+- [ ] 이미지를 빌드해 ECR 에 올린다 (T+30분)
+- [ ] ECS 클러스터와 세 서비스를 띄운다 (T+50분)
+- [ ] ALB 규칙으로 경로를 나누고 기본 404 를 둔다
+- [ ] 덤프를 적재하고 인덱스를 만든다
+- [ ] WAF 로 이메일 형식 검증을 건다
+- [ ] 부하를 걸고 네 축을 측정한다
+- [ ] 낮은 축을 하나씩 올린다
+- [ ] 비용 ratio 를 맞춘다
+- [ ] 정리한다
+
+---
+
+## 1. 준비 (T+0 ~ T+20)
+
+<Steps>
+
+1. **변수를 세운다.**
+
+   ```bash
+   export AWS_DEFAULT_REGION=ap-northeast-2
+   export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+   export PREFIX=apdev
+   mkdir -p ~/lab32 && cd ~/lab32
+   ```
+
+2. **배포 바이너리를 확인한다.**
+
+   실기출 배포 파일(`user` · `product` · `stress`)이 있다면 먼저 정체를 확인한다.
+
+   ```bash
+   file user product stress
+   ```
+
+   ```bash
+   python3 - <<'EOF'
+   import re
+   for name in ("user", "product", "stress"):
+       data = open(name, "rb").read()
+       for pat in (rb"/v1/[a-z]{3,10}", rb"/health[a-z]*", rb"MYSQL_[A-Z]+", rb"TABLE_[A-Z]+"):
+           found = sorted(set(m.decode() for m in re.findall(pat, data)))
+           if found:
+               print(f"{name:8} {pat.decode():20} {found[:6]}")
+   EOF
+   ```
+
+   :::danger[상태 검사 경로를 여기서 확정한다]
+   2025 3과제 바이너리는 `/healthcheck` 였다. 문제지만 보고 `/health` 로 걸면 대상이 전부 비정상이 되어 트래픽이 흐르지 않는다. **바이너리가 근거다.**
+
+   배포 파일이 없다면 [Go·Gin 앱 읽기](/start/go-app-basics/)의 절차를 따라 대체 앱으로 연습한다.
+   :::
+
+3. **네트워크와 데이터 계층을 만든다.**
+
+   ```hcl title="network.tf"
+   terraform {
+     required_providers { aws = { source = "hashicorp/aws", version = "~> 5.0" } }
+   }
+   provider "aws" { region = var.region }
+
+   variable "region" { default = "ap-northeast-2" }
+   variable "prefix" { default = "apdev" }
+   variable "db_password" { sensitive = true }
+
+   data "aws_availability_zones" "this" { state = "available" }
+   data "aws_caller_identity" "this" {}
+
+   locals {
+     registry = "${data.aws_caller_identity.this.account_id}.dkr.ecr.${var.region}.amazonaws.com"
+   }
+
+   resource "aws_vpc" "this" {
+     cidr_block           = "10.0.0.0/16"
+     enable_dns_hostnames = true
+     enable_dns_support   = true
+     tags = { Name = "${var.prefix}-vpc" }
+   }
+
+   resource "aws_subnet" "public" {
+     count                   = 2
+     vpc_id                  = aws_vpc.this.id
+     cidr_block              = cidrsubnet(aws_vpc.this.cidr_block, 8, count.index)
+     availability_zone       = data.aws_availability_zones.this.names[count.index]
+     map_public_ip_on_launch = true
+     tags = { Name = "${var.prefix}-public-${count.index}" }
+   }
+
+   resource "aws_subnet" "private" {
+     count             = 2
+     vpc_id            = aws_vpc.this.id
+     cidr_block        = cidrsubnet(aws_vpc.this.cidr_block, 8, count.index + 10)
+     availability_zone = data.aws_availability_zones.this.names[count.index]
+     tags = { Name = "${var.prefix}-private-${count.index}" }
+   }
+
+   resource "aws_internet_gateway" "this" {
+     vpc_id = aws_vpc.this.id
+     tags   = { Name = "${var.prefix}-igw" }
+   }
+
+   resource "aws_eip" "nat" {
+     domain = "vpc"
+   }
+
+   # NAT 는 하나만 — 비용 축을 의식한다
+   resource "aws_nat_gateway" "this" {
+     allocation_id = aws_eip.nat.id
+     subnet_id     = aws_subnet.public[0].id
+     depends_on    = [aws_internet_gateway.this]
+     tags          = { Name = "${var.prefix}-nat" }
+   }
+
+   resource "aws_route_table" "public" {
+     vpc_id = aws_vpc.this.id
+     route {
+       cidr_block = "0.0.0.0/0"
+       gateway_id = aws_internet_gateway.this.id
+     }
+   }
+
+   resource "aws_route_table" "private" {
+     vpc_id = aws_vpc.this.id
+     route {
+       cidr_block     = "0.0.0.0/0"
+       nat_gateway_id = aws_nat_gateway.this.id
+     }
+   }
+
+   resource "aws_route_table_association" "public" {
+     count          = 2
+     subnet_id      = aws_subnet.public[count.index].id
+     route_table_id = aws_route_table.public.id
+   }
+
+   resource "aws_route_table_association" "private" {
+     count          = 2
+     subnet_id      = aws_subnet.private[count.index].id
+     route_table_id = aws_route_table.private.id
+   }
+   ```
+
+   :::note[NAT 를 하나만 둔 이유]
+   AZ 마다 두면 가용성이 오르지만 시간당 요금이 두 배다. 비용이 12점인 과제라 의식적인 선택이다. NAT 가 있는 AZ 가 죽으면 다른 AZ 의 아웃바운드가 끊기지만, 인바운드 트래픽 처리는 ALB 가 계속한다.
+   :::
+
+4. **RDS 와 DynamoDB.**
+
+   ```hcl title="data.tf"
+   resource "aws_db_subnet_group" "this" {
+     name       = "${var.prefix}-db-subnet"
+     subnet_ids = aws_subnet.private[*].id
+   }
+
+   resource "aws_security_group" "db" {
+     name   = "${var.prefix}-db-sg"
+     vpc_id = aws_vpc.this.id
+     ingress {
+       from_port       = 3306
+       to_port         = 3306
+       protocol        = "tcp"
+       security_groups = [aws_security_group.ecs.id]
+     }
+     egress {
+       from_port   = 0
+       to_port     = 0
+       protocol    = "-1"
+       cidr_blocks = ["0.0.0.0/0"]
+     }
+   }
+
+   resource "aws_db_instance" "this" {
+     identifier             = "${var.prefix}-rds-instance"
+     engine                 = "mysql"
+     engine_version         = "8.0"
+     instance_class         = "db.t3.micro"     # 고정. 바꾸면 감점
+     allocated_storage      = 20
+     storage_type           = "gp3"
+     multi_az               = true
+     db_name                = "dev"
+     username               = "admin"
+     password               = var.db_password
+     db_subnet_group_name   = aws_db_subnet_group.this.name
+     vpc_security_group_ids = [aws_security_group.db.id]
+     skip_final_snapshot    = true
+
+     # 느린 질의를 찾기 위해
+     parameter_group_name = aws_db_parameter_group.this.name
+     enabled_cloudwatch_logs_exports = ["slowquery", "error"]
+   }
+
+   resource "aws_db_parameter_group" "this" {
+     name   = "${var.prefix}-mysql8"
+     family = "mysql8.0"
+
+     parameter {
+       name  = "slow_query_log"
+       value = "1"
+     }
+     parameter {
+       name  = "long_query_time"
+       value = "0.2"     # 목표를 넘긴 질의만 모인다
+     }
+     parameter {
+       name  = "log_output"
+       value = "FILE"
+     }
+   }
+
+   resource "aws_dynamodb_table" "product" {
+     name         = "${var.prefix}-product"
+     billing_mode = "PAY_PER_REQUEST"
+     hash_key     = "id"
+
+     attribute {
+       name = "id"
+       type = "S"
+     }
+   }
+
+   output "rds_address" { value = aws_db_instance.this.address }
+   ```
+
+   :::caution[GSI 는 앱 동작을 확인한 뒤 만든다]
+   바이너리에 `TABLE_INDEX` 가 있으면 GSI 가 필요하다. 어떤 축인지는 앱이 던지는 요청을 봐야 안다. 부하가 시작된 뒤 DynamoDB 지표에서 `Scan` 이 보이면 그 축으로 GSI 를 만든다.
+   :::
+
+   ```bash
+   export TF_VAR_db_password='Skills2026#$'
+   terraform init && terraform apply
+   ```
+
+</Steps>
+
+---
+
+## 2. 이미지 (T+20 ~ T+30)
+
+<Steps>
+
+1. **Dockerfile 셋을 쓴다.**
+
+   ```dockerfile title="Dockerfile.user"
+   FROM public.ecr.aws/amazonlinux/amazonlinux:2023
+   WORKDIR /app
+   COPY --chmod=0755 user ./server
+   EXPOSE 8080
+   ENTRYPOINT ["/app/server"]
+   ```
+
+   `product` 와 `stress` 도 같은 형태로 만든다.
+
+   :::note[정적 링크면 최소 이미지도 된다]
+   `file` 출력이 `statically linked` 면 `gcr.io/distroless/base` 나 `scratch` 도 된다. 이미지가 작을수록 새 인스턴스에서 pull 이 빨라 스케일아웃 지연이 준다.
+
+   다만 **셸이 없어 디버깅이 어렵다.** 드릴 첫 회는 amazonlinux 로 하고, 동작을 확인한 뒤 줄인다.
+   :::
+
+2. **ECR 에 올린다.**
+
+   ```bash
+   for app in user product stress; do
+     aws ecr create-repository --repository-name ${PREFIX}-${app} 2>/dev/null || true
+   done
+
+   export ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+   aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_REGISTRY
+
+   for app in user product stress; do
+     docker build -f Dockerfile.${app} -t ${ECR_REGISTRY}/${PREFIX}-${app}:v1 .
+     docker push ${ECR_REGISTRY}/${PREFIX}-${app}:v1
+   done
+   ```
+
+</Steps>
+
+---
+
+## 3. ECS (T+30 ~ T+50)
+
+<Steps>
+
+1. **클러스터와 캐패시티 공급자.**
+
+   ```hcl title="ecs.tf"
+   resource "aws_ecs_cluster" "this" {
+     name = "${var.prefix}-cluster"
+
+     setting {
+       name  = "containerInsights"
+       value = "enabled"      # 부하 중 지표를 보려면 필요하다
+     }
+   }
+
+   data "aws_ssm_parameter" "ecs_ami" {
+     name = "/aws/service/ecs/optimized-ami/amazon-linux-2023/recommended/image_id"
+   }
+
+   resource "aws_iam_role" "ecs_instance" {
+     name = "${var.prefix}-ecs-instance-role"
+     assume_role_policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [{
+         Effect    = "Allow"
+         Principal = { Service = "ec2.amazonaws.com" }
+         Action    = "sts:AssumeRole"
+       }]
+     })
+   }
+
+   resource "aws_iam_role_policy_attachment" "ecs_instance" {
+     role       = aws_iam_role.ecs_instance.name
+     policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+   }
+
+   resource "aws_iam_instance_profile" "ecs_instance" {
+     name = "${var.prefix}-ecs-instance-profile"
+     role = aws_iam_role.ecs_instance.name
+   }
+
+   resource "aws_security_group" "ecs" {
+     name   = "${var.prefix}-ecs-sg"
+     vpc_id = aws_vpc.this.id
+
+     ingress {
+       from_port       = 0
+       to_port         = 65535
+       protocol        = "tcp"
+       security_groups = [aws_security_group.alb.id]
+     }
+     egress {
+       from_port   = 0
+       to_port     = 0
+       protocol    = "-1"
+       cidr_blocks = ["0.0.0.0/0"]
+     }
+   }
+
+   resource "aws_launch_template" "ecs" {
+     name_prefix   = "${var.prefix}-ecs-"
+     image_id      = data.aws_ssm_parameter.ecs_ami.value
+     instance_type = "c5.large"     # 고정. 다른 타입은 감점
+
+     iam_instance_profile { name = aws_iam_instance_profile.ecs_instance.name }
+     vpc_security_group_ids = [aws_security_group.ecs.id]
+
+     user_data = base64encode(<<-EOT
+       #!/bin/bash
+       echo ECS_CLUSTER=${aws_ecs_cluster.this.name} >> /etc/ecs/ecs.config
+     EOT
+     )
+
+     tag_specifications {
+       resource_type = "instance"
+       tags          = { Name = "${var.prefix}-ecs-node" }
+     }
+   }
+
+   resource "aws_autoscaling_group" "ecs" {
+     name                = "${var.prefix}-ecs-asg"
+     vpc_zone_identifier = aws_subnet.private[*].id
+     min_size            = 2
+     max_size            = 10
+     desired_capacity    = 2
+
+     launch_template {
+       id      = aws_launch_template.ecs.id
+       version = "$Latest"
+     }
+
+     # 캐패시티 공급자가 관리하도록 둔다
+     protect_from_scale_in = true
+
+     tag {
+       key                 = "AmazonECSManaged"
+       value               = "true"
+       propagate_at_launch = true
+     }
+   }
+
+   resource "aws_ecs_capacity_provider" "main" {
+     name = "${var.prefix}-cp"
+
+     auto_scaling_group_provider {
+       auto_scaling_group_arn         = aws_autoscaling_group.ecs.arn
+       managed_termination_protection = "ENABLED"
+
+       managed_scaling {
+         status                    = "ENABLED"
+         target_capacity           = 80      # 비용과 여유의 저울
+         minimum_scaling_step_size = 1
+         maximum_scaling_step_size = 4
+       }
+     }
+   }
+
+   resource "aws_ecs_cluster_capacity_providers" "this" {
+     cluster_name       = aws_ecs_cluster.this.name
+     capacity_providers = [aws_ecs_capacity_provider.main.name]
+
+     default_capacity_provider_strategy {
+       capacity_provider = aws_ecs_capacity_provider.main.name
+       weight            = 1
+     }
+   }
+   ```
+
+2. **역할 둘을 만든다.**
+
+   ```hcl title="ecs-roles.tf"
+   # 실행 역할 — ECS 에이전트가 쓴다 (ECR pull, 로그)
+   resource "aws_iam_role" "execution" {
+     name = "${var.prefix}-ecs-execution-role"
+     assume_role_policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [{
+         Effect    = "Allow"
+         Principal = { Service = "ecs-tasks.amazonaws.com" }
+         Action    = "sts:AssumeRole"
+       }]
+     })
+   }
+
+   resource "aws_iam_role_policy_attachment" "execution" {
+     role       = aws_iam_role.execution.name
+     policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+   }
+
+   # 태스크 역할 — 컨테이너 안의 앱이 쓴다 (DynamoDB)
+   resource "aws_iam_role" "task" {
+     name = "${var.prefix}-ecs-task-role"
+     assume_role_policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [{
+         Effect    = "Allow"
+         Principal = { Service = "ecs-tasks.amazonaws.com" }
+         Action    = "sts:AssumeRole"
+       }]
+     })
+   }
+
+   resource "aws_iam_role_policy" "task" {
+     role = aws_iam_role.task.id
+     policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [{
+         Effect = "Allow"
+         Action = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:UpdateItem"]
+         Resource = [
+           aws_dynamodb_table.product.arn,
+           "${aws_dynamodb_table.product.arn}/index/*",
+         ]
+       }]
+     })
+   }
+   ```
+
+3. **태스크 정의와 서비스를 `for_each` 로 한 벌만 쓴다.**
+
+   ```hcl title="services.tf"
+   locals {
+     apps = {
+       user = {
+         cpu    = 256
+         memory = 512
+         env = [
+           { name = "MYSQL_USER",     value = "admin" },
+           { name = "MYSQL_PASSWORD", value = var.db_password },
+           { name = "MYSQL_HOST",     value = aws_db_instance.this.address },
+           { name = "MYSQL_PORT",     value = "3306" },
+           { name = "MYSQL_DBNAME",   value = "dev" },
+         ]
+         desired = 2
+       }
+       product = {
+         cpu    = 256
+         memory = 512
+         env = [
+           { name = "TABLE_NAME", value = aws_dynamodb_table.product.name },
+           { name = "AWS_REGION", value = var.region },
+         ]
+         desired = 2
+       }
+       stress = {
+         cpu    = 512        # CPU 를 실제로 태우는 앱
+         memory = 512
+         env     = []
+         desired = 2
+       }
+     }
+   }
+
+   resource "aws_cloudwatch_log_group" "app" {
+     for_each          = local.apps
+     name              = "/ecs/${var.prefix}-${each.key}"
+     retention_in_days = 1
+   }
+
+   resource "aws_ecs_task_definition" "app" {
+     for_each = local.apps
+
+     family             = "${var.prefix}-${each.key}"
+     network_mode       = "bridge"          # awsvpc 는 c5.large 에서 ENI 2개 제한
+     execution_role_arn = aws_iam_role.execution.arn
+     task_role_arn      = aws_iam_role.task.arn
+
+     container_definitions = jsonencode([{
+       name      = each.key
+       image     = "${local.registry}/${var.prefix}-${each.key}:v1"
+       cpu       = each.value.cpu
+       memory    = each.value.memory
+       essential = true
+
+       portMappings = [{
+         containerPort = 8080
+         hostPort      = 0            # 동적 포트 — 한 인스턴스에 여러 태스크
+       }]
+
+       environment = each.value.env
+
+       logConfiguration = {
+         logDriver = "awslogs"
+         options = {
+           "awslogs-group"         = aws_cloudwatch_log_group.app[each.key].name
+           "awslogs-region"        = var.region
+           "awslogs-stream-prefix" = "ecs"
+         }
+       }
+     }])
+   }
+
+   resource "aws_ecs_service" "app" {
+     for_each = local.apps
+
+     name            = "${var.prefix}-${each.key}"
+     cluster         = aws_ecs_cluster.this.id
+     task_definition = aws_ecs_task_definition.app[each.key].arn
+     desired_count   = each.value.desired
+
+     capacity_provider_strategy {
+       capacity_provider = aws_ecs_capacity_provider.main.name
+       weight            = 1
+     }
+
+     load_balancer {
+       target_group_arn = aws_lb_target_group.app[each.key].arn
+       container_name   = each.key
+       container_port   = 8080
+     }
+
+     # 배포 중 최소 가용을 유지한다
+     deployment_minimum_healthy_percent = 100
+     deployment_maximum_percent         = 200
+
+     depends_on = [aws_lb_listener.http]
+   }
+   ```
+
+   :::danger[`hostPort = 0` 이 핵심이다]
+   동적 포트 매핑이다. ECS 가 인스턴스의 빈 포트를 골라 붙이고 대상 그룹에 그 포트로 등록한다. 고정 포트로 두면 인스턴스당 태스크가 하나뿐이라 밀도가 나오지 않는다.
+   :::
+
+</Steps>
+
+---
+
+## 4. ALB 와 경로 (T+50)
+
+<Steps>
+
+1. **ALB 와 대상 그룹.**
+
+   ```hcl title="alb.tf"
+   resource "aws_security_group" "alb" {
+     name   = "${var.prefix}-alb-sg"
+     vpc_id = aws_vpc.this.id
+     ingress {
+       from_port   = 80
+       to_port     = 80
+       protocol    = "tcp"
+       cidr_blocks = ["0.0.0.0/0"]
+     }
+     egress {
+       from_port   = 0
+       to_port     = 0
+       protocol    = "-1"
+       cidr_blocks = ["0.0.0.0/0"]
+     }
+   }
+
+   resource "aws_lb" "this" {
+     name               = "${var.prefix}-alb"
+     load_balancer_type = "application"
+     subnets            = aws_subnet.public[*].id
+     security_groups    = [aws_security_group.alb.id]
+   }
+
+   resource "aws_lb_target_group" "app" {
+     for_each = local.apps
+
+     name        = "${var.prefix}-${each.key}-tg"
+     port        = 8080
+     protocol    = "HTTP"
+     vpc_id      = aws_vpc.this.id
+     target_type = "instance"
+
+     health_check {
+       path                = "/healthcheck"   # 바이너리에서 확인한 경로
+       interval            = 10
+       timeout             = 5
+       healthy_threshold   = 2
+       unhealthy_threshold = 3
+       matcher             = "200"
+     }
+
+     deregistration_delay = 30    # 기본 300 은 스케일인이 느려진다
+   }
+
+   # 기본 동작 — 정의되지 않은 경로는 404
+   resource "aws_lb_listener" "http" {
+     load_balancer_arn = aws_lb.this.arn
+     port              = 80
+     protocol          = "HTTP"
+
+     default_action {
+       type = "fixed-response"
+       fixed_response {
+         content_type = "application/json"
+         message_body = "{\"error\":\"not found\"}"
+         status_code  = "404"
+       }
+     }
+   }
+
+   resource "aws_lb_listener_rule" "app" {
+     for_each = local.apps
+
+     listener_arn = aws_lb_listener.http.arn
+     priority     = index(keys(local.apps), each.key) + 10
+
+     condition {
+       path_pattern { values = ["/v1/${each.key}", "/v1/${each.key}/*"] }
+     }
+     action {
+       type             = "forward"
+       target_group_arn = aws_lb_target_group.app[each.key].arn
+     }
+   }
+
+   output "alb_dns" { value = aws_lb.this.dns_name }
+   ```
+
+2. **적용하고 확인한다.**
+
+   ```bash
+   terraform apply
+   export ALB=$(terraform output -raw alb_dns)
+
+   # 대상이 정상인가
+   for app in user product stress; do
+     TG=$(aws elbv2 describe-target-groups --names ${PREFIX}-${app}-tg \
+       --query 'TargetGroups[0].TargetGroupArn' --output text)
+     echo -n "$app: "
+     aws elbv2 describe-target-health --target-group-arn $TG \
+       --query 'TargetHealthDescriptions[*].TargetHealth.State' --output text
+   done
+   ```
+
+   전부 `healthy` 여야 한다.
+
+   :::caution[대상이 unhealthy 면 여기서 멈춘다]
+   상태 검사 경로가 틀렸거나 앱이 안 뜬 것이다. 로그를 본다.
+
+   ```bash
+   aws logs tail /ecs/${PREFIX}-user --since 5m
+   ```
+
+   진단은 [Go·Gin 앱 읽기의 증상별 원인 표](/start/go-app-basics/#4-2-증상별-원인)를 쓴다.
+   :::
+
+3. **404 와 경로를 확인한다.**
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code} /v1/user\n'   "http://$ALB/v1/user"
+   curl -s -o /dev/null -w '%{http_code} /v1/none\n'   "http://$ALB/v1/none"
+   curl -s -o /dev/null -w '%{http_code} /nothing\n'   "http://$ALB/nothing"
+   ```
+
+   두 번째와 세 번째가 `404` 여야 한다.
+
+</Steps>
+
+---
+
+## 5. 데이터 적재와 인덱스
+
+<Steps>
+
+1. **Bastion 에서 덤프를 적재한다.**
+
+   RDS 가 사설 서브넷에 있으므로 VPC 안에서 붙는다.
+
+   ```bash
+   RDS_HOST=$(terraform output -raw rds_address 2>/dev/null || \
+     aws rds describe-db-instances --db-instance-identifier ${PREFIX}-rds-instance \
+       --query 'DBInstances[0].Endpoint.Address' --output text)
+
+   mysql -h $RDS_HOST -u admin -p dev < load_user.dump
+   ```
+
+2. **적재를 확인하고 인덱스를 만든다.**
+
+   ```sql
+   SELECT COUNT(*) FROM user;
+
+   -- 인덱스 전
+   EXPLAIN SELECT id, username, email FROM user WHERE email = 'gildong@example.org';
+
+   ALTER TABLE user ADD INDEX idx_email (email);
+
+   -- 인덱스 후
+   EXPLAIN SELECT id, username, email FROM user WHERE email = 'gildong@example.org';
+   ```
+
+   `type` 이 `ALL` 에서 `ref` 로, `rows` 가 큰 수에서 작은 수로 바뀌어야 한다.
+
+   :::danger[반드시 적재 뒤에 만든다]
+   덤프가 `DROP TABLE` 을 포함하면 먼저 만든 인덱스가 사라진다. 그리고 행이 많을 때 인덱스가 있으면 적재가 훨씬 느리다.
+   :::
+
+</Steps>
+
+---
+
+## 6. WAF — 이메일 형식 검증
+
+<Steps>
+
+1. **정규식 패턴 세트와 Web ACL 을 만든다.**
+
+   ```hcl title="waf.tf"
+   resource "aws_wafv2_regex_pattern_set" "valid_email" {
+     name  = "${var.prefix}-valid-email"
+     scope = "REGIONAL"
+
+     regular_expression {
+       regex_string = "\"email\"\\s*:\\s*\"[^\"@]+@[^\"@.]+\\.[^\"@]+\""
+     }
+   }
+
+   resource "aws_wafv2_web_acl" "this" {
+     name  = "${var.prefix}-waf"
+     scope = "REGIONAL"
+
+     default_action { allow {} }
+
+     rule {
+       name     = "block-invalid-email"
+       priority = 1
+
+       statement {
+         and_statement {
+           statement {
+             byte_match_statement {
+               search_string         = "/v1/user"
+               positional_constraint = "EXACTLY"
+               field_to_match { uri_path {} }
+               text_transformation {
+                 priority = 0
+                 type     = "NONE"
+               }
+             }
+           }
+           statement {
+             not_statement {
+               statement {
+                 regex_pattern_set_reference_statement {
+                   arn = aws_wafv2_regex_pattern_set.valid_email.arn
+                   field_to_match {
+                     body { oversize_handling = "CONTINUE" }
+                   }
+                   text_transformation {
+                     priority = 0
+                     type     = "NONE"
+                   }
+                 }
+               }
+             }
+           }
+         }
+       }
+
+       action { block {} }     # 기본 차단 응답이 403
+
+       visibility_config {
+         cloudwatch_metrics_enabled = true
+         metric_name                = "block-invalid-email"
+         sampled_requests_enabled   = true
+       }
+     }
+
+     visibility_config {
+       cloudwatch_metrics_enabled = true
+       metric_name                = "${var.prefix}-waf"
+       sampled_requests_enabled   = true
+     }
+   }
+
+   resource "aws_wafv2_web_acl_association" "alb" {
+     resource_arn = aws_lb.this.arn
+     web_acl_arn  = aws_wafv2_web_acl.this.arn
+   }
+   ```
+
+2. **실제로 확인한다.**
+
+   ```bash
+   terraform apply
+   sleep 30   # WAF 연결 반영에 시간이 걸린다
+
+   echo "--- 정상 (201 또는 200 이어야 함) ---"
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST "http://$ALB/v1/user" \
+     -H 'Content-Type: application/json' \
+     -d '{"username":"kim","email":"gildong@example.org"}'
+
+   echo "--- 도메인 누락 (403) ---"
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST "http://$ALB/v1/user" \
+     -H 'Content-Type: application/json' \
+     -d '{"username":"kim","email":"gildong"}'
+
+   echo "--- 도메인 형식 오류 (403) ---"
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST "http://$ALB/v1/user" \
+     -H 'Content-Type: application/json' \
+     -d '{"username":"kim","email":"gildong@example"}'
+   ```
+
+   :::caution[문제지의 세 예시가 그대로 시험 케이스다]
+   `gildong@example.org` 는 통과, `gildong` 과 `gildong@example` 은 차단이다. 셋 다 맞을 때까지 정규식을 고친다. 검증률이 배점이라 부분 점수가 있다.
+   :::
+
+</Steps>
+
+---
+
+## 7. 부하 운영
+
+<Steps>
+
+1. **오토스케일링을 건다.**
+
+   ```hcl title="autoscaling.tf"
+   resource "aws_appautoscaling_target" "app" {
+     for_each = local.apps
+
+     service_namespace  = "ecs"
+     resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.app[each.key].name}"
+     scalable_dimension = "ecs:service:DesiredCount"
+     min_capacity       = 2
+     max_capacity       = 20
+   }
+
+   # user·product 는 요청 수 기반 — DB 대기라 CPU 가 낮다
+   resource "aws_appautoscaling_policy" "requests" {
+     for_each = { for k, v in local.apps : k => v if k != "stress" }
+
+     name               = "${var.prefix}-${each.key}-requests"
+     policy_type        = "TargetTrackingScaling"
+     resource_id        = aws_appautoscaling_target.app[each.key].resource_id
+     scalable_dimension = aws_appautoscaling_target.app[each.key].scalable_dimension
+     service_namespace  = "ecs"
+
+     target_tracking_scaling_policy_configuration {
+       predefined_metric_specification {
+         predefined_metric_type = "ALBRequestCountPerTarget"
+         resource_label = join("/", [
+           replace(aws_lb.this.arn_suffix, "loadbalancer/", ""),
+           aws_lb_target_group.app[each.key].arn_suffix,
+         ])
+       }
+       target_value       = 200
+       scale_in_cooldown  = 300   # 줄일 때는 신중하게
+       scale_out_cooldown = 60    # 늘릴 때는 빠르게
+     }
+   }
+
+   # stress 는 CPU 기반 — 실제로 CPU 를 태운다
+   resource "aws_appautoscaling_policy" "stress_cpu" {
+     name               = "${var.prefix}-stress-cpu"
+     policy_type        = "TargetTrackingScaling"
+     resource_id        = aws_appautoscaling_target.app["stress"].resource_id
+     scalable_dimension = aws_appautoscaling_target.app["stress"].scalable_dimension
+     service_namespace  = "ecs"
+
+     target_tracking_scaling_policy_configuration {
+       predefined_metric_specification {
+         predefined_metric_type = "ECSServiceAverageCPUUtilization"
+       }
+       target_value       = 50
+       scale_in_cooldown  = 300
+       scale_out_cooldown = 60
+     }
+   }
+   ```
+
+2. **부하를 건다.**
+
+   ```javascript title="load.js"
+   import http from 'k6/http';
+   import { check } from 'k6';
+
+   export const options = {
+     stages: [
+       { duration: '2m', target: 50 },
+       { duration: '5m', target: 200 },
+       { duration: '3m', target: 200 },
+       { duration: '2m', target: 0 },
+     ],
+   };
+
+   const BASE = __ENV.BASE;
+
+   export default function () {
+     const r1 = http.get(`${BASE}/v1/user?email=test${__VU}@example.org`);
+     check(r1, { 'user 200': (r) => r.status === 200, 'user fast': (r) => r.timings.duration < 200 });
+
+     const r2 = http.get(`${BASE}/v1/product?id=p${__VU % 100}`);
+     check(r2, { 'product 200': (r) => r.status === 200, 'product fast': (r) => r.timings.duration < 200 });
+
+     const r3 = http.get(`${BASE}/v1/stress`);
+     check(r3, { 'stress ok': (r) => r.status === 200, 'stress fast': (r) => r.timings.duration < 1000 });
+   }
+   ```
+
+   ```bash
+   k6 run -e BASE=http://$ALB load.js
+   ```
+
+   :::danger[자기 엔드포인트에만 건다]
+   대회에서는 채점 플랫폼이 트래픽을 주입한다. 연습에서 남의 엔드포인트에 부하를 걸지 않는다.
+   :::
+
+3. **부하 중에 본다.**
+
+   별도 창에서 지켜본다.
+
+   ```bash
+   watch -n 10 '
+   echo "--- 태스크 ---"
+   aws ecs describe-services --cluster '"${PREFIX}"'-cluster \
+     --services '"${PREFIX}"'-user '"${PREFIX}"'-product '"${PREFIX}"'-stress \
+     --query "services[*].{name:serviceName,desired:desiredCount,running:runningCount,pending:pendingCount}" \
+     --output table
+   echo "--- 인스턴스 ---"
+   aws ecs list-container-instances --cluster '"${PREFIX}"'-cluster \
+     --query "length(containerInstanceArns)"
+   '
+   ```
+
+   ALB 지표를 본다.
+
+   ```bash
+   LB_SUFFIX=$(aws elbv2 describe-load-balancers --names ${PREFIX}-alb \
+     --query 'LoadBalancers[0].LoadBalancerArn' --output text | cut -d: -f6 | sed 's|loadbalancer/||')
+
+   aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB \
+     --metric-name TargetResponseTime \
+     --dimensions Name=LoadBalancer,Value=$LB_SUFFIX \
+     --start-time $(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%S) \
+     --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+     --period 60 --statistics Average p95 \
+     --query 'sort_by(Datapoints,&Timestamp)[*].{t:Timestamp,avg:Average,p95:ExtendedStatistics.p95}' \
+     --output table
+   ```
+
+4. **느린 질의를 확인한다.**
+
+   ```bash
+   aws rds describe-db-log-files --db-instance-identifier ${PREFIX}-rds-instance \
+     --query 'DescribeDBLogFiles[?contains(LogFileName,`slowquery`)].LogFileName' --output text
+
+   aws rds download-db-log-file-portion \
+     --db-instance-identifier ${PREFIX}-rds-instance \
+     --log-file-name slowquery/mysql-slowquery.log \
+     --query 'LogFileData' --output text | tail -40
+   ```
+
+   0.2초를 넘긴 질의만 나온다. **인덱스가 필요한 곳이 여기서 드러난다.**
+
+</Steps>
+
+---
+
+## 8. 자가채점
+
+<details class="build-step">
+<summary>자가채점 — 제약 위반이 없는가</summary>
+
+```bash
+echo "--- Lambda 는 없어야 한다 (모든 리전) ---"
+for r in ap-northeast-2 us-east-1 us-west-1 eu-west-1 ap-southeast-1; do
+  n=$(aws lambda list-functions --region $r --query 'length(Functions)' --output text)
+  echo "$r: $n"
+done
+
+echo "--- EC2 는 c5.large 만 ---"
+aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" \
+  --query 'Reservations[*].Instances[*].InstanceType' --output text | tr '\t' '\n' | sort | uniq -c
+
+echo "--- RDS 는 db.t3.micro 한 대 ---"
+aws rds describe-db-instances \
+  --query 'DBInstances[*].{id:DBInstanceIdentifier,class:DBInstanceClass,multiaz:MultiAZ}' --output table
+
+echo "--- DynamoDB 테이블 하나 ---"
+aws dynamodb list-tables --query 'TableNames'
+
+echo "--- EKS 는 없어야 한다 ---"
+aws eks list-clusters --query 'clusters'
+```
+
+**기대 출력** — Lambda 는 전 리전 0. EC2 는 `c5.large` 만. RDS 한 대. 테이블 하나. EKS 없음.
+
+**안 나올 때 볼 곳** — Lambda 가 하나라도 있으면 감점이다. 다른 실습에서 만든 것이 남아 있는지 확인한다. 다른 인스턴스 타입이 있으면 Bastion 도 개수에 든다는 점을 기억한다.
+
+</details>
+
+<details class="build-step">
+<summary>자가채점 — 비정상 요청 처리 (배점 4)</summary>
+
+```bash
+ok=0; bad=0
+for i in $(seq 1 20); do
+  c=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://$ALB/v1/user" \
+    -H 'Content-Type: application/json' -d "{\"username\":\"u$i\",\"email\":\"u$i@example.org\"}")
+  [ "$c" = "200" ] || [ "$c" = "201" ] && ok=$((ok+1))
+done
+
+for i in $(seq 1 20); do
+  c=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://$ALB/v1/user" \
+    -H 'Content-Type: application/json' -d "{\"username\":\"u$i\",\"email\":\"bad$i\"}")
+  [ "$c" = "403" ] && bad=$((bad+1))
+done
+
+echo "정상 통과: $ok/20"
+echo "비정상 차단: $bad/20"
+echo "검증률: $(( bad * 100 / 20 ))%"
+```
+
+**기대 출력** — 정상 20/20 통과, 비정상 20/20 차단, 검증률 100%.
+
+**안 나올 때 볼 곳** — 정상이 차단되면 정규식이 너무 엄격하다. 비정상이 통과하면 너무 관대하다. `gildong@example`(점 없음)이 차단되는지 특히 확인한다.
+
+</details>
+
+<details class="build-step">
+<summary>자가채점 — 네 축 근사 측정</summary>
+
+k6 결과에서 읽는다.
+
+```
+checks.........................: 92.35%
+  ✓ user 200
+  ✓ user fast
+  ...
+http_req_duration..............: avg=... p(95)=...
+```
+
+| 채점 축 | k6 에서 | 목표 |
+|---|---|---|
+| 가용성 | 각 API 의 `200` 체크 통과율 | 90% 이상 |
+| 성능 | 각 API 의 `fast` 체크 통과율 | 90% 이상 |
+| 비정상 요청 | 위 블록의 검증률 | 90% 이상 |
+| 비용 | 인스턴스 수 × 시간 | ratio 0.5~1.0 |
+
+**기대 출력** — `user 200` 과 `user fast` 가 각각 90% 이상.
+
+**안 나올 때 볼 곳** — `200` 은 높은데 `fast` 가 낮으면 응답이 느린 것이다. 인덱스와 캐싱을 본다. `200` 자체가 낮으면 태스크가 부족하거나 5XX 가 나는 것이다. ALB 지표를 본다.
+
+</details>
+
+---
+
+## 9. 조정 순환
+
+부하가 도는 동안 낮은 축을 하나씩 올린다.
+
+| 낮은 축 | 첫 수 | 확인 |
+|---|---|---|
+| `user` 성능 | 인덱스 확인 → 커넥션 → 태스크 수 | 느린 질의 로그 |
+| `product` 성능 | GET 캐싱 → GSI → 태스크 수 | DynamoDB 지표의 Scan |
+| `stress` 성능 | 태스크 CPU 상향 → 태스크 수 | ECS CPU 이용률 |
+| 가용성 전반 | `min_capacity` 상향, 5XX 원인 | ALB 5XX 지표 |
+| 비용 | `min_size` 와 `target_capacity` 하향 | 인스턴스 수 |
+
+한 번에 하나만 바꾼다. 둘을 함께 바꾸면 어느 것이 효과였는지 모른다.
+
+```bash
+# 최소 태스크 수 조정
+aws application-autoscaling register-scalable-target \
+  --service-namespace ecs \
+  --resource-id service/${PREFIX}-cluster/${PREFIX}-user \
+  --scalable-dimension ecs:service:DesiredCount \
+  --min-capacity 4 --max-capacity 20
+```
+
+트래픽이 없는 시간에는 줄인다.
+
+```bash
+for app in user product stress; do
+  aws ecs update-service --cluster ${PREFIX}-cluster --service ${PREFIX}-${app} --desired-count 1
+done
+```
+
+**비용이 전 기간 누적이면 이 절약이 그대로 점수다.**
+
+---
+
+## 10. 정리
+
+:::danger[부하부터 멈춘다]
+k6 가 돌고 있으면 `Ctrl+C` 로 멈춘다. 부하가 도는 채로 리소스를 지우면 오류만 쌓인다.
+:::
+
+<Steps>
+
+1. **서비스를 0으로 내린다.**
+
+   ```bash
+   for app in user product stress; do
+     aws ecs update-service --cluster ${PREFIX}-cluster --service ${PREFIX}-${app} --desired-count 0
+   done
+   sleep 30
+   ```
+
+2. **`destroy`**
+
+   ```bash
+   terraform destroy
+   ```
+
+3. **남은 것을 확인한다.**
+
+   ```bash
+   aws ecs list-clusters --query 'clusterArns'
+   aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" \
+     --query 'Reservations[*].Instances[*].[InstanceId,InstanceType]' --output text
+   aws rds describe-db-instances --query 'DBInstances[*].DBInstanceIdentifier'
+   aws elbv2 describe-load-balancers --query 'LoadBalancers[*].LoadBalancerName'
+   aws ec2 describe-nat-gateways --filter "Name=state,Values=available" \
+     --query 'NatGateways[*].NatGatewayId'
+   ```
+
+   전부 비어야 한다.
+
+</Steps>
+
+:::caution[`destroy` 가 캐패시티 공급자에서 막히면]
+`managed_termination_protection` 이 켜져 있어 인스턴스가 보호된다. 서비스를 0으로 내린 뒤 Auto Scaling 그룹의 `desired_capacity` 를 0으로 내리고 다시 시도한다.
+
+```bash
+aws autoscaling update-auto-scaling-group \
+  --auto-scaling-group-name ${PREFIX}-ecs-asg \
+  --min-size 0 --desired-capacity 0
+```
+:::
+
+전체 점검은 [정리 체크리스트](/reference/cleanup-check/)에 있다.
+
+---
+
+## 다음 단계
+
+- 같은 문제의 EKS 경로 — [21. 3과제 배포](/part-5/21-task3-deploy/) · [22. 부하 운영](/part-5/22-task3-tuning/)
+- 이 모듈의 근거 — [실기출 분해](/reference/past-exams/)

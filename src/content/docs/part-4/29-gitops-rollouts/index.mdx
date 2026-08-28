@@ -1,0 +1,103 @@
+---
+title: 29. GitOps — ArgoCD · Argo Rollouts · External Secrets
+description: 2025 1과제 최대 배점(CD 4.5점)인 ArgoCD Blue/Green 롤아웃과 External Secrets(IRSA)를 3분 제약까지 포함해 잡는 모듈 개요.
+sidebar:
+  order: 1
+---
+
+import { FileTree, LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+[2025 1과제](/reference/past-exams/#2-1-2025년-1과제-30점)에서 **단일 항목 최대 배점(4.5점)** 이다. 2과제 CI/CD 모듈에도 ArgoCD 가 나온다. 한 해에 두 과제에서 요구된 축이다.
+
+요구를 그대로 옮기면 이렇다.
+
+> gitops 브랜치에 새로운 커밋이 푸쉬되는 것을 감지하여 Blue/Green 방식으로 롤아웃되어야 합니다. 새로운 커밋이 push 될 경우 새로운 애플리케이션은 Green Stage 에서 /health 경로로 Health Check 를 진행해야합니다. Health Check 후 애플리케이션에 문제가 없을 시 Blue Stage 로 배포되어야 합니다. CI/CD 는 3분안에 작업이 완료되어야 합니다.
+
+여기에 시크릿 요구가 붙는다.
+
+> 환경변수 값은 Pod 에 직접적으로 명시해선 안되며 Secrets Manager 에 저장된 값을 External Secrets 을 사용해 읽어와야 합니다.
+
+## 학습 목표
+
+- [ ] GitOps 가 기존 배포 방식과 무엇이 다른지 설명할 수 있다
+- [ ] ArgoCD 의 Application·동기화·자동 복구가 각각 무엇인지 안다
+- [ ] Deployment 로는 Blue/Green 을 하기 어려운 이유를 설명할 수 있다
+- [ ] Argo Rollouts 의 activeService 와 previewService 가 무엇을 가리키는지 안다
+- [ ] `prePromotionAnalysis` 와 `autoPromotionEnabled` 의 관계를 설명할 수 있다
+- [ ] External Secrets 의 SecretStore·ExternalSecret 두 오브젝트 역할을 구분한다
+- [ ] IRSA 가 파드에 권한을 주는 경로를 순서대로 말할 수 있다
+- [ ] IRSA 정책의 Resource 를 좁히는 이유와 좁히는 법을 안다
+- [ ] 3분 제약을 못 지킬 때 어디를 줄일지 판단할 수 있다
+
+## 소요 시간
+
+약 7~8시간 (이론 3h + 실습 4~5h)
+
+## 과금 리소스와 destroy 방침
+
+| 리소스 | 과금 | 방침 |
+|---|---|---|
+| **EKS 클러스터** | **시간당 고정 과금**. 이 모듈에서 가장 비싸다 | 실습 종료 즉시 destroy |
+| 노드그룹 EC2 | 시간당 과금 | 클러스터와 함께 |
+| NLB·ALB | 시간당 + LCU 과금 | 서비스·인그레스 삭제로 함께 |
+| Secrets Manager | 시크릿당 월 과금(소액) | 복구 대기 없이 즉시 삭제 |
+| ECR | 저장량 | 이미지까지 삭제 |
+
+:::danger[EKS 는 클러스터가 있는 것만으로 과금된다]
+파드가 없어도 컨트롤 플레인 요금이 시간당 붙는다. 노드까지 있으면 그만큼 더다. **실습을 마치면 클러스터를 지운다.**
+:::
+
+:::caution[Secrets Manager 는 지워도 바로 안 지워진다]
+기본 복구 대기가 7일이라 같은 이름으로 다시 만들 수 없다. 실습에서는 즉시 삭제를 쓴다.
+
+```bash
+aws secretsmanager delete-secret --secret-id <이름> --force-delete-without-recovery
+```
+:::
+
+## 선행 지식
+
+:::tip[개념이 낯설면 여기부터]
+- Deployment·Service·Pod 의 관계와 라벨 셀렉터 — [k8s-basics](/start/k8s-basics/)
+- 롤링 업데이트가 무엇을 하는지 — [k8s-basics](/start/k8s-basics/)
+- IAM 역할과 신뢰 정책, OIDC — [iam-basics](/start/iam-basics/)
+- helm 으로 차트를 설치하는 법 — [k8s-basics](/start/k8s-basics/)
+:::
+
+- 서비스가 라벨 셀렉터로 파드를 고른다는 사실 — [k8s-basics](/start/k8s-basics/)
+- 대상 그룹 상태 검사가 실패하면 트래픽이 가지 않는다 — [loadbalancer-basics](/start/loadbalancer-basics/)
+- 커스텀 리소스와 컨트롤러의 관계 — [k8s-basics](/start/k8s-basics/)
+- CI 가 이미지를 ECR 까지 올린다 — [28. CI/CD 파이프라인](/part-4/28-cicd-pipeline/)
+
+## 선행 모듈
+
+- PART 2 — 09. eksctl 클러스터, 10. K8s 워크로드·ALB
+- PART 4 — 28. CI/CD 파이프라인 (이 모듈은 그 뒤를 잇는다)
+
+## 실기출 근거
+
+<FileTree>
+
+- 2025 전국 1과제
+  - **문제지 11. Secret management** External Secrets · IRSA · 최소 권한
+  - **문제지 16. Continuous Delivery** ArgoCD · Blue/Green · 3분
+  - **mark1.sh 7-3, 7-4, 8-1, 8-2, 12-2** 롤아웃·시크릿·정책 검사
+- 2025 전국 2과제
+  - **문제지 1) CI/CD — ArgoCD** 드리프트 자동 복구, 5분 제약
+
+</FileTree>
+
+## 공식 문서
+
+- [Argo CD 개요](https://argo-cd.readthedocs.io/en/stable/) — Application 과 동기화
+- [Argo Rollouts BlueGreen](https://argo-rollouts.readthedocs.io/en/stable/features/bluegreen/) — activeService · previewService
+- [Argo Rollouts 분석](https://argo-rollouts.readthedocs.io/en/stable/features/analysis/) — prePromotionAnalysis
+- [External Secrets Operator](https://external-secrets.io/latest/) — SecretStore · ExternalSecret
+- [EKS IRSA](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) — 서비스 계정에 역할 주기
+
+## 다음 단계
+
+<LinkButton href="/part-4/29-gitops-rollouts/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-4/29-gitops-rollouts/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

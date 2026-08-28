@@ -1,0 +1,694 @@
+---
+title: Lab 28 — GitHub 에서 ECR 까지 두 경로로 잇기
+description: CodeBuild·CodePipeline 경로와 GitHub Actions 경로를 각각 구축해 커밋 한 번으로 ECR 에 이미지가 올라가게 만들고 실기출 채점 명령으로 확인하는 실습.
+sidebar:
+  order: 3
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+선행 지식과 목표는 [모듈 개요](/part-4/28-cicd-pipeline/)에. 개념은 [이론](/part-4/28-cicd-pipeline/theory/)에 있다.
+
+**경로 둘을 다 만든다.** 실기출이 두 해에 걸쳐 둘 다 냈기 때문이다([실기출 분해](/reference/past-exams/#1-두-해-주제-대조)). A 경로는 2025 1과제(CodeBuild·CodePipeline), B 경로는 2025 2과제(GitHub Actions)다.
+
+## 실습 목표
+
+- [ ] GitHub 공개 저장소를 만들고 브랜치를 나눈다
+- [ ] ECR 저장소를 만든다
+- [ ] A 경로 — CodeBuild 프로젝트와 CodePipeline 을 만들어 커밋으로 이미지를 올린다
+- [ ] B 경로 — GitHub Actions 로 같은 일을 한다
+- [ ] Actions 가 특정 파일 변경에만 돌게 만든다
+- [ ] OIDC 로 장기 액세스 키 없이 AWS 를 부른다
+- [ ] 실기출 채점 명령으로 확인한다
+- [ ] 빌드 실패를 로그에서 좁힌다
+- [ ] 정리한다
+
+:::caution[저장소는 public 으로 만든다]
+2025 2과제가 `Repository Type: Public` 을 지정했고, public 이면 GitHub Actions 가 무제한 무료다. private 이면 무료 분이 소진되고 유의사항이 경고한 불이익이 생긴다.
+
+다만 **토큰·자격증명을 절대 커밋하지 않는다.** public 저장소에 올린 토큰은 즉시 노출된다.
+:::
+
+---
+
+## 1. 공통 준비
+
+<Steps>
+
+1. **GitHub 공개 저장소를 만든다.**
+
+   이름은 `gj2025-repository` 로 한다(실기출과 같은 이름).
+
+2. **클론하고 파일을 둔다.**
+
+   ```bash
+   git clone https://github.com/<계정>/gj2025-repository.git
+   cd gj2025-repository
+   ```
+
+   실습용 앱을 만든다. 대회는 Go 바이너리를 주지만 여기서는 nginx 로 대신한다.
+
+   ```bash
+   echo '<h1>v1.0.0</h1>' > index.html
+   echo '1.0.0' > version
+   ```
+
+   ```dockerfile title="Dockerfile"
+   FROM nginx:alpine
+   COPY index.html /usr/share/nginx/html/index.html
+   ```
+
+3. **레지스트리 주소를 변수에 담아 둔다.**
+
+   ```bash
+   export AWS_DEFAULT_REGION=ap-northeast-2
+   ```
+
+   :::note[ECR 저장소는 아래 Terraform 이 만든다]
+   `aws ecr create-repository` 로 미리 만들지 않는다. 2절의 `aws_ecr_repository.app` 이 같은 이름(`app-repo`)을 만들므로, 손으로 먼저 만들면 `RepositoryAlreadyExistsException` 으로 `apply` 가 실패한다.
+
+   이미 만들었다면 지우거나 상태로 가져온다.
+
+   ```bash
+   terraform import aws_ecr_repository.app app-repo
+   ```
+   :::
+
+   ```bash
+   export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+   export ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+   echo $ECR_REGISTRY
+   ```
+
+</Steps>
+
+---
+
+## 2. A 경로 — CodeBuild + CodePipeline
+
+<Steps>
+
+1. **`buildspec.yaml` 을 저장소 최상단에 둔다.**
+
+   ```yaml title="buildspec.yaml"
+   version: 0.2
+
+   phases:
+     pre_build:
+       commands:
+         - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+         - IMAGE_TAG=v$(cat version)
+         - echo "tag=$IMAGE_TAG"
+     build:
+       commands:
+         - docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+         - docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+     post_build:
+       commands:
+         - printf '[{"name":"app","imageUri":"%s"}]' $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG > imagedefinitions.json
+
+   artifacts:
+     files:
+       - imagedefinitions.json
+   ```
+
+   push 를 `build` 단계에 두었다. `post_build` 는 빌드가 실패해도 돌기 때문이다.
+
+2. **GitHub 개인 액세스 토큰을 만든다.**
+
+   GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token. 범위는 `repo` 와 `admin:repo_hook` 을 준다.
+
+   :::danger[토큰을 파일에 쓰지 않는다]
+   환경변수로만 다룬다. `.tfvars` 에 쓰면 실수로 커밋된다.
+
+   ```bash
+   export TF_VAR_github_token='ghp_...'
+   ```
+   :::
+
+3. **Terraform 으로 파이프라인을 만든다.**
+
+   ```hcl title="pipeline.tf"
+   terraform {
+     required_providers {
+       aws = { source = "hashicorp/aws", version = "~> 5.0" }
+       tls = { source = "hashicorp/tls", version = "~> 4.0" }   # 3절 OIDC 에서 쓴다
+     }
+   }
+   provider "aws" { region = var.region }
+
+   variable "region"        { default = "ap-northeast-2" }
+   variable "prefix"        { default = "gj2025" }
+   variable "github_owner"  {}
+   variable "github_repo"   { default = "gj2025-repository" }
+   variable "github_token"  { sensitive = true }
+
+   data "aws_caller_identity" "this" {}
+
+   locals {
+     registry = "${data.aws_caller_identity.this.account_id}.dkr.ecr.${var.region}.amazonaws.com"
+   }
+
+   # ---------- 아티팩트 버킷 ----------
+   resource "aws_s3_bucket" "artifacts" {
+     bucket        = "${var.prefix}-pipeline-artifacts-${data.aws_caller_identity.this.account_id}"
+     force_destroy = true
+   }
+
+   # ---------- CodeBuild 역할 ----------
+   resource "aws_iam_role" "build" {
+     name = "${var.prefix}-build-role"
+     assume_role_policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [{
+         Effect    = "Allow"
+         Principal = { Service = "codebuild.amazonaws.com" }
+         Action    = "sts:AssumeRole"
+       }]
+     })
+   }
+
+   resource "aws_iam_role_policy" "build" {
+     role = aws_iam_role.build.id
+     policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [
+         {
+           # 이 API 만은 리소스를 좁힐 수 없다
+           Effect   = "Allow"
+           Action   = "ecr:GetAuthorizationToken"
+           Resource = "*"
+         },
+         {
+           Effect = "Allow"
+           Action = [
+             "ecr:BatchCheckLayerAvailability",
+             "ecr:InitiateLayerUpload",
+             "ecr:UploadLayerPart",
+             "ecr:CompleteLayerUpload",
+             "ecr:PutImage",
+           ]
+           Resource = aws_ecr_repository.app.arn
+         },
+         {
+           Effect   = "Allow"
+           Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+           Resource = "arn:aws:logs:${var.region}:${data.aws_caller_identity.this.account_id}:log-group:/${var.prefix}/build/*"
+         },
+         {
+           Effect   = "Allow"
+           Action   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]
+           Resource = "${aws_s3_bucket.artifacts.arn}/*"
+         },
+       ]
+     })
+   }
+
+   resource "aws_ecr_repository" "app" {
+     name         = "app-repo"
+     force_delete = true
+   }
+
+   # ---------- CodeBuild ----------
+   resource "aws_cloudwatch_log_group" "build" {
+     name              = "/${var.prefix}/build/app"
+     retention_in_days = 1
+   }
+
+   resource "aws_codebuild_project" "app" {
+     name         = "${var.prefix}-app-build"
+     service_role = aws_iam_role.build.arn
+
+     source {
+       type      = "CODEPIPELINE"
+       buildspec = "buildspec.yaml"
+     }
+     artifacts { type = "CODEPIPELINE" }
+
+     environment {
+       compute_type    = "BUILD_GENERAL1_SMALL"
+       image           = "aws/codebuild/amazonlinux2-x86_64-standard:5.0"
+       type            = "LINUX_CONTAINER"
+       privileged_mode = true   # Docker 를 쓰려면 반드시
+
+       environment_variable {
+         name  = "ECR_REGISTRY"
+         value = local.registry
+       }
+       environment_variable {
+         name  = "ECR_REPOSITORY"
+         value = aws_ecr_repository.app.name
+       }
+     }
+
+     logs_config {
+       cloudwatch_logs {
+         group_name  = aws_cloudwatch_log_group.build.name
+         stream_name = "build"
+       }
+     }
+   }
+   ```
+
+4. **파이프라인 역할과 파이프라인을 쓴다.**
+
+   ```hcl title="pipeline.tf"
+   resource "aws_iam_role" "pipeline" {
+     name = "${var.prefix}-pipeline-role"
+     assume_role_policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [{
+         Effect    = "Allow"
+         Principal = { Service = "codepipeline.amazonaws.com" }
+         Action    = "sts:AssumeRole"
+       }]
+     })
+   }
+
+   resource "aws_iam_role_policy" "pipeline" {
+     role = aws_iam_role.pipeline.id
+     policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [
+         {
+           Effect   = "Allow"
+           Action   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:GetBucketVersioning"]
+           Resource = [aws_s3_bucket.artifacts.arn, "${aws_s3_bucket.artifacts.arn}/*"]
+         },
+         {
+           Effect   = "Allow"
+           Action   = ["codebuild:BatchGetBuilds", "codebuild:StartBuild"]
+           Resource = aws_codebuild_project.app.arn
+         },
+       ]
+     })
+   }
+
+   resource "aws_codepipeline" "app" {
+     name     = "${var.prefix}-app-pipeline"
+     role_arn = aws_iam_role.pipeline.arn
+
+     artifact_store {
+       location = aws_s3_bucket.artifacts.bucket
+       type     = "S3"
+     }
+
+     stage {
+       name = "Source"           # 채점이 이 이름으로 찾는다
+       action {
+         name             = "Source"
+         category         = "Source"
+         owner            = "ThirdParty"
+         provider         = "GitHub"
+         version          = "1"
+         output_artifacts = ["source_output"]
+         configuration = {
+           Owner      = var.github_owner
+           Repo       = var.github_repo
+           Branch     = "main"
+           OAuthToken = var.github_token
+         }
+       }
+     }
+
+     stage {
+       name = "Build"            # 채점이 이 이름으로 찾는다
+       action {
+         name             = "Build"
+         category         = "Build"
+         owner            = "AWS"
+         provider         = "CodeBuild"
+         version          = "1"
+         input_artifacts  = ["source_output"]   # Source 의 출력 이름과 같아야 한다
+         output_artifacts = ["build_output"]
+         configuration = { ProjectName = aws_codebuild_project.app.name }
+       }
+     }
+   }
+   ```
+
+5. **적용하고 커밋으로 돌려 본다.**
+
+   ```bash
+   terraform init
+   terraform apply -var="github_owner=<계정>"
+   ```
+
+   ```bash
+   echo '<h1>v1.0.1</h1>' > index.html
+   echo '1.0.1' > version
+   git add -A && git commit -m "bump to 1.0.1" && git push
+   ```
+
+   파이프라인이 도는 것을 본다.
+
+   ```bash
+   aws codepipeline get-pipeline-state --name gj2025-app-pipeline \
+     --query 'stageStates[*].{stage:stageName,status:latestExecution.status}'
+   ```
+
+</Steps>
+
+---
+
+## 3. B 경로 — GitHub Actions
+
+A 경로와 같은 저장소에서 한다. 리전만 `ap-southeast-1` 로 바꿔 2025 2과제를 재현해도 되고 서울을 계속 써도 된다.
+
+<Steps>
+
+1. **OIDC 공급자와 역할을 만든다.**
+
+   ```hcl title="oidc.tf"
+   data "tls_certificate" "github" {
+     url = "https://token.actions.githubusercontent.com/.well-known/openid-configuration"
+   }
+
+   resource "aws_iam_openid_connect_provider" "github" {
+     url             = "https://token.actions.githubusercontent.com"
+     client_id_list  = ["sts.amazonaws.com"]
+     thumbprint_list = [data.tls_certificate.github.certificates[0].sha1_fingerprint]
+   }
+
+   resource "aws_iam_role" "gh_actions" {
+     name = "${var.prefix}-gh-actions-role"
+     assume_role_policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [{
+         Effect    = "Allow"
+         Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
+         Action    = "sts:AssumeRoleWithWebIdentity"
+         Condition = {
+           StringEquals = {
+             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+           }
+           StringLike = {
+             # 이 조건이 없으면 아무 저장소나 이 역할을 맡는다
+             "token.actions.githubusercontent.com:sub" = "repo:${var.github_owner}/${var.github_repo}:*"
+           }
+         }
+       }]
+     })
+   }
+
+   resource "aws_iam_role_policy" "gh_actions" {
+     role = aws_iam_role.gh_actions.id
+     policy = jsonencode({
+       Version = "2012-10-17"
+       Statement = [
+         { Effect = "Allow", Action = "ecr:GetAuthorizationToken", Resource = "*" },
+         {
+           Effect = "Allow"
+           Action = [
+             "ecr:BatchCheckLayerAvailability",
+             "ecr:InitiateLayerUpload",
+             "ecr:UploadLayerPart",
+             "ecr:CompleteLayerUpload",
+             "ecr:PutImage",
+           ]
+           Resource = aws_ecr_repository.app.arn
+         },
+       ]
+     })
+   }
+
+   output "gh_actions_role_arn" { value = aws_iam_role.gh_actions.arn }
+   ```
+
+   ```bash
+   terraform apply -var="github_owner=<계정>"
+   terraform output -raw gh_actions_role_arn
+   ```
+
+2. **워크플로를 쓴다.**
+
+   ```yaml title=".github/workflows/build.yml"
+   name: build-and-push
+
+   on:
+     push:
+       branches: [main]
+       paths:
+         - 'index.html'      # 이 파일이 바뀔 때만 — 요구사항이자 무한루프 차단
+
+   permissions:
+     id-token: write         # OIDC 토큰을 받으려면 필요
+     contents: write         # 매니페스트를 고쳐 push 하려면 필요
+
+   jobs:
+     build:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v4
+
+         - uses: aws-actions/configure-aws-credentials@v4
+           with:
+             role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+             aws-region: ap-northeast-2
+
+         - id: ecr
+           uses: aws-actions/amazon-ecr-login@v2
+
+         - name: Build and push
+           env:
+             REGISTRY: ${{ steps.ecr.outputs.registry }}
+           run: |
+             TAG=v$(cat version)
+             docker build -t $REGISTRY/app-repo:$TAG .
+             docker push $REGISTRY/app-repo:$TAG
+             echo "TAG=$TAG" >> $GITHUB_ENV
+
+         - name: Update manifest
+           env:
+             REGISTRY: ${{ steps.ecr.outputs.registry }}
+           run: |
+             mkdir -p manifest
+             sed -i "s|image: .*|image: $REGISTRY/app-repo:$TAG|" manifest/deploy.yaml
+             git config user.name  github-actions
+             git config user.email actions@github.com
+             git commit -am "bump image to $TAG" || echo "no change"
+             git push
+   ```
+
+3. **역할 ARN 을 저장소 Secrets 에 넣는다.**
+
+   GitHub → 저장소 → Settings → Secrets and variables → Actions → New repository secret. 이름 `AWS_ROLE_ARN`, 값은 2번에서 출력한 ARN.
+
+   :::note[ARN 은 비밀이 아니지만 Secrets 에 둔다]
+   계정 ID 가 드러나는 것을 막는다. 공개 저장소라면 습관을 들여 둔다.
+   :::
+
+4. **매니페스트 자리를 만든다.**
+
+   ```bash
+   mkdir -p manifest
+   cat > manifest/deploy.yaml <<'YAML'
+   apiVersion: apps/v1
+   kind: Deployment
+   metadata:
+     name: nginx-deploy
+     namespace: wsc2025
+   spec:
+     replicas: 2
+     selector:
+       matchLabels: { app: nginx }
+     template:
+       metadata:
+         labels: { app: nginx }
+       spec:
+         containers:
+           - name: nginx
+             image: PLACEHOLDER
+             ports:
+               - containerPort: 80
+   YAML
+   git add -A && git commit -m "add workflow and manifest" && git push
+   ```
+
+   이 push 는 `index.html` 을 건드리지 않았으므로 워크플로가 돌지 않는다. **필터가 동작하는지 확인하는 첫 시험이다.**
+
+5. **`index.html` 을 고쳐 돌린다.**
+
+   ```bash
+   echo '<h1>v1.0.2</h1>' > index.html
+   echo '1.0.2' > version
+   git add -A && git commit -m "bump to 1.0.2" && git push
+   ```
+
+   GitHub 의 Actions 탭에서 진행을 본다.
+
+</Steps>
+
+---
+
+## 4. 자가채점
+
+<details class="build-step">
+<summary>자가채점 — 2025 2과제 `2_cicd.sh` 발췌 (1-1 · 1-2)</summary>
+
+```bash
+# 1-1 ECR 저장소
+aws ecr describe-repositories --repository-names app-repo \
+  --query 'repositories[0].repositoryName' --output text
+
+# 1-2 이미지 태그
+aws ecr list-images --repository-name app-repo \
+  --query 'imageIds[?imageTag!=`null`].imageTag' --output text
+```
+
+**기대 출력** — 첫 명령이 `app-repo`. 둘째 명령이 `v1.0.1` · `v1.0.2` 처럼 `vX.X.X` 형식 태그.
+
+**안 나올 때 볼 곳** — 저장소가 없으면 리전을 확인한다. 태그가 없으면 빌드가 push 까지 가지 못한 것이므로 6절로 간다. 태그가 `latest` 면 `buildspec` 이나 워크플로의 태그 만드는 줄을 본다.
+
+</details>
+
+<details class="build-step">
+<summary>자가채점 — 2025 1과제 `mark1.sh` 11-1 · 11-2</summary>
+
+```bash
+# 11-1 CodeBuild 설정
+aws codebuild batch-get-projects --names gj2025-app-build \
+  --query "projects[0].[ \
+      source.type, \
+      source.location, \
+      source.auth.type, \
+      environment.environmentVariables[].type, \
+      logsConfig.cloudWatchLogs.groupName]" --output text | xargs -n1
+
+# 11-2 CodePipeline 구조
+aws codepipeline get-pipeline --name gj2025-app-pipeline \
+  --query 'pipeline.[stages[?name==`Source`].actions[0].[actionTypeId.provider, configuration.[OAuthToken != null, Repo]], stages[?name==`Build`].actions[0].configuration.ProjectName]' \
+  --output text | tr '\t' '\n'
+```
+
+**기대 출력**
+
+| 명령 | 기대 |
+|---|---|
+| 11-1 | `CODEPIPELINE` · 환경변수 타입들 · `/gj2025/build/app` |
+| 11-2 | `GitHub` · `True` · 저장소 이름 · `gj2025-app-build` |
+
+**안 나올 때 볼 곳** — 11-2 가 비면 단계 이름이 `Source` · `Build` 가 아닌 것이다. 쿼리가 이름으로 찾으므로 정확히 맞춰야 한다. `OAuthToken` 이 `False` 면 토큰을 설정하지 않았다.
+
+</details>
+
+<details class="build-step">
+<summary>자가채점 — Actions 필터가 동작하는가</summary>
+
+```bash
+# index.html 을 건드리지 않는 커밋 — 워크플로가 돌면 안 된다
+echo "note" >> README.md
+git add -A && git commit -m "docs only" && git push
+```
+
+**기대** — GitHub Actions 탭에 새 실행이 **생기지 않는다.**
+
+**안 나올 때 볼 곳** — 실행이 생겼다면 `on.push.paths` 가 없거나 잘못된 것이다. 이 필터가 없으면 매니페스트 갱신 push 가 워크플로를 다시 불러 무한루프가 된다.
+
+</details>
+
+---
+
+## 5. ECR 에 올라간 것 확인하기
+
+```bash
+aws ecr describe-images --repository-name app-repo \
+  --query 'sort_by(imageDetails,&imagePushedAt)[-1].{tags:imageTags,pushed:imagePushedAt,size:imageSizeInBytes}'
+```
+
+실제로 끌어와 본다.
+
+```bash
+aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_REGISTRY
+docker pull $ECR_REGISTRY/app-repo:v1.0.2
+docker run --rm -p 8080:80 -d $ECR_REGISTRY/app-repo:v1.0.2
+curl -s localhost:8080
+```
+
+`<h1>v1.0.2</h1>` 가 나오면 이미지가 제대로 만들어진 것이다.
+
+---
+
+## 6. 막혔을 때
+
+### 6-1. CodeBuild 로그부터
+
+```bash
+aws logs tail /gj2025/build/app --follow
+```
+
+| 마지막 줄 | 원인 | 고침 |
+|---|---|---|
+| `Cannot connect to the Docker daemon` | 특권 모드 꺼짐 | `privileged_mode = true` |
+| `not authorized to perform: ecr:GetAuthorizationToken` | 리소스를 좁혔다 | `Resource = "*"` |
+| `name unknown: The repository ... does not exist` | 저장소 이름·리전 불일치 | 환경변수 확인 |
+| `YAML_FILE_ERROR` | `buildspec.yaml` 문법·위치 | 최상단인지, 들여쓰기 확인 |
+| 로그 자체가 없다 | 로그 설정 누락 | `logs_config` 확인 |
+
+### 6-2. 파이프라인이 안 돈다
+
+```bash
+aws codepipeline get-pipeline-state --name gj2025-app-pipeline \
+  --query 'stageStates[*].{stage:stageName,status:latestExecution.status,msg:actionStates[0].latestExecution.errorDetails.message}'
+```
+
+웹훅이 안 걸렸을 수 있다. 수동으로 돌려 확인한다.
+
+```bash
+aws codepipeline start-pipeline-execution --name gj2025-app-pipeline
+```
+
+수동으로는 되고 push 로는 안 되면 웹훅 문제다. 토큰에 `admin:repo_hook` 범위가 있는지 확인한다.
+
+### 6-3. Actions 가 실패한다
+
+| 오류 | 고침 |
+|---|---|
+| `Credentials could not be loaded` | `permissions: id-token: write` 추가 |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | 신뢰 정책 `sub` 가 `repo:소유자/저장소:*` 와 맞는지 |
+| `denied: ... not authorized` (push) | 역할 정책의 ECR 권한 |
+| git push 에서 `permission denied` | `permissions: contents: write` 추가 |
+| 워크플로가 안 돈다 | `paths` 와 `branches` 확인 |
+
+신뢰 정책이 의심되면 실제 `sub` 값을 로그에 찍어 본다.
+
+```yaml
+- run: echo "${{ github.repository }} / ${{ github.ref }}"
+```
+
+---
+
+## 7. 정리
+
+```bash
+terraform destroy -var="github_owner=<계정>"
+```
+
+ECR 이미지가 남아 삭제가 막히면 `force_delete = true` 를 이미 넣어 두었으므로 함께 지워진다. 확인한다.
+
+```bash
+aws ecr describe-repositories --query 'repositories[*].repositoryName'
+aws codepipeline list-pipelines --query 'pipelines[*].name'
+aws codebuild list-projects --query 'projects'
+aws s3 ls | grep gj2025
+```
+
+전부 비어야 한다.
+
+GitHub 쪽도 정리한다.
+
+- 개인 액세스 토큰을 폐기한다 (Settings → Developer settings)
+- 저장소를 남겨 둘 거라면 Secrets 의 `AWS_ROLE_ARN` 을 지운다
+
+:::caution[토큰 폐기를 잊지 않는다]
+public 저장소에 연결했던 토큰이다. 실습이 끝나면 반드시 폐기한다. 남겨 두면 유출 시 계정 전체가 위험하다.
+:::
+
+---
+
+## 다음 단계
+
+- CD 를 마저 — [29. GitOps · Argo Rollouts](/part-4/29-gitops-rollouts/)
+- 이 모듈의 근거 — [실기출 분해](/reference/past-exams/)

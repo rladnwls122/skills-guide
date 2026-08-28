@@ -5,6 +5,7 @@ sidebar:
   order: 0
 ---
 
+import { Quiz, QuizResults } from 'starlight-quiz/components';
 import { Steps, Card, CardGrid, LinkButton, Tabs, TabItem } from '@astrojs/starlight/components';
 
 > 문서 유형: 개요
@@ -206,6 +207,11 @@ PowerShell 함정 미리 각인: `curl`은 Invoke-WebRequest 별칭 → 항상 `
 | 13 | EKS 클러스터가 IAM 과 어떻게 엮이는지(IRSA·클러스터 생성자 신원) 설명할 수 있다 | [eks-basics](/start/eks-basics/)로 보충 |
 | 14 | DynamoDB 의 파티션 키·GSI 로 조회 패턴을 설계할 수 있다 | [dynamodb-basics](/start/dynamodb-basics/)로 보충 |
 | 15 | Prometheus 가 메트릭을 어떻게 모으고 PodMonitor 가 무엇인지 안다 | [observability-basics](/start/observability-basics/)로 보충 |
+| 16 | Lambda 핸들러가 받는 `event` 에서 값을 꺼내고 응답 형식을 만들 수 있다 | [python-basics](/start/python-basics/)로 보충 |
+| 17 | 제공된 Go 바이너리에서 라우트와 환경변수를 알아낼 수 있다 | [go-app-basics](/start/go-app-basics/)로 보충 |
+| 18 | `EXPLAIN` 출력을 읽고 인덱스가 쓰이는지 판단할 수 있다 | [mysql-basics](/start/mysql-basics/)로 보충 |
+
+16~18번은 **언어 축**이다. 대회가 주는 앱은 Go 로 만들어져 수정할 수 없지만, **Lambda 는 선수가 직접 쓴다.** 그리고 3과제 성능 점수는 인덱스에서 갈린다. 두 해 실기출이 무엇을 요구했는지는 [실기출 분해](/reference/past-exams/)에 있다.
 
 9·10번은 **2과제 전용**이다. PART-4에 들어가기 전까지는 몰라도 진도가 막히지 않으므로, 자가진단 "아니오" 개수에는 넣되 보충은 PART-4 직전에 해도 된다.
 
@@ -220,6 +226,65 @@ Terraform 은 다르다. **채점 대상이 아니다** — 과제지·채점지
 - [ ] Budgets 알람 생성
 - [ ] skills-2026 클론
 - [ ] 자가진단 통과 (또는 기초 다지기 일정 반영)
+
+## 자기 점검 퀴즈
+
+<Quiz title="root 로 apply 하면 무엇이 터지나">
+학습용 계정을 만들고 root 로 로그인한 채 그대로 apply 했다. 나중에 무엇이 터지는가?
+
+- [ ] 과금이 두 배가 된다
+- [ ] root 는 리소스를 만들 수 없어 apply 자체가 실패한다
+- [x] set-03 유형의 root-less 키 정책에서 이후 KMS 사용이 전부 거부된다
+- [ ] 리전이 자동으로 us-east-1 로 바뀐다
+
+키 정책에서 root 를 뺀 구성이면 그 키를 만든 신원이 root 일 때 이후 KMS 호출이 전부 막힌다(모듈 13에서 체험한다). 그래서 IAM 사용자를 하나 만들어 그 신원만 쓴다. 대회 원칙도 같은 말이다 — **클러스터 생성자 · kubectl 신원 · 채점 신원이 하나**여야 한다.
+</Quiz>
+
+<Quiz title="파란 아이콘 PowerShell">
+Windows 에서 파란 아이콘의 Windows PowerShell 5.1 로 실습하면 무엇이 깨지는가?
+
+- [ ] 아무 문제 없다
+- [x] 기본 인코딩이 CP949 라 terraform·jq 출력이 깨지고 `&&` 연산자도 없다
+- [ ] aws CLI 가 설치되지 않는다
+- [ ] `git clone` 이 실패한다
+
+검은 아이콘의 **PowerShell 7** 을 쓴다. `$PSVersionTable` 의 `PSVersion` 이 `7.x` 인지로 확인한다. 함정이 하나 더 있다 — PowerShell 에서 `curl` 은 `Invoke-WebRequest` 별칭이라 항상 `curl.exe` 로 부른다.
+</Quiz>
+
+<Quiz title="월 알람 하나로 부족한 이유">
+월 $50 예산 알람 하나만 걸어 두면 무엇을 놓치는가?
+
+- [ ] 놓치는 것이 없다. 상한이 곧 방어선이다
+- [x] 80% 문턱인 $40 에 닿기 전에 NAT 를 하루 켜 둔 사고가 이미 끝나 있다
+- [ ] 알람이 이메일로 오지 않는다
+- [ ] 월 예산은 EKS 요금을 세지 않는다
+
+그래서 **일 단위 알람을 함께 건다** — 하루 $5 를 넘기면 그날 안에 메일이 온다. 다만 알람은 사고를 막지 못하고 알리기만 한다. 실제 방어선은 모듈 종료 시 destroy 와 매일 학습 종료 시 [잔존 리소스 점검](/reference/cleanup-check/)이다.
+</Quiz>
+
+<Quiz title="저장소를 어디에 클론하나">
+skills-2026 저장소를 바탕화면에 클론했다. 무엇이 문제인가?
+
+- [ ] 디스크 용량이 부족해진다
+- [x] 가이드의 정답지 경로가 전부 `~/skills-2026` 기준이라 이후 모든 복사·diff 명령이 실패한다
+- [ ] 브랜치를 따로 바꿔야 한다
+- [ ] `git clone` 은 홈 디렉터리에서만 동작한다
+
+**반드시 홈 디렉터리 아래에 받는다.** 2과제 정답지는 전부 `main` 에 있으므로 브랜치를 바꿀 일은 없다.
+</Quiz>
+
+<Quiz title="아니오가 다섯 개 나왔다">
+선수 지식 자가진단 18문 중 아니오가 다섯 개 나왔다. 어디서 시작하나?
+
+- [ ] 그대로 PART 1 로 간다
+- [x] [PART 0 컴퓨팅 기초](/part-0/01-os-process/)부터 시작한다
+- [ ] 자가진단을 다시 해 본다
+- [ ] 대회 당일 자료만 읽는다
+
+**아니오 세 개 이상이면 PART 0 이 그 자리다.** 다만 9·10번은 2과제 전용이라 개수에는 넣되 보충은 PART-4 직전에 해도 되고, 16~18번 언어 축은 Lambda 를 직접 쓰는 일과 3과제 성능 점수에 바로 걸린다.
+</Quiz>
+
+<QuizResults />
 
 ## 선수 학습 가이드
 
@@ -287,6 +352,18 @@ Terraform 은 다르다. **채점 대상이 아니다** — 과제지·채점지
   <Card title="오토스케일링 기초" icon="up-caret">
     자가진단 10 — HPA·KEDA·Karpenter·Fargate, PART-4 모듈 15
     [읽기](/start/autoscaling-basics/)
+  </Card>
+  <Card title="Python·boto3 기초" icon="seti:python">
+    자가진단 16 — 실제 과제 Lambda 셋을 줄 단위로 해부, PART-1 모듈 08 · PART-4 모듈 31
+    [읽기](/start/python-basics/)
+  </Card>
+  <Card title="Go·Gin 앱 읽기" icon="seti:go">
+    자가진단 17 — 수정 불가 바이너리에서 라우트·환경변수 역추적, PART-5 모듈 32
+    [읽기](/start/go-app-basics/)
+  </Card>
+  <Card title="MySQL 기초" icon="seti:db">
+    자가진단 18 — 인덱스와 EXPLAIN 이 3과제 성능 12점을 가른다, PART-5 모듈 32
+    [읽기](/start/mysql-basics/)
   </Card>
 </CardGrid>
 

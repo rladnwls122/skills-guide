@@ -1,0 +1,109 @@
+---
+title: 31. 민감 데이터 보호 — Macie · Lambda 마스킹
+description: 2025 2과제 Storage data protect 모듈을 Macie 분류 작업과 S3 이벤트 기반 Lambda 마스킹으로 푸는 모듈 개요.
+sidebar:
+  order: 1
+---
+
+import { FileTree, LinkButton } from '@astrojs/starlight/components';
+
+> 문서 유형: 개요
+
+[2025 2과제](/reference/past-exams/#3-2-2025-2과제--small-challenge-4시간) Storage data protect 모듈이다. 요구가 둘로 나뉜다.
+
+**첫째, 감지한다.** Macie 로 S3 의 민감 정보를 찾는다.
+
+**둘째, 가린다.** Lambda 가 원본을 마스킹해 다른 경로에 넣는다.
+
+그리고 채점 방식이 특이하다. **원본은 Macie 에 감지되고 마스킹본은 감지되지 않아야 한다.** 곧 Macie 가 마스킹의 채점자 역할을 한다.
+
+| 유형 | 원본 (감지되어야 함) | 마스킹 (감지되지 않아야 함) |
+|---|---|---|
+| 이름 | `Crystal White` | `Crystal *****` |
+| 이메일 | `davisjesus@example.org` | `d*********@example.org` |
+| 전화 | `010-7658-5153` | `010-7658-****` |
+| 주민번호 | `887-07-7325` | `887-07-****` |
+| 카드 | `4468-6779-7028-4776` | `4468-6779-7028-****` |
+| UUID | `665ef2db-cd63-4086-81e9-661ccaf8dd20` | `665ef2db-cd63-4086-81e9-************` |
+
+:::note[이 모듈은 파이썬 실력이 그대로 점수가 된다]
+마스킹 여섯 종을 정규식으로 정확히 구현하는 것이 과제의 절반이다. [Python·boto3 기초](/start/python-basics/#4-2-마스킹-정규식-여섯-종)를 먼저 읽으면 훨씬 수월하다.
+:::
+
+## 학습 목표
+
+- [ ] Macie 의 분류 작업·발견 항목·관리형 식별자가 각각 무엇인지 안다
+- [ ] 작업 범위를 접두사로 좁히는 법과 한 번만 실행시키는 법을 안다
+- [ ] S3 이벤트 알림이 Lambda 를 부르는 경로를 설명할 수 있다
+- [ ] 같은 버킷에 쓸 때 무한루프를 막는 방법을 안다
+- [ ] 마스킹 정규식 여섯 종을 쓰고 서로 겹치지 않게 순서를 정할 수 있다
+- [ ] 마스킹 결과가 Macie 에 감지되지 않는지 확인할 수 있다
+- [ ] 대용량 파일에서 Lambda 제한(시간·메모리)을 피하는 법을 안다
+- [ ] 발견 항목을 읽고 어느 유형이 남았는지 짚을 수 있다
+
+## 소요 시간
+
+약 5~6시간 (이론 2h + 실습 3~4h)
+
+## 과금 리소스와 destroy 방침
+
+| 리소스 | 과금 | 방침 |
+|---|---|---|
+| **Macie** | **검사한 데이터 양당 과금.** 30일 무료 평가판 있음 | 작업을 한 번만 돌린다 |
+| S3 | 저장량 + 요청 | 객체까지 삭제 |
+| Lambda | 실행 시간 | 프리티어 내 |
+| CloudWatch Logs | 저장량 | 보존 짧게 |
+
+:::danger[Macie 를 켜 두면 계속 과금될 수 있다]
+Macie 를 활성화하면 S3 자동 검색이 기본으로 켜져 계정의 버킷을 지속적으로 훑는다. 실습이 끝나면 자동 검색을 끄고 Macie 자체를 비활성화한다.
+
+```bash
+aws macie2 update-automated-discovery-configuration --status DISABLED
+aws macie2 disable-macie
+```
+:::
+
+:::caution[제공 파일이 각 1만 줄이다]
+2025 배포 파일은 유형마다 10,000줄이다. 여섯 파일이면 6만 줄이다. 실습에서는 앞 몇백 줄만 잘라 써도 되지만, **Lambda 시간 제한을 만나는 경험 자체가 이 모듈의 일부**다.
+:::
+
+## 선행 지식
+
+:::tip[개념이 낯설면 여기부터]
+- S3 접두사가 폴더가 아니라 키의 일부라는 사실 — [s3-basics](/start/s3-basics/)
+- Lambda 핸들러가 S3 이벤트를 받는 모양 — [Python·boto3 기초](/start/python-basics/#2-6-lambda-핸들러)
+- 정규식의 기본(`\d` · `{n}` · 괄호 그룹) — [Python·boto3 기초](/start/python-basics/)
+:::
+
+- S3 이벤트 알림과 접두사·접미사 필터 — [s3-basics](/start/s3-basics/)
+- Lambda 실행 역할과 리소스 기반 정책의 차이 — [iam-basics](/start/iam-basics/)
+- `re.sub` 에 함수를 넘기는 법 — [Python·boto3 기초](/start/python-basics/#4-1-s3-이벤트를-받는-lambda)
+
+## 선행 모듈
+
+- PART 1 — 07. KMS·S3·CloudFront (버킷 보안 구성)
+- PART 4 — 14. 서버리스 워크플로 (S3 트리거 Lambda)
+
+## 실기출 근거
+
+<FileTree>
+
+- 2025 전국 2과제
+  - **문제지 2) Storage data protect** 버킷·접두사·Macie 작업·마스킹 표
+  - **2_storage_data_protect.sh 2-1 ~ 2-7** 버킷·작업·함수 확인
+  - **배포파일 module2/** `names.txt` · `emails.txt` · `phones.txt` · `ssns.txt` · `credit_cards.txt` · `uuids.txt` 각 10,000줄
+
+</FileTree>
+
+## 공식 문서
+
+- [Amazon Macie 사용 설명서](https://docs.aws.amazon.com/macie/latest/user/) — 작업과 발견 항목
+- [Macie 관리형 데이터 식별자](https://docs.aws.amazon.com/macie/latest/user/managed-data-identifiers.html) — 무엇을 감지하는지
+- [S3 이벤트 알림](https://docs.aws.amazon.com/AmazonS3/latest/userguide/NotificationHowTo.html) — 접두사·접미사 필터
+- [Python `re` 모듈](https://docs.python.org/3/library/re.html) — 정규식
+- [aws_macie2_classification_job](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/macie2_classification_job) — Terraform 리소스
+
+## 다음 단계
+
+<LinkButton href="/part-4/31-macie-masking/theory/" icon="open-book">이론 읽기</LinkButton>
+<LinkButton href="/part-4/31-macie-masking/lab/" variant="minimal" icon="rocket">실습 시작</LinkButton>

@@ -402,77 +402,71 @@ RDS Proxy 는 앱과 DB 사이에 서서 접속을 모아 준다. 앱이 100개�
 
 ## ⑦ 자기 점검 퀴즈
 
-<Quiz
-  question="`EXPLAIN` 결과에 `type: ALL`, `key: NULL`, `rows: 298734` 가 나왔다. 무슨 뜻인가?"
-  options={[
-    '인덱스가 잘 쓰이고 있다',
-    '인덱스를 쓰지 않고 테이블 전체를 훑고 있다',
-    '테이블이 잠겨 있다',
-    '질의에 문법 오류가 있다',
-  ]}
-  correct={1}
-  explanation="type 이 ALL 이면 전체 훑기이고 key 가 NULL 이면 어떤 인덱스도 쓰지 않았다는 뜻이다. rows 는 읽을 것으로 추정하는 행 수다. 조건 열에 인덱스를 만들면 type 이 ref 로, rows 가 작은 수로 바뀐다."
-/>
+<Quiz title="EXPLAIN 의 type ALL 과 key NULL">
+`EXPLAIN` 결과에 `type: ALL`, `key: NULL`, `rows: 298734` 가 나왔다. 무슨 뜻인가?
 
-<Quiz
-  question="덤프 적재와 인덱스 생성의 올바른 순서는?"
-  options={[
-    '인덱스를 먼저 만들고 덤프를 적재한다',
-    '덤프를 적재하고 인덱스를 만든다',
-    '순서는 상관없다',
-    '동시에 해야 한다',
-  ]}
-  correct={1}
-  explanation="덤프가 DROP TABLE 과 CREATE TABLE 을 포함하면 먼저 만든 인덱스가 사라진다. 또 행이 많을 때 인덱스가 있으면 적재할 때마다 인덱스를 갱신해야 해서 적재 자체도 느려진다."
-/>
+- [ ] 인덱스가 잘 쓰이고 있다
+- [x] 인덱스를 쓰지 않고 테이블 전체를 훑고 있다
+- [ ] 테이블이 잠겨 있다
+- [ ] 질의에 문법 오류가 있다
 
-<Quiz
-  question="`idx_user_created (user_id, created_at)` 복합 인덱스가 있다. 이 인덱스가 쓰이지 않는 질의는?"
-  options={[
-    'WHERE user_id = ?',
-    'WHERE user_id = ? AND created_at > ?',
-    'WHERE created_at > ?',
-    'WHERE user_id = ? ORDER BY created_at',
-  ]}
-  correct={2}
-  explanation="복합 인덱스는 앞쪽 열부터 순서대로 쓸 수 있다. 전화번호부가 성으로 먼저 정렬돼 있으면 이름만으로는 찾을 수 없는 것과 같다. created_at 단독 조건이 잦다면 그 열만의 인덱스를 따로 만든다."
-/>
+type 이 ALL 이면 전체 훑기이고 key 가 NULL 이면 어떤 인덱스도 쓰지 않았다는 뜻이다. rows 는 읽을 것으로 추정하는 행 수다. 조건 열에 인덱스를 만들면 type 이 ref 로, rows 가 작은 수로 바뀐다.
+</Quiz>
 
-<Quiz
-  question="앱 컨테이너를 늘렸더니 `Error 1040: Too many connections` 가 나기 시작했다. 원인은?"
-  options={[
-    'DB 디스크가 가득 찼다',
-    '컨테이너마다 커넥션 풀을 열어 DB 최대 접속 수를 넘었다',
-    '인덱스가 없다',
-    '포트가 잘못됐다',
-  ]}
-  correct={1}
-  explanation="컨테이너 수에 비례해 접속이 늘어난다. db.t3.micro 는 최대 접속 수가 제한적이다. RDS Proxy 를 두면 앱 쪽 접속을 모아 DB 쪽 접속 수를 조절한다."
-/>
+<Quiz title="적재와 인덱스 생성 순서">
+덤프 적재와 인덱스 생성의 올바른 순서는?
 
-<Quiz
-  question="2025 3과제에서 응답 시간을 줄이려 할 때 쓸 수 없는 방법은?"
-  options={[
-    '인덱스 추가',
-    '커넥션 풀 크기 조정',
-    '읽기 전용 복제본 추가',
-    '필요한 열만 SELECT',
-  ]}
-  correct={2}
-  explanation="문제지가 Primary 한 대만 쓰고 Read Replica 는 생성하지 않는다고 못 박았다. 인스턴스 타입도 db.t3.micro 로 고정이다. 하드웨어로 밀어붙일 수 없으니 인덱스와 캐싱으로 풀어야 한다."
-/>
+- [ ] 인덱스를 먼저 만들고 덤프를 적재한다
+- [x] 덤프를 적재하고 인덱스를 만든다
+- [ ] 순서는 상관없다
+- [ ] 동시에 해야 한다
 
-<Quiz
-  question="`long_query_time` 을 0.2 로 두는 이유는?"
-  options={[
-    '질의를 0.2초 안에 끝내도록 강제한다',
-    '0.2초를 넘긴 질의만 로그에 남아 목표를 못 지킨 질의를 정확히 모을 수 있다',
-    '접속 제한 시간을 정한다',
-    '인덱스를 자동으로 만든다',
-  ]}
-  correct={1}
-  explanation="느린 질의 로그의 기준선이다. 3과제 목표가 0.2초이므로 그 값으로 두면 목표를 넘긴 질의만 모인다. 어떤 질의에 인덱스가 필요한지 추측하지 않고 알아내는 방법이다."
-/>
+덤프가 DROP TABLE 과 CREATE TABLE 을 포함하면 먼저 만든 인덱스가 사라진다. 또 행이 많을 때 인덱스가 있으면 적재할 때마다 인덱스를 갱신해야 해서 적재 자체도 느려진다.
+</Quiz>
+
+<Quiz title="복합 인덱스가 안 쓰이는 질의">
+`idx_user_created (user_id, created_at)` 복합 인덱스가 있다. 이 인덱스가 쓰이지 않는 질의는?
+
+- [ ] WHERE user_id = ?
+- [ ] WHERE user_id = ? AND created_at > ?
+- [x] WHERE created_at > ?
+- [ ] WHERE user_id = ? ORDER BY created_at
+
+복합 인덱스는 앞쪽 열부터 순서대로 쓸 수 있다. 전화번호부가 성으로 먼저 정렬돼 있으면 이름만으로는 찾을 수 없는 것과 같다. created_at 단독 조건이 잦다면 그 열만의 인덱스를 따로 만든다.
+</Quiz>
+
+<Quiz title="Too many connections">
+앱 컨테이너를 늘렸더니 `Error 1040: Too many connections` 가 나기 시작했다. 원인은?
+
+- [ ] DB 디스크가 가득 찼다
+- [x] 컨테이너마다 커넥션 풀을 열어 DB 최대 접속 수를 넘었다
+- [ ] 인덱스가 없다
+- [ ] 포트가 잘못됐다
+
+컨테이너 수에 비례해 접속이 늘어난다. db.t3.micro 는 최대 접속 수가 제한적이다. RDS Proxy 를 두면 앱 쪽 접속을 모아 DB 쪽 접속 수를 조절한다.
+</Quiz>
+
+<Quiz title="응답 시간을 줄이지 못하는 것">
+2025 3과제에서 응답 시간을 줄이려 할 때 쓸 수 없는 방법은?
+
+- [ ] 인덱스 추가
+- [ ] 커넥션 풀 크기 조정
+- [x] 읽기 전용 복제본 추가
+- [ ] 필요한 열만 SELECT
+
+문제지가 Primary 한 대만 쓰고 Read Replica 는 생성하지 않는다고 못 박았다. 인스턴스 타입도 db.t3.micro 로 고정이다. 하드웨어로 밀어붙일 수 없으니 인덱스와 캐싱으로 풀어야 한다.
+</Quiz>
+
+<Quiz title="long_query_time 0.2">
+`long_query_time` 을 0.2 로 두는 이유는?
+
+- [ ] 질의를 0.2초 안에 끝내도록 강제한다
+- [x] 0.2초를 넘긴 질의만 로그에 남아 목표를 못 지킨 질의를 정확히 모을 수 있다
+- [ ] 접속 제한 시간을 정한다
+- [ ] 인덱스를 자동으로 만든다
+
+느린 질의 로그의 기준선이다. 3과제 목표가 0.2초이므로 그 값으로 두면 목표를 넘긴 질의만 모인다. 어떤 질의에 인덱스가 필요한지 추측하지 않고 알아내는 방법이다.
+</Quiz>
 
 <QuizResults />
 

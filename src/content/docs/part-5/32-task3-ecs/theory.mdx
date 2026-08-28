@@ -514,76 +514,70 @@ EKS 경로([21](/part-5/21-task3-deploy/) · [22](/part-5/22-task3-tuning/))와 
 
 ## 자기 점검 퀴즈
 
-<Quiz
-  question="ECS 태스크가 `CannotPullContainerError` 로 시작하지 못한다. 어느 역할 문제인가?"
-  options={[
-    '태스크 역할(Task Role)',
-    '실행 역할(Execution Role)',
-    '인스턴스 프로파일',
-    '서비스 연결 역할',
-  ]}
-  correct={1}
-  explanation="ECR 에서 이미지를 가져오는 것은 ECS 에이전트이고 실행 역할을 쓴다. 태스크 역할은 컨테이너 안의 앱이 AWS 를 부를 때 쓰므로, 그쪽이 부족하면 태스크는 뜨고 앱만 실패한다."
-/>
+<Quiz title="CannotPullContainerError 는 어느 역할인가">
+ECS 태스크가 `CannotPullContainerError` 로 시작하지 못한다. 어느 역할 문제인가?
 
-<Quiz
-  question="c5.large 에 `awsvpc` 모드로 태스크를 올리는데 2개까지만 뜬다. 원인은?"
-  options={[
-    'CPU 가 부족하다',
-    '메모리가 부족하다',
-    '인스턴스당 붙일 수 있는 ENI 수 제한이다',
-    '보안 그룹 한도다',
-  ]}
-  correct={2}
-  explanation="awsvpc 는 태스크마다 ENI 를 하나씩 쓴다. c5.large 는 ENI 3개이고 하나는 기본이라 태스크는 2개다. 밀도가 필요하면 bridge 모드와 동적 포트를 쓴다."
-/>
+- [ ] 태스크 역할(Task Role)
+- [x] 실행 역할(Execution Role)
+- [ ] 인스턴스 프로파일
+- [ ] 서비스 연결 역할
 
-<Quiz
-  question="비용 ratio 가 0.45 로 측정됐다. 결과는?"
-  options={[
-    '비용 점수 만점',
-    '모든 칸에 하한 0.5 가 있어 비용 12점을 전부 잃는다',
-    '절반 점수',
-    '가용성 점수만 잃는다',
-  ]}
-  correct={1}
-  explanation="채점 항목이 전부 '0.5 이상 X 이하' 형태다. 하한 아래면 어느 칸도 만족하지 못한다. 게다가 리소스가 부족하면 처리율과 응답 시간도 나빠져 두 번 손해다."
-/>
+ECR 에서 이미지를 가져오는 것은 ECS 에이전트이고 실행 역할을 쓴다. 태스크 역할은 컨테이너 안의 앱이 AWS 를 부를 때 쓰므로, 그쪽이 부족하면 태스크는 뜨고 앱만 실패한다.
+</Quiz>
 
-<Quiz
-  question="`POST /v1/user` 의 요청 본문에 있는 이메일 형식을 검증해 403 을 내야 한다. 어느 계층인가?"
-  options={[
-    'CloudFront Functions',
-    'ALB 리스너 규칙 고정 응답',
-    'WAF 정규식 패턴 세트',
-    '애플리케이션 코드',
-  ]}
-  correct={2}
-  explanation="이메일이 요청 본문에 있고 본문을 검사할 수 있는 것은 WAF 뿐이다. CloudFront Functions 와 ALB 규칙은 본문을 못 본다. 앱은 수정할 수 없다."
-/>
+<Quiz title="awsvpc 모드에서 태스크가 2개까지만">
+c5.large 에 `awsvpc` 모드로 태스크를 올리는데 2개까지만 뜬다. 원인은?
 
-<Quiz
-  question="`user` API 의 CPU 이용률은 20% 인데 응답이 0.2초를 넘는다. 스케일링이 동작하지 않는 이유와 대책은?"
-  options={[
-    '태스크 수가 최대치다',
-    'DB 대기가 대부분이라 CPU 가 낮다. 스케일링 지표를 ALBRequestCountPerTarget 으로 바꾼다',
-    '메모리가 부족하다',
-    'ALB 가 느리다',
-  ]}
-  correct={1}
-  explanation="I/O 대기 중인 태스크는 CPU 를 쓰지 않는다. CPU 목표를 못 넘으니 늘어나지 않는다. 요청 수 기반 지표가 응답 시간 목표에 더 직결한다. 근본 원인인 인덱스도 함께 본다."
-/>
+- [ ] CPU 가 부족하다
+- [ ] 메모리가 부족하다
+- [x] 인스턴스당 붙일 수 있는 ENI 수 제한이다
+- [ ] 보안 그룹 한도다
 
-<Quiz
-  question="`product` 응답 시간을 줄이는 가장 효과가 큰 방법은?"
-  options={[
-    'DynamoDB 용량 모드를 프로비저닝으로',
-    '데이터가 불변이고 같은 id 가 반복되므로 CloudFront 에서 GET 을 캐싱해 백엔드까지 오지 않게 한다',
-    '태스크를 두 배로',
-    'RDS Proxy 도입',
-  ]}
-  correct={1}
-  explanation="문제지가 '생성 이후 정보는 변경되지 않으며 동일한 id 에 대한 요청이 빈번'하다고 알려 준다. 캐싱해도 안전하다는 뜻이다. 응답 시간과 비용이 함께 좋아진다. 단 POST 는 캐싱하지 않는다."
-/>
+awsvpc 는 태스크마다 ENI 를 하나씩 쓴다. c5.large 는 ENI 3개이고 하나는 기본이라 태스크는 2개다. 밀도가 필요하면 bridge 모드와 동적 포트를 쓴다.
+</Quiz>
+
+<Quiz title="비용 ratio 0.45">
+비용 ratio 가 0.45 로 측정됐다. 결과는?
+
+- [ ] 비용 점수 만점
+- [x] 모든 칸에 하한 0.5 가 있어 비용 12점을 전부 잃는다
+- [ ] 절반 점수
+- [ ] 가용성 점수만 잃는다
+
+채점 항목이 전부 '0.5 이상 X 이하' 형태다. 하한 아래면 어느 칸도 만족하지 못한다. 게다가 리소스가 부족하면 처리율과 응답 시간도 나빠져 두 번 손해다.
+</Quiz>
+
+<Quiz title="이메일 형식 검증은 어느 계층인가">
+`POST /v1/user` 의 요청 본문에 있는 이메일 형식을 검증해 403 을 내야 한다. 어느 계층인가?
+
+- [ ] CloudFront Functions
+- [ ] ALB 리스너 규칙 고정 응답
+- [x] WAF 정규식 패턴 세트
+- [ ] 애플리케이션 코드
+
+이메일이 요청 본문에 있고 본문을 검사할 수 있는 것은 WAF 뿐이다. CloudFront Functions 와 ALB 규칙은 본문을 못 본다. 앱은 수정할 수 없다.
+</Quiz>
+
+<Quiz title="CPU 는 낮은데 응답이 느리다">
+`user` API 의 CPU 이용률은 20% 인데 응답이 0.2초를 넘는다. 스케일링이 동작하지 않는 이유와 대책은?
+
+- [ ] 태스크 수가 최대치다
+- [x] DB 대기가 대부분이라 CPU 가 낮다. 스케일링 지표를 ALBRequestCountPerTarget 으로 바꾼다
+- [ ] 메모리가 부족하다
+- [ ] ALB 가 느리다
+
+I/O 대기 중인 태스크는 CPU 를 쓰지 않는다. CPU 목표를 못 넘으니 늘어나지 않는다. 요청 수 기반 지표가 응답 시간 목표에 더 직결한다. 근본 원인인 인덱스도 함께 본다.
+</Quiz>
+
+<Quiz title="product 응답 시간 줄이기">
+`product` 응답 시간을 줄이는 가장 효과가 큰 방법은?
+
+- [ ] DynamoDB 용량 모드를 프로비저닝으로
+- [x] 데이터가 불변이고 같은 id 가 반복되므로 CloudFront 에서 GET 을 캐싱해 백엔드까지 오지 않게 한다
+- [ ] 태스크를 두 배로
+- [ ] RDS Proxy 도입
+
+문제지가 '생성 이후 정보는 변경되지 않으며 동일한 id 에 대한 요청이 빈번'하다고 알려 준다. 캐싱해도 안전하다는 뜻이다. 응답 시간과 비용이 함께 좋아진다. 단 POST 는 캐싱하지 않는다.
+</Quiz>
 
 <QuizResults />

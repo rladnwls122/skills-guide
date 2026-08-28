@@ -35,13 +35,11 @@
 		padding-inline: 0.85rem;
 	}
 
-	/* Steps: 기본 들여쓰기가 좁은 화면에서 본문을 반토막 낸다. */
-	.sl-steps {
-		padding-inline-start: 1.25rem;
-	}
-
+	/* Steps: 번호 배지와 본문 사이 간격만 줄인다(기본 1rem). 배지는 li 안에
+	   absolute 로 놓이고 폭이 --bullet-size 라, 패딩을 그보다 작게 잡으면
+	   배지가 본문 글자 위에 겹친다. */
 	.sl-steps > li {
-		padding-inline-start: 0.75rem;
+		padding-inline-start: calc(var(--bullet-size) + 0.5rem);
 	}
 
 	/* 탭 라벨이 많으면 줄바꿈 대신 가로 스크롤 — 탭 줄이 3줄로 쌓이면 못 쓴다. */

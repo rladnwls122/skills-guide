@@ -618,7 +618,7 @@ Calico 로 파드 사이 통신을 막는 요구가 같은 과제에 함께 나�
 
 ---
 
-## 자기 점검 퀴즈 (5문)
+## 자기 점검 퀴즈 (7문)
 
 <Quiz title="노트북에서 private 클러스터 생성">
 `eksctl create cluster`를 퍼블릭 네트워크의 본 PC에서 실행했는데 fully-private 클러스터가 만들어진다. 그 이유와, 생성이 중간에 끊겼을 때 해야 할 일은?
@@ -695,6 +695,38 @@ coredns addon 업데이트가 Corefile을 addon 기본값으로 초기화한다.
 2. **CoreDNS Corefile**
 
 mark 4-1은 kubelet configz와 Corefile을 각각 grep한다. kps의 Alertmanager `clusterDomain`도 같이 맞춘다.
+</Quiz>
+
+<Quiz title="어느 고리에서 끊겼나">
+`user` 역할을 맡아 `kubectl get all -n skills` 를 쳤더니 `Error from server (Forbidden): pods is forbidden: User "..." cannot list resource "pods" ... in the namespace "skills"` 가 나왔다. 무엇이 확인된 것인가?
+
+- [x] assume 와 클러스터 등록까지는 성공했고, RBAC 의 동사·리소스가 모자라다
+- [ ] 신뢰 정책이 틀렸다
+  > 그러면 `aws sts assume-role` 자체가 `AccessDenied` 로 실패해 여기까지 오지 못한다.
+- [ ] 역할이 클러스터에 등록되지 않았다
+  > 그 경우는 `You must be logged in to the server (Unauthorized)` 다. 사용자 이름이 오류에 찍힌 시점에 신원은 인정된 것이다.
+- [ ] `update-kubeconfig` 를 안 했다
+  > 안 했으면 접속할 서버 정보가 없어 오류 형태가 다르다.
+
+**`Forbidden` 은 앞 고리들이 통과했다는 뜻이다.** 신뢰 정책 → 접근 항목 → 그룹 매핑 → RBAC 네 고리 중 마지막에서 끊겼다. `Unauthorized` 와 `Forbidden` 을 가르는 것만으로 볼 곳이 절반으로 준다.
+
+`Role` 의 `verbs` 를 먼저 본다. `kubectl get all` 은 `get` 이 아니라 **`list`** 를 쓴다 — `get` 만 있으면 이름을 지정한 조회만 된다.
+</Quiz>
+
+<Quiz title="skills 에서만 조회하게 한다">
+"`user` 는 `skills` 네임스페이스에서 조회만" 이라는 요구다. `ClusterRole` + `ClusterRoleBinding` 에 `verbs: ["get","list","watch"]` 로 만들면 어떻게 되나?
+
+- [x] 모든 네임스페이스가 열려 "다른 곳은 막혀야 한다" 항목에서 잃는다
+- [ ] 요구를 만족한다
+  > 조회만 되는 것은 맞지만 범위가 클러스터 전체다. 요구는 네임스페이스를 제한했다.
+- [ ] `kubectl get all -n skills` 가 막힌다
+  > 그쪽은 통과한다. 그래서 더 위험하다 — "되어야 하는" 항목만 확인하면 성공처럼 보인다.
+- [ ] Calico 를 함께 설치해야 동작한다
+  > 네트워크 계층과 API 계층은 별개다. RBAC 에는 관계없다.
+
+**네임스페이스 범위 `Role` + `RoleBinding` 이다.** 채점은 되는 것과 막혀야 하는 것을 함께 본다. 넓게 열어 두면 앞쪽은 통과하고 뒤쪽에서 잃는다.
+
+미리 확인한다 — `kubectl auth can-i list pods -n skills` 는 `yes`, `kubectl auth can-i list pods -n default` 는 `no`, `user` 라면 `can-i delete pods -n skills` 도 `no` 여야 한다.
 </Quiz>
 
 <QuizResults confetti />

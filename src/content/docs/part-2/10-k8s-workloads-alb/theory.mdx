@@ -167,7 +167,7 @@ CRD(CustomResourceDefinition)는 쿠버네티스에 새 리소스 종류를 추�
 
 **TargetGroupBinding(TGB)** 이 그 CRD 중 하나다. 이미 만들어져 있는 타깃그룹에 Service 뒤 Pod IP 를 등록하고 해제하는 일을 선언한다.
 
-ALB·타깃그룹·헬스체크가 무엇인지는 [loadbalancer-basics](/start/loadbalancer-basics/)에 있다. "Ingress 로 만들게 하는 길" 대신 "직접 만들고 등록만 맡기는 길"을 고르는 이유는 [그 문서의 길 B 절](/start/loadbalancer-basics/#5-3-길-b--내가-만들고-등록만-맡긴다-targetgroupbinding)이 두 방식을 나란히 놓고 설명한다.
+ALB·타깃그룹·헬스체크가 무엇인지는 [loadbalancer-basics](/start/loadbalancer-basics/)에 있다. "Ingress 로 만들게 하는 길" 대신 "직접 만들고 등록만 맡기는 길"을 고르는 이유가 있다. [그 문서의 길 B 절](/start/loadbalancer-basics/#5-3-길-b--내가-만들고-등록만-맡긴다-targetgroupbinding)이 두 방식을 나란히 놓고 설명한다.
 
 **② 왜 (채점 관점 — 수상 과제 공통 패턴)** — 채점은 `wskorea26-book-alb`, `wskorea26-book-tg` 같은 **정확한 이름**을 검사한다(mark 7-1 등). Ingress 로 만들어도 ALB 이름까지는 `alb.ingress.kubernetes.io/load-balancer-name` 애노테이션으로 맞출 수 있다. 막히는 것은 타깃그룹이다. 컨트롤러가 `k8s-` 로 시작하는 이름을 자동으로 짓고, 그 이름을 바꾸는 애노테이션이 없다.
 

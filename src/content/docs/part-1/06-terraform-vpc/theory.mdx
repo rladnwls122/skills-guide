@@ -12,7 +12,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 선행 지식과 학습 경로는 [모듈 개요](/part-1/06-terraform-vpc/)에. 처음 보는 약어나 말은 [이 사이트의 말](/reference/glossary/)에 있다.
 
-이 문서는 set-02 task-1 실측 코드를 근거로, "채점 스크립트(mark.sh)가 무엇을 보는가" 관점으로 Terraform 문법과 VPC 를 정리한다.
+이 문서는 set-02 task-1 실측 코드를 근거로 삼는다. "채점 스크립트(mark.sh)가 무엇을 보는가" 관점으로 Terraform 문법과 VPC 를 정리한다.
 
 블록 구조·참조 주소·의존성 그래프처럼 **HCL 을 읽는 법 자체**는 [hcl-basics](/start/hcl-basics/) 로 옮겼다. `resource "aws_vpc" "this"` 의 라벨 두 개가 각각 무엇인지 헷갈리면 그 문서를 먼저 본다.
 
@@ -136,7 +136,7 @@ variable "subnets" {
 
 </details>
 
-이름은 전부 변수로 뺀다 — 뒤에 나올 `vpc.tf` 가 이 이름들을 참조하므로, 여기 없으면 `terraform validate` 가 "Reference to undeclared input variable" 로 막는다.
+이름은 전부 변수로 뺀다 — 뒤에 나올 `vpc.tf` 가 이 이름들을 참조한다. 여기 없으면 `terraform validate` 가 "Reference to undeclared input variable" 로 막는다.
 
 ```hcl title="variables.tf (이름 변수 — set-02 실측)"
 variable "vpc_name" { type = string, default = "wskorea26-vpc" }
@@ -181,7 +181,7 @@ locals {
 정답지 `set-02/task-1/terraform/data.tf` 에는 위 두 줄 말고도 `bucket_name`(S3 용)과 `provided_dir`(제공자료 경로)가 함께 들어 있다. **그 파일은 1과제 전체를 만드는 코드의 일부**라, VPC 만 만드는 이 모듈에 복사해 오면 선언하지 않은 `var.bucket_name_prefix` 를 참조해 `terraform validate` 가 실패한다. 이 모듈에서는 위 블록만 쓴다.
 :::
 
-핵심: **서브넷 이름을 map 의 key 로** 쓰면 이름·CIDR·AZ·tier 가 한 곳에 모이고, `for` + `if` 로 public/private 을 파생시킨다.
+핵심은 **서브넷 이름을 map 의 key 로** 쓰는 것이다. 그러면 이름·CIDR·AZ·tier 가 한 곳에 모이고, `for` 와 `if` 로 public·private 을 파생시킬 수 있다.
 
 **④ 변형 포인트** — 요구가 바뀌면 여기가 움직인다.
 

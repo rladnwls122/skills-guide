@@ -14,7 +14,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 ARN(Amazon Resource Name)은 AWS 리소스마다 붙는 전역 고유 이름이다. 생김새와 자리별 뜻은 [iam-basics](/start/iam-basics/)에 있다.
 
-암호화(KMS)와 정적 웹 서빙(S3+CloudFront)은 거의 모든 세트에 나온다. 채점은 "alias 이름 역조회", "정책 텍스트 grep", "퍼블릭 차단 상태" 같은 기계적 검사이므로, 정확한 구조를 암기 수준으로 익힌다.
+암호화(KMS)와 정적 웹 서빙(S3+CloudFront)은 거의 모든 세트에 나온다. 채점은 기계적 검사다 — alias 이름 역조회, 정책 텍스트 grep, 퍼블릭 차단 상태를 본다. 그래서 정확한 구조를 암기 수준으로 익힌다.
 
 :::tip[읽으면서 확인한다]
 1절과 7절 끝에 **지금 확인하기** 블록이 접혀 있다. 둘 다 **아무것도 만들지 않는 조회**라 과금이 0원이고, 리소스를 하나도 안 만든 계정에서도 그대로 된다. 블록을 열지 않고 읽어도 문서는 그대로 이어진다.
@@ -159,7 +159,7 @@ data "aws_iam_policy_document" "kms_s3" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-키 정책을 두 조각으로 나눠 합친다. 위쪽은 계정 root 에 전권을 주는 기본 구문이고, 아래쪽이 CloudFront 서비스에 복호화만 허용하는 구문이다. `source_policy_documents` 가 둘을 한 문서로 합성한다. 키 정책의 `resources` 가 항상 `"*"` 인 것은 그 정책이 붙은 키 자신을 뜻하기 때문이다([kms-basics 의 실물 JSON 절](/start/kms-basics/#1-root-less-키-정책-실물--적용된-json)이 이 표기를 IAM 정책의 `"Resource": "*"` 와 나란히 놓고 푼다), `aws:SourceAccount` 조건이 다른 계정의 CloudFront 가 이 키를 쓰지 못하게 막는다.
+키 정책을 두 조각으로 나눠 합친다. 위쪽은 계정 root 에 전권을 주는 기본 구문이고, 아래쪽이 CloudFront 서비스에 복호화만 허용하는 구문이다. `source_policy_documents` 가 둘을 한 문서로 합성한다. 키 정책의 `resources` 가 항상 `"*"` 인 것은 그 정책이 붙은 키 자신을 뜻하기 때문이다. [kms-basics 의 실물 JSON 절](/start/kms-basics/#1-root-less-키-정책-실물--적용된-json)이 이 표기를 IAM 정책의 `"Resource": "*"` 와 나란히 놓고 푼다. 그리고 `aws:SourceAccount` 조건이 다른 계정의 CloudFront 가 이 키를 쓰지 못하게 막는다.
 
 </details>
 
@@ -173,7 +173,7 @@ data "aws_iam_policy_document" "kms_s3" {
 
 **① 한 줄 정의** — 유의사항이 "키 정책에 root principal 과 `kms:*` 액션 금지"를 걸면, 관리자 principal 을 `"*"` 로 두고 `kms:CallerAccount` 조건으로 계정 하나에 가둔 뒤 액션을 전부 나열해야 한다.
 
-**② 왜 필요한가 (채점 관점)** — set-03 mark 의 check_kms 가 **정책 텍스트를 grep** 해서 `:root` 나 `kms:*` 가 있으면 실격 처리한다. 동시에 KMS 의 lockout safety check 를 통과해야 하는데, 이 검사가 보는 것은 **호출한 신원 본인에게 `kms:PutKeyPolicy` 가 허용되는가** 하나다. 그래서 관리 statement 에 `kms:Put*` 를 반드시 포함시키고, 나머지 관리·운영 액션도 개별 나열한다.
+**② 왜 필요한가 (채점 관점)** — set-03 mark 의 check_kms 가 **정책 텍스트를 grep** 해서 `:root` 나 `kms:*` 가 있으면 실격 처리한다. 동시에 KMS 의 lockout safety check 를 통과해야 한다. 이 검사가 보는 것은 하나다 — **호출한 신원 본인에게 `kms:PutKeyPolicy` 가 허용되는가**. 그래서 관리 statement 에 `kms:Put*` 를 반드시 포함시키고, 나머지 관리·운영 액션도 개별 나열한다.
 
 principal 을 배포자 한 사람의 ARN 으로 좁히지 않는 이유는 채점 쪽에 있다. 과제지가 "미리 IAM 사용자를 만들어 그 신원으로 진행하라"고 말하지 않으면 채점자는 지급받은 root 로 접속한다. KMS 는 IAM 정책이 아니라 키 정책이 1차 관문이다. 관리자를 배포자 신원 하나로 잠그면 채점 스크립트 자신이 `describe-key`·`get-key-policy` 조차 못 해 KMS 항목이 통째로 0점이 된다. `"*"` + `kms:CallerAccount` 는 계정 밖 principal 을 막으면서 계정 안 신원 판단은 각자의 IAM 정책에 맡기므로, root 로 채점해도 통과한다.
 
@@ -241,7 +241,7 @@ root-less 키 정책이 통과하는 조건을 판정 순서로 그렸다. 첫 �
 </details>
 
 :::danger[치명 함정]
-관리 statement 하나로 끝나지 않는다. AWS 서비스가 **자기 이름으로**(서비스 principal 로) 키를 부르는 경로는 `kms:CallerAccount` 조건으로 덮이지 않는다. 그래서 그 소비자마다 **별도 statement 를 직접** 써야 한다. set-03 은 bucket 키에 `cloudfront.amazonaws.com`(`aws:SourceAccount` 조건), function 키에 `lambda.amazonaws.com`(`kms:EncryptionContext` 조건)을 명시하고, db 키에도 사용 주체인 `book_pod`·`book_function` 역할을 최소 액션으로 따로 적어 둔다.
+관리 statement 하나로 끝나지 않는다. AWS 서비스가 **자기 이름으로**(서비스 principal 로) 키를 부르는 경로는 `kms:CallerAccount` 조건으로 덮이지 않는다. 그래서 그 소비자마다 **별도 statement 를 직접** 써야 한다. set-03 은 키마다 소비자를 따로 적는다. bucket 키에 `cloudfront.amazonaws.com`(`aws:SourceAccount` 조건), function 키에 `lambda.amazonaws.com`(`kms:EncryptionContext` 조건)을 명시한다. db 키에도 사용 주체인 `book_pod`·`book_function` 역할을 최소 액션으로 적어 둔다.
 
 관리자 principal 을 배포자 ARN 하나로 좁혔다면 함정이 하나 더 붙는다 — 그 신원이 아닌 자격증명으로 apply·eksctl·kubectl 을 실행하는 순간 그 키의 모든 작업이 거부된다. set-03 정답지가 계정 위임을 쓰는 이상 이 제약은 없지만, 배포자 고정 방식을 골랐다면 도구 전부를 같은 자격증명으로 돌려야 한다.
 :::
@@ -646,7 +646,7 @@ aws cloudfront create-invalidation --distribution-id <ID> --paths '/*'
 
 ## 7. WAF — Web ACL 구조와 스코프
 
-**① 한 줄 정의** — WAF Web ACL은 priority(우선순위)가 매겨진 규칙(rule) 목록이다. 각 규칙은 매치 조건(statement)과 처리(action)를 갖고, CloudFront에 붙이면 scope는 `CLOUDFRONT`(항상 us-east-1), ALB에 직접 붙이면 `REGIONAL`(보호 대상과 같은 리전)이다.
+**① 한 줄 정의** — WAF Web ACL은 priority(우선순위)가 매겨진 규칙(rule) 목록이다. 각 규칙은 매치 조건(statement)과 처리(action)를 갖는다. scope 는 붙이는 대상이 정한다 — CloudFront 에 붙이면 `CLOUDFRONT`(항상 us-east-1), ALB 에 직접 붙이면 `REGIONAL`(보호 대상과 같은 리전)이다.
 
 **② 왜 필요한가 (채점 관점)** — 후보 세트 중 set-03·set-07 은 WAF를 채점하고 set-02 는 아예 없다. 그런데 확인 방식이 다르다.
 

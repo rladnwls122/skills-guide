@@ -150,7 +150,7 @@ Part C를 배포했다면 destroy까지 여기서 끝낸다 — 마지막 "정�
 7. **DynamoDB는 전 속성 String 저장** — mark 4-5-A가 `temperature.S`/`status.S`로 조회한다. Number로 저장하면 값이 안 잡혀 0점.
 8. **ESM은 `starting_position = LATEST`** — TRIM_HORIZON으로 두면 재배포 시 백로그 재처리가 폭주한다.
 9. **env 이름 한 글자 차이**: producer `BOOTSTRAP_SERVERS`(복수) / consumer `BOOTSTRAP_SERVER`(단수). 통일하면 둘 중 하나가 깨진다.
-10. **4-5-B는 `--output json`**으로 `SENSOR-002`의 `sensorId`·`timestamp`만 조회하고 `timestamp`가 ISO 8601 KST여야 한다(정정 전 `--output table`·`max-items 3`에서 변경 — [정정 내역](/reference/errata/)). 4-1의 S3 버킷 ARN은 비번호를 제외하고 채점한다.
+10. **4-5-B는 `--output json`**으로 `SENSOR-002`의 `sensorId`·`timestamp`만 조회하고 `timestamp`가 ISO 8601 KST여야 한다. 4-1의 S3 버킷 ARN은 비번호를 제외하고 채점한다.
 
 ### 1-4. 통과 기준
 

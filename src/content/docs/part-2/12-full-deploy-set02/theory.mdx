@@ -243,7 +243,7 @@ graph LR
 
 **관측성** — 세 후보 전부에 있다. 차이는 있고 없고가 아니라 채점 방식이다. set-02 는 Prometheus 도구 이름을 지정하지 않고 Grafana 패널 5개만 요구해 수동 채점 위주라 부담이 적다. set-03 은 Prometheus·Alertmanager·Node Exporter·Fluent Bit·Grafana 스택이 못박혀 있고 mark.sh 가 부하를 직접 만들어 실시간 확인한다. set-07 은 Fluent Bit·Prometheus·Grafana 스택에 더해 대시보드 패널 구성과 배치까지 정밀 채점하고, 5.0점이 Observability 2.0 + Grafana 1.5 + Log Pipeline Test 1.5 로 쪼개져 있다.
 
-set-02 의 관측성 부담은 정정으로 한 번 더 줄었다. "Pod 로그를 CloudWatch Logs 로 전송" 문구가 최종 요구사항에서 빠진 잔여 문구로 확인되어 삭제됐다([정정 내역](/reference/errata/)). **set-02 가 선정되면 로그 파이프라인(Fluent Bit·CloudWatch)에 시간을 쓰지 않는다.**
+set-02 의 관측성 부담은 정정으로 한 번 더 줄었다. "Pod 로그를 CloudWatch Logs 로 전송" 문구가 최종 요구사항에서 빠진 잔여 문구로 확인되어 삭제됐다. **set-02 가 선정되면 로그 파이프라인(Fluent Bit·CloudWatch)에 시간을 쓰지 않는다.**
 
 **KMS 키 정책** — set-02 와 set-07 은 키 정책에 root 위임을 그대로 쓴다. set-07 만 WAF 로그용 Platform 키 하나를 us-east-1 에 MRK 로 더 둔다. set-03 은 root principal 과 `kms:*` 를 둘 다 금지하므로 관리 액션을 개별 나열하고 KMS 의 lockout safety check 를 통과시켜야 한다. 그 구현은 [PART-1 모듈 07 이론 3절](/part-1/07-kms-s3-cloudfront/theory/)에 있다.
 

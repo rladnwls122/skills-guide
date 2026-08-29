@@ -12,7 +12,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 선행 지식과 학습 경로는 [모듈 개요](/part-4/19-vpc-lattice/)에.
 
-2과제 set-08 task-2 module-2(Simplify Service Networking with VPC Lattice, **도쿄 ap-northeast-1**)를 다룬다. 참고 구현은 `skills-2026` `main` 의 `set-08/task-2/module-2-lattice` 에 있고, 항목별 판정 기준은 2026-08-01 정정본이 정본이다([정정 내역](/reference/errata/)). 정정본 2-4가 **Service EC2 보안 그룹의 TCP/8080 인바운드는 Lattice 관리형 프리픽스 리스트로만 열고 `0.0.0.0/0`이면 미충족**임을 명문화했다.
+2과제 set-08 task-2 module-2(Simplify Service Networking with VPC Lattice, **도쿄 ap-northeast-1**)를 다룬다. 참고 구현은 `skills-2026` `main` 의 `set-08/task-2/module-2-lattice` 에 있고, 항목별 판정 기준은 2026-08-01 정정본이 정본이다. 정정본 2-4가 **Service EC2 보안 그룹의 TCP/8080 인바운드는 Lattice 관리형 프리픽스 리스트로만 열고 `0.0.0.0/0`이면 미충족**임을 명문화했다.
 
 ## 도식 — Client/Service VPC와 Lattice 경로
 
@@ -170,7 +170,7 @@ Lattice 는 계층이 넷이라 무엇을 무엇에 붙이는지가 헷갈린다
 
 ## 변형 포인트
 
-당일 과제는 전체 채점 점수의 약 30% 범위 안에서 수정된다([대회 운영 규칙](/reference/competition-rules/)). 이 모듈에서 바뀔 값과 고칠 자리는 정해져 있다.
+당일 과제는 전체 채점 점수의 약 30% 범위 안에서 수정된다. 이 모듈에서 바뀔 값과 고칠 자리는 정해져 있다.
 
 | 바뀌는 값 | 고칠 곳 | 확인 |
 |---|---|---|

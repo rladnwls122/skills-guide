@@ -162,7 +162,7 @@ MSK 인증 설정 한 덩어리가 브로커 포트와 클라이언트 요구사
 - 4-3 MSK `wsc2026-msk-cluster` / `ACTIVE` / `3.6.0` / `kafka.t3.small` / `Sasl.Iam.Enabled` **`True`**.
 - 4-4 두 Lambda의 이벤트 소스 매핑 상태가 **모두** `Enabled`.
 - 4-5-A DynamoDB 스캔 결과가 `temperature.S`/`status.S`로 조회(문자열 저장 확인).
-- 4-5-B `--output json` 으로 `SENSOR-002` 의 `sensorId`·`timestamp` **두 항목만** 조회하고, `timestamp`가 ISO 8601 KST(`2026-06-01T18:28:24+09:00`) 형식이면 정답(producer가 계속 돌고 있다는 증거). 정정 전 명령은 `--output table`·`max-items 3` 이었다 — [정정 내역](/reference/errata/) 참고.
+- 4-5-B `--output json` 으로 `SENSOR-002` 의 `sensorId`·`timestamp` **두 항목만** 조회하고, `timestamp`가 ISO 8601 KST(`2026-06-01T18:28:24+09:00`) 형식이면 정답(producer가 계속 돌고 있다는 증거).
 - 4-1 의 S3 버킷 ARN 은 **비번호 부분을 제외하고** 채점한다.
 - `wsc2026-alaytics-ec2-role` 의 오타는 정정으로 수정됐고 이 이름은 채점 대상이 아니다. "오타는 그대로" 원칙 자체는 유효하되 정정 공지를 먼저 본다.
 
@@ -264,7 +264,7 @@ MSK 모듈에서 Lambda consumer가 `temperature`를 Number 타입으로 저장�
 
 ---
 
-한 글자 차이지만 통일하거나 "고쳐주면" 동작이 깨진다. 제공 문서의 이름을 원문 그대로 유지하는 원칙은 과제지에도 그대로 적용된다 — 다만 오타의 대표 사례였던 set-02의 `wsc2026-alaytics-ec2-role`(alaytics)은 정정으로 수정됐고 채점 대상도 아니다([정정 내역](/reference/errata/)). 이름을 확정하기 전에 정정 공지를 먼저 본다.
+한 글자 차이지만 통일하거나 "고쳐주면" 동작이 깨진다. 제공 문서의 이름을 원문 그대로 유지하는 원칙은 과제지에도 그대로 적용된다 — 다만 오타의 대표 사례였던 set-02의 `wsc2026-alaytics-ec2-role`(alaytics)은 정정으로 수정됐고 채점 대상도 아니다. 이름을 확정하기 전에 정정 공지를 먼저 본다.
 </Quiz>
 
 <Quiz title="bare 타임스탬프와 TIMESTAMP_LTZ">

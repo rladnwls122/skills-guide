@@ -1,0 +1,270 @@
+---
+title: Drill 28 — AWS 파이프라인을 걷어내고 Actions 하나로 잇는다
+description: Lab 28 의 CodeBuild·CodePipeline 경로를 기준본으로 두고, GitHub Actions + OIDC 단일 경로로 직접 이행하며 지우는 판단까지 훈련한다.
+sidebar:
+  order: 4
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+[Lab 28](/part-4/28-cicd-pipeline/lab/)이 구축이라면 여기는 훈련이다. 만드는 순서를 알려 주지 않는다 — **요구만 주고 이행은 직접 한다.**
+
+이 드릴이 특별한 이유가 있다. **더하는 것이 아니라 지우는 것이 절반이다.** 요구가 늘면 리소스가 느는 것이 보통인데, 여기서는 잘 도는 것을 걷어내야 통과한다.
+
+:::caution[이 변동은 출제 예측이 아니다]
+Lab 28 은 두 경로를 나란히 보여 준다. 이 드릴은 그 둘을 "하나를 고르고 나머지를 지운다"는 판단으로 바꾼 훈련용 축이다. 쓰는 기전은 전부 실재한다.
+:::
+
+---
+
+## 0. 기준본 세우기
+
+[Lab 28](/part-4/28-cicd-pipeline/lab/)의 **A 경로까지만** 되살린다. B 경로는 만들지 않은 상태에서 시작한다.
+
+```bash
+cd ~/cicd-lab
+terraform apply -auto-approve
+```
+
+파이프라인이 한 번 성공하는 것을 확인하고 시작한다.
+
+```bash
+aws codepipeline get-pipeline-state --name gj2025-app-pipeline \
+  --query 'stageStates[*].{stage:stageName,status:latestExecution.status}'
+```
+
+모든 단계가 `Succeeded` 여야 한다.
+
+---
+
+## 1. 변동 과제지
+
+**정답 코드를 먼저 열지 않는다.**
+
+> 조직이 CI 도구를 **GitHub Actions 하나로 통일**하기로 했다. 저장소에 push 하면 이미지가 빌드돼 ECR 에 올라가는 동작은 그대로 유지하되, **AWS 쪽 빌드·배포 서비스는 남기지 않는다.** 워크플로는 장기 자격증명을 저장소에 저장하지 않고 AWS 에 인증해야 하며, 그 역할은 **이 저장소의 워크플로만** 맡을 수 있어야 한다.
+
+기준본과의 차이다.
+
+| 항목 | Lab 28 A 경로 (기준본) | 이 드릴 (타깃) |
+|---|---|---|
+| 빌드 실행 위치 | CodeBuild | **GitHub 러너** |
+| 단계 연결 | CodePipeline | **워크플로 한 파일** |
+| AWS 인증 | 서비스 역할 | **OIDC 로 맡는 역할** |
+| 자격증명 저장 | 없음(서비스 역할) | 없음 — 저장하면 요구 위반 |
+| 빌드 정의 | `buildspec.yaml` | **워크플로 YAML** |
+| 남는 AWS 리소스 | 파이프라인·빌드·버킷·역할 | **ECR 과 역할 하나** |
+
+### 요구에서 파생되는 것
+
+**"AWS 쪽 빌드·배포 서비스는 남기지 않는다"** 가 이 이행의 핵심이다. 새 경로를 만드는 것은 절반이고, 나머지 절반은 **무엇을 지울 수 있는지 가려내는 일**이다.
+
+파이프라인을 지우면 그것만 사라지지 않는다. 아티팩트를 주고받던 버킷, 그 버킷을 읽던 역할, 빌드 프로젝트와 그 로그 그룹이 함께 딸려 있다. **하나를 지울 때 딸린 것을 같이 못 지우면 요구되지 않은 리소스로 남는다.**
+
+"이 저장소의 워크플로만"이라는 조건은 신뢰 정책의 문제다. 조건을 빼도 인증은 되고 파이프라인도 돈다 — 그래서 빠뜨렸다는 것을 알아채기 어렵다.
+
+---
+
+## 2. 이행 (타이머 30분)
+
+타이머를 걸고 시작한다. 아래는 절차가 아니라 **스스로 답해야 할 질문 목록**이다.
+
+- GitHub 워크플로가 장기 키 없이 AWS 에 인증하려면 계정 쪽에 무엇을 먼저 만들어야 하나
+- 그 역할의 신뢰 정책에서 **누구를** 신뢰한다고 적나. 저장소를 특정하는 값은 어느 클레임에 들어 있나
+- 워크플로에 어떤 권한 블록이 있어야 토큰이 발급되나. 없으면 어느 단계에서 실패하나
+- 러너에서 ECR 에 로그인하는 명령은 무엇이고, 그 권한의 대상 범위는 저장소 단위인가 아닌가
+- 태그를 `vX.X.X` 로 유지하려면 값을 어디서 읽나. `buildspec.yaml` 이 하던 일을 누가 대신하나
+- **지울 목록을 적는다.** 파이프라인 말고 딸려 있는 것이 몇 개인가
+- 지우는 순서가 있나. 먼저 지우면 실패하는 것이 있나
+
+:::note[막히면 여기]
+- [Configuring OpenID Connect in AWS](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services)
+- [aws_iam_openid_connect_provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_openid_connect_provider)
+- 개념이 흔들리면 [이론 4절](/part-4/28-cicd-pipeline/theory/)
+:::
+
+---
+
+## 3. 통과 기준
+
+<Steps>
+
+1. **AWS 빌드·배포 서비스 잔존 0건**
+
+   ```bash
+   aws codepipeline list-pipelines --query 'pipelines[*].name'
+   aws codebuild list-projects --query 'projects'
+   ```
+
+   둘 다 빈 목록이어야 한다. 아티팩트 버킷과 그 역할도 함께 확인한다.
+
+   ```bash
+   grep -rn "codebuild\|codepipeline" . --include=*.tf
+   ```
+
+2. **계획이 통과한다**
+
+   ```bash
+   terraform validate && terraform plan
+   ```
+
+3. **push 하면 새 태그가 올라온다**
+
+   ```bash
+   echo "0.0.1" > version && git add -A && git commit -m "bump" && git push
+   ```
+
+   워크플로가 끝난 뒤 확인한다.
+
+   ```bash
+   aws ecr describe-images --repository-name app-repo \
+     --query 'sort_by(imageDetails,&imagePushedAt)[-1].imageTags'
+   ```
+
+4. **자격증명이 저장소에 없다**
+
+   ```bash
+   gh secret list
+   ```
+
+   `AWS_ACCESS_KEY_ID` 계열이 있으면 요구 위반이다.
+
+5. **역할이 이 저장소만 신뢰한다**
+
+   ```bash
+   aws iam get-role --role-name <역할명> \
+     --query 'Role.AssumeRolePolicyDocument.Statement[0].Condition'
+   ```
+
+   조건에 저장소를 특정하는 값이 있어야 한다.
+
+</Steps>
+
+---
+
+## 4. 복기
+
+다섯 개를 통과시킨 뒤에 연다.
+
+<details>
+<summary>정답 구성 — 열기 전에 자기 답을 적어 둔다</summary>
+
+신뢰 정책의 조건이 이 이행의 채점 지점이다.
+
+```hcl title="oidc.tf"
+data "aws_iam_policy_document" "trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:<owner>/<repo>:*"]     # 이 줄이 없으면 아무 저장소나 맡는다
+    }
+  }
+}
+```
+
+워크플로에는 권한 블록이 필요하다.
+
+```yaml title=".github/workflows/build.yml"
+permissions:
+  id-token: write      # 없으면 토큰이 발급되지 않는다
+  contents: read
+```
+
+**지운 것의 목록**이 절반이다.
+
+| 지운 것 | 딸려 있던 것 |
+|---|---|
+| CodePipeline | 아티팩트 S3 버킷 · 파이프라인 서비스 역할 |
+| CodeBuild 프로젝트 | 빌드 서비스 역할 · `/aws/codebuild/*` 로그 그룹 |
+| `buildspec.yaml` | 워크플로 YAML 이 대신한다 |
+
+버킷은 비어 있지 않으면 삭제가 거부된다. `force_destroy` 를 켜거나 먼저 비운다.
+
+</details>
+
+놓친 곳을 분류한다.
+
+| 분류 | 뜻 | 다음에 할 것 |
+|---|---|---|
+| 몰라서 못 했다 | OIDC 클레임 이름 | 그 문서 한 쪽만 다시 읽는다 |
+| 알았는데 빠뜨렸다 | `sub` 조건 · `id-token: write` | 체크리스트로 만든다 |
+| 지우지 못했다 | 딸린 리소스를 못 찾았다 | `terraform state list` 로 먼저 세는 습관 |
+
+---
+
+## 5. 고장 진단
+
+기준본을 되살린 뒤 아래를 심고 **증상만 보고 원인을 좁힌다.**
+
+### 5-1. 빌드가 도커에 붙지 못한다
+
+CodeBuild 프로젝트의 `privileged_mode` 를 끈다.
+
+```
+증상: Cannot connect to the Docker daemon at unix:///var/run/docker.sock
+```
+
+<details>
+<summary>볼 곳의 순서</summary>
+
+권한 문제로 착각하기 쉽다. **오류가 나는 단계로 가른다** — ECR 권한이 문제면 로그인이나 push 에서 거부되지, daemon 에 붙지도 못하지는 않는다.
+
+CodeBuild 자체가 컨테이너에서 돈다. 그 안에서 도커를 실행하려면 특권 모드가 필요하다.
+
+</details>
+
+### 5-2. Source 는 되는데 Build 가 입력을 못 찾는다
+
+Source 단계의 `output_artifacts` 이름을 한 글자 바꾼다.
+
+```
+증상: 파이프라인이 Build 단계에서 실패한다. 권한 오류는 아니다.
+```
+
+<details>
+<summary>볼 곳의 순서</summary>
+
+단계는 **아티팩트 이름으로** 이어진다. 이름이 다르면 연결을 찾지 못한다.
+
+권한 문제와 구분한다 — 권한이면 접근 거부로 뜨고, 이름이면 찾지 못했다고 뜬다.
+
+```bash
+aws codepipeline get-pipeline --name gj2025-app-pipeline \
+  --query 'pipeline.stages[*].actions[*].{stage:name,out:outputArtifacts[*].name,in:inputArtifacts[*].name}'
+```
+
+</details>
+
+---
+
+## 6. 정리
+
+```bash
+terraform destroy
+```
+
+```bash
+aws ecr describe-repositories --query 'repositories[*].repositoryName'
+aws iam list-open-id-connect-providers
+```
+
+GitHub 쪽 워크플로 파일도 지운다 — 저장소에 남으면 push 마다 실패한 워크플로가 쌓인다.
+
+---
+
+## 다음 단계
+
+[모듈 29 — GitOps 와 Rollouts](/part-4/29-gitops-rollouts/)로 간다.

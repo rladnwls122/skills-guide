@@ -1,0 +1,268 @@
+---
+title: Drill 27 — 차단 목록을 허용 목록으로 뒤집는다
+description: Lab 27 로 세운 방화벽을 기준본으로 두고, 지정한 목적지만 통과시키는 허용 목록 구성으로 직접 이행한 뒤 고장을 심어 진단까지 훈련한다.
+sidebar:
+  order: 4
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+[Lab 27](/part-4/27-network-firewall/lab/)이 구축이라면 여기는 훈련이다. 만드는 순서를 알려 주지 않는다 — **요구만 주고 이행은 직접 한다.**
+
+:::caution[이 변동은 출제 예측이 아니다]
+2025 2과제에는 이 요구가 없었다. 방화벽 설계에서 실제로 갈리는 판단을 훈련용으로 만든 축이고, 쓰는 기전(`STRICT_ORDER` · `aws:drop_established` · `pass` 규칙)은 전부 실재한다.
+:::
+
+---
+
+## 0. 기준본 세우기
+
+[Lab 27](/part-4/27-network-firewall/lab/)이 `terraform destroy` 로 끝나므로 빈 계정에서 시작한다. Lab 을 마친 상태를 그대로 되살린다.
+
+```bash
+cd ~/nfw-lab          # Lab 27 에서 쓴 디렉터리
+terraform apply -auto-approve
+```
+
+섰는지 한 줄로 확인한다.
+
+```bash
+aws network-firewall describe-firewall --firewall-name wsc2025-firewall \
+  --query 'FirewallStatus.Status' --output text
+```
+
+`READY` 가 나오면 시작한다. 다른 값이면 [Lab 27 의 6절](/part-4/27-network-firewall/lab/)로 돌아간다.
+
+:::danger[시간당 과금이 큰 스택이다]
+방화벽 엔드포인트가 AZ 마다, NAT Gateway 가 따로 과금한다. **타이머를 걸고 시작해 7절까지 한 번에 끝낸다.**
+:::
+
+---
+
+## 1. 변동 과제지
+
+**정답 코드를 먼저 열지 않는다.** 아래 요구만 읽고 2절로 간다.
+
+> 보안 정책이 바뀌어 **명시적으로 허용한 목적지 외의 모든 아웃바운드 트래픽을 차단**해야 한다. 허용 대상은 AWS 서비스 도메인(`.amazonaws.com`)과 운영팀이 지정한 `example.com` 두 가지다. 차단된 요청은 클라이언트가 오래 기다리지 않도록 즉시 거부로 응답해야 한다. 규칙 평가 순서는 구성한 순서를 그대로 따라야 한다.
+
+기준본과의 차이다.
+
+| 항목 | Lab 27 (기준본) | 이 드릴 (타깃) |
+|---|---|---|
+| 정책의 방향 | 지정한 것만 막는다 | **지정한 것만 통과시킨다** |
+| Stateful 기본 동작 | 통과 | **차단** |
+| 규칙 평가 순서 | 기본(작용 순) | **구성한 순서 그대로** |
+| 차단 방식 | 조용히 버린다 | **즉시 거부** |
+| 외부 DNS | 명시적으로 차단 | 기본 차단에 포함된다 |
+| ICMP 차단 | Stateless 규칙 | 그대로 둔다 |
+
+### 요구에서 파생되는 것
+
+**"허용한 것 외 전부 차단"이 이 이행의 전부다.** 나머지는 거기서 따라 나온다.
+
+기준본은 기본이 통과라서 막을 것만 적었다. 뒤집으면 기본이 차단이므로 **통과시킬 것을 적어야 하고**, 그 순간 규칙이 몇 개면 되는지가 아니라 **무엇을 빠뜨렸는지**가 문제가 된다. 빠뜨린 것은 오류가 아니라 침묵으로 나타난다.
+
+"평가 순서를 구성한 순서대로"라는 한 줄이 붙은 이유도 여기 있다. 허용과 차단이 섞이면 **어느 쪽이 먼저 걸리느냐**가 결과를 바꾼다.
+
+기준본에 있던 외부 DNS 차단 규칙은 **지울 대상이다.** 기본이 차단이면 그 규칙은 아무것도 더하지 않는다. 남겨 두면 요구되지 않은 구성이다.
+
+---
+
+## 2. 이행 (타이머 25분)
+
+타이머를 걸고 시작한다. 아래는 절차가 아니라 **스스로 답해야 할 질문 목록**이다.
+
+- 정책의 기본 동작을 차단으로 바꾸는 인자는 무엇이고, 값이 하나인가 둘인가
+- 규칙을 구성한 순서대로 평가하게 하려면 정책의 어느 블록을 켜야 하나. 그 블록을 켜면 **규칙 그룹 쪽에도 따라 바뀌는 설정**이 있나
+- 통과시키는 Suricata 동작은 무엇인가. 도메인 하나를 통과시키는 규칙은 몇 줄인가
+- `.amazonaws.com` 처럼 여러 이름을 한 번에 담으려면 `content` 를 어떻게 쓰나
+- HTTPS 로 오는 요청을 이름으로 가르려면 규칙이 몇 벌 필요한가. HTTP 는 어떤가
+- "즉시 거부"로 바꾸는 동작 이름은 무엇이고, **그 동작이 모든 프로토콜에서 되는가**
+- 기준본에서 **지워야 할 규칙**은 무엇인가. 외부 DNS 말고 또 있나
+- 허용 목록에 DNS 를 넣지 않으면 어떤 일이 먼저 일어나나
+
+:::note[막히면 여기]
+- Suricata 동작과 규칙 순서: [Suricata Rules](https://docs.suricata.io/en/latest/rules/intro.html)
+- 정책 인자: [aws_networkfirewall_firewall_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/networkfirewall_firewall_policy)
+- 개념이 흔들리면 [이론 5절](/part-4/27-network-firewall/theory/)
+:::
+
+---
+
+## 3. 통과 기준
+
+<Steps>
+
+1. **옛 규칙 잔존 0건**
+
+   ```bash
+   grep -rn "ifconfig.io" . --include=*.tf
+   ```
+
+   빈 출력이어야 한다. 차단 목록 방식의 흔적이 남아 있으면 이행이 끝나지 않은 것이다.
+
+2. **계획이 통과한다**
+
+   ```bash
+   terraform validate && terraform plan
+   ```
+
+3. **허용한 곳은 통한다**
+
+   ```bash
+   curl -m 5 -s -o /dev/null -w 'example %{http_code}\n' https://example.com
+   aws sts get-caller-identity --query Account --output text
+   ```
+
+   앞은 `200`, 뒤는 계정 번호가 나온다. 두 번째가 실패하면 AWS 서비스 도메인이 허용 목록에 없는 것이다.
+
+4. **허용하지 않은 곳은 즉시 끊긴다**
+
+   ```bash
+   curl -m 5 -sS https://ifconfig.io ; echo "exit=$?"
+   curl -m 5 -sS https://www.wikipedia.org ; echo "exit=$?"
+   ```
+
+   **`exit=28`(타임아웃)이 아니라 `exit=35` 나 `exit=56` 계열이어야 한다.** 시간을 다 쓰고 끊기면 거부가 아니라 버린 것이다.
+
+5. **평가 순서가 구성 순서다**
+
+   ```bash
+   aws network-firewall describe-firewall-policy --firewall-policy-name wsc2025-firewall-policy \
+     --query 'FirewallPolicy.{order:StatefulEngineOptions.RuleOrder,default:StatefulDefaultActions}'
+   ```
+
+</Steps>
+
+---
+
+## 4. 복기
+
+먼저 위 다섯 개를 통과시킨 뒤에 연다.
+
+<details>
+<summary>정답 구성 — 열기 전에 자기 답을 적어 둔다</summary>
+
+정책 쪽에서 둘을 바꾼다.
+
+```hcl title="firewall.tf"
+firewall_policy {
+  stateless_default_actions          = ["aws:forward_to_sfe"]
+  stateless_fragment_default_actions = ["aws:forward_to_sfe"]
+
+  stateful_engine_options {
+    rule_order = "STRICT_ORDER"          # 구성한 순서대로 평가
+  }
+  stateful_default_actions = [
+    "aws:drop_established",              # 허용되지 않은 것은 차단
+    "aws:alert_established",             # 차단된 것을 로그에 남긴다
+  ]
+  # ...
+}
+```
+
+규칙 그룹은 통과 목록이 된다.
+
+```hcl title="firewall-rules.tf"
+rules_source {
+  rules_string = <<-EOT
+    pass tls $HOME_NET any -> $EXTERNAL_NET any (tls.sni; content:".amazonaws.com"; endswith; msg:"allow aws"; sid:2000010; rev:1;)
+    pass tls $HOME_NET any -> $EXTERNAL_NET any (tls.sni; content:"example.com"; endswith; msg:"allow example"; sid:2000011; rev:1;)
+    pass http $HOME_NET any -> $EXTERNAL_NET any (http.host; content:"example.com"; endswith; msg:"allow example http"; sid:2000012; rev:1;)
+    pass udp $HOME_NET any -> $EXTERNAL_NET 53 (msg:"allow dns"; sid:2000020; rev:1;)
+    reject tls $HOME_NET any -> $EXTERNAL_NET any (msg:"reject rest tls"; sid:2000030; rev:1;)
+  EOT
+}
+```
+
+`STRICT_ORDER` 를 켜면 규칙 그룹에도 `stateful_rule_options { rule_order = "STRICT_ORDER" }` 가 필요하다. 정책만 바꾸면 적용에서 거부된다.
+
+DNS 를 허용 목록에 넣지 않으면 이름 해석부터 죽는다. 그러면 `example.com` 도 못 간다 — 증상이 "전부 안 됨"으로 나와 원인을 찾기 어렵다.
+
+</details>
+
+놓친 곳을 분류한다.
+
+| 분류 | 뜻 | 다음에 할 것 |
+|---|---|---|
+| 몰라서 못 했다 | 인자·동작 이름을 몰랐다 | 그 인자만 공식 문서에서 다시 찾아 본다 |
+| 알았는데 빠뜨렸다 | DNS·순서 옵션 | 체크리스트로 만든다 |
+| 방향을 잘못 잡았다 | 차단 규칙을 늘려 풀려 했다 | 요구의 첫 문장을 다시 읽는 습관 |
+
+---
+
+## 5. 고장 진단
+
+기준본을 되살린 뒤(`terraform apply`) 아래를 심고 **증상만 보고 원인을 좁힌다.** 두 고장 모두 [이론](/part-4/27-network-firewall/theory/)에 실측으로 기록된 것이다.
+
+### 5-1. 아무것도 안 막힌다
+
+App 서브넷 라우트 테이블의 기본 경로를 방화벽 엔드포인트에서 **NAT Gateway 로 직접** 바꾼다.
+
+```
+증상: 규칙은 그대로인데 차단 대상이 전부 통한다. 오류는 없다.
+```
+
+무엇부터 보나. 순서를 적고 나서 연다.
+
+<details>
+<summary>볼 곳의 순서</summary>
+
+1. **FLOW 로그에 기록이 있나** — 없으면 트래픽이 방화벽까지 오지 않은 것이다. 규칙을 아무리 봐도 소용없다.
+
+   ```bash
+   aws logs describe-log-streams --log-group-name /wsc2025/firewall \
+     --query 'logStreams[-1].lastEventTimestamp'
+   ```
+
+2. **App 서브넷 라우트의 다음 홉** — 방화벽 엔드포인트인가 NAT 인가.
+3. 방화벽이 `READY` 인가, 규칙 그룹이 정책에 붙었나.
+
+1번이 압도적으로 많다. **규칙보다 경로를 먼저 본다.**
+
+</details>
+
+### 5-2. 규칙을 넣었는데 적용이 거부된다
+
+Suricata 규칙 두 줄의 `sid` 를 같은 값으로 만든다.
+
+```
+증상: terraform apply 가 규칙 그룹에서 실패한다.
+```
+
+<details>
+<summary>볼 곳의 순서</summary>
+
+오류 문구에 규칙 그룹 이름이 찍힌다. `sid` 는 **규칙마다 달라야 하는 식별자**다 — 중복이면 엔진이 어느 규칙인지 가릴 수 없어 그룹 전체가 거부된다.
+
+문법 오류와 구분한다. 문법이 틀리면 파싱 단계에서 다른 문구가 난다.
+
+</details>
+
+---
+
+## 6. 정리
+
+:::danger[반드시 실행한다]
+방화벽 엔드포인트와 NAT Gateway 가 시간당 과금한다.
+:::
+
+```bash
+terraform destroy
+```
+
+```bash
+aws network-firewall list-firewalls --query 'Firewalls[*].FirewallName'
+aws ec2 describe-nat-gateways --filter "Name=state,Values=available" \
+  --query 'NatGateways[*].NatGatewayId'
+```
+
+둘 다 빈 목록이어야 한다.
+
+---
+
+## 다음 단계
+
+[모듈 28 — CI/CD 파이프라인](/part-4/28-cicd-pipeline/)으로 간다.

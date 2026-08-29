@@ -19,7 +19,7 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 | 직접 쓴다 | `app/Dockerfile` 한 장 — 제공 Dockerfile 은 flask 를 설치하지 않아 파드가 CrashLoop 한다 |
 | 값만 바꾼다 | 매니페스트의 `<ECR_IMAGE>` 자리, helm 설치 옵션의 버전·리소스 값 |
 
-terraform 과 eksctl 은 본 PC 에서, 이미지 빌드·helm·kubectl·채점은 **ap-northeast-1 CloudShell** 에서 한다.
+terraform 과 eksctl 은 본 PC 에서 한다. 이미지 빌드·helm·kubectl·채점은 **`ap-northeast-1` CloudShell** 에서 한다.
 
 ## 실습 목표
 
@@ -47,7 +47,7 @@ terraform 과 eksctl 은 본 PC 에서, 이미지 빌드·helm·kubectl·채점�
 :::note[정답지가 들어왔다 — 이 절차의 근거가 코드로 바뀌었다]
 `set-07/task-2/module-4-container-logging` 에 구현이 있다. 이 파트의 순서와 값은 그 구현에 맞춰 두었으니, 막히면 정답지의 `README.md` 와 `cs-deploy.sh` 를 연다.
 
-구성은 본 PC 가 `terraform`·`eksctl` 만 쓰고 **이미지 빌드·helm·kubectl·채점은 전부 ap-northeast-1 CloudShell** 에서 하는 2분할이다. 정답지가 공식 OTel Helm 차트 대신 **원시 매니페스트**를 쓴다는 점이 이 모듈의 갈림길이다.
+구성은 2분할이다. 본 PC 는 `terraform`·`eksctl` 만 쓰고, **이미지 빌드·helm·kubectl·채점은 전부 `ap-northeast-1` CloudShell** 에서 한다. 정답지가 공식 OTel Helm 차트 대신 **원시 매니페스트**를 쓴다는 점이 이 모듈의 갈림길이다.
 :::
 
 ### 1-1. 절차 (순서 요약 — 순서 의존이 많다)
@@ -90,7 +90,7 @@ kill %1
 
 </details>
 
-채점 전 마지막 준비: `/log?level=info`, `/log?level=warn`, `/log?level=error` 각각 호출 → Grafana Log Overview 3패널 모두 데이터 확인(범례 INFO/WARN/ERROR). 채점: `bash ~/skills-2026/set-07/task-2/mark/mark4.sh` (4-6은 Grafana 웹 수동 채점).
+검증 전 마지막 준비다. `/log?level=info`·`/log?level=warn`·`/log?level=error` 를 각각 호출한다. Grafana Log Overview 세 패널에 데이터가 모두 보여야 한다(범례 INFO·WARN·ERROR). 채점: `bash ~/skills-2026/set-07/task-2/mark/mark4.sh` (4-6은 Grafana 웹 수동 채점).
 
 ### 1-3. :badge[함정]{variant=danger}
 

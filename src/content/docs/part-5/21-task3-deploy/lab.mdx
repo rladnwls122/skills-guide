@@ -245,7 +245,7 @@ WAF는 로깅이 꺼진 채로 만들어진다. 켜 두지 않으면 부하 중 
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-WAF 평가 로그를 CloudWatch Logs 로 흘린다. 로그 그룹 이름의 `aws-waf-logs-` 접두어는 규칙이라 다른 이름이면 마지막 명령이 거부된다. Web ACL 과 로그 그룹을 각각 조회해 변수에 담은 뒤 둘을 연결하는 순서이고, CloudFront 에 붙은 ACL 이므로 세 명령 모두 us-east-1 이다.
+WAF 평가 로그를 CloudWatch Logs 로 흘린다. 로그 그룹 이름의 `aws-waf-logs-` 접두어는 규칙이라 다른 이름이면 마지막 명령이 거부된다. Web ACL 과 로그 그룹을 각각 조회해 변수에 담은 뒤 둘을 연결하는 순서다. CloudFront 에 붙은 ACL 이므로 세 명령 모두 `us-east-1` 이다.
 
 </details>
 

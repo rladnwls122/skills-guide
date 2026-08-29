@@ -13,7 +13,7 @@ import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 
 **방식**: set-02 의 클러스터가 선 상태에서 시작한다. set-07 변동 과제지를 읽고 **절차 안내 없이 직접** 고친 뒤, 통과 기준으로 스스로 판정한다. 배포한 다음에는 값을 잘못 읽었을 때의 복구와 고장 진단까지 간다.
 
-클러스터는 한 번 만들면 약 20분이 묶인다. 그래서 이 모듈에서 진짜로 익힐 것은 YAML 을 빨리 쓰는 속도가 아니라 **`create` 를 누르기 전에 무엇을 확인하는가**, 그리고 **잘못 만든 뒤에 고쳐서 살릴 수 있는 값인지 판정하는 법**이다.
+클러스터는 한 번 만들면 약 20분이 묶인다. 그래서 이 모듈에서 진짜로 익힐 것은 YAML 을 빨리 쓰는 속도가 아니다. **`create` 를 누르기 전에 무엇을 확인하는가**, 그리고 **잘못 만든 뒤에 고쳐서 살릴 수 있는 값인지 판정하는 법**이다.
 
 ## 실습 목표
 
@@ -40,7 +40,7 @@ import { Tabs, TabItem, Steps } from '@astrojs/starlight/components';
 
 set-02 의 클러스터가 선 상태에서 시작한다.
 
-이 실습은 정답지의 `set-02/task-1/terraform` 을 **통째로** apply 한 상태를 전제한다. [06 실습](/part-1/06-terraform-vpc/lab/)에서 이행한 `~/set07-lab` 으로는 안 된다 — 그 사본은 VPC 만 고친 것이고, 뒤의 렌더가 보안 그룹·KMS 키·IAM 정책 ARN 까지 요구하는데 그 값들은 정답지 tf 의 `security.tf`·`kms.tf`·`iam.tf` 에서 나온다.
+이 실습은 정답지의 `set-02/task-1/terraform` 을 **통째로** apply 한 상태를 전제한다. [06 실습](/part-1/06-terraform-vpc/lab/)에서 이행한 `~/set07-lab` 으로는 안 된다 — 그 사본은 VPC 만 고친 것이다. 뒤의 렌더는 보안 그룹·KMS 키·IAM 정책 ARN 까지 요구하는데, 그 값들은 정답지 tf 의 `security.tf`·`kms.tf`·`iam.tf` 에서 나온다.
 
 :::danger[06 실습 스택을 먼저 지운다]
 `~/set07-lab` 을 띄워 둔 채로 여기를 시작하면 NAT 게이트웨이가 양쪽에서 동시에 과금된다. 이름이 달라 충돌하지는 않지만 돈이 두 배로 나간다. `~/set07-lab` 에서 `terraform destroy` 를 먼저 돌린다.

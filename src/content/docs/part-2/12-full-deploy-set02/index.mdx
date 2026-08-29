@@ -17,7 +17,7 @@ import { LinkButton } from '@astrojs/starlight/components';
 - [ ] CloudShell VPC Environment에서 mark.sh를 실행해 **80% 이상** 득점
 
 :::danger[실제 시험은 세 후보 중 하나 — 이 모듈은 set-02 기준]
-1과제는 경기 시작 직전 수상 후보 **set-02·set-03·set-07 중 하나**가 선정된다. 이 모듈과 런북은 set-02 기준이며, set-03·set-07이 선정되면 WAF·관측성 등 요구사항이 달라진다. 세 후보의 구성 차이는 [이론 4절](/part-2/12-full-deploy-set02/theory/)에서 표로 정리한다 — Prometheus·Grafana·Fluent Bit 관측성은 후보 세 편 모두 **이 모듈(1과제, 4시간) 안에** 들어 있으므로 바로 앞 [모듈 11 관측성](/part-2/11-observability/)을 끝내고 온다.
+1과제는 경기 시작 직전 수상 후보 **set-02·set-03·set-07 중 하나**가 선정된다. 이 모듈과 런북은 set-02 기준이며, set-03·set-07이 선정되면 WAF·관측성 등 요구사항이 달라진다. 세 후보의 구성 차이는 [이론 4절](/part-2/12-full-deploy-set02/theory/)에서 표로 정리한다 — Prometheus·Grafana·Fluent Bit 관측성은 후보 세 편 모두 **이 모듈 안에** 들어 있다. 그러니 바로 앞 [모듈 11 관측성](/part-2/11-observability/)을 끝내고 온다.
 :::
 
 - [ ] 01~06 이 조각으로 훈련한 이행을 **한 번에, 타이머 안에** 완주할 수 있다
@@ -42,7 +42,7 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 :::danger[정리 순서 엄수]
 **첫날 → 이튿날은 스택 전체 유지** (완주 흐름 유지가 목적).
-**이튿날 종료 시 반드시 10단계 정리 절차로 전부 삭제** — helm → eksctl → DynamoDB 삭제방지 해제 → terraform destroy 순서를 지켜야 destroy가 안 막힌다.
+**이튿날 종료 시 10단계 정리 절차로 전부 삭제한다.** helm → eksctl → DynamoDB 삭제방지 해제 → `terraform destroy` 순서를 지켜야 destroy 가 안 막힌다.
 :::
 
 ## 선행 지식

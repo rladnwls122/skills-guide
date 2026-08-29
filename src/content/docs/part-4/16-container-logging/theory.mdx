@@ -12,7 +12,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 선행 지식과 학습 경로는 [모듈 개요](/part-4/16-container-logging/)에. 처음 보는 약어나 말은 [이 사이트의 말](/reference/glossary/)에 있다.
 
-2과제의 컨테이너 로깅 유형을 다룬다. 앱이 표준 출력에 찍은 줄이 수집기를 거쳐 저장소에 쌓이고 대시보드에서 조회되기까지, **어느 고리 하나가 끊기면 어디에서 증상이 보이는지**가 이 문서의 요점이다.
+2과제의 컨테이너 로깅 유형을 다룬다. 앱이 표준 출력에 찍은 줄은 수집기를 거쳐 저장소에 쌓이고 대시보드에서 조회된다. **어느 고리 하나가 끊기면 어디에서 증상이 보이는지**가 이 문서의 요점이다.
 
 기준본은 set-07 task-2 module-4 다. 리전은 `ap-northeast-1`(도쿄).
 
@@ -50,7 +50,7 @@ flowchart LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-유형 4 로그 파이프라인이다. 앱이 stdout 에 JSON 한 줄을 찍으면 노드의 로그 파일에 남고, OTel Collector DaemonSet 이 그 파일을 읽어 OTLP 로 Loki 에 넣는다. Grafana 는 Loki 를 데이터소스로 읽는다. 바깥의 ALB 둘은 Terraform 이 이름을 고정해 만들고 TargetGroupBinding 으로 각각 앱과 Grafana 에 연결된다 — 채점자가 그 두 주소로 들어온다.
+유형 4 로그 파이프라인이다. 앱이 stdout 에 JSON 한 줄을 찍으면 노드의 로그 파일에 남는다. OTel Collector DaemonSet 이 그 파일을 읽어 OTLP 로 Loki 에 넣는다. Grafana 는 Loki 를 데이터소스로 읽는다. 바깥의 ALB 둘은 Terraform 이 이름을 고정해 만들고 TargetGroupBinding 으로 각각 앱과 Grafana 에 연결된다 — 채점자가 그 두 주소로 들어온다.
 
 </details>
 

@@ -12,7 +12,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 선행 지식과 학습 경로는 [모듈 개요](/part-4/18-documentdb/)에. 처음 보는 약어나 말은 [이 사이트의 말](/reference/glossary/)에 있다.
 
-이 모듈은 2과제 후보 **set-08 task-2 module-1**이다. 근거는 지급 코드 `docdb_client.py`와 문제지, 그리고 2026-08-01 정정본의 판정 기준이다 — 정답 Terraform 은 `skills-2026` `main` 에 있다. Amazon DocumentDB가 무엇인지, DynamoDB와 무엇이 다른지, 왜 VPC 밖에서 접근할 수 없는지, 인덱스를 왜 직접 만들어야 하는지를 채점 관점에서 정리한다. 절차는 [lab](/part-4/18-documentdb/lab/)에서 다룬다.
+이 모듈은 2과제 후보 **set-08 task-2 module-1**이다. 근거는 지급 코드 `docdb_client.py`와 문제지, 그리고 2026-08-01 정정본의 판정 기준이다 — 정답 Terraform 은 `skills-2026` `main` 에 있다. Amazon DocumentDB 가 무엇이고 DynamoDB 와 무엇이 다른지를 정리한다. 왜 VPC 밖에서 접근할 수 없는지, 인덱스를 왜 직접 만들어야 하는지도 채점 관점에서 본다. 절차는 [lab](/part-4/18-documentdb/lab/)에서 다룬다.
 
 ---
 
@@ -63,7 +63,7 @@ PART-1에서 다룬 DynamoDB와 같은 "NoSQL"로 묶이지만 설계 방식은 
 | 과금 | 온디맨드=요청 단위, 프로비저닝=용량 단위 | 인스턴스 시간 + 스토리지/IO — 서버리스가 아니다 |
 
 :::note[실측 — 두 필드 비교는 어느 쪽도 기본 쿼리가 아니다]
-`docdb_client.py`의 `low_stock()`은 `warehouseId`로 Mongo에서 문서를 가져온 뒤, `stock <= reorderPoint`(같은 문서의 두 필드 비교)는 **Python 코드로** 걸러낸다. MongoDB 계열 `find()`도 이런 필드 간 비교는 `$expr`가 있어야 하고, DynamoDB `FilterExpression`도 속성-상수 비교가 기본이라 속성끼리 비교는 매끄럽지 않다. `{warehouseId:1, stock:1}` 인덱스는 후보를 정렬해 가져오는 역할까지만 하고, 최종 판단은 애플리케이션이 한다.
+`docdb_client.py`의 `low_stock()`은 `warehouseId`로 Mongo에서 문서를 가져온 뒤, `stock <= reorderPoint`(같은 문서의 두 필드 비교)는 **Python 코드로** 걸러낸다. MongoDB 계열 `find()` 도 이런 필드 간 비교는 `$expr` 가 있어야 한다. DynamoDB `FilterExpression` 도 속성과 상수를 비교하는 것이 기본이라 속성끼리 비교는 매끄럽지 않다. `{warehouseId:1, stock:1}` 인덱스는 후보를 정렬해 가져오는 역할까지만 하고, 최종 판단은 애플리케이션이 한다.
 :::
 
 ## 3. 네트워크 — VPC 안에서만 접근 가능
@@ -86,7 +86,7 @@ flowchart LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-구성 전체가 한 장이다. 채점자는 EC2 의 8080 으로만 들어오고, DocumentDB 는 VPC 안에서 클라이언트 보안 그룹으로만 열려 있어 밖에서 직접 닿을 수 없다. 비밀번호는 EC2 에 저장되지 않고 요청마다 Secrets Manager 에서 읽는다 — 코드나 user-data 에 자격 증명이 남지 않는 구조다. KMS 는 트래픽 경로가 아니라 저장 암호화 쪽에 붙는다.
+구성 전체가 한 장이다. 채점자는 EC2 의 8080 으로만 들어온다. DocumentDB 는 VPC 안에서 클라이언트 보안 그룹으로만 열려 있어 밖에서 직접 닿을 수 없다. 비밀번호는 EC2 에 저장되지 않고 요청마다 Secrets Manager 에서 읽는다 — 코드나 user-data 에 자격 증명이 남지 않는 구조다. KMS 는 트래픽 경로가 아니라 저장 암호화 쪽에 붙는다.
 
 </details>
 

@@ -104,11 +104,11 @@ kubectl get nodes -l karpenter.sh/nodepool=skm-app-nodepool   # 1대로 수렴
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-스케일 동작을 위에서 아래로 확인한다. 먼저 KEDA·Karpenter·워커·ScaledObject 가 정상인지 보고, 메시지 100건이 들어간 뒤 파드가 1에서 5로 늘고 노드가 따라 느는지 `-w` 로 지켜본다. 파드 5개의 요청량이 노드 한 대의 할당 가능 CPU 를 넘기 때문에 노드가 2대 이상이 되는 것이 정상이다. 큐를 비우면 반대로 수렴한다.
+스케일 동작을 위에서 아래로 확인한다. 먼저 KEDA·Karpenter·워커·ScaledObject 가 정상인지 본다. 그다음 메시지 100건을 넣고 파드가 1에서 5로, 노드가 따라 느는지 `-w` 로 지켜본다. 파드 5개의 요청량이 노드 한 대의 할당 가능 CPU 를 넘기 때문에 노드가 2대 이상이 되는 것이 정상이다. 큐를 비우면 반대로 수렴한다.
 
 </details>
 
-채점: `bash ~/module-3/mark/mark3.sh` — 3-6 Max Ready Pods 5 / Max App Nodes 2 이상, 3-7 Final Pods 1 / Final Nodes 1.
+검증은 `bash ~/module-3/mark/mark3.sh` 다. 3-6 은 Max Ready Pods 5 와 Max App Nodes 2 이상, 3-7 은 Final Pods 1 과 Final Nodes 1 을 본다.
 
 ### A-3. :badge[함정]{variant=danger}
 

@@ -127,11 +127,11 @@ VPC·서브넷·SG·KMS·정책 ARN 은 YAML 에 `${VAR}` 플레이스홀더로 
 
 :::danger[세트별 채점 갈림]
 **set-02는 반드시 IRSA.** mark 5-4는 "kube-system 파드(aws-node/kube-proxy 제외)는 전부 addon 노드"를 검사한다. 그런데 Pod Identity 는 `eks-pod-identity-agent` 를 DaemonSet 으로 깔고, DaemonSet 은 정의상 **모든 노드에 하나씩** 뜬다. 그래서 app 노드에도 kube-system 파드가 하나 생겨 **5-4 감점**이다.
-**set-03/07은 Pod Identity + Access Entry(authMode=API, aws-auth 미사용)** — 해당 세트엔 5-4 같은 노드 배치 검사가 없어 신형 방식을 쓴다.
+**set-03·07 은 Pod Identity 와 Access Entry 를 쓴다**(`authMode=API`, aws-auth 미사용). 그 세트에는 5-4 같은 노드 배치 검사가 없어 신형 방식으로 간다.
 :::
 
 :::note[협의회(2026-07-31) — Access Entry는 "강제"에서 "선택"으로]
-1과제 과제지에 명시됐던 Access Entry 사용 요구는 삭제되고, kubectl 접근 방식(Access Entry·aws-auth ConfigMap 등)은 선수 자유가 됐다. 과제지에는 "CloudShell에서 kubectl 명령어를 사용할 수 있어야 한다"만 남는다. 정답지 구성(`authenticationMode: API` + Access Entry)은 그 요구를 채우는 최단 경로라 그대로 쓴다 — 바뀐 것은 방식이 채점되지 않는다는 점이지, 채점 신원이 CloudShell에서 kubectl이 돼야 한다는 사실이 아니다.
+1과제 과제지에 명시됐던 Access Entry 사용 요구는 삭제됐다. kubectl 접근 방식은 Access Entry 든 aws-auth ConfigMap 이든 선수 자유가 됐다. 과제지에는 "CloudShell에서 kubectl 명령어를 사용할 수 있어야 한다"만 남는다. 정답지 구성(`authenticationMode: API` + Access Entry)은 그 요구를 채우는 최단 경로라 그대로 쓴다 — 바뀐 것은 방식이 채점되지 않는다는 점이지, 채점 신원이 CloudShell에서 kubectl이 돼야 한다는 사실이 아니다.
 
 회의록이 채점 절차까지 못 박았다. **쿠버네티스 채점은 선수의 CloudShell에서 진행하고**, 접근이 안 될 때만 `aws eks update-kubeconfig --name <클러스터명> --region <리전>` 을 **1회** 실행할 수 있다. 그 외에 자격 증명을 입력하거나 다른 명령을 실행하는 것은 허용되지 않는다 — 채점 시작 시점의 kubeconfig가 곧 결과다.
 :::
@@ -157,7 +157,7 @@ graph LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-파드·사용자에게 AWS 권한을 주는 세 방식이 나란히 있다. IRSA 는 서비스 계정 토큰을 STS 가 OIDC 로 검증해 역할을 내주고, Pod Identity 는 노드의 에이전트 DaemonSet 이 대신 받아 주며 역할의 신뢰 대상이 `pods.eks.amazonaws.com` 이다. Access Entry 는 성격이 다르다 — AWS 신원을 클러스터 RBAC 에 매핑하는 것이라 `kubectl` 을 쓰는 사람 쪽 문제다.
+파드·사용자에게 AWS 권한을 주는 세 방식이 나란히 있다. IRSA 는 서비스 계정 토큰을 STS 가 OIDC 로 검증해 역할을 내준다. Pod Identity 는 노드의 에이전트 DaemonSet 이 대신 받아 주고, 역할의 신뢰 대상이 `pods.eks.amazonaws.com` 이다. Access Entry 는 성격이 다르다 — AWS 신원을 클러스터 RBAC 에 매핑하는 것이라 `kubectl` 을 쓰는 사람 쪽 문제다.
 
 </details>
 
@@ -245,7 +245,7 @@ kubectl 인증은 두 갈래 모두 Access Entry(`authenticationMode: API`)를 �
 
 **① 한 줄 정의** — 시스템 컴포넌트용 addon 노드그룹과 애플리케이션 전용 app 노드그룹으로 분리하고 label(+필요시 taint)로 스케줄을 통제한다.
 
-label·nodeSelector·taint/toleration·DaemonSet 이 각각 무엇인지는 [k8s-basics](/start/k8s-basics/)에, 노드그룹 2분할이 전체 배치에서 차지하는 자리는 그 문서의 "실제로 쓰이는 배치" 절에 있다.
+label·nodeSelector·taint·toleration·DaemonSet 이 각각 무엇인지는 [k8s-basics](/start/k8s-basics/)에 있다. 노드그룹 2분할이 전체 배치에서 차지하는 자리는 그 문서의 "실제로 쓰이는 배치" 절에 있다.
 
 **② 왜 (채점 관점)** — mark 5-3이 `describe-nodegroup`으로 노드그룹 이름·인스턴스 타입·**tags.Name**·서브넷을 검사하고, mark 5-4가 "kube-system 파드는 addon 노드, wskorea26 파드는 app 노드"를 `kubectl get pod -o wide`로 검사한다.
 
@@ -281,7 +281,7 @@ graph TD
 - `tags.Name: wskorea26-addon-node` → **describe-nodegroup의 tags.Name 채점(mark 5-3)용** — set-02는 채점 대상이라 유지.
 - `instanceName: wskorea26-addon-node` → **EC2 인스턴스 Name 태그**를 실제로 지정하는 필드. 인스턴스 태그 요구는 반드시 이걸로.
 
-**함정 ②: `addonsConfig.disableDefaultAddons: true`** — 최신 eksctl은 metrics-server를 kube-system에 기본 설치하는데, nodeSelector가 없어 **app 노드에 스케줄되면 mark 5-4 위반**. 기본 애드온 자동설치를 끄고 필요한 것만 명시한다.
+**함정 ②: `addonsConfig.disableDefaultAddons: true`** — 최신 eksctl 은 metrics-server 를 kube-system 에 기본 설치한다. 그런데 nodeSelector 가 없어 **app 노드에 스케줄되면 mark 5-4 위반**이다. 기본 애드온 자동설치를 끄고 필요한 것만 명시한다.
 
 **함정 ③: coredns 노드 고정** — coredns는 Deployment형 애드온이라 아무 노드나 갈 수 있다. `configurationValues`로 고정:
 

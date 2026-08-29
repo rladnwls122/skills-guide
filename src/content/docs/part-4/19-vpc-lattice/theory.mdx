@@ -12,7 +12,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 선행 지식과 학습 경로는 [모듈 개요](/part-4/19-vpc-lattice/)에. 처음 보는 약어나 말은 [이 사이트의 말](/reference/glossary/)에 있다.
 
-2과제 set-08 task-2 module-2(Simplify Service Networking with VPC Lattice, **도쿄 ap-northeast-1**)를 다룬다. 참고 구현은 `skills-2026` `main` 의 `set-08/task-2/module-2-lattice` 에 있고, 항목별 판정 기준은 2026-08-01 정정본이 정본이다. 정정본 2-4가 **Service EC2 보안 그룹의 TCP/8080 인바운드는 Lattice 관리형 프리픽스 리스트로만 열고 `0.0.0.0/0`이면 미충족**임을 명문화했다.
+2과제 set-08 task-2 module-2 를 다룬다 — Simplify Service Networking with VPC Lattice, **도쿄 `ap-northeast-1`** 이다. 참고 구현은 `skills-2026` `main` 의 `set-08/task-2/module-2-lattice` 에 있고, 항목별 판정 기준은 2026-08-01 정정본이 정본이다. 정정본 2-4 가 판정 기준을 명문화했다. **Service EC2 보안 그룹의 TCP/8080 인바운드는 Lattice 관리형 프리픽스 리스트로만 열어야 하고, `0.0.0.0/0` 이면 미충족이다.**
 
 ## 도식 — Client/Service VPC와 Lattice 경로
 
@@ -43,11 +43,11 @@ flowchart LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-두 VPC 가 IP 경로 없이 통신하는 구조다. 대역이 겹치든 말든 상관없고 피어링도 없다 — 클라이언트는 Lattice 가 발급한 DNS 이름을 부르고, Service Network 에 묶인 양쪽이 그 이름을 통해 만난다. 서비스 EC2 의 보안 그룹은 Lattice 관리형 프리픽스 리스트만 허용하므로, 트래픽이 실제로 Lattice 를 거쳐 들어온다는 것이 방화벽 수준에서 강제된다.
+두 VPC 가 IP 경로 없이 통신하는 구조다. 대역이 겹치든 말든 상관없고 피어링도 없다 — 클라이언트는 Lattice 가 발급한 DNS 이름을 부르고, Service Network 에 묶인 양쪽이 그 이름을 통해 만난다. 서비스 EC2 의 보안 그룹은 Lattice 관리형 프리픽스 리스트만 허용한다. 그래서 트래픽이 실제로 Lattice 를 거쳐 들어온다는 것이 방화벽 수준에서 강제된다.
 
 </details>
 
-Client EC2는 Client VPC 안에서 Lattice가 생성한 도메인 이름을 호출한다. 그 요청은 Client VPC에 붙은 **VPC Association**을 거쳐 Service Network로 들어가고, Service → Listener → Target Group을 거쳐 Service VPC 안의 EC2로 전달된다. 이 경로 어디에도 두 VPC 사이의 IP 라우팅은 없다 — Target Group이 Service VPC를 `vpcIdentifier`로 지정할 뿐, Service VPC 자체는 Service Network에 Association 되지 않는다.
+Client EC2는 Client VPC 안에서 Lattice가 생성한 도메인 이름을 호출한다. 그 요청은 Client VPC 에 붙은 **VPC Association** 을 거쳐 Service Network 로 들어간다. 거기서 Service → Listener → Target Group 을 거쳐 Service VPC 안의 EC2 로 전달된다. 이 경로 어디에도 두 VPC 사이의 IP 라우팅은 없다 — Target Group 이 Service VPC 를 `vpcIdentifier` 로 지정할 뿐이다. Service VPC 자체는 Service Network 에 Association 되지 않는다.
 
 ## Lattice가 대체하는 것
 
@@ -58,7 +58,7 @@ Client EC2는 Client VPC 안에서 Lattice가 생성한 도메인 이름을 호�
 | 내부 ALB/NLB + PrivateLink | 서비스 단위(Endpoint Service) | 무방 | 없음 — 서비스마다 개별 NLB·엔드포인트 구성 | L4/L7 프록시 |
 | VPC Lattice | 서비스 네트워크(다대다) | 무방 | 있음 — 같은 Service Network에 묶인 VPC·서비스는 서로 접근 가능 | L7(HTTP/gRPC 인식) |
 
-피어링·TGW가 CIDR 겹침에 막히는 이유는 라우팅 테이블에 상대 CIDR을 목적지로 올리기 때문이다([vpc-basics 의 VPC 연결 절](/start/vpc-basics/#vpc-연결--피어링과-transit-gateway)과 [L3·L4·L7 절](/start/vpc-basics/#연결-방식이-무엇을-보고-판단하는가--l3l4l7)이 이 표의 근본 원리다). PrivateLink(내부 ALB/NLB + VPC 엔드포인트)는 이미 CIDR 제약이 없는 L4/L7 방식이지만, 서비스마다 NLB와 엔드포인트 서비스를 개별로 만들어야 한다. Lattice는 그 구성을 Service Network 하나로 묶어 다대다로 확장한다 — VPC 여러 개, 서비스 여러 개가 같은 Service Network에 붙으면 서로 접근할 수 있다.
+피어링·TGW 가 CIDR 겹침에 막히는 이유는 라우팅 테이블에 상대 CIDR 을 목적지로 올리기 때문이다. 이 표의 근본 원리는 [vpc-basics 의 VPC 연결 절](/start/vpc-basics/#vpc-연결--피어링과-transit-gateway)과 [L3·L4·L7 절](/start/vpc-basics/#연결-방식이-무엇을-보고-판단하는가--l3l4l7)에 있다. PrivateLink(내부 ALB/NLB + VPC 엔드포인트)는 이미 CIDR 제약이 없는 L4/L7 방식이지만, 서비스마다 NLB와 엔드포인트 서비스를 개별로 만들어야 한다. Lattice는 그 구성을 Service Network 하나로 묶어 다대다로 확장한다 — VPC 여러 개, 서비스 여러 개가 같은 Service Network에 붙으면 서로 접근할 수 있다.
 
 ## 4계층 구조
 
@@ -71,7 +71,7 @@ Lattice 리소스는 네 계층으로 나뉜다. 이 모듈의 고정 이름을 
 | Listener | 프로토콜·포트를 받아 Target Group으로 Forward | `skills-lattice-http-listener` (HTTP/80) |
 | Target Group | 실제 트래픽을 받는 대상 목록 + 헬스 체크 | `skills-lattice-order-tg` (Instance · HTTP/8080 · `/health`) |
 
-**VPC Association은 Client VPC에만 만든다.** Service VPC는 Target Group의 `vpcIdentifier`로만 연결되고 별도 Association이 없다 — Lattice가 Target Group 설정을 보고 Service VPC 안에 필요한 경로를 알아서 만든다. Client VPC를 Association 하는 이유는 그 VPC 안의 리소스(Client EC2)가 Lattice 생성 도메인을 **호출**해야 하기 때문이다. 호출하는 쪽만 Association이 필요하다.
+**VPC Association은 Client VPC에만 만든다.** Service VPC는 Target Group의 `vpcIdentifier`로만 연결되고 별도 Association이 없다 — Lattice가 Target Group 설정을 보고 Service VPC 안에 필요한 경로를 알아서 만든다. Client VPC 를 Association 하는 이유가 있다. 그 VPC 안의 Client EC2 가 Lattice 생성 도메인을 **호출**해야 하기 때문이다. 호출하는 쪽만 Association이 필요하다.
 
 ## 관리형 프리픽스 리스트로 접근 제어
 
@@ -121,7 +121,7 @@ Service EC2의 보안 그룹은 8080 인바운드를 **AWS가 리전마다 관�
 
 ## CIDR이 겹쳐도 되는 이유
 
-Client VPC(`10.61.0.0/16`)와 Service VPC(`10.62.0.0/16`)는 겹치지 않지만, 겹쳤어도 이 아키텍처는 그대로 동작한다. 이유는 앞의 두 절을 합치면 나온다 — Client는 Lattice 도메인을 호출할 뿐 Service VPC의 IP를 직접 알지 못하고, Lattice의 데이터 플레인이 Target Group 설정을 보고 Service VPC 안에서 별도로 타깃에 연결한다. 두 VPC의 라우팅 테이블 어디에도 상대 VPC의 CIDR을 가리키는 경로가 생기지 않는다. 피어링·TGW의 CIDR 제약은 "상대 CIDR을 내 라우팅 테이블에 올린다"는 전제에서만 나오는데, Lattice는 그 전제 자체가 없다.
+Client VPC(`10.61.0.0/16`)와 Service VPC(`10.62.0.0/16`)는 겹치지 않지만, 겹쳤어도 이 아키텍처는 그대로 동작한다. 이유는 앞의 두 절을 합치면 나온다 — Client 는 Lattice 도메인을 호출할 뿐 Service VPC 의 IP 를 직접 알지 못한다. Lattice 의 데이터 플레인이 Target Group 설정을 보고 Service VPC 안에서 별도로 타깃에 연결한다. 두 VPC의 라우팅 테이블 어디에도 상대 VPC의 CIDR을 가리키는 경로가 생기지 않는다. 피어링·TGW의 CIDR 제약은 "상대 CIDR을 내 라우팅 테이블에 올린다"는 전제에서만 나오는데, Lattice는 그 전제 자체가 없다.
 
 ## 채점이 보는 상태
 

@@ -83,7 +83,7 @@ flowchart LR
   - 경로 B(Endpoint): VPC 엔드포인트가 게이트웨이형과 인터페이스형으로 갈리는 이유는 [vpc-basics 의 VPC 엔드포인트 절](/start/vpc-basics/#vpc-엔드포인트--프라이빗-경로로-aws-api-부르기)에 있다. "인터넷 미경유" 요구 시 이미지 pull 용 `s3`(Gateway)/`ecr.api`/`ecr.dkr` 만으로는 부족하다. 인증에 `sts`(IRSA 의 `AssumeRoleWithWebIdentity`)·`oidc-eks`(OIDC 디스커버리)·`eks-auth`(Pod Identity), 노드 부트스트랩에 `ec2` 가 더 필요하고, 워크로드에 따라 `logs`·`elasticloadbalancing`·`kms` 를 추가한다 (set-07은 ECR·CloudWatch를 Endpoint로).
 
 :::danger[함정 — eks Endpoint 가 OIDC 해석을 가린다]
-set-03 실측(endpoints.tf 주석): `eks` Interface Endpoint를 `private_dns_enabled`로 만들면 그 PHZ(프라이빗 호스팅 영역 — VPC 안에서만 유효한 DNS 영역)가 `eks.<region>.amazonaws.com` 을 가져가면서 `oidc.eks.<region>.amazonaws.com` 해석까지 가려 **IRSA가 깨진다**. NAT가 있으면 이 호출은 NAT 경유로 충분하므로 set-03은 이 엔드포인트를 만들지 않는다.
+set-03 실측이다(endpoints.tf 주석). `eks` Interface Endpoint 를 `private_dns_enabled` 로 만들면 그 PHZ 가 `eks.<region>.amazonaws.com` 을 가져간다. PHZ 는 VPC 안에서만 유효한 DNS 영역이다. 그러면서 `oidc.eks.<region>.amazonaws.com` 해석까지 가려 **IRSA 가 깨진다**. NAT가 있으면 이 호출은 NAT 경유로 충분하므로 set-03은 이 엔드포인트를 만들지 않는다.
 
 **`eks-auth` 는 반대다.** AWS는 아웃바운드 인터넷이 없는 클러스터에서 Pod Identity에 `com.amazonaws.<region>.eks-auth` 를 **필수**로 문서화한다. 프라이빗 DNS 이름이 `eks-auth.<region>.api.aws` 라 OIDC 도메인과 겹치지 않아 위 문제를 일으키지 않는다 — 만들지 않으면 오히려 Pod Identity가 죽는다.
 
@@ -101,7 +101,7 @@ set-03 실측(endpoints.tf 주석): `eks` Interface Endpoint를 `private_dns_ena
 | "인터넷 미경유" 요구 | `endpoints.tf` 에 `sts`·`oidc-eks`·`eks-auth`·`ec2` 추가 | IRSA·Pod Identity 동작 |
 | 워크로드 종류 | `logs`·`elasticloadbalancing`·`kms` 엔드포인트 | 해당 API 호출 성공 |
 
-set-03 은 `privateCluster` 에 `skipEndpointCreation: true` 를 주고 NAT 와 S3 Gateway Endpoint 만으로 끝낸다. set-07 은 NAT 에 ECR·CloudWatch Interface Endpoint 를 병행하고 작업 호스트로 SSM bastion 을 쓴다. 엔드포인트를 늘릴 때 `eks` 를 프라이빗 DNS 로 켜면 `oidc-eks` 를 함께 만든다.
+set-03 은 `privateCluster` 에 `skipEndpointCreation: true` 를 주고 NAT 와 S3 Gateway Endpoint 만으로 끝낸다. set-07 은 NAT 에 ECR·CloudWatch Interface Endpoint 를 병행한다. 작업 호스트로는 SSM bastion 을 쓴다. 엔드포인트를 늘릴 때 `eks` 를 프라이빗 DNS 로 켜면 `oidc-eks` 를 함께 만든다.
 
 <details class="build-step">
 <summary>지금 확인하기 — 닫힌 클러스터인지 한 줄로 판정하기</summary>
@@ -200,7 +200,7 @@ bastion 을 쓰면 채점 전에 인스턴스·인스턴스 프로파일·역할
 :::note[협의회(2026-07-31) — 접근 경로는 제한하지 않는다]
 EKS 접근 방식을 특정하지 않는 쪽으로 정리됐다. 과제지 요구는 "CloudShell에서 kubectl 명령어를 사용할 수 있어야 한다" 하나다. CloudShell 접근이 불가한 구성이면 **선수가 채점 전에 bastion을 사전 구축해 쓰는 것도 공식적으로 허용**된다.
 
-본 PC·VPC CloudShell·일반 CloudShell 3분할과 bastion 패턴이 그대로 공인된 셈이다. 다만 "채점 전 bastion 삭제"는 세트별 과제지의 미요구 리소스 정리 원칙에서 나온 것이므로, 과제지가 bastion을 언급하면 그 지시를 우선한다.
+본 PC·VPC CloudShell·일반 CloudShell 3분할과 bastion 패턴이 그대로 공인된 셈이다. 다만 "채점 전 bastion 삭제"는 미요구 리소스 정리 원칙에서 나온 것이다. 과제지가 bastion 을 언급하면 그 지시를 우선한다.
 
 회의록이 붙인 조건 셋을 함께 지킨다.
 
@@ -265,7 +265,7 @@ addon을 업데이트하면 **Corefile이 초기화**될 수 있다. 이미 했�
 
 ### ① 정의
 
-감사자용 AssumeRole 전용 역할. set-07 사양: trust = 계정 `:root` + `sts:ExternalId` StringEquals 조건, `max_session_duration = 3600`, 권한은 DynamoDB 조회 + VPC/EKS Describe(액션 와일드카드 금지).
+감사자용 AssumeRole 전용 역할. set-07 사양이다. 신뢰 정책은 계정 `:root` 에 `sts:ExternalId` StringEquals 조건을 건다. `max_session_duration` 은 3600 이고, 권한은 DynamoDB 조회와 VPC·EKS Describe 다 — 액션 와일드카드는 금지다.
 
 Principal·신뢰 정책(trust policy)·STS 임시 자격 증명이 처음이면 [iam-basics](/start/iam-basics/)를 먼저 본다 — 이 절은 그 문서의 개념 위에서 "평가가 두 번 일어난다"만 더한다.
 
@@ -398,7 +398,7 @@ flowchart LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-internal ALB 를 CloudFront VPC Origin 으로 노출하는 구성이다. 사용자 트래픽은 CloudFront 를 거쳐 내부 ALB 로 들어가고, 정적 파일은 OAC 로 S3 에서 받는다. 직접 접근은 두 겹으로 막힌다 — ALB 가 internal 이라 인터넷에서는 연결 자체가 안 되고(000), VPC 안에서 시도해도 보안 그룹이 CloudFront 오리진 프리픽스 리스트만 허용한다. 오른쪽 KMS 는 다중 리전 키로, 로그용 기본 키는 us-east-1 에 두고 복제본이 서울 리소스를 담당한다.
+internal ALB 를 CloudFront VPC Origin 으로 노출하는 구성이다. 사용자 트래픽은 CloudFront 를 거쳐 내부 ALB 로 들어가고, 정적 파일은 OAC 로 S3 에서 받는다. 직접 접근은 두 겹으로 막힌다 — ALB 가 internal 이라 인터넷에서는 연결 자체가 안 된다(000). VPC 안에서 시도해도 보안 그룹이 CloudFront 오리진 프리픽스 리스트만 허용한다. 오른쪽 KMS 는 다중 리전 키로, 로그용 기본 키는 us-east-1 에 두고 복제본이 서울 리소스를 담당한다.
 
 </details>
 
@@ -464,7 +464,7 @@ flowchart LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-네 고리다. IAM 역할을 맡는 것까지가 AWS 쪽이고, 그 역할이 클러스터에 등록돼 어느 그룹으로 매핑되는지, 그 그룹에 무슨 동사가 허용되는지가 쿠버네티스 쪽이다.
+네 고리다. IAM 역할을 맡는 것까지가 AWS 쪽이다. 그 역할이 클러스터에 등록돼 어느 그룹으로 매핑되는지, 그 그룹에 무슨 동사가 허용되는지가 쿠버네티스 쪽이다.
 
 **어디서 막혔는지 증상으로 갈린다.**
 

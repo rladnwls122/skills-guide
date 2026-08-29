@@ -24,7 +24,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 함정은 "앱이 /metrics를 노출하지 않는다"는 데서 나온다.
 
-메트릭이 무엇인지, Prometheus 가 왜 "가져가는" 방식인지, Grafana 와 역할이 어떻게 갈리는지는 [observability-basics](/start/observability-basics/)가 먼저 다룬다. 이 문서는 그 위에서 대회 파이프라인을 조립한다.
+메트릭이 무엇이고 Prometheus 가 왜 "가져가는" 방식인지는 [observability-basics](/start/observability-basics/)가 먼저 다룬다. Grafana 와 역할이 어떻게 갈리는지도 거기 있다. 이 문서는 그 위에서 대회 파이프라인을 조립한다.
 
 ---
 
@@ -33,7 +33,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 ### ① 정의
 
 앱 컨테이너의 stdout 액세스 로그 한 줄이 두 갈래로 소비되는 파이프라인.
-한 갈래는 **CloudWatch Logs**(형식 변환 후 전송), 다른 갈래는 **로그→메트릭 변환**을 거쳐 Prometheus/Grafana/알람의 데이터 소스가 된다.
+한 갈래는 형식을 바꿔 **CloudWatch Logs** 로 보낸다. 다른 갈래는 **로그를 메트릭으로 바꿔** Prometheus·Grafana·알람의 데이터 소스가 된다.
 
 ### ② 왜 (채점 관점)
 
@@ -41,7 +41,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 그 5키가 왜 하필 그 형식인지부터 짚는다. 과제지가 CloudWatch 로 전송된 로그의 예시 한 줄을 그대로 박아 두었기 때문이다 — `{"timestamp":"...","method":"POST","path":"/v1/book","status_code":200,"client_ip":"..."}`. 반면 앱이 stdout 으로 찍는 원본은 logfmt 한 줄이고 `duration` 처럼 예시에 없는 필드까지 들어 있다. 그래서 파이프라인이 원본을 그대로 흘리면 키 이름도 개수도 어긋난다. 파서로 필요한 값을 뽑고 Lua 로 5키만 다시 조립하는 것은 이 간극을 메우는 작업이다. `status_code` 를 문자열이 아니라 정수로, `timestamp` 를 ISO8601 `Z` 표기로 맞추는 것도 같은 이유다.
 
-`/health` 를 버리는 것도 형식 문제의 연장이다. `/health` 는 ALB 헬스체크가 주기적으로 때리는 경로라 사용자 요청과 섞이면 로그가 그것만으로 채워지고, 뒤에서 만드는 요청 수·오류율 메트릭도 실제 트래픽을 반영하지 못한다.
+`/health` 를 버리는 것도 형식 문제의 연장이다. `/health` 는 ALB 헬스체크가 주기적으로 때리는 경로다. 사용자 요청과 섞이면 로그가 그것만으로 채워지고, 뒤에서 만드는 요청 수·오류율 메트릭도 실제 트래픽을 반영하지 못한다.
 - Grafana 대시보드는 패널 존재만이 아니라 **데이터 표시 여부**까지 본다 — No Data 패널 하나라도 있으면 오답.
 - 알람(11-4)은 실제 Firing 여부를 검사한다. HTTP 계열 알람의 유일한 소스가 로그 기반 메트릭이므로 파이프라인이 끊기면 알람 점수도 통째로 날아간다.
 
@@ -71,7 +71,7 @@ flowchart LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-로그 한 줄이 두 갈래 산출물이 되기까지의 전 경로다. 앱이 stdout 으로 찍으면 kubelet 이 노드의 파일로 남기고, Fluent Bit 이 그 파일을 tail 해 cri 파서로 읽는다. 파서 필터가 method·path·status·duration 을 뽑고 Lua 필터가 `/health` 같은 라인을 버린다. 정제된 레코드는 오른쪽으로 CloudWatch Logs 에 저장되고, 아래쪽으로 log_to_metrics 를 거쳐 Prometheus 메트릭이 된다 — 같은 로그가 저장과 메트릭 두 목적지로 갈라지는 것이 이 파이프라인의 뼈대다.
+로그 한 줄이 두 갈래 산출물이 되기까지의 전 경로다. 앱이 stdout 으로 찍으면 kubelet 이 노드의 파일로 남기고, Fluent Bit 이 그 파일을 tail 해 cri 파서로 읽는다. 파서 필터가 method·path·status·duration 을 뽑고 Lua 필터가 `/health` 같은 라인을 버린다. 정제된 레코드는 오른쪽으로 CloudWatch Logs 에 저장된다. 아래쪽으로는 log_to_metrics 를 거쳐 Prometheus 메트릭이 된다 — 같은 로그가 저장과 메트릭 두 목적지로 갈라지는 것이 이 파이프라인의 뼈대다.
 
 </details>
 
@@ -147,7 +147,7 @@ Fluent Bit 파드 한 개가 노드에서 무엇을 붙들고 있는지다. 노�
 | 로그 그룹 이름 | Terraform 로그 그룹 + `cloudwatch_logs` OUTPUT | `auto_create_group false` 유지 — Fluent Bit 이 만들면 암호화 미적용 |
 | taint 있는 노드그룹 | DaemonSet 의 `tolerations: [operator: Exists]` | 앱이 뜬 노드에도 fluent-bit 이 Running |
 
-Lua 를 몇 개로 나눌지도 세트마다 다르다. set-03 은 드롭·변환(`prepare.lua`)과 형식 조립(`format.lua`)을 나누고 Reference02 형식("LEVEL 5자 패딩 + 키 순서 고정 JSON 문자열")을 만든다. set-07 은 `reshape.lua` 하나로 5키를 재구성한다(`timestamp` ISO8601Z, `status_code` 정수화). `/health` 드롭 분기는 어느 쪽이든 남긴다 — 채점이 CloudWatch 에서 0건을 확인한다.
+Lua 를 몇 개로 나눌지도 세트마다 다르다. set-03 은 드롭·변환(`prepare.lua`)과 형식 조립(`format.lua`)을 나눈다. 그렇게 Reference02 형식을 만든다 — LEVEL 5자 패딩에 키 순서를 고정한 JSON 문자열이다. set-07 은 `reshape.lua` 하나로 5키를 재구성한다(`timestamp` ISO8601Z, `status_code` 정수화). `/health` 드롭 분기는 어느 쪽이든 남긴다 — 채점이 CloudWatch 에서 0건을 확인한다.
 
 <details class="build-step">
 <summary>지금 확인하기 — 수집 범위가 세트마다 어떻게 다른가</summary>
@@ -193,13 +193,13 @@ Lua 를 몇 개로 나눌지도 세트마다 다르다. set-03 은 드롭·변�
 
 ### ① 정의
 
-Fluent Bit 필터. 통과하는 로그 레코드를 세거나(counter) 필드 값을 집계해(histogram) Prometheus 메트릭으로 만든 뒤, `prometheus_exporter` OUTPUT이 `:2021/metrics`로 노출한다.
+Fluent Bit 필터. 통과하는 로그 레코드를 세거나(counter) 필드 값을 집계해(histogram) Prometheus 메트릭으로 만든다. 그 결과를 `prometheus_exporter` OUTPUT 이 `:2021/metrics` 로 노출한다.
 
 여기서 Fluent Bit 은 [exporter](/start/observability-basics/#2-4-exporter--메트릭을-낼-줄-모르는-것을-위해) 노릇을 한다 — 메트릭을 낼 줄 모르는 앱 대신 `/metrics` 를 여는 자리다. counter 와 histogram 의 차이는 [메트릭 종류 절](/start/observability-basics/#2-6-메트릭-종류--counter--gauge--histogram)에 있다.
 
 ### ② 왜 (채점 관점)
 
-제공 앱 바이너리가 /metrics를 노출하지 않는 세트(set-03)에서 트래픽 패널·HighErrorRate/HighLatency 알람의 **유일한 소스**다. 이게 없으면 대시보드 Row와 알람 2종이 전부 No Data.
+제공 앱 바이너리가 `/metrics` 를 노출하지 않는 세트(set-03)가 있다. 그때는 이것이 트래픽 패널과 HighErrorRate·HighLatency 알람의 **유일한 소스**다. 이게 없으면 대시보드 Row와 알람 2종이 전부 No Data.
 
 ### ③ 원리
 
@@ -217,7 +217,7 @@ flowchart LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-로그를 메트릭으로 바꾸는 세 필터다. 요청 수는 method·path·status 를 라벨로 갖는 카운터, 오류 수는 status 가 4·5 로 시작할 때만 세는 카운터, 응답 시간은 `duration_seconds` 값을 담는 히스토그램이다. 셋 다 같은 태그로 묶여 2021 포트의 exporter 로 나가고, PodMonitor 가 그 포트를 15초마다 긁어 Prometheus 로 넣는다.
+로그를 메트릭으로 바꾸는 세 필터다. 요청 수는 method·path·status 를 라벨로 갖는 카운터다. 오류 수는 status 가 4·5 로 시작할 때만 세는 카운터이고, 응답 시간은 `duration_seconds` 값을 담는 히스토그램이다. 셋 다 같은 태그로 묶여 2021 포트의 exporter 로 나가고, PodMonitor 가 그 포트를 15초마다 긁어 Prometheus 로 넣는다.
 
 </details>
 
@@ -225,7 +225,7 @@ flowchart LR
 실제 노출되는 이름에는 **`log_metric_counter_` / `log_metric_histogram_` 접두어가 자동으로 붙는다**:
 `log_metric_counter_wsc2026_requests_total`, `log_metric_histogram_wsc2026_request_duration_seconds_{bucket,sum,count}`.
 
-**배포 후 반드시 `:2021/metrics`를 curl 해서 실제 메트릭명을 확인**하고 prometheus-rules.yaml / dashboard.json의 이름과 대조한다. 접두어 규칙이 버전에 따라 다를 수 있어 실측이 원칙.
+**배포 후 `:2021/metrics` 를 curl 해 실제 메트릭 이름을 확인한다.** 그 값을 `prometheus-rules.yaml` 과 `dashboard.json` 의 이름과 대조한다. 접두어 규칙이 버전에 따라 다를 수 있어 실측이 원칙.
 :::
 
 - PodMonitor가 붙으려면 kps values에 `podMonitorSelectorNilUsesHelmValues: false`가 있어야 release 라벨 없이도 선택된다. PodMonitor 가 "무엇을 긁을지"를 어떻게 고르는지는 [observability-basics 의 PodMonitor 절](/start/observability-basics/#2-5-podmonitor--무엇을-긁을지-선언한다) 참고.
@@ -242,7 +242,7 @@ flowchart LR
 
 ### ① 정의
 
-Prometheus Operator + Prometheus + Alertmanager + node-exporter + kube-state-metrics + Grafana를 한 Helm 차트로 설치. CRD(`PrometheusRule`, `PodMonitor`, `ServiceMonitor`)로 룰/스크레이프 대상을 선언한다.
+한 Helm 차트가 여섯을 함께 설치한다 — Prometheus Operator·Prometheus·Alertmanager·node-exporter·kube-state-metrics·Grafana 다. CRD(`PrometheusRule`, `PodMonitor`, `ServiceMonitor`)로 룰/스크레이프 대상을 선언한다.
 
 ### ② 왜 (채점 관점)
 
@@ -279,7 +279,7 @@ PrometheusRule 과 PodMonitor 를 잡는 경로는 셀렉터 값 두 개에 달�
 - 알람 6종(set-03 Reference02): PodHighCPU(80%/3m), PodHighMemory(90%/3m), PodNotReady, HighErrorRate(5%/1m), HighLatency(평균 3s/1m), PodCrashLooping(재시작>3).
 
 :::danger[함정 — 발화 불가 항목은 사양대로 구현만]
-set-03 실측: 제공 바이너리에 `/delay` 엔드포인트가 없어(404, µs 응답) HighLatency는 채점 latency-gen으로 발화시킬 수 없다. 나머지 5종은 채점 부하 파드로 발화된다. **룰을 임의로 낮춰 억지로 발화시키면 사양 불일치 감점.**
+set-03 실측이다. 제공 바이너리에 `/delay` 엔드포인트가 없다(404, µs 응답). 그래서 HighLatency 는 채점 latency-gen 으로 발화시킬 수 없다. 나머지 5종은 채점 부하 파드로 발화된다. **룰을 임의로 낮춰 억지로 발화시키면 사양 불일치 감점.**
 :::
 
 ### ④ 세트별 차이

@@ -20,7 +20,7 @@ S3 퍼블릭 차단·OAC 버킷 정책·순환 참조 같은 CloudFront 공통 �
 
 ## 1. CloudFront Functions vs Lambda@Edge — 4개 이벤트 훅
 
-CloudFront가 요청을 처리하는 동안 코드가 끼어들 수 있는 지점은 이론상 4개다: **viewer-request → (캐시 미스 시) origin-request → origin-response → viewer-response**. 그런데 CloudFront Functions는 이 중 **viewer-request·viewer-response 둘만** 지원한다(mTLS 연결 단계 전용의 connection-request도 있지만 이 모듈과 무관). origin-request·origin-response는 **Lambda@Edge 전용**이다.
+CloudFront 가 요청을 처리하는 동안 코드가 끼어들 수 있는 지점은 이론상 넷이다. **viewer-request → (캐시 미스 시) origin-request → origin-response → viewer-response** 순이다. 그런데 CloudFront Functions 는 이 중 **viewer-request·viewer-response 둘만** 지원한다. mTLS 연결 단계 전용의 connection-request 도 있지만 이 모듈과는 무관하다. origin-request·origin-response는 **Lambda@Edge 전용**이다.
 
 ```mermaid
 flowchart LR
@@ -70,7 +70,7 @@ AWS 공식 비교표에서 이 모듈 판단에 필요한 항목만 추렸다.
 | 요청 본문 접근 | 불가 | 가능 |
 | CloudFront 안에서 빌드·테스트 완결 | 가능 | 불가(Lambda 콘솔, us-east-1 리전 필요) |
 
-**어느 쪽을 언제 쓰나** — 캐시 키 정규화, 헤더 조작, URL 리다이렉트/재작성, 간단한 인가 검증처럼 가벼운 문자열 로직은 CloudFront Functions. 외부 API 호출, 파일시스템, 요청 본문 파싱처럼 무거운 작업이 필요하면 Lambda@Edge. 이 모듈은 KVS 조회 + URI/쿠키 조작뿐이라 CloudFront Functions로 충분하다 — 오히려 **Lambda@Edge는 KeyValueStore를 아예 못 써서** 이 설계를 그대로 옮길 수 없다(훅·기능 지원 표).
+**어느 쪽을 언제 쓰나** — 가벼운 문자열 로직은 CloudFront Functions 다. 캐시 키 정규화, 헤더 조작, URL 재작성, 간단한 인가 검증이 그렇다. 외부 API 호출, 파일시스템, 요청 본문 파싱처럼 무거운 작업이 필요하면 Lambda@Edge. 이 모듈은 KVS 조회 + URI/쿠키 조작뿐이라 CloudFront Functions로 충분하다 — 오히려 **Lambda@Edge는 KeyValueStore를 아예 못 써서** 이 설계를 그대로 옮길 수 없다(훅·기능 지원 표).
 
 ---
 
@@ -103,7 +103,7 @@ AWS 공식 비교표에서 이 모듈 판단에 필요한 항목만 추렸다.
 
 두 함수는 URL을 재작성하고 쿠키를 세팅하는 것 외에는 아무것도 하지 않는다. 오리진(S3)은 항상 `/version-a/index.html` 또는 `/version-b/index.html` 같은 구체적인 경로만 받는다 — "/"로 오는 요청을 분기하는 로직은 오리진에 전혀 없다.
 
-**viewer-request** (`skillsphone-cdn-ab-req-fn`) — 요청 쿠키 `x-sp-ab`가 있으면 그 값을 유지하고, 없으면 KVS의 `weight`를 읽어 `Math.random() < weight`면 `b`, 아니면 `a`로 배정한다. 새로 배정한 경우에만 `x-sp-ab-assigned` 요청 헤더를 세운다(기존 배정을 유지한 경우는 세우지 않음 — viewer-response가 이 헤더로 "새로 배정했는가"를 판단한다). 마지막에 배정된 버전에 해당하는 KVS 값(`version_a`/`version_b`)으로 `request.uri`를 덮어쓴다.
+**viewer-request** (`skillsphone-cdn-ab-req-fn`) — 요청 쿠키 `x-sp-ab`가 있으면 그 값을 유지하고, 없으면 KVS의 `weight`를 읽어 `Math.random() < weight`면 `b`, 아니면 `a`로 배정한다. 새로 배정한 경우에만 `x-sp-ab-assigned` 요청 헤더를 세운다. 기존 배정을 유지했다면 세우지 않는다 — viewer-response 가 이 헤더로 "새로 배정했는가"를 판단한다. 마지막에 배정된 버전에 해당하는 KVS 값(`version_a`/`version_b`)으로 `request.uri`를 덮어쓴다.
 
 ```js title="terraform/cloudfront/req-fn.js"
 import cf from 'cloudfront';
@@ -142,7 +142,7 @@ async function handler(event) {
 
 </details>
 
-**viewer-response** (`skillsphone-cdn-ab-res-fn`) — `x-sp-ab-assigned` 요청 헤더가 있을 때만 `Set-Cookie`를 추가한다. 즉 방금 새로 배정된 방문자에게만 쿠키를 발급하고, 이미 쿠키가 있던 재방문자에게는 다시 발급하지 않는다(mark 2-4/2-5가 검사하는 지점).
+**viewer-response** (`skillsphone-cdn-ab-res-fn`) — `x-sp-ab-assigned` 요청 헤더가 있을 때만 `Set-Cookie`를 추가한다. 즉 방금 새로 배정된 방문자에게만 쿠키를 발급한다. 이미 쿠키가 있던 재방문자에게는 다시 발급하지 않는다 — mark 2-4·2-5 가 검사하는 지점이다.
 
 ```js title="terraform/cloudfront/res-fn.js"
 function handler(event) {
@@ -167,7 +167,7 @@ function handler(event) {
 
 </details>
 
-구현체 주석은 KVS 조회 두 번(weight, version_*)을 `Promise.all`이 아니라 순차 `await`로 처리한 이유를 "함수 메모리 한도(2 MB) 초과 위험"이라 적어 두었다. 이번 조사에서 AWS 공식 문서에서 그 메모리 근거 문구를 별도로 재확인하지는 못했지만, 2 MB라는 한도 자체는 위 비교표에서 확인된다.
+구현체 주석이 이유를 적어 두었다. KVS 조회 두 번(weight, version_*)을 `Promise.all` 이 아니라 순차 `await` 로 처리한 것은 "함수 메모리 한도(2 MB) 초과 위험" 때문이다. 이번 조사에서 AWS 공식 문서에서 그 메모리 근거 문구를 별도로 재확인하지는 못했지만, 2 MB라는 한도 자체는 위 비교표에서 확인된다.
 
 ---
 
@@ -268,7 +268,7 @@ CloudFront Functions는 만들면 바로 `DEVELOPMENT` 스테이지에 들어간
 | 쿠키 수명 `Max-Age=86400` | `terraform/cloudfront/res-fn.js` 의 `attributes` | `aws cloudfront test-function --stage LIVE` |
 | 함수 이름 | `aws_cloudfront_function` 의 `skillsphone-cdn-ab-req-fn` · `skillsphone-cdn-ab-res-fn` | `describe-function --stage LIVE` 가 `DEPLOYED` |
 
-쿠키명은 두 자리를 함께 바꾼다. 함수 JS 만 고치고 캐시 정책의 화이트리스트 쿠키 이름을 그대로 두면 CloudFront 가 옛 이름 쿠키로 캐시 키를 만들어, 배정이 바뀌어도 같은 캐시 항목이 나간다.
+쿠키명은 두 자리를 함께 바꾼다. 함수 JS 만 고치고 캐시 정책의 화이트리스트 쿠키 이름을 그대로 두면 어떻게 되나. CloudFront 가 옛 이름 쿠키로 캐시 키를 만들어, 배정이 바뀌어도 같은 캐시 항목이 나간다.
 
 ---
 

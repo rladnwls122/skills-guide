@@ -158,19 +158,49 @@ aws elbv2 describe-load-balancers \
 
 이 사이트가 풀어 쓰지 않고 지나가는 것들이다. 개념 자체는 [선수 학습](/start/)에서 다룬다.
 
+### 네트워크
+
 | 약어 | 풀이 | 어디서 배우나 |
 |---|---|---|
-| VPC | 내 전용 가상 네트워크 | [vpc-basics](/start/vpc-basics/) |
-| CIDR | 주소 범위 표기(`10.0.0.0/16`) | [vpc-basics](/start/vpc-basics/) |
-| IAM | 누가 무엇을 할 수 있는지 정하는 체계 | [iam-basics](/start/iam-basics/) |
-| ARN | AWS 리소스의 전역 고유 이름 | [iam-basics](/start/iam-basics/) |
-| EKS | AWS 가 운영해 주는 쿠버네티스 | [eks-basics](/start/eks-basics/) |
-| IRSA | 파드에 IAM 역할을 붙이는 방식 | [eks-basics](/start/eks-basics/) |
-| ALB | 요청을 뒤로 나눠 주는 로드밸런서 | [loadbalancer-basics](/start/loadbalancer-basics/) |
+| VPC | Virtual Private Cloud. 내 전용 가상 네트워크 | [vpc-basics](/start/vpc-basics/) |
+| CIDR | 주소 범위 표기(`10.0.0.0/16`). 뒤 숫자가 클수록 좁다 | [vpc-basics](/start/vpc-basics/) |
+| AZ | Availability Zone. 한 리전 안의 물리적으로 분리된 구역 | [vpc-basics](/start/vpc-basics/) |
+| IGW | Internet Gateway. VPC 를 인터넷에 잇는 문 | [vpc-basics](/start/vpc-basics/) |
+| NAT | 사설 주소가 밖으로 나갈 때 주소를 바꿔 주는 장치 | [vpc-basics](/start/vpc-basics/) |
+| RTB | Route Table. 어느 대역을 어디로 보낼지 적은 표 | [vpc-basics](/start/vpc-basics/) |
+| ENI | Elastic Network Interface. 리소스에 붙는 가상 랜카드 | [vpc-basics](/start/vpc-basics/) |
+| TGW | Transit Gateway. 여러 VPC 를 잇는 가운데 허브 | [02 네트워크 이론](/part-0/02-network-basics/theory/) |
+
+### 신원과 암호화
+
+| 약어 | 풀이 | 어디서 배우나 |
+|---|---|---|
+| IAM | Identity and Access Management. 누가 무엇을 할 수 있는지 정하는 체계 | [iam-basics](/start/iam-basics/) |
+| ARN | Amazon Resource Name. AWS 리소스의 전역 고유 이름 | [iam-basics](/start/iam-basics/) |
 | KMS | 암호화 키를 맡아 주는 서비스 | [kms-basics](/start/kms-basics/) |
-| CMK | 직접 만들어 정책을 붙이는 키 | [kms-basics](/start/kms-basics/) |
-| GSI | DynamoDB 에서 다른 축으로 찾게 해 주는 인덱스 | [dynamodb-basics](/start/dynamodb-basics/) |
-| IaC | 인프라를 코드로 정의하는 방식(Terraform 등) | [hcl-basics](/start/hcl-basics/) |
+| CMK | Customer Managed Key. 직접 만들어 정책을 붙이는 키 | [kms-basics](/start/kms-basics/) |
+| SSE | Server-Side Encryption. 저장할 때 서버가 알아서 암호화 | [s3-basics](/start/s3-basics/) |
+| OAC | Origin Access Control. CloudFront 만 버킷을 읽게 하는 장치 | [s3-basics](/start/s3-basics/) |
+
+### 컨테이너와 쿠버네티스
+
+| 약어 | 풀이 | 어디서 배우나 |
+|---|---|---|
+| EKS | AWS 가 운영해 주는 쿠버네티스 | [eks-basics](/start/eks-basics/) |
+| IRSA | IAM Roles for Service Accounts. 파드에 IAM 역할을 붙이는 방식 | [eks-basics](/start/eks-basics/) |
+| LBC | Load Balancer Controller. 쿠버네티스 설정으로 ALB 를 만드는 컨트롤러 | [loadbalancer-basics](/start/loadbalancer-basics/) |
+| PDB | PodDisruptionBudget. 한꺼번에 몇 개까지 내려도 되는지의 하한 | [k8s-basics](/start/k8s-basics/) |
+| HPA | Horizontal Pod Autoscaler. 파드 수를 지표로 조절한다 | [autoscaling-basics](/start/autoscaling-basics/) |
+
+### 트래픽과 데이터
+
+| 약어 | 풀이 | 어디서 배우나 |
+|---|---|---|
+| ALB | Application Load Balancer. 요청을 뒤로 나눠 준다 | [loadbalancer-basics](/start/loadbalancer-basics/) |
+| TG | Target Group. 로드밸런서가 보낼 대상 묶음 | [loadbalancer-basics](/start/loadbalancer-basics/) |
+| GSI | Global Secondary Index. 기본 키가 아닌 축으로 찾게 해 준다 | [dynamodb-basics](/start/dynamodb-basics/) |
+| ESM | Event Source Mapping. 스트림·큐를 Lambda 에 잇는 설정 | [serverless-basics](/start/serverless-basics/) |
+| IaC | Infrastructure as Code. 인프라를 코드로 정의한다 | [hcl-basics](/start/hcl-basics/) |
 
 ---
 

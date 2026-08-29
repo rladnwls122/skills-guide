@@ -36,6 +36,14 @@ EKS + NAT GW + ALB + CloudFront + RDS Multi-AZ + 노드 최대 9대가 동시에
 - 정리 순서: k6 중지 → `kubectl delete` → `eksctl delete cluster` → `terraform destroy` → [잔존 리소스 점검](/reference/cleanup-check/).
 :::
 
+## 선행 지식
+
+- 파드의 requests·limits 와 축출 — [k8s-basics](/start/k8s-basics/)
+- 파드와 노드를 늘리는 두 층 — [autoscaling-basics](/start/autoscaling-basics/)
+- 인덱스가 조회 시간을 바꾸는 원리와 EXPLAIN 읽기 — [mysql-basics](/start/mysql-basics/)
+- 지표를 어떻게 모으고 무엇을 보나 — [observability-basics](/start/observability-basics/)
+- 타깃 그룹과 헬스체크가 트래픽을 가르는 방식 — [loadbalancer-basics](/start/loadbalancer-basics/)
+
 ## 선행 모듈
 
 - [21. 3과제 배포](/part-5/21-task3-deploy/) — 이 모듈은 그 스택을 전제한다

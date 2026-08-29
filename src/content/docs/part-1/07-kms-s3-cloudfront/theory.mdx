@@ -159,7 +159,7 @@ data "aws_iam_policy_document" "kms_s3" {
 <details class="diagram-note">
 <summary>이 블록이 하는 일</summary>
 
-키 정책을 두 조각으로 나눠 합친다. 위쪽은 계정 root 에 전권을 주는 기본 구문이고, 아래쪽이 CloudFront 서비스에 복호화만 허용하는 구문이다. `source_policy_documents` 가 둘을 한 문서로 합성한다. 키 정책의 `resources` 가 항상 `"*"` 인 이유는 그 정책이 붙은 키 자신을 뜻하기 때문이고([kms-basics 의 실물 JSON 절](/start/kms-basics/#1-root-less-키-정책-실물--적용된-json)이 이 표기를 IAM 정책의 `"Resource": "*"` 와 나란히 놓고 푼다), `aws:SourceAccount` 조건이 다른 계정의 CloudFront 가 이 키를 쓰지 못하게 막는다.
+키 정책을 두 조각으로 나눠 합친다. 위쪽은 계정 root 에 전권을 주는 기본 구문이고, 아래쪽이 CloudFront 서비스에 복호화만 허용하는 구문이다. `source_policy_documents` 가 둘을 한 문서로 합성한다. 키 정책의 `resources` 가 항상 `"*"` 인 것은 그 정책이 붙은 키 자신을 뜻하기 때문이다([kms-basics 의 실물 JSON 절](/start/kms-basics/#1-root-less-키-정책-실물--적용된-json)이 이 표기를 IAM 정책의 `"Resource": "*"` 와 나란히 놓고 푼다), `aws:SourceAccount` 조건이 다른 계정의 CloudFront 가 이 키를 쓰지 못하게 막는다.
 
 </details>
 
@@ -175,7 +175,7 @@ data "aws_iam_policy_document" "kms_s3" {
 
 **② 왜 필요한가 (채점 관점)** — set-03 mark 의 check_kms 가 **정책 텍스트를 grep** 해서 `:root` 나 `kms:*` 가 있으면 실격 처리한다. 동시에 KMS 의 lockout safety check 를 통과해야 하는데, 이 검사가 보는 것은 **호출한 신원 본인에게 `kms:PutKeyPolicy` 가 허용되는가** 하나다. 그래서 관리 statement 에 `kms:Put*` 를 반드시 포함시키고, 나머지 관리·운영 액션도 개별 나열한다.
 
-principal 을 배포자 한 사람의 ARN 으로 좁히지 않는 이유는 채점 쪽에 있다. 과제지가 "미리 IAM 사용자를 만들어 그 신원으로 진행하라"고 말하지 않으면 채점자는 지급받은 root 로 접속한다. KMS 는 IAM 정책이 아니라 키 정책이 1차 관문이라, 관리자를 배포자 신원 하나로 잠그면 채점 스크립트 자신이 `describe-key`·`get-key-policy` 조차 못 해 KMS 항목이 통째로 0점이 된다. `"*"` + `kms:CallerAccount` 는 계정 밖 principal 을 막으면서 계정 안 신원 판단은 각자의 IAM 정책에 맡기므로, root 로 채점해도 통과한다.
+principal 을 배포자 한 사람의 ARN 으로 좁히지 않는 이유는 채점 쪽에 있다. 과제지가 "미리 IAM 사용자를 만들어 그 신원으로 진행하라"고 말하지 않으면 채점자는 지급받은 root 로 접속한다. KMS 는 IAM 정책이 아니라 키 정책이 1차 관문이다. 관리자를 배포자 신원 하나로 잠그면 채점 스크립트 자신이 `describe-key`·`get-key-policy` 조차 못 해 KMS 항목이 통째로 0점이 된다. `"*"` + `kms:CallerAccount` 는 계정 밖 principal 을 막으면서 계정 안 신원 판단은 각자의 IAM 정책에 맡기므로, root 로 채점해도 통과한다.
 
 **③ 핵심 원리** — set-03 kms.tf 실측:
 
@@ -241,7 +241,7 @@ root-less 키 정책이 통과하는 조건을 판정 순서로 그렸다. 첫 �
 </details>
 
 :::danger[치명 함정]
-관리 statement 하나로 끝나지 않는다. AWS 서비스가 **자기 이름으로**(서비스 principal 로) 키를 부르는 경로는 `kms:CallerAccount` 조건으로 덮이지 않으므로, 그 소비자마다 **별도 statement 를 직접** 써야 한다. set-03 은 bucket 키에 `cloudfront.amazonaws.com`(`aws:SourceAccount` 조건), function 키에 `lambda.amazonaws.com`(`kms:EncryptionContext` 조건)을 명시하고, db 키에도 사용 주체인 `book_pod`·`book_function` 역할을 최소 액션으로 따로 적어 둔다.
+관리 statement 하나로 끝나지 않는다. AWS 서비스가 **자기 이름으로**(서비스 principal 로) 키를 부르는 경로는 `kms:CallerAccount` 조건으로 덮이지 않는다. 그래서 그 소비자마다 **별도 statement 를 직접** 써야 한다. set-03 은 bucket 키에 `cloudfront.amazonaws.com`(`aws:SourceAccount` 조건), function 키에 `lambda.amazonaws.com`(`kms:EncryptionContext` 조건)을 명시하고, db 키에도 사용 주체인 `book_pod`·`book_function` 역할을 최소 액션으로 따로 적어 둔다.
 
 관리자 principal 을 배포자 ARN 하나로 좁혔다면 함정이 하나 더 붙는다 — 그 신원이 아닌 자격증명으로 apply·eksctl·kubectl 을 실행하는 순간 그 키의 모든 작업이 거부된다. set-03 정답지가 계정 위임을 쓰는 이상 이 제약은 없지만, 배포자 고정 방식을 골랐다면 도구 전부를 같은 자격증명으로 돌려야 한다.
 :::
@@ -391,7 +391,7 @@ sequenceDiagram
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-요청 한 건이 통과하는 관문 둘이다. CloudFront 가 OAC 로 SigV4 서명을 붙여 S3 를 부르면 버킷 정책이 서비스 주체와 `AWS:SourceArn`(배포 ARN)을 확인하고, 객체가 SSE-KMS 라 S3 가 이어서 KMS 에 복호화를 요청하면 키 정책이 `aws:SourceAccount` 를 확인한다. 둘 중 하나만 막혀도 사용자는 403 을 본다 — 버킷 정책만 고쳐 두고 키 정책을 빠뜨리는 실수가 여기서 드러난다.
+요청 한 건이 통과하는 관문 둘이다. CloudFront 가 OAC 로 SigV4 서명을 붙여 S3 를 부르면 버킷 정책이 서비스 주체와 `AWS:SourceArn`(배포 ARN)을 확인한다. 객체가 SSE-KMS 라면 S3 가 이어서 KMS 에 복호화를 요청하고, 이번에는 키 정책이 `aws:SourceAccount` 를 확인한다. 둘 중 하나만 막혀도 사용자는 403 을 본다 — 버킷 정책만 고쳐 두고 키 정책을 빠뜨리는 실수가 여기서 드러난다.
 
 </details>
 
@@ -650,7 +650,7 @@ aws cloudfront create-invalidation --distribution-id <ID> --paths '/*'
 
 **② 왜 필요한가 (채점 관점)** — 후보 세트 중 set-03·set-07 은 WAF를 채점하고 set-02 는 아예 없다. 그런데 확인 방식이 다르다.
 
-set-03 mark 10-1 은 세 가지를 본다. `aws wafv2 list-web-acls`로 리소스 자체를 조회하고, SQLi/XSS payload(`booking_id=1' OR 1=1--`, `<script>alert(1)</script>`)를 실제로 던져 403을 확인하고, rate 규칙의 `Limit` 값을 API로 읽어 200 이하인지 본다.
+set-03 mark 10-1 은 세 가지를 본다. 먼저 `aws wafv2 list-web-acls` 로 리소스 자체를 조회한다. 다음으로 SQLi·XSS payload(`booking_id=1' OR 1=1--`, `<script>alert(1)</script>`)를 실제로 던져 403 을 확인한다. 마지막으로 rate 규칙의 `Limit` 값을 API 로 읽어 200 이하인지 본다.
 
 set-07 은 `aws wafv2` 호출이 전혀 없다. XSS 프로브 상태 코드와 연속 요청 후 상태만 보는 curl 블랙박스 테스트다.
 
@@ -758,7 +758,7 @@ resource "aws_wafv2_web_acl" "unicorn" {
 
 [`aws_wafv2_web_acl`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/wafv2_web_acl) 로 만든 set-07 방식의 Web ACL 이다. CloudFront 에 붙이는 ACL 은 반드시 us-east-1 에 만들어야 해서 별칭 프로바이더를 쓴다. 기본 액션이 `allow` 라 규칙에 걸린 요청만 막히고, 규칙은 priority 오름차순으로 평가된다. `override_action.none` 은 관리형 그룹 안 각 규칙이 자기 동작을 그대로 수행하라는 뜻이다 — `count` 로 바꾸면 차단 대신 집계만 한다.
 
-`visibility_config` 는 이 규칙의 관측 설정이고 세 필드가 필수다. `cloudwatch_metrics_enabled` 는 규칙별 매치 수를 CloudWatch 메트릭으로 내보낼지, `metric_name` 은 그 메트릭에 붙일 이름, `sampled_requests_enabled` 는 매치된 요청 표본을 콘솔에서 볼 수 있게 남길지 정한다. 오탐 대응이 이 표본에서 시작하므로 두 값을 `true` 로 켜 둔다.
+`visibility_config` 는 이 규칙의 관측 설정이고 세 필드가 필수다. `cloudwatch_metrics_enabled` 는 규칙별 매치 수를 CloudWatch 메트릭으로 내보낼지를 정한다. `metric_name` 은 그 메트릭에 붙일 이름이고, `sampled_requests_enabled` 는 매치된 요청 표본을 콘솔에서 볼 수 있게 남길지 정한다. 오탐 대응이 이 표본에서 시작하므로 두 값을 `true` 로 켜 둔다.
 
 </details>
 

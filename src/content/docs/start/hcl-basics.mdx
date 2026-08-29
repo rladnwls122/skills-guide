@@ -315,7 +315,7 @@ content_type = lookup(local.content_types, regex("[^.]+$", each.value), "applica
 `regex("[^.]+$", "index.html")` 이 `"html"` 을 뽑고, 그걸 키로 `content_types` 맵을 찾고, 없으면 `application/octet-stream` 을 쓴다.
 
 :::tip[정책 JSON 은 두 가지 방법이 있다]
-`jsonencode({...})` 로 직접 쓰는 방법과 `data "aws_iam_policy_document"` 로 쓰는 방법이다. 후자가 오타를 잡아 주고 여러 statement 를 합치기 쉬워 IAM 정책에는 주로 이쪽을 쓴다. JSON 을 heredoc 문자열로 적으면 따옴표·콤마 실수가 `apply` 까지 살아남지만, `aws_iam_policy_document` 는 인자 이름을 provider 가 검증해 `terraform validate`·`plan` 단계에서 걸린다. 문서끼리 합칠 때는 `source_policy_documents = [다른문서.json]` 로 다른 정책 문서를 상속한다 — 공통 statement 하나를 여러 키 정책이 나눠 쓰는 방식이다. EventBridge 이벤트 패턴처럼 IAM 정책이 아닌 JSON 에는 `jsonencode` 를 쓴다.
+`jsonencode({...})` 로 직접 쓰는 방법과 `data "aws_iam_policy_document"` 로 쓰는 방법이다. 후자가 오타를 잡아 주고 여러 statement 를 합치기 쉬워 IAM 정책에는 주로 이쪽을 쓴다. JSON 을 heredoc 문자열로 적으면 따옴표·콤마 실수가 `apply` 까지 살아남는다. `aws_iam_policy_document` 는 인자 이름을 provider 가 검증하므로 `terraform validate`·`plan` 단계에서 걸린다. 문서끼리 합칠 때는 `source_policy_documents = [다른문서.json]` 로 다른 정책 문서를 상속한다 — 공통 statement 하나를 여러 키 정책이 나눠 쓰는 방식이다. EventBridge 이벤트 패턴처럼 IAM 정책이 아닌 JSON 에는 `jsonencode` 를 쓴다.
 :::
 
 ### provider 의 리전과 버전 고정

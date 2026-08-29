@@ -8,7 +8,8 @@
     "preview": "astro preview",
     "font": "python scripts/subset-font.py",
     "check:icons": "node scripts/check-mermaid-icons.mjs",
-    "check:lab": "node scripts/check-lab-contract.mjs"
+    "check:lab": "node scripts/check-lab-contract.mjs",
+    "check:read": "node scripts/check-readability.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^7.0.3",

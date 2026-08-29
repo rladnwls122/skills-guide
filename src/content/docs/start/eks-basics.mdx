@@ -54,7 +54,7 @@ flowchart LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-EKS 가 어디까지 관리하고 사용자 VPC 에 무엇이 남는지를 가른다. API 서버·etcd·스케줄러는 AWS 관리 영역에 있어 사용자가 접속할 수는 있어도 손댈 수 없다. 워커 노드는 사용자 VPC 의 프라이빗 서브넷에 뜨는 EC2 이고, 노드의 kubelet 이 API 서버 지시를 받아 파드를 띄운 뒤 상태를 되보고한다. 파드가 받는 IP 는 가상 대역이 아니라 그 서브넷의 VPC IP 다 — 서브넷 CIDR 이 좁으면 파드 수가 먼저 막힌다.
+EKS 가 어디까지 관리하고 사용자 VPC 에 무엇이 남는지를 가른다. API 서버·etcd·스케줄러는 AWS 관리 영역에 있어 사용자가 접속할 수는 있어도 손댈 수 없다. 워커 노드는 사용자 VPC 의 프라이빗 서브넷에 뜨는 EC2 다. 노드의 kubelet 이 API 서버 지시를 받아 파드를 띄우고 상태를 되보고한다. 파드가 받는 IP 는 가상 대역이 아니라 그 서브넷의 VPC IP 다 — 서브넷 CIDR 이 좁으면 파드 수가 먼저 막힌다.
 
 </details>
 
@@ -139,7 +139,7 @@ sequenceDiagram
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-IRSA 로 파드가 AWS 자격 증명을 얻는 순서다. 파일로 마운트된 프로젝티드 토큰을 읽어 `AssumeRoleWithWebIdentity` 를 부르면, STS 가 역할의 신뢰 정책을 보고 OIDC 발급자와 `sub`(네임스페이스·서비스 계정 이름)가 일치하는지 확인한다. 통과하면 임시 자격 증명이 나오고 그것으로 AWS API 를 부른다. 액세스 키를 파드에 넣지 않는 이유가 이 흐름이다.
+IRSA 로 파드가 AWS 자격 증명을 얻는 순서다. 파일로 마운트된 프로젝티드 토큰을 읽어 `AssumeRoleWithWebIdentity` 를 부른다. 그러면 STS 가 역할의 신뢰 정책을 보고 OIDC 발급자와 `sub`(네임스페이스·서비스 계정 이름)가 맞는지 확인한다. 통과하면 임시 자격 증명이 나오고 그것으로 AWS API 를 부른다. 액세스 키를 파드에 넣지 않는 이유가 이 흐름이다.
 
 </details>
 
@@ -187,7 +187,7 @@ CNI가 IP를 주는 것까지가 끝이 아니다. 그 IP로 **서비스 이름�
 - **kube-proxy**: 각 노드에서 Service의 가상 IP(ClusterIP)를 실제 파드 IP로 바꾸는 규칙을 커널에 심는다(iptables 또는 IPVS). ClusterIP는 어떤 인터페이스에도 붙어 있지 않은 **가상 주소**다 — 그래서 ping이 되지 않는다.
 - **CoreDNS**: `svc.ns.svc.cluster.local` 같은 이름을 ClusterIP로 푼다. 파드는 CoreDNS 서비스의 ClusterIP를 네임서버로 받는다.
 
-셋의 의존 순서가 곧 장애 진단 순서다. **CNI(IP) → kube-proxy(라우팅) → CoreDNS(이름)**. CoreDNS 파드가 IP를 못 받으면 클러스터 전체의 이름 해석이 죽고, 증상은 "이미지 pull 실패"·"서비스 연결 안 됨"처럼 엉뚱하게 나타난다. 이름 해석이 의심되면 `kubectl -n kube-system get pods -l k8s-app=kube-dns` 를 먼저 본다.
+셋의 의존 순서가 곧 장애 진단 순서다. **CNI(IP) → kube-proxy(라우팅) → CoreDNS(이름)**. CoreDNS 파드가 IP 를 못 받으면 클러스터 전체의 이름 해석이 죽는다. 증상은 "이미지 pull 실패"·"서비스 연결 안 됨"처럼 엉뚱하게 나타난다. 이름 해석이 의심되면 `kubectl -n kube-system get pods -l k8s-app=kube-dns` 를 먼저 본다.
 
 ### 트래픽이 들어오는 경로
 
@@ -219,9 +219,9 @@ Ingress 가 ALB 로 이어지는 경로다. Ingress 는 규칙을 선언할 뿐�
 | LoadBalancer | 외부 | NodePort 위에 클라우드 로드밸런서(NLB)를 붙인다 |
 | Ingress + ALB | 외부, L7 | 경로·호스트 기반 라우팅. ALB 하나로 여러 서비스를 받는다 |
 
-AWS Load Balancer Controller는 클러스터 안에서 Ingress·Service 리소스를 감시하다가 **실제 ALB/NLB를 AWS API로 만든다**. 그래서 이 컨트롤러에는 ELB를 만들 IAM 권한이 필요하고, 그 권한을 IRSA로 준다.
+AWS Load Balancer Controller 는 클러스터 안에서 Ingress·Service 리소스를 감시한다. 그러다 **실제 ALB·NLB 를 AWS API 로 만든다.** 그래서 이 컨트롤러에는 ELB를 만들 IAM 권한이 필요하고, 그 권한을 IRSA로 준다.
 
-ALB 자체의 구조(리스너·규칙·타깃그룹·헬스체크), 타깃 유형 `instance` 와 `ip` 의 차이, Ingress 와 TargetGroupBinding 중 무엇을 쓸지는 [로드밸런서 기초](/start/loadbalancer-basics/) 에 있다.
+ALB 자체의 구조는 [로드밸런서 기초](/start/loadbalancer-basics/)에 있다 — 리스너·규칙·타깃그룹·헬스체크, 타깃 유형 `instance` 와 `ip` 의 차이, Ingress 와 TargetGroupBinding 중 무엇을 쓸지가 거기 있다.
 
 EKS 쪽에서만 성립하는 것은 둘이다.
 

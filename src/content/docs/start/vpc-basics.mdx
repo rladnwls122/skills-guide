@@ -165,7 +165,7 @@ aws ec2 authorize-security-group-ingress --group-id sg-... \
 | `10.0.0.0/16` | local | |
 | `10.0.5.0/24` | NAT GW | **선택** — 접두사가 가장 길다 |
 
-세 번째 줄처럼 **`local` 보다 구체적인 경로**를 넣을 때는 제약이 둘 붙는다. 목적지가 VPC 안 어느 서브넷의 CIDR 과 정확히 일치해야 하고, 대상은 **NAT 게이트웨이·네트워크 인터페이스·Gateway Load Balancer 엔드포인트** 셋 중 하나여야 한다. 인터넷 게이트웨이나 Transit Gateway 를 이 자리에 넣으면 경로 생성이 거부된다.
+세 번째 줄처럼 **`local` 보다 구체적인 경로**를 넣을 때는 제약이 둘 붙는다. 목적지가 VPC 안 어느 서브넷의 CIDR 과 정확히 일치해야 한다. 그리고 대상이 **NAT 게이트웨이·네트워크 인터페이스·Gateway Load Balancer 엔드포인트** 셋 중 하나여야 한다. 인터넷 게이트웨이나 Transit Gateway 를 이 자리에 넣으면 경로 생성이 거부된다.
 
 VPC CIDR에 대한 `local` 경로는 자동 생성되며 **지울 수 없다**. 다만 대상 교체는 지원된다 — `aws ec2 replace-route --destination-cidr-block 10.0.0.0/16 --network-interface-id eni-...` 로 VPC 내부 트래픽을 검사용 어플라이언스로 몰고, `--local-target` 으로 되돌린다. 미들박스 검사 구성이 이 방식이다.
 
@@ -188,7 +188,7 @@ VPC CIDR에 대한 `local` 경로는 자동 생성되며 **지울 수 없다**. 
 
 L3 로 잇는 방식은 두 VPC 사이에 **IP 경로 자체를 만든다**. 그래서 CIDR 이 겹치면 목적지를 하나로 정할 수 없어 막힌다. L7 로 잇는 방식은 클라이언트가 IP 대신 DNS 이름을 호출하고 중간의 프록시가 목적지를 고르므로 CIDR 이 겹쳐도 무방하다.
 
-**VPC Lattice** 는 서비스 네트워크 하나에 VPC·서비스를 붙여 다대다로 잇는 L7 방식이다. 피어링·TGW·PrivateLink 와 무엇이 어떻게 다른지, Service Network·Service·Target Group·Listener 4계층이 각각 무엇인지는 [VPC Lattice 이론](/part-4/19-vpc-lattice/theory/)에서 다룬다.
+**VPC Lattice** 는 서비스 네트워크 하나에 VPC·서비스를 붙여 다대다로 잇는 L7 방식이다. 피어링·TGW·PrivateLink 와 무엇이 다른지는 [VPC Lattice 이론](/part-4/19-vpc-lattice/theory/)에서 다룬다. Service Network·Service·Target Group·Listener 네 계층이 각각 무엇인지도 거기 있다.
 
 ### VPC 엔드포인트 — 프라이빗 경로로 AWS API 부르기
 

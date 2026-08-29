@@ -12,7 +12,7 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 **선수 학습 15/18.** [k8s-basics](/start/k8s-basics/)와 [eks-basics](/start/eks-basics/) 위에 선다. 파드를 늘리는 층과 노드를 늘리는 층이 갈린다.
 
-2과제의 스케일링 모듈은 **Pod를 늘리는 층**과 **노드를 늘리는 층**이 따로 돌아간다. [모듈 15](/part-4/15-eks-scaling/) 이론은 그 두 층이 이미 머릿속에 있다는 전제로 시간 예산과 채점 함정만 다루므로, KEDA가 HPA와 무슨 관계인지나 Karpenter가 왜 노드그룹을 안 쓰는지가 흐릿하면 여기서 먼저 채운다.
+2과제의 스케일링 모듈은 **Pod를 늘리는 층**과 **노드를 늘리는 층**이 따로 돌아간다. [모듈 15](/part-4/15-eks-scaling/) 이론은 그 두 층을 이미 안다고 보고 시간 예산과 채점 함정만 다룬다. KEDA 가 HPA 와 무슨 관계인지, Karpenter 가 왜 노드그룹을 안 쓰는지가 흐릿하면 여기서 먼저 채운다.
 
 ## ① 학습 목표
 
@@ -44,7 +44,7 @@ flowchart LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-오토스케일링이 2층 구조라는 것을 보여 준다. 1층은 메트릭을 보고 Pod 수를 바꾸는 HPA·KEDA 이고, 2층은 그 결과 갈 곳이 없어진 Pending Pod 을 보고 노드를 늘리는 Karpenter·Cluster Autoscaler 다. 노드는 메트릭이 아니라 **스케줄되지 못한 Pod** 을 보고 늘어난다 — CPU 가 아무리 높아도 Pod 이 늘지 않으면 노드도 늘지 않는다.
+오토스케일링이 2층 구조라는 것을 보여 준다. 1층은 메트릭을 보고 Pod 수를 바꾸는 HPA·KEDA 다. 2층은 그 결과 갈 곳이 없어진 Pending Pod 을 보고 노드를 늘리는 Karpenter·Cluster Autoscaler 다. 노드는 메트릭이 아니라 **스케줄되지 못한 Pod** 을 보고 늘어난다 — CPU 가 아무리 높아도 Pod 이 늘지 않으면 노드도 늘지 않는다.
 
 </details>
 
@@ -101,7 +101,7 @@ flowchart LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-KEDA 가 SQS 큐 길이로 Pod 수를 바꾸는 경로다. ScaledObject 를 선언하면 KEDA 오퍼레이터가 그것을 읽어 HPA(`keda-hpa-<이름>`)를 대신 만들고, 그 HPA 가 큐 길이를 메트릭으로 받아 replicas 를 조정한다. 점선이 다른 일을 한다 — 0 에서 1 로 깨우는 활성화 판단만은 HPA 가 아니라 오퍼레이터가 큐를 직접 폴링해서 한다. `minReplicaCount: 0` 일 때 `pollingInterval` 이 의미를 갖는 이유다.
+KEDA 가 SQS 큐 길이로 Pod 수를 바꾸는 경로다. ScaledObject 를 선언하면 KEDA 오퍼레이터가 그것을 읽어 HPA(`keda-hpa-<이름>`)를 대신 만든다. 그 HPA 가 큐 길이를 메트릭으로 받아 replicas 를 조정한다. 점선이 다른 일을 한다 — 0 에서 1 로 깨우는 활성화 판단만은 HPA 가 아니라 오퍼레이터가 큐를 직접 폴링해서 한다. `minReplicaCount: 0` 일 때 `pollingInterval` 이 의미를 갖는 이유다.
 
 </details>
 
@@ -173,7 +173,7 @@ Fargate는 노드를 관리하지 않는 실행 방식이다. Pod를 만들면 A
 1. 관리형 노드그룹을 최소 규모로 하나 두고 거기에 컨트롤러를 올린다 — 노드 수가 고정돼 있으면 컨트롤러 복제본 수를 그 안에 맞춰야 한다
 2. **컨트롤러 네임스페이스를 Fargate 프로파일로 잡는다** — Pod마다 컴퓨트가 생기므로 노드 용량을 신경 쓸 필요가 없다
 
-Fargate에는 제약도 있다. DaemonSet이 뜨지 않고(노드가 Pod 전용이라 의미가 없다), 특권 컨테이너·호스트 네트워크를 못 쓰며, 노드에 GPU나 로컬 스토리지를 붙일 수 없다. **로그 수집 DaemonSet이 필요한 워크로드는 Fargate에 올리지 않는다.**
+Fargate에는 제약도 있다. DaemonSet 이 뜨지 않는다 — 노드가 Pod 전용이라 의미가 없다. 특권 컨테이너와 호스트 네트워크도 못 쓰고, 노드에 GPU 나 로컬 스토리지를 붙일 수 없다. **로그 수집 DaemonSet이 필요한 워크로드는 Fargate에 올리지 않는다.**
 
 ---
 

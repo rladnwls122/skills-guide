@@ -83,11 +83,11 @@ S3 요청 하나가 허용되기까지의 관문 순서다. 퍼블릭 액세스 
 
 #### 켠 순서에 따라 증상이 갈린다
 
-요청 흐름 도식이 보여준 것은 **요청 시점**의 판정이다. BPA는 그보다 앞선 **쓰기 시점**에도 작동한다. `BlockPublicPolicy` 가 켜져 있으면 퍼블릭을 허용하는 버킷 정책은 `PutBucketPolicy` 호출 자체가 거부된다 — 조건 없는 `"Principal": "*"` 가 AWS가 드는 대표 예다. 즉 BPA를 켠 채로 퍼블릭 정책을 넣으면 저장 단계에서 `AccessDenied` 로 막히고, 정책을 먼저 붙인 뒤 BPA를 켜면 정책은 그대로 남은 채 `RestrictPublicBuckets` 가 요청 시점에 판정을 무효화한다. 증상이 다르므로 어느 순서로 켰는지부터 확인한다.
+요청 흐름 도식이 보여준 것은 **요청 시점**의 판정이다. BPA는 그보다 앞선 **쓰기 시점**에도 작동한다. `BlockPublicPolicy` 가 켜져 있으면 퍼블릭을 허용하는 버킷 정책은 `PutBucketPolicy` 호출 자체가 거부된다 — 조건 없는 `"Principal": "*"` 가 AWS가 드는 대표 예다. 순서에 따라 증상이 갈린다. BPA 를 켠 채로 퍼블릭 정책을 넣으면 저장 단계에서 `AccessDenied` 로 막힌다. 정책을 먼저 붙인 뒤 BPA 를 켜면 정책은 그대로 남고 `RestrictPublicBuckets` 가 요청 시점에 판정을 무효화한다. 증상이 다르므로 어느 순서로 켰는지부터 확인한다.
 
 ### 객체 소유권과 ACL
 
-객체 소유권(Object Ownership)을 **버킷 소유자 적용(Bucket owner enforced)** 으로 두면 ACL이 통째로 비활성화된다. 2023년 이후 새 버킷의 기본값이 이것이다. ACL로 권한을 주는 예제 코드가 동작하지 않는 대부분의 이유가 여기에 있다. 대회 환경에서는 ACL을 쓰지 않고 버킷 정책으로만 통제한다 — 통제 지점이 하나여야 채점도 디버깅도 단순해진다.
+객체 소유권을 **버킷 소유자 적용**(Bucket owner enforced)으로 두면 ACL 이 통째로 비활성화된다. 2023년 이후 새 버킷의 기본값이 이것이다. ACL로 권한을 주는 예제 코드가 동작하지 않는 대부분의 이유가 여기에 있다. 대회 환경에서는 ACL을 쓰지 않고 버킷 정책으로만 통제한다 — 통제 지점이 하나여야 채점도 디버깅도 단순해진다.
 
 ## ③ 대회에서 어떻게 쓰이나
 
@@ -173,7 +173,7 @@ flowchart LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-BPA 를 켠 비공개 버킷을 CloudFront 로 공개하는 경로다. CloudFront 가 OAC 로 SigV4 서명을 붙여 `GetObject` 를 보내고, 버킷 정책이 그 서비스 주체와 배포 ARN 을 확인해 통과시킨다. 객체가 SSE-KMS 로 암호화돼 있으면 S3 가 이어서 KMS 에 복호화를 요청하므로, 키 정책에도 CloudFront 경로가 허용돼야 200 이 나온다.
+BPA 를 켠 비공개 버킷을 CloudFront 로 공개하는 경로다. CloudFront 가 OAC 로 SigV4 서명을 붙여 `GetObject` 를 보내고, 버킷 정책이 그 서비스 주체와 배포 ARN 을 확인해 통과시킨다. 객체가 SSE-KMS 로 암호화돼 있으면 S3 가 이어서 KMS 에 복호화를 요청한다. 그래서 키 정책에도 CloudFront 경로가 허용돼야 200 이 나온다.
 
 </details>
 

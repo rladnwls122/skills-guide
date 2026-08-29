@@ -13,6 +13,9 @@ hero:
       link: /start/
       icon: right-arrow
       variant: primary
+    - text: 처음 왔다면 (용어 사전)
+      link: /reference/glossary/
+      variant: minimal
     - text: 로드맵 보기
       link: "#roadmap"
       variant: minimal
@@ -23,14 +26,38 @@ import DayRail from '../../components/DayRail.svelte';
 
 <DayRail client:visible />
 
+## 처음 왔다면
+
+이 사이트는 대회 용어로 쓰여 있다. **세트·정답지·기준본 같은 말이 설명 없이 나오면 정상이다** — 검색해도 안 나오는 이 대회만의 말이라 사전을 따로 두었다.
+
+<Steps>
+
+1. **[이 사이트의 말](/reference/glossary/)** 을 먼저 훑는다 (10분)
+
+   과제·과제지·채점 스크립트·세트 넷만 알면 나머지 문서가 읽힌다.
+
+2. **[사전 준비](/start/)** 로 계정과 도구를 갖춘다 (반나절)
+
+   끝에 자가진단 18문이 있다. **아니오가 셋 이상이면 PART 0 부터**, 아니면 PART 1 부터 시작한다.
+
+3. **모듈 하나를 끝까지 해 본다**
+
+   개요 → 이론 → 실습 → (있으면) 드릴 순서다. 한 모듈을 끝내 보면 나머지가 같은 모양이라는 것을 알게 된다.
+
+</Steps>
+
+:::tip[클라우드가 처음이라면 그것도 정상이다]
+PART 0 이 운영체제·네트워크·컨테이너부터 시작한다. AWS 를 한 번도 안 써 봤어도 순서대로 가면 된다 — **건너뛴 개념이 나중에 진단을 막는다.**
+:::
+
 ## 최종 목표
 
 1. 1과제 공통 스택(CloudFront→ALB→EKS/Lambda→DynamoDB + KMS + 관측성)을
-   **자기 런북 기반으로 4시간 내 배포 + mark.sh 자동 채점 90%+** — 문서를 빠르고
+   **자기 [런북](/reference/glossary/#런북) 기반으로 4시간 내 배포 + [채점 스크립트](/reference/glossary/#과제지--채점지--채점-스크립트) 90%+** — 문서를 빠르고
    정확하게 실행하는 능력.
 2. **문서에 없는 상황을 개념으로 해결** — 배포 중 오류, 문서에 없는 신규 요구가 나와도
    원인을 스스로 짚고, 필요한 리소스를 **콘솔·manifest·tf 혼합**으로 직접 만든다.
-3. 과제지 30% 변동을 **30분 내 반영** (grep/sed 드릴).
+3. [과제지](/reference/glossary/#과제지--채점지--채점-스크립트) [30% 변동](/reference/glossary/#변동)을 **30분 내 반영** (grep/sed 드릴).
 4. 대표 장애 12종을 확인 명령→원인→조치 순서로 해결.
 5. **제공물을 스스로 읽어 낸다** — 수정 불가 Go 바이너리에서 라우트·환경변수를 뽑고,
    Lambda 를 백지에서 쓰고, 느린 질의를 인덱스로 잡는다.
@@ -51,7 +78,7 @@ import DayRail from '../../components/DayRail.svelte';
 
 </Steps>
 
-## 대원칙 (수상 과제에서 추출)
+## 대원칙 ([수상 세트](/reference/glossary/#후보-세트)에서 추출)
 
 1. **채점 스크립트 우선주의** — 구현 전 mark.sh부터. 이름·필드 순서·개수·오타까지 일치.
 2. **불필요 리소스 = 감점** — 요구 안 된 bastion/태그/latest 태그/폴더 마커 금지.
@@ -75,6 +102,7 @@ EKS 를 이어서 쓰는 구간(모듈 09→12→13)만 예외이고, 그것도 
 ## Reference
 
 <CardGrid>
+  <LinkCard title="이 사이트의 말" href="/reference/glossary/" description="세트·정답지·기준본·이행 — 검색해도 안 나오는 이 대회의 말을 한자리에." />
   <LinkCard title="실기출 분해 — 2024·2025" href="/reference/past-exams/" description="실제로 시행된 두 해의 요구사항·배점·채점 스크립트. 매년 나오는 축과 한 해만 나온 축을 가른다." />
   <LinkCard title="AI 학습 활용 가이드" href="/reference/ai-study-guide/" description="질문 공식·패턴 5종·의존 방지. 학습용 AI로 개념을 채우고 Q 출력을 검증하는 눈을 기른다." />
   <LinkCard title="명령 치트시트" href="/reference/cheatsheet/" description="만들어졌는지 확인하고, 안 될 때 원인을 좁히는 명령. 서비스별 · 증상별." />

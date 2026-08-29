@@ -245,7 +245,7 @@ kubectl 인증은 두 갈래 모두 Access Entry(`authenticationMode: API`)를 �
 
 **① 한 줄 정의** — 시스템 컴포넌트용 addon 노드그룹과 애플리케이션 전용 app 노드그룹으로 분리하고 label(+필요시 taint)로 스케줄을 통제한다.
 
-label·nodeSelector·taint/toleration·DaemonSet 이 각각 무엇인지는 [k8s-basics](/start/k8s-basics/)에, 노드그룹 2분할이 대회 아키텍처에서 차지하는 자리는 그 문서의 대회 실전 아키텍처 절에 있다.
+label·nodeSelector·taint/toleration·DaemonSet 이 각각 무엇인지는 [k8s-basics](/start/k8s-basics/)에, 노드그룹 2분할이 전체 배치에서 차지하는 자리는 그 문서의 "실제로 쓰이는 배치" 절에 있다.
 
 **② 왜 (채점 관점)** — mark 5-3이 `describe-nodegroup`으로 노드그룹 이름·인스턴스 타입·**tags.Name**·서브넷을 검사하고, mark 5-4가 "kube-system 파드는 addon 노드, wskorea26 파드는 app 노드"를 `kubectl get pod -o wide`로 검사한다.
 

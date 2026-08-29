@@ -1138,7 +1138,7 @@ ALB 오리진 behavior 에 `Managed-CachingDisabled` 를 붙였다. 그런데 AP
 
 **`redirect-to-https` 다.** 세 값의 차이가 이 문항의 전부다 — `allow-all` 은 HTTP 를 그대로 받고, `https-only` 는 403 으로 막고, `redirect-to-https` 만 넘긴다.
 
-그리고 **상태코드를 실제로 확인한다.** 실기출 채점 정정 내역에 "반환값을 302에서 301로 수정하였습니다" 라는 줄이 있었다.
+그리고 **상태코드를 실제로 확인한다.** 리다이렉트 코드는 배포 설정과 브라우저에 따라 301 과 302 가 갈리고, 검증하는 쪽이 둘 중 하나를 기대할 수 있다.
 
 ```bash
 curl -sI http://<배포도메인>/ | head -1

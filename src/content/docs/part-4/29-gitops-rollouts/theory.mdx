@@ -639,9 +639,12 @@ argocd app sync wsc2025-argo-app
 관리자가 `kubectl set image` 로 이미지를 바꿨는데 잠시 뒤 원래대로 돌아왔다. 무엇이 그렇게 만들었나?
 
 - [ ] Deployment 의 롤백 기능
+  > 롤백은 사람이 부르는 명령이다. 저절로 돌지 않는다.
 - [x] ArgoCD Application 의 syncPolicy.automated.selfHeal
 - [ ] Argo Rollouts 의 분석
+  > 분석은 새 버전을 승격할지 판단할 뿐 이미지를 되돌리지 않는다.
 - [ ] ECR 이미지 불변 태그
+  > 태그를 덮어쓰지 못하게 할 뿐 클러스터 상태에는 관여하지 않는다.
 
 selfHeal 은 클러스터 상태가 저장소와 다르면 저장소 기준으로 되돌린다. 2025 2과제의 자동 복구 요구가 이 설정이다.
 </Quiz>
@@ -650,9 +653,12 @@ selfHeal 은 클러스터 상태가 저장소와 다르면 저장소 기준으�
 `prePromotionAnalysis` 가 활성 서비스(`activeService`)를 호출하도록 잘못 썼다. 무엇이 문제인가?
 
 - [ ] 분석이 실행되지 않는다
+  > 실행된다. 실행되는데 대상이 틀린 쪽이 더 나쁘다 — 통과했다는 신호만 남는다.
 - [x] 아직 이전 버전을 검사하는 것이라 새 버전 검증이 되지 않는다
 - [ ] 롤아웃이 즉시 실패한다
+  > 이전 버전은 건강하므로 오히려 분석이 통과해 버린다.
 - [ ] 두 서비스가 합쳐진다
+  > 서비스는 그대로 둘이다.
 
 승격 전이므로 activeService 는 여전히 이전 버전을 가리킨다. 새 버전은 previewService 뒤에 있다. 검증은 항상 성공하고 문제 있는 버전도 승격된다.
 </Quiz>
@@ -661,9 +667,12 @@ selfHeal 은 클러스터 상태가 저장소와 다르면 저장소 기준으�
 커밋 후 3분 안에 새 버전이 떠야 하는데 매번 넘긴다. 기본 설정에서 가장 큰 병목은?
 
 - [ ] 이미지 빌드 시간
+  > 빌드는 파이프라인 쪽이고 이 구간 밖이다.
 - [x] ArgoCD 의 기본 저장소 폴링 주기 3분
 - [ ] 파드 기동 시간
+  > 수십 초다. 3분을 채우지 못한다.
 - [ ] ECR push 시간
+  > 마찬가지로 커밋 이후 구간이 아니다.
 
 ArgoCD 는 기본적으로 3분마다 저장소를 확인한다. 그것만으로 예산을 다 쓴다. 웹훅을 걸거나 timeout.reconciliation 을 30초 등으로 줄인다.
 </Quiz>
@@ -672,9 +681,12 @@ ArgoCD 는 기본적으로 3분마다 저장소를 확인한다. 그것만으로
 ExternalSecret 이 `SecretSyncedError` 다. IRSA 네 고리 중 확인 순서로 맞는 것은?
 
 - [ ] 파드 로그만 보면 된다
+  > 앱 파드는 시크릿이 없어 뜨지도 못한다. 원인은 Operator 쪽에 남는다.
 - [x] ServiceAccount annotation → IAM 역할 존재 → 신뢰 정책 sub 조건 → Operator 로그
 - [ ] 클러스터를 다시 만든다
+  > 원인을 찾지 않고 20분을 버리는 선택이다.
 - [ ] Secrets Manager 를 다시 만든다
+  > 새로 만들면 ARN 끝의 임의 6자가 바뀌어 정책이 또 어긋난다.
 
 네 고리를 순서대로 확인한다. Operator 로그의 오류 종류가 갈래를 정한다. AccessDenied 면 정책, AssumeRoleWithWebIdentity 실패면 신뢰 정책이다.
 </Quiz>
@@ -683,9 +695,12 @@ ExternalSecret 이 `SecretSyncedError` 다. IRSA 네 고리 중 확인 순서로
 IRSA 정책에 `arn:aws:secretsmanager:...:secret:gj2025-catalog-secret` 이라고 썼는데 권한 오류가 난다. 원인은?
 
 - [ ] 리전이 틀렸다
+  > 리전이 틀리면 리소스를 아예 못 찾아 오류 문구가 달라진다.
 - [x] Secrets Manager ARN 끝에 임의 6자가 붙는데 그것을 빠뜨렸다
 - [ ] Action 이 부족하다
+  > `GetSecretValue` 가 있어도 Resource 가 안 맞으면 거부된다.
 - [ ] 역할이 없다
+  > 역할이 없으면 그 앞의 assume 단계에서 실패한다.
 
 시크릿 ARN 은 이름 뒤에 하이픈과 임의 6자가 붙는다. -?????? 로 표현하거나 실제 ARN 을 넣는다. Terraform 이면 리소스 속성을 참조해 이 문제를 피한다.
 </Quiz>
@@ -694,9 +709,12 @@ IRSA 정책에 `arn:aws:secretsmanager:...:secret:gj2025-catalog-secret` 이라�
 `autoPromotionEnabled: false` 로 두면 3과제 3분 제약에서 무엇이 문제인가?
 
 - [ ] 파드가 뜨지 않는다
+  > 미리보기 파드는 정상적으로 뜬다.
 - [x] 사람이 promote 명령을 쳐야 전환되므로 자동화가 끊기고 시간 안에 활성이 바뀌지 않는다
 - [ ] 분석이 실행되지 않는다
+  > 분석은 설정대로 돈다. 멈추는 것은 그다음 전환이다.
 - [ ] 서비스가 만들어지지 않는다
+  > active·preview 두 서비스 모두 만들어진다.
 
 false 면 미리보기까지만 자동이고 승격은 수동이다. 채점이 커밋 후 정해진 시간 안에 새 버전이 활성인지 보면 실패한다.
 </Quiz>

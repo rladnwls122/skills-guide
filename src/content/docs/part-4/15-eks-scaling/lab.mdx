@@ -68,7 +68,7 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 <Steps>
 
-1. **본 PC**: `module-3-eks-scaling/terraform` apply → `outputs.json` → eksctl/k8s/mark/provided+outputs.json을 zip으로 CloudShell 반입.
+1. **본 PC**: `module-3-eks-scaling/terraform` apply → `outputs.json` → eksctl/k8s/mark/provided+outputs.json을 zip으로 CloudShell 에 올린다.
 2. **CloudShell**: eksctl·helm 설치 → `~/.skm-env` 환경변수 영구화 → `eksctl create cluster`(~20분, **탭 닫지 말 것**). 클러스터가 2개(모듈 3·4)가 되면 **모듈 전용 터미널에서 `KUBECONFIG`를 모듈 경로로 고정**하고 시작한다 — 터미널 1개 = 클러스터 1개. 공유 kubeconfig의 `use-context` 전환은 잊는 순간 엉뚱한 클러스터에 apply 된다.
 3. 앱 이미지 빌드/푸시 (제공 Dockerfile 그대로).
 4. **KEDA 2.20.1** 설치 — `serviceAccount.operator.create=false`(IRSA용 keda-operator 재사용) + addon taint `tolerations` 지정.

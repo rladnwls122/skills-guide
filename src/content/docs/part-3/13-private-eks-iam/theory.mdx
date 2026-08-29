@@ -92,7 +92,7 @@ set-03 실측(endpoints.tf 주석): `eks` Interface Endpoint를 `private_dns_ena
 
 ### ④ 변형 포인트
 
-당일 과제의 약 30% 가 수정된다. 이 주제에서 바뀌는 값은 대부분 엔드포인트 목록 한 곳에 모인다.
+요구가 바뀌면 아래 자리가 움직인다. 이 주제에서 바뀌는 값은 대부분 엔드포인트 목록 한 곳에 모인다.
 
 | 바뀌는 값 | 고칠 곳 | 확인 |
 |---|---|---|
@@ -200,7 +200,7 @@ bastion 을 쓰면 채점 전에 인스턴스·인스턴스 프로파일·역할
 :::note[협의회(2026-07-31) — 접근 경로는 제한하지 않는다]
 EKS 접근 방식을 특정하지 않는 쪽으로 정리됐다. 과제지 요구는 "CloudShell에서 kubectl 명령어를 사용할 수 있어야 한다" 하나다. CloudShell 접근이 불가한 구성이면 **선수가 채점 전에 bastion을 사전 구축해 쓰는 것도 공식적으로 허용**된다.
 
-본 PC·VPC CloudShell·일반 CloudShell 3분할과 bastion 패턴이 그대로 공인된 셈이다. 다만 "채점 전 bastion 삭제"는 세트별 과제지의 미요구 리소스 정리 원칙에서 나온 것이므로, 당일 과제지가 bastion을 언급하면 그 지시를 우선한다.
+본 PC·VPC CloudShell·일반 CloudShell 3분할과 bastion 패턴이 그대로 공인된 셈이다. 다만 "채점 전 bastion 삭제"는 세트별 과제지의 미요구 리소스 정리 원칙에서 나온 것이므로, 과제지가 bastion을 언급하면 그 지시를 우선한다.
 
 회의록이 붙인 조건 셋을 함께 지킨다.
 
@@ -672,7 +672,7 @@ mark 9-1은 audit role의 ExternalId를 문자열 **정확 일치**로 본다. E
 
 ---
 
-대회 당일 맞춰야 하는 두 값은 **terraform apply에 넣는 `player_number`**와 **채점 셸에서 export하는 등번호(`number`)**다. 둘이 다르면 mark 9-1의 문자열 비교와 mark 9-2의 assume이 **모두** 실패한다.
+실전에서 맞춰야 하는 두 값은 **terraform apply에 넣는 `player_number`**와 **채점 셸에서 export하는 등번호(`number`)**다. 둘이 다르면 mark 9-1의 문자열 비교와 mark 9-2의 assume이 **모두** 실패한다.
 
 9-2는 성공과 실패 양쪽이 다 채점 대상이다. ExternalId 없이 assume하면 `AccessDenied` 여야 하고, 붙여서 assume한 뒤에는 `describe-vpcs`가 성공하고 `describe-instances`가 거부되어야 한다. `get-role`은 `MaxSessionDuration=3600`도 함께 본다.
 </Quiz>

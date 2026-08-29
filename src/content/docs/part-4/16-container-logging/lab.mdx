@@ -54,7 +54,7 @@ terraform 과 eksctl 은 본 PC 에서, 이미지 빌드·helm·kubectl·채점�
 
 <Steps>
 
-1. **본 PC**: `module-4-container-logging/terraform` apply (VPC + **이름 고정 ALB/TG** + ECR + LBC IAM) → zip 반입.
+1. **본 PC**: `module-4-container-logging/terraform` apply (VPC + **이름 고정 ALB/TG** + ECR + LBC IAM) → zip 으로 올린다.
 2. **CloudShell**: `~/.o11y-env` → `eksctl create cluster`(~20분) → 노드 2대가 AZ a/c로 분산됐는지 확인.
 3. 이미지 빌드: 제공 `app.py` 는 그대로 두고 **`app/Dockerfile` 만 직접 쓴다** — 제공 Dockerfile 은 flask 를 설치하지 않아 파드가 CrashLoop 한다. 베이스·tzdata·비루트 패턴은 [모듈 08 의 Dockerfile](/part-1/08-container-lambda-dynamodb/lab/)을 그대로 가져오고, 바뀌는 것은 의존성 설치 줄과 진입점이다.
 4. **LBC 차트 3.4.3 설치** ← TGB CRD가 여기서 생긴다. 이후에만 TGB apply 가능.
@@ -100,7 +100,7 @@ kill %1
 4. **level은 대문자 ERROR** — LogQL `| json | level="ERROR"`. 소문자로 찍히게 가공하면 오답.
 5. **범례는 plain text**(`ERROR`)여야 한다 — `{level="ERROR"}` 형태로 뜨면 오답. `sum by (level)` + legendFormat `{{level}}`.
 6. **No Data 패널 1개라도 있으면 오답** — 채점 전 3레벨 호출.
-7. **로그 확인(4-5)은 부분 일치**로 완화됐다(배포본 v5) — "3분 이내로 기록된 로그가 있으면 득점"이라 본문을 맞출 필요 없이 **채점 직전 트래픽을 한 번 흘려 최근 로그를 만들어 두면** 된다. 모든 노드 TZ는 KST로 설정한다.
+7. **로그 확인(4-5)은 부분 일치**로 완화됐다(배포본 v5) — "3분 이내로 기록된 로그가 있으면 득점"이라 본문을 맞출 필요 없이 **검증 직전 트래픽을 한 번 흘려 최근 로그를 만들어 두면** 된다. 모든 노드 TZ는 KST로 설정한다.
 7. OTel이 body를 가공하면 `| json` 파싱 깨짐 — container 파서 외 본문 변형 금지.
 8. mark4.sh의 `rm -rf ~/.aws`는 CloudShell(관리형 세션)에선 무해 — bastion에서 돌리지 말 것.
 

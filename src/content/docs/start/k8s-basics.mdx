@@ -205,7 +205,7 @@ flowchart TB
 - **Service는 ClusterIP만**: 외부 노출은 Ingress가 아니라 **Terraform으로 만든 ALB + TargetGroupBinding**(Pod IP를 타깃그룹에 직접 등록). Ingress로 만들면 ALB 이름은 애노테이션으로 맞출 수 있어도 **타깃그룹 이름을 지정할 수 없어서** "타깃그룹 이름 채점"을 통과 못 한다.
 - **ConfigMap**으로 앱 설정(DB 호스트 등)을 주입하고, **Secret**은 KMS envelope 암호화(모듈 13)의 대상이 된다.
 - **ServiceAccount**는 IRSA/Pod Identity로 AWS IAM 권한과 연결된다 — "Pod이 S3에 접근하는 방법". 개념만 잡고 PART-2 모듈 09에서 심화.
-- **Helm**은 AWS Load Balancer Controller, kube-prometheus-stack 설치에 쓴다. **차트 버전 고정**이 원칙(버전 미고정 = 대회 당일 다른 버전이 설치되는 사고).
+- **Helm**은 AWS Load Balancer Controller, kube-prometheus-stack 설치에 쓴다. **차트 버전 고정**이 원칙(버전을 고정하지 않으면 다음에 깔 때 다른 버전이 들어온다).
 
 :::danger[Namespace를 틀리면 0점]
 채점 스크립트(mark.sh)는 "특정 ns에 Pod이 있는가"를 검사한다. 리소스가 멀쩡해도 ns가 틀리면 점수가 0이다.

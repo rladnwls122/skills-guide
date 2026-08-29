@@ -21,7 +21,7 @@ set-02 2과제는 RC 판(2026-08-23)에서 **모듈 3(Cloud Event Handling)이 �
 - [ ] S3 트리거의 suffix 필터로 재귀 무한루프를 막는 이유를 설명할 수 있다
 - [ ] ASL(Amazon States Language)에서 S3 "이동"을 Copy+Delete 2개 상태로 분리하는 이유를 안다
 - [ ] Python `Decimal` 나눗셈으로 483/5=96.6을 정확히 만들고, float가 왜 오답인지 설명할 수 있다
-- [ ] "채점 직전 리셋"(버킷/테이블 초기화 → test.csv 정확 1회 업로드) 절차를 순서대로 수행할 수 있다
+- [ ] "검증 직전 리셋"(버킷/테이블 초기화 → test.csv 정확 1회 업로드) 절차를 순서대로 수행할 수 있다
 - [ ] EC2 네이티브 State-change 이벤트와 CloudTrail→EventBridge 경로의 지연 차이를 설명할 수 있다
 - [ ] 자동복구 Lambda의 무한루프 2중 차단(룰 `anything-but` + 람다 값 비교)을 구현할 수 있다
 - [ ] AWS Config 룰의 스코프를 좁혀야 하는 이유(NON_COMPLIANT 오답 방지)를 안다
@@ -83,7 +83,7 @@ set-02 2과제는 RC 판(2026-08-23)에서 **모듈 3(Cloud Event Handling)이 �
       - **workflow.asl.json** 상태 머신 정의
     - terraform/lambda
       - **index.py** Decimal 평균·오류행 분기 정답
-    - **README.md** "최종 실행 절차(채점 직전, 순서 엄수)" 실측 런북
+    - **README.md** "최종 실행 절차(검증 직전, 순서 엄수)" 실측 런북
   - **README.md** 모듈별 리전·공통 워크플로 (RC 판 이후 모듈 3개)
 - skills-2026/set-08/task-2
   - module-3-event-handling 유형 2 정답 — 보안 그룹 자동복구

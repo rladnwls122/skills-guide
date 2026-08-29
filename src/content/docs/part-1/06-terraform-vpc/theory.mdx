@@ -58,7 +58,7 @@ provider "aws" {
 
 </details>
 
-**④ 변형 포인트** — 당일 과제의 약 30% 가 수정된다.
+**④ 변형 포인트** — 요구가 바뀌면 여기가 움직인다.
 
 | 바뀌는 값 | 고칠 곳 | 확인 |
 |---|---|---|
@@ -102,7 +102,7 @@ provider 블록 자체는 세트가 바뀌어도 같은 모양이다. 바뀌는 
 
 **① 한 줄 정의** — `variable` 은 외부에서 주입 가능한 입력값, `terraform.tfvars` 는 그 값을 실제로 주입하는 파일, `locals` 는 내부 계산값이다. 세 블록의 우선순위와 tfvars 자동 로드 규칙은 [hcl-basics](/start/hcl-basics/)에 있다.
 
-**② 왜 필요한가 (채점 관점)** — 대회 당일 공개 과제의 **약 30%가 수정**된다. 이름·CIDR·리전·비번호가 바뀌었을 때 tfvars 한 파일만 고치면 끝나도록 설계해야 한다. 특히 리소스 이름은 "정확 일치" 채점 항목이 많다 (예: mark 가 alias·Name 태그로 리소스를 역조회).
+**② 왜 필요한가 (채점 관점)** — 공개된 요구의 **약 30%가 바뀐 채로 온다**. 이름·CIDR·리전·비번호가 바뀌었을 때 tfvars 한 파일만 고치면 끝나도록 설계해야 한다. 특히 리소스 이름은 "정확 일치" 채점 항목이 많다 (예: mark 가 alias·Name 태그로 리소스를 역조회).
 
 **③ 핵심 원리** — set-02 실측 패턴:
 
@@ -156,7 +156,7 @@ variable "private_rtb_name_prefix" { type = string, default = "wskorea26-private
 :::
 
 ```hcl title="terraform.tfvars"
-# 대회 당일 바뀌는 값만 명시 주입
+# 요구가 바뀌면 이 값들만 갈아 끼운다
 player_number = "103"
 region        = "ap-northeast-2"
 vpc_cidr      = "172.16.0.0/16"
@@ -183,7 +183,7 @@ locals {
 
 핵심: **서브넷 이름을 map 의 key 로** 쓰면 이름·CIDR·AZ·tier 가 한 곳에 모이고, `for` + `if` 로 public/private 을 파생시킨다.
 
-**④ 변형 포인트** — 당일 과제의 약 30% 가 수정된다.
+**④ 변형 포인트** — 요구가 바뀌면 여기가 움직인다.
 
 | 바뀌는 값 | 고칠 곳 | 확인 |
 |---|---|---|
@@ -256,7 +256,7 @@ data 소스 두 종류의 쓰임이다. [`aws_caller_identity`](https://registry
 
 set-02 의 KMS 키 정책은 여기서 만든 문서를 `source_policy_documents` 로 상속해 공통 root statement 를 나눠 쓴다 — 실물은 [모듈 07 이론의 키 정책 절](/part-1/07-kms-s3-cloudfront/theory/)에 있다.
 
-**④ 변형 포인트** — 당일 과제의 약 30% 가 수정된다.
+**④ 변형 포인트** — 요구가 바뀌면 여기가 움직인다.
 
 | 바뀌는 값 | 고칠 곳 | 확인 |
 |---|---|---|

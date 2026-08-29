@@ -151,7 +151,7 @@ MSK 인증 설정 한 덩어리가 브로커 포트와 클라이언트 요구사
 - 2-5 `GET /health` → `{"status":"healthy"}` 정확 일치(대소문자 포함).
 - 2-6 systemd `app` 유닛이 SSM 명령으로 `active`/`enabled` 둘 다 나와야 한다.
 
-:::caution[채점 직전 Flink 상태는 READY]
+:::caution[검증 직전 Flink 상태는 READY]
 `wsc2026-analytics-flink`가 **READY** / `ZEPPELIN-FLINK-3_0`이어야 한다(mark 2-4) — 시연(Run→RUNNING) 후 **반드시 Stop**해 READY로 복귀. RUNNING이면 오답. DDL은 Glue DB에 저장돼 Stop해도 유지된다. task.md가 "Flink 1.19"라 해도 mark가 `ZEPPELIN-FLINK-3_0`을 채점하면 **mark 우선**.
 :::
 
@@ -224,8 +224,8 @@ Zeppelin에서 `Could not find any factory for identifier 'kinesis'` 오류가 �
 콘솔 위저드는 커넥터를 자동 추가하지만 bare CFN은 아니다. 커넥터를 바꾼 뒤 기존 세션에 그대로 실행하면 여전히 실패하므로, 반드시 새 세션에서 확인한다.
 </Quiz>
 
-<Quiz title="채점 직전 Flink 상태">
-시연(Run)을 마친 뒤 채점 직전 Flink Studio 애플리케이션의 상태는 [[READY]] 여야 한다.
+<Quiz title="검증 직전 Flink 상태">
+시연(Run)을 마친 뒤 검증 직전 Flink Studio 애플리케이션의 상태는 [[READY]] 여야 한다.
 
 ---
 

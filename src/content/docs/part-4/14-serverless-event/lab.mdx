@@ -39,7 +39,7 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 ## 실습 목표
 
 - [ ] (유형 1) S3→Lambda→Step Functions→DynamoDB 파이프라인을 배포하고 test.csv 1회 처리로 `STU1020 96.6 A` + error 4건을 재현한다
-- [ ] (유형 1) 채점 직전 리셋 절차를 암기 수준으로 수행한다
+- [ ] (유형 1) 검증 직전 리셋 절차를 암기 수준으로 수행한다
 - [ ] (유형 2) EC2 자동복구 스택을 배포하고 stop+SSH 인바운드 위반 → 90초 내 running / 인바운드 0 복구를 재현한다
 - [ ] (유형 2) 타입 원복 시연을 레이스 없이(stop-rule 비활성화) 수행한다
 - [ ] (이행) 같은 자동복구 요구를 **상태 감시에서 호출 감시로** 갈아 끼운다
@@ -147,7 +147,7 @@ PART-1~3 에는 없던 축이다. 거기서는 리전이 서울로 고정이었�
    - Lambda: `wsc2026-student-score-function`, `python3.12`, env에 S3_BUCKET/DDB_TABLE
    - State Machine: `wsc2026-student-score-workflow  STANDARD`
 
-3. **A-3. 최종 실행 절차** (채점 직전 리셋 — 순서 엄수)
+3. **A-3. 최종 실행 절차** (검증 직전 리셋 — 순서 엄수)
 
    :::danger[RC 판에서 업로드 주체가 바뀌었다]
    set-02 RC 판(2026-08-23)부터 `test.csv` 를 올리는 주체가 **선수에서 채점자로** 바뀌었다. 그래서 대회에서의 최종 상태는 "한 번 처리해 둔 상태"가 아니라 **완전히 비운 상태**다 — 버킷과 테이블에 데이터가 남아 있으면 채점 1-1·1-5·1-6 이 전부 오답이 된다.
@@ -202,7 +202,7 @@ PART-1~3 에는 없던 축이다. 거기서는 리전이 서울로 고정이었�
    <details class="diagram-note">
    <summary>이 블록이 하는 일</summary>
 
-   채점 직전 리셋 절차다. 순서가 중요하다 — 앞선 실행이 남긴 `processed/`·`error/` 객체와 DynamoDB 항목을 먼저 비우고, 그다음 `test.csv` 를 **정확히 한 번** 올린다. 두 번 올리면 오류 JSON 이 8개가 되어 기대값과 어긋난다. 마지막 조회로 실행이 한 건만 SUCCEEDED 인지 확인한다.
+   검증 직전 리셋 절차다. 순서가 중요하다 — 앞선 실행이 남긴 `processed/`·`error/` 객체와 DynamoDB 항목을 먼저 비우고, 그다음 `test.csv` 를 **정확히 한 번** 올린다. 두 번 올리면 오류 JSON 이 8개가 되어 기대값과 어긋난다. 마지막 조회로 실행이 한 건만 SUCCEEDED 인지 확인한다.
 
    </details>
 

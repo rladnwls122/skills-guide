@@ -61,7 +61,7 @@ flowchart LR
 
 ### ③ 핵심 연결 고리
 
-1. **제공 Dockerfile 결함** — flask 미설치 + requirements.txt 없음 → 그대로 빌드하면 CrashLoop. **자체 Dockerfile로 빌드하되 제공 app.py는 수정 금지.** (대회 당일 제공본이 수정돼 있으면 제공본 우선.)
+1. **제공 Dockerfile 결함** — flask 미설치 + requirements.txt 없음 → 그대로 빌드하면 CrashLoop. **자체 Dockerfile로 빌드하되 제공 app.py는 수정 금지.** (받은 제공본이 이미 고쳐져 있으면 그쪽을 따른다.)
 2. **filelog `container` 파서 체인**: `/var/log/pods/*/*/*.log` 수집 → container 파서가 CRI 포맷(타임스탬프/스트림 접두어)을 분해하고 **파일 경로에서 k8s.namespace.name/pod.name/pod.uid를 리소스 속성으로 추출** → **body는 앱이 찍은 원본 JSON 한 줄 그대로** 유지. 본문을 가공하면 Loki에서 `| json` 파싱이 깨진다.
 3. **Loki OTLP 인제스트**: exporter `otlphttp` → `http://o11y-loki...:3100/otlp`. Loki 3.x가 `k8s.namespace.name` 리소스 속성을 인덱스 라벨 `k8s_namespace_name`으로 **자동 승격** — 채점 LogQL `{k8s_namespace_name="o11y"}`와 정확히 맞물린다. 승격 대상은 리소스 속성뿐이고 로그 속성은 승격되지 않으므로, body에서 필드를 더 뽑아도 인덱스 라벨은 늘지 않는다. 대신 body 원본이 훼손돼 `| json` 파싱이 깨진다.
 4. **자기 로그 exclude** — 콜렉터 자신의 로그(`monitoring_o11y-otel*`)를 수집에서 제외해 루프 방지.
@@ -122,7 +122,7 @@ helm show values grafana-community/loki --version 18.7.1 | grep -nE 'port|otlp|s
 :::note[배포본 v5에서 완화·확정된 것들]
 정답 구현이 들어오기 전에는 배포 자료의 `CHANGELOG.txt` 가 유일한 근거였다. 지금은 `set-07/task-2/module-4-container-logging` 에 구현이 있으므로 둘을 함께 본다 — 아래 항목은 배포 자료 쪽 근거다.
 
-- **로그 확인(4-5)이 정확 일치에서 부분 일치로 바뀌었다.** 기준은 "출력된 로그 중 **3분 이내로 기록된 로그가 있으면 득점**" — 로그 본문 전체를 맞출 필요가 없고 **최근성**만 보면 된다. 채점 직전에 트래픽을 한 번 흘려 두는 것으로 충족된다.
+- **로그 확인(4-5)이 정확 일치에서 부분 일치로 바뀌었다.** 기준은 "출력된 로그 중 **3분 이내로 기록된 로그가 있으면 득점**" — 로그 본문 전체를 맞출 필요가 없고 **최근성**만 보면 된다. 검증 직전에 트래픽을 한 번 흘려 두는 것으로 충족된다.
 - **모든 EKS 노드의 TZ를 KST로** 설정하라는 지시가 추가됐다.
 - **범례는 plain text로 출력**해야 한다(`{level="ERROR"}` 같은 라벨 표기가 아니라 `ERROR`). `legendFormat`을 `{{level}}`로 두는 이유가 이것이다.
 - 대시보드는 이미지대로 구성하되 **Panel type이 명시**됐다 — 패널 종류를 임의로 고르지 않는다.
@@ -133,7 +133,7 @@ helm show values grafana-community/loki --version 18.7.1 | grep -nE 'port|otlp|s
 :::
 
 - 범례가 `{level="ERROR"}` 형태면 오답 — legendFormat `{{level}}` 유지.
-- ALB 타깃 healthy까지 1~2분 — 채점 직전 `curl /healthz`로 확인.
+- ALB 타깃 healthy까지 1~2분 — 검증 직전 `curl /healthz`로 확인.
 
 
 <details class="build-step">

@@ -11,7 +11,7 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 선행 지식과 목표는 [모듈 개요](/part-4/27-network-firewall/)에. 개념은 [이론](/part-4/27-network-firewall/theory/)에 있다.
 
-이 실습은 [2025 2과제 Secure networking 모듈](/reference/past-exams/#3-2-2025-2과제--small-challenge-4시간)을 그대로 재현한다. 원래 리전은 `eu-west-1` 이지만 **연습에서는 서울(`ap-northeast-2`)을 써도 된다.** 대회 당일에는 문제지의 리전을 그대로 따른다.
+이 실습은 [2025 2과제 Secure networking 모듈](/reference/past-exams/#3-2-2025-2과제--small-challenge-4시간)을 그대로 재현한다. 원래 리전은 `eu-west-1` 이지만 **연습에서는 서울(`ap-northeast-2`)을 써도 된다.** 실전에서는 문제지의 리전을 그대로 따른다.
 
 :::danger[과금이 큰 실습이다]
 방화벽 엔드포인트가 AZ 마다 시간당 과금하고 NAT Gateway 도 그렇다. 두 AZ 로 만들면 엔드포인트가 둘이다. **끝나면 즉시 `terraform destroy` 한다.** 반나절 켜 두면 실습 하나에 커피값이 넘는다.

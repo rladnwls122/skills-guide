@@ -83,13 +83,13 @@ flowchart LR
 :::
 
 - **S3 폴더 마커는 `input/` 하나만 생성.** `processed/`·`error/`는 실행 후 실제 객체가 생겨 PRE가 뜬다. 마커(0바이트 객체)를 만들어두면 채점의 `aws s3 ls` 목록에 잉여 라인이 출력돼 오답.
-- **채점 직전 리셋 절차 (순서 엄수)**: ① `processed/`·`error/` 비우기 → ② DynamoDB 전 항목 삭제 → ③ `test.csv`를 `input/`에 **정확히 1회** 업로드. 2회 업로드하면 timestamp가 다른 error JSON이 8개가 되어 오답(기대는 4개).
+- **검증 직전 리셋 절차 (순서 엄수)**: ① `processed/`·`error/` 비우기 → ② DynamoDB 전 항목 삭제 → ③ `test.csv`를 `input/`에 **정확히 1회** 업로드. 2회 업로드하면 timestamp가 다른 error JSON이 8개가 되어 오답(기대는 4개).
 - 기대 결과: `STU1020 96.6 A` (get-item), `processed/`에 test.csv만, `error/`에 error_*_STU2001/STU2002/STU2004/unknown.json **정확히 4개**.
 - 채점 상태 = "깨끗한 버킷/테이블에서 test.csv 1회 처리 완료 + SUCCEEDED 실행 1건".
 
 ### ⑤ 변형 포인트
 
-당일 과제의 약 30% 가 수정된다.
+요구가 바뀌면 아래 자리가 움직인다.
 
 | 바뀌는 값 | 고칠 곳 | 확인 |
 |---|---|---|

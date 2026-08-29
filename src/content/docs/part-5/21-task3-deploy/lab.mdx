@@ -52,7 +52,7 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 </Tabs>
 
 :::caution[두 값은 반드시 같아야 한다]
-`terraform.tfvars` 의 `db_password` 는 RDS 와 RDS Proxy 가 **실제로 만드는** 비밀번호다. 셸의 `DB_PASSWORD` 는 STEP 8 에서 매니페스트의 `<DB_PASSWORD>` 자리를 치환할 때만 쓰인다. 두 값이 어긋나면 인프라는 정상으로 뜨는데 앱만 DB 인증에 실패한다 — 증상이 배포 실패가 아니라 런타임 500 이라 원인을 찾는 데 시간이 든다. 대회 당일 과제지가 다른 비밀번호를 지정하면 **두 곳을 함께** 바꾼다.
+`terraform.tfvars` 의 `db_password` 는 RDS 와 RDS Proxy 가 **실제로 만드는** 비밀번호다. 셸의 `DB_PASSWORD` 는 STEP 8 에서 매니페스트의 `<DB_PASSWORD>` 자리를 치환할 때만 쓰인다. 두 값이 어긋나면 인프라는 정상으로 뜨는데 앱만 DB 인증에 실패한다 — 증상이 배포 실패가 아니라 런타임 500 이라 원인을 찾는 데 시간이 든다. 실전 과제지가 다른 비밀번호를 지정하면 **두 곳을 함께** 바꾼다.
 
 새 셸 창을 열 때마다 `DB_PASSWORD` 는 사라진다. 창을 열면 이 한 줄부터 다시 실행한다.
 :::

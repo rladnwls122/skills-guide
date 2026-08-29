@@ -145,7 +145,7 @@ Part C를 배포했다면 destroy까지 여기서 끝낸다 — 마지막 "정�
 2. **Kinesis SQL 커넥터는 bare CFN에 없다** — `CustomArtifactsConfiguration`에 Maven `flink-sql-connector-kinesis:1.15.4` 명시 주입. 안 하면 `Could not find any factory for identifier 'kinesis'`.
 3. **bare 타임스탬프**(`2026-07-13 08:10:51`, T/Z 없음) — 베이스 테이블 `TIMESTAMP(3)` 파싱 + 뷰에서 `TIMESTAMP_LTZ(3)` CAST로 우회. 자세한 이유는 [이론](/part-4/17-streaming/theory/).
 4. **`%flink.conf parallelism.default 1`은 인터프리터 기동 전, 첫 문단에서만** 먹는다. 세션이 망가지면 인터프리터 재시작.
-5. **채점 직전 Flink 상태는 READY** — mark 2-4는 `wsc2026-analytics-flink READY ZEPPELIN-FLINK-3_0`을 본다. RUNNING이면 오답.
+5. **검증 직전 Flink 상태는 READY** — mark 2-4는 `wsc2026-analytics-flink READY ZEPPELIN-FLINK-3_0`을 본다. RUNNING이면 오답.
 6. **제공 producer 바이너리는 SASL/IAM 서명 구현이 없다**(리버싱으로 확인) — 9098을 주면 `unexpected EOF: broker appears to be expecting TLS`. 기본값(`producer_auth_mode=tls`)이 실측 정답 경로다.
 7. **DynamoDB는 전 속성 String 저장** — mark 4-5-A가 `temperature.S`/`status.S`로 조회한다. Number로 저장하면 값이 안 잡혀 0점.
 8. **ESM은 `starting_position = LATEST`** — TRIM_HORIZON으로 두면 재배포 시 백로그 재처리가 폭주한다.

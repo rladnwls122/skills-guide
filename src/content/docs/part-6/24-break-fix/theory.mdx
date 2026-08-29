@@ -25,7 +25,7 @@ OAC(Origin Access Control)는 CloudFront 만 버킷을 읽게 하는 장치다. 
 
 ## 원칙 2 — 경로를 분리해서 진단한다
 
-CloudFront 403처럼 다층 경로의 오류는 **오리진 직접 curl로 계층을 분리**한다: S3 presign / ALB 직접 / Function URL 직접. 어느 계층에서 처음 깨지는지 찾으면 원인 후보가 1~2개로 준다.
+CloudFront 403 처럼 여러 계층을 지나는 오류는 **오리진을 직접 `curl` 해 계층을 분리**한다. S3 presign, ALB 직접, Function URL 직접 셋을 각각 친다. 어느 계층에서 처음 깨지는지 찾으면 원인 후보가 1~2개로 준다.
 
 ## 원칙 3 — Events와 로그가 1차 소스다
 

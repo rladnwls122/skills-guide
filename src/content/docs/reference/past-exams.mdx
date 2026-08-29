@@ -206,7 +206,7 @@ Serverless Inventory 모듈은 Lambda 는 물론 EC2 와 ECS 까지 전부 금�
 2. Stateful 규칙으로 UDP·TCP 53 외부 DNS 질의를 차단한다
 3. IP 직접 접속과 HTTPS 우회까지 차단한다
 
-**Serverless Inventory** — DynamoDB `inventory` 테이블은 파티션 키가 `name` 이고 속성이 `value` 다. Step Functions `inventory-state-machine` 이 `{"sales": N}` 을 받아 재고와 잔고를 갱신한다. API Gateway REST API 는 AWS Service Proxy 통합으로 Lambda 없이 DynamoDB 를 직접 읽고, `item` 쿼리스트링이 `mysecret` 으로 시작하면 403 을 낸다.
+**Serverless Inventory** — DynamoDB `inventory` 테이블은 파티션 키가 `name` 이고 속성이 `value` 다. Step Functions `inventory-state-machine` 이 `{"sales": N}` 을 받아 재고와 잔고를 갱신한다. API Gateway REST API 는 AWS Service Proxy 통합으로 Lambda 없이 DynamoDB 를 직접 읽는다. `item` 쿼리스트링이 `mysecret` 으로 시작하면 403 을 낸다.
 
 ### 3-3. 2025 3과제 — 운영 (40점)
 

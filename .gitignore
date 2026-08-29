@@ -20,3 +20,8 @@ scripts/.font-cache/
 
 # 서버 배포 스크립트
 deploy.sh
+
+# 옵시디언이 루트에 만드는 잔여물 — 사이트 콘텐츠는 src/content/docs/ 아래다
+/*.base
+/reference/
+/start/

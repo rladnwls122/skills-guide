@@ -59,6 +59,21 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 
 이 모듈은 **원리**를 맡는다. AWS 의 구현(ALB 의 리스너 규칙, 대상 그룹, CloudFront 동작)은 [로드밸런서 기초](/start/loadbalancer-basics/)가 이어받는다.
 
+## 공식 문서
+
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [Route 53 레코드 유형](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/ResourceRecordTypes.html) · A·CNAME·TXT 세 항목. 무엇을 가리키는 레코드인지가 이 모듈 2절의 내용이다
+- [HTTP 응답 상태 코드](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status) · 4xx 와 5xx 목록. 403 과 404 를 누가 내는지가 3과제 채점 축과 직결한다
+
+**모듈을 마친 뒤 확인한다**
+
+- [별칭 레코드와 일반 레코드](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resource-record-sets-choosing-alias-non-alias.html) · 둘을 비교하는 부분. AWS 리소스를 가리킬 때 별칭을 쓰는 이유가 여기 있다
+- [ALB 리스너](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-listeners.html) · 프로토콜과 포트 항목. L4 와 L7 의 차이가 실물에서 어떻게 나타나는지 본다
+- [AWS Certificate Manager 사용 설명서](https://docs.aws.amazon.com/acm/latest/userguide/) · 인증서 요청과 검증 절차. TLS 를 붙이는 실제 동선이다
+
 ## 다음
 
 [04. 리눅스와 셸](/part-0/04-linux-shell/) — 이 모든 것이 실제로 도는 운영체제를 다룬다.

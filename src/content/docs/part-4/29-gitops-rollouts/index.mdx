@@ -95,11 +95,18 @@ aws secretsmanager delete-secret --secret-id <이름> --force-delete-without-rec
 
 ## 공식 문서
 
-- [Argo CD 개요](https://argo-cd.readthedocs.io/en/stable/) — Application 과 동기화
-- [Argo Rollouts BlueGreen](https://argo-rollouts.readthedocs.io/en/stable/features/bluegreen/) — activeService · previewService
-- [Argo Rollouts 분석](https://argo-rollouts.readthedocs.io/en/stable/features/analysis/) — prePromotionAnalysis
-- [External Secrets Operator](https://external-secrets.io/latest/) — SecretStore · ExternalSecret
-- [EKS IRSA](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) — 서비스 계정에 역할 주기
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [Argo CD 개요](https://argo-cd.readthedocs.io/en/stable/) · Application 과 동기화를 설명하는 앞부분. 클러스터가 저장소를 따라간다는 방향이 GitOps 의 전부다
+- [Argo Rollouts BlueGreen](https://argo-rollouts.readthedocs.io/en/stable/features/bluegreen/) · `activeService` 와 `previewService` 항목. 서비스 두 개로 버전을 가르는 구조다
+
+**실습 중 대조한다**
+
+- [Argo Rollouts 분석](https://argo-rollouts.readthedocs.io/en/stable/features/analysis/) · `prePromotionAnalysis` 와 AnalysisTemplate 항목. 승격 전 자동 검사를 붙일 때 연다
+- [External Secrets Operator](https://external-secrets.io/latest/) · SecretStore 와 ExternalSecret 두 리소스. 비밀을 저장소에 두지 않고 주입할 때 연다
+- [EKS IRSA](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html) · 서비스 계정 애너테이션과 신뢰 정책 예시
 
 ## 다음 단계
 

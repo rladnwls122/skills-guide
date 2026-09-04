@@ -59,6 +59,19 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
   </Card>
 </CardGrid>
 
+## 공식 문서
+
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [Dockerfile 레퍼런스](https://docs.docker.com/reference/dockerfile/) · `FROM`·`RUN`·`COPY`·`ENTRYPOINT` 네 항목. 어느 명령이 빌드 시점이고 어느 것이 실행 시점인지가 이 모듈 5절이다
+
+**모듈을 마친 뒤 확인한다**
+
+- [빌드 캐시](https://docs.docker.com/build/cache/) · 캐시가 깨지는 조건. 레이어 순서를 바꾸면 빌드 시간이 달라지는 이유다
+- [Amazon ECR 사용 설명서](https://docs.aws.amazon.com/AmazonECR/latest/userguide/) · 로그인과 푸시 절차. 만든 이미지를 실제로 쓰려면 거치는 단계다
+
 ## 다음
 
 PART 0 의 마지막이다. [사전 준비](/start/)로 계정과 도구를 갖춘 뒤, [PART 1](/part-1/06-terraform-vpc/)에서 이 개념들을 코드로 옮긴다.

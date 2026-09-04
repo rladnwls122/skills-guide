@@ -79,12 +79,19 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 ## 공식 문서
 
-- [KMS 키 정책](https://docs.aws.amazon.com/kms/latest/developerguide/key-policies.html) — admin/use 액션 분리, root 제외 시 주의사항
-- [CloudFront OAC로 S3 접근 제한](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html) — 버킷 정책 SourceArn 원문
-- [서비스별 액션·리소스·조건 키](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) — 정책에 쓸 수 있는 Action·Condition 전수표
-- [`aws_cloudfront_distribution`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_distribution) — behavior·오리진 인자 목록
-- [Amazon S3 사용 설명서](https://docs.aws.amazon.com/AmazonS3/latest/userguide/) — 퍼블릭 차단 4종·SSE-KMS·BucketKey
-- [AWS WAF 개발자 안내서](https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html) — Web ACL·규칙·관리형 규칙 그룹·RuleActionOverrides 전반
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [KMS 키 정책](https://docs.aws.amazon.com/kms/latest/developerguide/key-policies.html) · 키 관리 권한과 사용 권한을 가르는 부분. 두 권한을 섞으면 열쇠를 잠근 채 잃는다
+- [CloudFront OAC 로 S3 접근 제한](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html) · 버킷 정책 예시와 `AWS:SourceArn` 조건. 버킷을 비공개로 두고 배포만 통과시키는 구조의 정본이다
+- [Amazon S3 사용 설명서](https://docs.aws.amazon.com/AmazonS3/latest/userguide/) · 퍼블릭 액세스 차단 네 항목과 SSE-KMS 를 다루는 부분. 네 항목이 각각 무엇을 막는지 구분한다
+
+**실습 중 대조한다**
+
+- [서비스별 액션·리소스·조건 키](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html) · 해당 서비스 페이지의 Action 표와 Condition key 표. 정책에 쓸 수 있는 이름의 전수표다
+- [`aws_cloudfront_distribution`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudfront_distribution) · `origin` 과 `default_cache_behavior` 두 블록의 인자 목록
+- [AWS WAF 개발자 안내서](https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html) · Web ACL 과 관리형 규칙 그룹, 그리고 `RuleActionOverrides` 를 다루는 부분. 오차단을 되돌릴 때 연다
 
 ## 다음 단계
 

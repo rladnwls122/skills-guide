@@ -68,8 +68,15 @@ Q가 코드를 대신 써 준다고 해서 문법을 안 익혀도 되는 것은
 
 ## 공식 문서
 
-- [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) — 리소스별 인자 정본. Q 출력 검증의 1차 소스
-- [Amazon Q Developer](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/what-is.html) — 기능 범위와 제약
-- [kubectl explain](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_explain/) — 필드 존재 여부를 클러스터에 직접 묻는 명령
-- [WAF 규칙 구문](https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statements.html) — statement 종류와 중첩 규칙
-- [CloudFront Functions](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-functions.html) — 런타임 제약과 이벤트 구조
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다. 이 모듈에서 문서는 배우는 곳이 아니라 **AI 출력을 반증하는 곳**이다.
+
+**드릴에 들어가기 전에 읽는다**
+
+- [Amazon Q Developer](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/what-is.html) · 기능 범위와 제약 항목. 무엇을 못 하는지를 알아야 어디를 의심할지 정해진다
+- [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) · 리소스 페이지의 인자 목록. 존재하지 않는 인자를 지어낸 출력을 여기서 잡는다
+
+**드릴 중 대조한다**
+
+- [kubectl explain](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_explain/) · 명령 사용법. 필드가 실재하는지 클러스터에 직접 묻는 방법이다
+- [WAF 규칙 구문](https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statements.html) · statement 종류 목록과 중첩 규칙. 생성된 규칙의 구조를 대조한다
+- [CloudFront Functions](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-functions.html) · 런타임 제약과 이벤트 객체 구조

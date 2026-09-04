@@ -61,10 +61,17 @@ VPC Lattice는 **Service Network VPC Association 시간당 + Service 처리량(G
 
 ## 공식 문서
 
-- [VPC Lattice란](https://docs.aws.amazon.com/vpc-lattice/latest/ug/what-is-vpc-lattice.html) — 개념 전체 지도
-- [Service Network](https://docs.aws.amazon.com/vpc-lattice/latest/ug/service-networks.html) — VPC Association·Service Association
-- [Service](https://docs.aws.amazon.com/vpc-lattice/latest/ug/services.html) — 리스너·생성된 DNS 이름
-- [Target Group](https://docs.aws.amazon.com/vpc-lattice/latest/ug/target-groups.html) — 타입별 등록 방식과 헬스 체크
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [VPC Lattice 란](https://docs.aws.amazon.com/vpc-lattice/latest/ug/what-is-vpc-lattice.html) · 구성 요소를 나열하는 앞부분. 이름이 넷뿐이고 그 관계만 알면 나머지는 인자다
+- [Service Network](https://docs.aws.amazon.com/vpc-lattice/latest/ug/service-networks.html) · VPC 연결과 서비스 연결 두 항목. 연결이 둘 다 있어야 통신이 열린다는 점이 가장 흔한 함정이다
+
+**실습 중 대조한다**
+
+- [Service](https://docs.aws.amazon.com/vpc-lattice/latest/ug/services.html) · 리스너 설정과 자동 생성되는 DNS 이름 항목
+- [Target Group](https://docs.aws.amazon.com/vpc-lattice/latest/ug/target-groups.html) · 타입별 등록 방식과 헬스 체크 항목. 대상이 인스턴스인지 IP 인지에 따라 등록이 달라진다
 
 ## 다음 단계
 

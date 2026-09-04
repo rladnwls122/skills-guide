@@ -87,11 +87,18 @@ set-07 task-2 module-1(NoSQL)이 이 모듈과 같은 스택의 2과제 버전�
 
 ## 공식 문서
 
-- [Dockerfile 레퍼런스](https://docs.docker.com/reference/dockerfile/) — `FROM`/`RUN`/`ENV`/`ENTRYPOINT` 정확한 동작
-- [Amazon ECR 사용 설명서](https://docs.aws.amazon.com/AmazonECR/latest/userguide/) — 로그인·push·이미지 스캔
-- [DynamoDB 개발자 안내서](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/) — PK/GSI 설계, PITR
-- [ALB의 Lambda 대상](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html) — 502를 만드는 응답 포맷 요구사항
-- [boto3 DynamoDB 레퍼런스](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html) — `Query` 인자와 Decimal 타입
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [DynamoDB 개발자 안내서](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/) · 기본 키와 보조 인덱스를 설명하는 부분. 조회 패턴이 테이블 설계를 정한다는 사실이 여기서 나온다
+- [ALB 의 Lambda 대상](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html) · 응답 형식을 규정하는 부분. 형식이 어긋나면 코드가 정상이어도 502 가 난다
+
+**실습 중 대조한다**
+
+- [Dockerfile 레퍼런스](https://docs.docker.com/reference/dockerfile/) · `FROM`·`RUN`·`ENV`·`ENTRYPOINT` 네 항목. 명령마다 레이어가 생기는지 여부를 확인한다
+- [Amazon ECR 사용 설명서](https://docs.aws.amazon.com/AmazonECR/latest/userguide/) · 로그인과 이미지 푸시 절차. 인증 토큰의 수명이 짧다는 점을 확인한다
+- [boto3 DynamoDB 레퍼런스](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html) · `Query` 의 인자 목록과 반환 타입. 숫자가 `Decimal` 로 오는 것이 흔한 함정이다
 
 ## 다음 단계
 

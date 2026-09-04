@@ -96,12 +96,19 @@ AWS 가 2024년 7월 이후 신규 고객에게 CodeCommit 저장소 생성을 �
 
 ## 공식 문서
 
-- [CodeBuild buildspec 참조](https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html) — 단계와 문법
-- [CodePipeline 구조](https://docs.aws.amazon.com/codepipeline/latest/userguide/reference-pipeline-structure.html) — 단계·작업·아티팩트
-- [GitHub Actions 워크플로 문법](https://docs.github.com/actions/reference/workflow-syntax-for-github-actions) — `on` · `jobs` · `steps`
-- [aws-actions/configure-aws-credentials](https://github.com/aws-actions/configure-aws-credentials) — OIDC 로 자격증명 얻기
-- [aws_codebuild_project](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/codebuild_project) — Terraform 리소스
-- [aws_codepipeline](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/codepipeline) — Terraform 리소스
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [CodePipeline 구조](https://docs.aws.amazon.com/codepipeline/latest/userguide/reference-pipeline-structure.html) · 단계와 작업, 아티팩트를 설명하는 부분. 단계 사이를 잇는 것이 아티팩트라는 구조가 뼈대다
+- [CodeBuild buildspec 참조](https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html) · `phases` 와 `artifacts` 두 항목. 빌드가 무엇을 남기는지가 여기서 정해진다
+
+**실습 중 대조한다**
+
+- [GitHub Actions 워크플로 문법](https://docs.github.com/actions/reference/workflow-syntax-for-github-actions) · `on`·`jobs`·`steps` 세 항목
+- [aws-actions/configure-aws-credentials](https://github.com/aws-actions/configure-aws-credentials) · OIDC 설정 예시. 장기 액세스 키를 두지 않는 방법이다
+- [aws_codebuild_project](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/codebuild_project) · `environment` 와 `source` 블록의 인자
+- [aws_codepipeline](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/codepipeline) · `stage` 블록과 `artifact_store` 인자
 
 ## 다음 단계
 

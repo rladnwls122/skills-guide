@@ -65,8 +65,15 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 
 ## 공식 문서
 
-- [애플리케이션 디버깅(kubectl)](https://kubernetes.io/docs/tasks/debug/debug-application/) — Pending·CrashLoop 진단 순서
-- [EKS 문제 해결](https://docs.aws.amazon.com/eks/latest/userguide/troubleshooting.html) — Unauthorized·노드 미조인 원문
-- [대상 그룹 헬스 체크](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html) — unhealthy reason 코드 해석
-- [CloudFront 응답 오류 해결](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/troubleshooting-response-errors.html) — 403/502의 오리진별 원인
-- [IAM 정책 평가 로직](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html) — AccessDenied 역추적
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다. 진단 문서는 고장이 난 뒤에 처음 열면 늦다.
+
+**드릴에 들어가기 전에 읽는다**
+
+- [애플리케이션 디버깅](https://kubernetes.io/docs/tasks/debug/debug-application/) · Pending 과 CrashLoopBackOff 를 다루는 부분. 어떤 명령을 어떤 순서로 치는지가 여기 있다
+- [IAM 정책 평가 로직](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html) · 명시적 거부와 암묵적 거부를 가르는 부분. 권한 오류를 역추적하는 유일한 근거다
+
+**드릴 중 대조한다**
+
+- [EKS 문제 해결](https://docs.aws.amazon.com/eks/latest/userguide/troubleshooting.html) · 권한 오류와 노드 미조인 항목. 증상 문자열을 그대로 찾을 수 있다
+- [대상 그룹 헬스 체크](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html) · unhealthy 사유 코드 표. 코드마다 볼 곳이 다르다
+- [CloudFront 응답 오류 해결](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/troubleshooting-response-errors.html) · 403 과 502 항목. 오리진 종류마다 원인이 갈린다

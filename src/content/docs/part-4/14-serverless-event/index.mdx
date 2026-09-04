@@ -98,11 +98,18 @@ set-02 2과제는 RC 판(2026-08-23)에서 **모듈 3(Cloud Event Handling)이 �
 
 ## 공식 문서
 
-- [Amazon States Language](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-amazon-states-language.html) — 상태 타입·`Parameters`·오류 처리
-- [EventBridge 이벤트 패턴](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-event-patterns.html) — 룰 작성 문법과 네이티브 vs CloudTrail 소스
-- [AWS Config 개발자 안내서](https://docs.aws.amazon.com/config/latest/developerguide/) — 레코더 스코프·규칙 평가 시점
-- [S3 이벤트 알림](https://docs.aws.amazon.com/AmazonS3/latest/userguide/NotificationHowTo.html) — suffix 필터로 재귀 차단
-- [Lambda Python 런타임](https://docs.aws.amazon.com/lambda/latest/dg/lambda-python.html) — 핸들러 서명·환경변수
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [EventBridge 이벤트 패턴](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-event-patterns.html) · 패턴 문법과 이벤트 소스를 다루는 부분. 서비스가 직접 내는 이벤트와 CloudTrail 을 거치는 이벤트의 구분이 규칙을 정한다
+- [Amazon States Language](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-amazon-states-language.html) · 상태 타입 목록과 오류 처리 항목. 상태 기계는 이 문법으로만 쓴다
+
+**실습 중 대조한다**
+
+- [AWS Config 개발자 안내서](https://docs.aws.amazon.com/config/latest/developerguide/) · 레코더 범위와 규칙 평가 시점을 다루는 부분. 규칙이 언제 도는지를 모르면 결과를 오해한다
+- [S3 이벤트 알림](https://docs.aws.amazon.com/AmazonS3/latest/userguide/NotificationHowTo.html) · 접두사·접미사 필터 항목. 처리 결과를 같은 버킷에 쓸 때 재귀를 막는 자리다
+- [Lambda Python 런타임](https://docs.aws.amazon.com/lambda/latest/dg/lambda-python.html) · 핸들러 서명과 환경변수 항목
 
 ## 다음 단계
 

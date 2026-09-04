@@ -74,11 +74,18 @@ PART 0 까지는 일반 개념이었다. **PART 1 부터는 실제 과제를 기
 
 ## 공식 문서
 
-- [Terraform 언어 레퍼런스](https://developer.hashicorp.com/terraform/language) — 블록·표현식·타입. 문법이 막히면 여기
-- [`for_each` 메타 인자](https://developer.hashicorp.com/terraform/language/meta-arguments/for_each) — map/set 반복과 `each` 참조
-- [AWS provider 리소스 색인](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) — `aws_vpc`·`aws_subnet`·`aws_route_table` 인자와 반환 속성(Attribute Reference)
-- [Terraform CLI 명령](https://developer.hashicorp.com/terraform/cli/commands) — `plan`/`apply`/`output`/`-target` 옵션
-- [Amazon VPC 사용 설명서](https://docs.aws.amazon.com/vpc/latest/userguide/) — 라우팅·NAT·엔드포인트 개념 원문
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [Terraform 언어 레퍼런스](https://developer.hashicorp.com/terraform/language) · 블록 종류와 표현식을 설명하는 앞부분. `resource`·`variable`·`output` 이 각각 무엇을 하는지가 여기서 정해진다
+- [Amazon VPC 사용 설명서](https://docs.aws.amazon.com/vpc/latest/userguide/) · 라우팅 테이블과 NAT 게이트웨이를 다루는 부분. 서브넷을 공용과 사설로 가르는 것이 라우팅이라는 사실이 이 모듈의 출발점이다
+
+**실습 중 대조한다**
+
+- [AWS provider 리소스 색인](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) · `aws_vpc`·`aws_subnet`·`aws_route_table` 세 페이지의 인자 목록과 Attribute Reference. 반환 속성 이름은 외우지 않고 여기서 찾는다
+- [`for_each` 메타 인자](https://developer.hashicorp.com/terraform/language/meta-arguments/for_each) · map 과 set 을 받는 부분, 그리고 `each.key`·`each.value` 참조. 서브넷을 반복으로 만들 때 연다
+- [Terraform CLI 명령](https://developer.hashicorp.com/terraform/cli/commands) · `plan`·`apply`·`output` 세 항목과 `-target` 옵션. 일부만 적용할 때 연다
 
 ## 다음 단계
 

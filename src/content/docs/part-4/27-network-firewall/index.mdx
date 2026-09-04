@@ -85,11 +85,18 @@ Network Firewall 은 가용 영역마다 엔드포인트를 하나씩 만들고 
 
 ## 공식 문서
 
-- [AWS Network Firewall 개발자 안내서](https://docs.aws.amazon.com/network-firewall/latest/developerguide/) — 서브넷 배치와 라우팅
-- [Suricata 규칙 형식](https://docs.suricata.io/en/latest/rules/intro.html) — 규칙 한 줄의 구조
-- [Network Firewall 규칙 그룹](https://docs.aws.amazon.com/network-firewall/latest/developerguide/rule-groups.html) — Stateless 와 Stateful
-- [aws_networkfirewall_firewall](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/networkfirewall_firewall) — Terraform 리소스
-- [aws_networkfirewall_rule_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/networkfirewall_rule_group) — 규칙 그룹 리소스
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [AWS Network Firewall 개발자 안내서](https://docs.aws.amazon.com/network-firewall/latest/developerguide/) · 방화벽 서브넷 배치와 라우팅을 다루는 부분. 트래픽을 방화벽으로 꺾는 것이 라우팅 테이블이라는 사실이 전제다
+- [Network Firewall 규칙 그룹](https://docs.aws.amazon.com/network-firewall/latest/developerguide/rule-groups.html) · 무상태와 상태 저장 규칙을 가르는 부분. 어느 쪽에 규칙을 넣느냐가 판정 순서를 바꾼다
+
+**실습 중 대조한다**
+
+- [Suricata 규칙 형식](https://docs.suricata.io/en/latest/rules/intro.html) · 규칙 한 줄의 구조를 분해하는 부분. 상태 저장 규칙을 직접 쓸 때 연다
+- [aws_networkfirewall_firewall](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/networkfirewall_firewall) · 서브넷 매핑 블록의 인자
+- [aws_networkfirewall_rule_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/networkfirewall_rule_group) · 규칙 소스 블록의 인자와 `stateful_rule_options`
 
 ## 다음 단계
 

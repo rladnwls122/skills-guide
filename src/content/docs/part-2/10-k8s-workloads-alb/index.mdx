@@ -65,12 +65,19 @@ import { LinkButton } from '@astrojs/starlight/components';
 
 ## 공식 문서
 
-- [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) — 롤링 업데이트·셀렉터 규칙
-- [probe 설정](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) — liveness/readiness/startup 차이와 필드
-- [PodDisruptionBudget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/) — 노드 회수 중 가용성 보장
-- [TargetGroupBinding (AWS Load Balancer Controller)](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/targetgroupbinding/targetgroupbinding/) — spec 필드·targetType
-- [ALB 리스너 규칙](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/listener-update-rules.html) — 조건·우선순위·기본 액션
-- [Helm 문서](https://helm.sh/docs/) — repo/chart/release/values
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [Deployment](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) · 셀렉터와 롤링 업데이트를 다루는 부분. 셀렉터는 만든 뒤 못 바꾼다는 제약이 설계를 정한다
+- [probe 설정](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/) · 세 프로브의 차이를 설명하는 부분. readiness 와 liveness 를 바꿔 쓰면 장애가 커진다
+
+**실습 중 대조한다**
+
+- [TargetGroupBinding](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/targetgroupbinding/targetgroupbinding/) · spec 필드 목록과 `targetType`. 파드를 ALB 대상으로 직접 등록할 때 연다
+- [ALB 리스너 규칙](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/listener-update-rules.html) · 조건과 우선순위, 그리고 기본 액션. 어디에도 맞지 않는 요청의 응답이 여기서 정해진다
+- [PodDisruptionBudget](https://kubernetes.io/docs/tasks/run-application/configure-pdb/) · `minAvailable` 과 `maxUnavailable` 항목. 노드 회수 중 가용성을 지킬 때 연다
+- [Helm 문서](https://helm.sh/docs/) · 차트와 릴리스, `values` 를 다루는 부분. 설치 명령의 플래그가 무엇을 덮는지 확인한다
 
 ## 다음 단계
 

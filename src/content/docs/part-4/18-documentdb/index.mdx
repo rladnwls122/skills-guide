@@ -69,11 +69,18 @@ DocumentDB 인스턴스는 RDS와 달리 **중지(stop) 기능이 없다.** 삭�
 
 ## 공식 문서
 
-- [Amazon DocumentDB란 무엇인가](https://docs.aws.amazon.com/documentdb/latest/developerguide/what-is.html) — 클러스터·인스턴스 구조
-- [Amazon DocumentDB 보안](https://docs.aws.amazon.com/documentdb/latest/developerguide/security.html) — VPC 격리·TLS·저장 암호화
-- [Amazon DocumentDB 동작 방식](https://docs.aws.amazon.com/documentdb/latest/developerguide/how-it-works.html) — 인덱스·TTL 동작
-- [AWS Secrets Manager 사용 설명서](https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html)
-- [PyMongo 문서](https://pymongo.readthedocs.io/en/stable/) — `docdb_client.py`가 쓰는 드라이버
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [Amazon DocumentDB 란 무엇인가](https://docs.aws.amazon.com/documentdb/latest/developerguide/what-is.html) · 클러스터와 인스턴스의 관계를 설명하는 부분. 저장 계층이 인스턴스와 분리돼 있다는 구조가 전제다
+- [Amazon DocumentDB 보안](https://docs.aws.amazon.com/documentdb/latest/developerguide/security.html) · TLS 항목. 기본이 TLS 필수라 인증서 없이 붙으면 연결부터 실패한다
+
+**실습 중 대조한다**
+
+- [Amazon DocumentDB 동작 방식](https://docs.aws.amazon.com/documentdb/latest/developerguide/how-it-works.html) · 인덱스와 TTL 을 다루는 부분. 만료 삭제를 요구받을 때 연다
+- [AWS Secrets Manager 사용 설명서](https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html) · 비밀 저장과 조회 절차. 접속 정보를 코드에 박지 않기 위해 연다
+- [PyMongo 문서](https://pymongo.readthedocs.io/en/stable/) · 연결 문자열과 TLS 옵션 항목. 실습 클라이언트가 쓰는 드라이버다
 
 ## 다음 단계
 

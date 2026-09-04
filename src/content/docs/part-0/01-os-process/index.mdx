@@ -58,6 +58,19 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
   </Card>
 </CardGrid>
 
+## 공식 문서
+
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [파드에 CPU·메모리 리소스 할당](https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/) · 요청과 제한을 가르는 앞부분. 이 모듈의 마지막 절이 그대로 이 개념이다
+
+**모듈을 마친 뒤 확인한다**
+
+- [파드 QoS 클래스](https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/) · 세 등급의 판정 규칙. 메모리가 모자랄 때 어느 파드가 먼저 죽는지가 여기서 정해진다
+- [`cgroups(7)`](https://man7.org/linux/man-pages/man7/cgroups.7.html) · 개요와 컨트롤러 목록. 컨테이너 격리가 새 기술이 아니라 커널 기능이라는 근거다
+
 ## 다음
 
 [02. 네트워크 기초](/part-0/02-network-basics/) — 프로세스끼리 말을 걸기 시작하면 네트워크가 된다.

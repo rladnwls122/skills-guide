@@ -56,6 +56,19 @@ import { Card, CardGrid, LinkButton } from '@astrojs/starlight/components';
 
 셸 문법과 한 줄 명령의 조합은 [셸 기초](/start/shell-basics/)가 더 깊게 다룬다. 이 모듈은 **운영체제 쪽**을 맡는다.
 
+## 공식 문서
+
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [GNU Bash 매뉴얼](https://www.gnu.org/software/bash/manual/bash.html) · 리다이렉션과 파이프라인 항목. 표준 출력과 표준 오류가 두 갈래라는 사실이 이 모듈 3절이다
+
+**모듈을 마친 뒤 확인한다**
+
+- [`systemd.service`](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html) · `Restart` 와 `ExecStart` 항목. 꺼져도 다시 뜨게 만드는 값이 이 둘이다
+- [`journalctl`](https://www.freedesktop.org/software/systemd/man/latest/journalctl.html) · 필터 옵션 목록. 서비스 로그를 좁혀 볼 때 쓰는 명령이다
+
 ## 다음
 
 [05. 컨테이너](/part-0/05-container/) — 지금 손으로 한 것을 이미지로 말아 둔다.

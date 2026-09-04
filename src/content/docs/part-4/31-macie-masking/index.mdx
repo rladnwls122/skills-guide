@@ -101,11 +101,18 @@ aws macie2 disable-macie
 
 ## 공식 문서
 
-- [Amazon Macie 사용 설명서](https://docs.aws.amazon.com/macie/latest/user/) — 작업과 발견 항목
-- [Macie 관리형 데이터 식별자](https://docs.aws.amazon.com/macie/latest/user/managed-data-identifiers.html) — 무엇을 감지하는지
-- [S3 이벤트 알림](https://docs.aws.amazon.com/AmazonS3/latest/userguide/NotificationHowTo.html) — 접두사·접미사 필터
-- [Python `re` 모듈](https://docs.python.org/3/library/re.html) — 정규식
-- [aws_macie2_classification_job](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/macie2_classification_job) — Terraform 리소스
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [Amazon Macie 사용 설명서](https://docs.aws.amazon.com/macie/latest/user/) · 분류 작업과 발견 항목을 설명하는 앞부분. Macie 는 찾아 주기만 하고 고치지 않는다는 점이 설계의 출발이다
+- [Macie 관리형 데이터 식별자](https://docs.aws.amazon.com/macie/latest/user/managed-data-identifiers.html) · 감지 대상 목록. 무엇이 기본으로 잡히고 무엇을 직접 만들어야 하는지 여기서 갈린다
+
+**실습 중 대조한다**
+
+- [S3 이벤트 알림](https://docs.aws.amazon.com/AmazonS3/latest/userguide/NotificationHowTo.html) · 접두사·접미사 필터 항목. 마스킹 결과를 같은 버킷에 쓸 때 재귀를 막는다
+- [Python `re` 모듈](https://docs.python.org/3/library/re.html) · 치환 함수와 그룹 참조 항목. 마스킹 규칙을 직접 쓸 때 연다
+- [aws_macie2_classification_job](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/macie2_classification_job) · 작업 유형과 S3 대상 지정 인자
 
 ## 다음 단계
 

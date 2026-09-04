@@ -90,9 +90,16 @@ SQS 자체가 처음이면 [serverless-basics](/start/serverless-basics/)의 SQS
 
 ## 공식 문서
 
-- [HorizontalPodAutoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) — 이용률 계산식과 `behavior` 필드
-- [KEDA Scalers](https://keda.sh/docs/latest/scalers/) — SQS 스케일러 인자·인증 방식
-- [Karpenter NodePool](https://karpenter.sh/docs/concepts/nodepools/) — requirements·limits·consolidation
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [HorizontalPodAutoscaler](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) · 이용률 계산식을 설명하는 부분. 분모가 `requests` 라는 사실이 이 모듈 전체를 관통한다
+- [Karpenter NodePool](https://karpenter.sh/docs/concepts/nodepools/) · `requirements` 와 `limits`, `disruption` 세 블록. 파드 층과 노드 층이 따로 논다는 구조가 여기서 보인다
+
+**실습 중 대조한다**
+
+- [KEDA Scalers](https://keda.sh/docs/latest/scalers/) · AWS SQS 스케일러 페이지의 인자 목록과 인증 방식. 큐 길이로 스케일할 때 연다
 
 ## 다음 단계
 

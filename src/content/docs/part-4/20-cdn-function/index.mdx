@@ -73,12 +73,19 @@ NAT·EKS 처럼 시간당 과금이 큰 리소스는 없다. 그래도 distribut
 
 ## 공식 문서
 
-- [CloudFront Functions 개발자 안내서](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-functions.html) — 실행 훅·런타임 개요
-- [Lambda@Edge 개발자 안내서](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/lambda-at-the-edge.html) — 4개 이벤트 훅·Node.js/Python
-- [CloudFront Functions와 Lambda@Edge의 차이](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/edge-functions-choosing.html) — 공식 비교표(런타임·훅·메모리·네트워크 접근)
-- [JavaScript 런타임 2.0](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/functions-javascript-runtime-20.html) — `async`/`await` 지원 범위와 제약
-- [함수 게시(publish)](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/publish-function.html) — DEVELOPMENT → LIVE 스테이지 전환
-- [Amazon CloudFront KeyValueStore](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/kvs-with-functions.html) — 함수-KVS 연동 구조
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [CloudFront Functions 와 Lambda@Edge 의 차이](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/edge-functions-choosing.html) · 공식 비교표. 둘 중 무엇을 쓰는지가 이 모듈의 첫 판단이고 근거가 이 표다
+- [CloudFront Functions 개발자 안내서](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-functions.html) · 실행 훅과 런타임 제약을 설명하는 부분. 네트워크 호출이 불가능하다는 제약이 설계를 정한다
+
+**실습 중 대조한다**
+
+- [Lambda@Edge 개발자 안내서](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/lambda-at-the-edge.html) · 네 가지 이벤트 훅 항목. 오리진 요청 단계가 필요할 때 연다
+- [JavaScript 런타임 2.0](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/functions-javascript-runtime-20.html) · 지원 문법과 제약 목록. `async` 사용 가능 여부가 여기서 갈린다
+- [함수 게시](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/publish-function.html) · 개발 스테이지에서 라이브로 올리는 절차. 게시하지 않으면 배포에 반영되지 않는다
+- [CloudFront KeyValueStore](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/kvs-with-functions.html) · 함수와 저장소를 연결하는 부분. 함수에서 값을 찾아야 할 때 연다
 
 ## 다음 단계
 

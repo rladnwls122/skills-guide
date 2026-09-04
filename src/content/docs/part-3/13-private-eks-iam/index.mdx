@@ -84,12 +84,19 @@ import { FileTree, LinkButton } from '@astrojs/starlight/components';
 
 ## 공식 문서
 
-- [EKS 프라이빗 클러스터](https://docs.aws.amazon.com/eks/latest/userguide/private-clusters.html) — 요구 엔드포인트 목록과 제약
-- [ECR용 VPC 엔드포인트](https://docs.aws.amazon.com/AmazonECR/latest/userguide/vpc-endpoints.html) — s3/ecr.api/ecr.dkr 조합
-- [IAM 정책 평가 로직](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html) — 신뢰 정책·권한 정책 이중 평가의 근거
-- [`sts:ExternalId`](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html) — audit role 실습 원문
-- [클러스터 DNS 커스터마이즈](https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/) — CoreDNS Corefile 수정
-- [CloudFront 개발자 안내서](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/) — VPC origins·prefix list 절 참조
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [EKS 프라이빗 클러스터](https://docs.aws.amazon.com/eks/latest/userguide/private-clusters.html) · 필요한 VPC 엔드포인트 목록과 제약. 인터넷을 끊으면 무엇이 못 도는지가 이 목록이다
+- [IAM 정책 평가 로직](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html) · 역할을 맡을 때 신뢰 정책과 권한 정책이 따로 평가되는 부분. 권한 오류를 역추적하는 근거다
+
+**실습 중 대조한다**
+
+- [ECR 용 VPC 엔드포인트](https://docs.aws.amazon.com/AmazonECR/latest/userguide/vpc-endpoints.html) · 필요한 엔드포인트 조합. 이미지 계층이 S3 에서 오므로 `ecr.api` 와 `ecr.dkr` 만으로는 부족하다
+- [`sts:ExternalId`](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html) · 신뢰 정책의 조건 예시. 감사 역할 실습의 원문이다
+- [클러스터 DNS 커스터마이즈](https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/) · CoreDNS 설정 파일을 고치는 부분
+- [CloudFront 개발자 안내서](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/) · VPC 오리진과 접두사 목록을 다루는 부분. 사설 ALB 를 배포에 붙일 때 연다
 
 ## 다음 단계
 

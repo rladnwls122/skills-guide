@@ -85,12 +85,19 @@ Lambda 를 쓸 수 없다는 제약이 문제의 성격을 뒤집는다. 평소�
 
 ## 공식 문서
 
-- [Amazon States Language](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-amazon-states-language.html) — 상태 타입과 필드
-- [Step Functions 의 AWS SDK 통합](https://docs.aws.amazon.com/step-functions/latest/dg/supported-services-awssdk.html) — Lambda 없이 서비스 부르기
-- [API Gateway REST API 통합 유형](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-api-integration-types.html) — AWS · AWS_PROXY · HTTP
-- [API Gateway 매핑 템플릿](https://docs.aws.amazon.com/apigateway/latest/developerguide/models-mappings.html) — VTL 문법
-- [aws_api_gateway_integration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration) — Terraform 리소스
-- [aws_sfn_state_machine](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sfn_state_machine) — Terraform 리소스
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [API Gateway REST API 통합 유형](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-api-integration-types.html) · `AWS`·`AWS_PROXY`·`HTTP` 세 유형의 차이. 어느 유형을 고르느냐가 매핑 템플릿의 필요 여부를 정한다
+- [Step Functions 의 AWS SDK 통합](https://docs.aws.amazon.com/step-functions/latest/dg/supported-services-awssdk.html) · 통합 호출 형식 부분. Lambda 없이 서비스를 직접 부를 수 있다는 사실이 설계를 바꾼다
+
+**실습 중 대조한다**
+
+- [Amazon States Language](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-amazon-states-language.html) · 상태 타입 목록과 입출력 필드
+- [API Gateway 매핑 템플릿](https://docs.aws.amazon.com/apigateway/latest/developerguide/models-mappings.html) · VTL 문법과 `$input` 변수. 요청 본문을 바꿔 넘길 때 연다
+- [aws_api_gateway_integration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/api_gateway_integration) · `type` 과 `uri`, `request_templates` 인자
+- [aws_sfn_state_machine](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sfn_state_machine) · `definition` 과 `role_arn` 인자
 
 ## 다음 단계
 

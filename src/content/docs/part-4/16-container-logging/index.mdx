@@ -69,9 +69,16 @@ k8s 리소스(TargetGroupBinding) → helm → `eksctl delete cluster` → `terr
 
 ## 공식 문서
 
-- [OpenTelemetry Collector 설정](https://opentelemetry.io/docs/collector/configuration/) — receiver/processor/exporter 파이프라인
-- [LogQL](https://grafana.com/docs/loki/latest/query/) — 라벨 셀렉터와 `| json` 파서
-- [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/) — TargetGroupBinding
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [OpenTelemetry Collector 설정](https://opentelemetry.io/docs/collector/configuration/) · receiver·processor·exporter 를 파이프라인으로 잇는 부분. 셋을 선언만 하고 파이프라인에 넣지 않으면 아무것도 흐르지 않는다
+- [LogQL](https://grafana.com/docs/loki/latest/query/) · 라벨 셀렉터와 `json` 파서를 다루는 부분. 라벨로 먼저 좁히고 나서 파싱한다는 순서가 요점이다
+
+**실습 중 대조한다**
+
+- [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/) · TargetGroupBinding 문서. 로그 수집 대상이 되는 경로를 붙일 때 연다
 
 ## 다음 단계
 

@@ -7,6 +7,12 @@ node_modules/
 
 dist/
 .astro/
+.vercel/
+
+# 저장소 자격 증명 — 절대 커밋하지 않는다. 예시는 .env.example 에 둔다
+.env
+.env.*
+!.env.example
 
 scripts/.font-cache/
 
@@ -25,3 +31,7 @@ deploy.sh
 /*.base
 /reference/
 /start/
+.vercel
+.env*
+# 값이 빈 예시만 커밋한다. 위 .env* 뒤에 와야 부정이 이긴다
+!.env.example

@@ -12,6 +12,7 @@
 	 * 스크롤 구동 애니메이션으로도 되지만, 숫자를 세는 것은 안 된다.
 	 */
 	import { onMount } from 'svelte';
+	import { summarize, quizTotals } from '../lib/progress-store.js';
 
 	/** ticks: 눈금 개수 = 모듈 수. from: 그 PART 가 시작하는 주차. */
 	const STOPS = [
@@ -102,11 +103,49 @@
 	let track = $state(null);
 	let progress = $state(0);
 
+	/* PART 별 진도. 키는 경로 접두사('/part-2/')다.
+	   서버에는 아무것도 없다 — 이 브라우저의 localStorage 를 읽은 값이다. */
+	let done = $state(new Map());
+
+	/** 카드 하나에 붙일 한 줄. 남긴 것이 없으면 줄 자체를 만들지 않는다. */
+	function line(href) {
+		const row = done.get('/' + href.split('/')[1] + '/');
+		if (!row || !row.seen) return null;
+		const parts = [];
+		if (row.quizTotal) parts.push(`퀴즈 ${row.correct} / ${row.quizTotal} 정답`);
+		if (row.checkTotal) parts.push(`체크 ${row.checkDone} / ${row.checkTotal}`);
+		if (!parts.length) return null;
+		return `${parts.join(' · ')} · 문서 ${row.seen}개`;
+	}
+
 	/* 지금 몇 주차인가. 정지 상태(움직임 최소화·스크립트 실패)에서는 1 이 아니라
 	   끝까지 온 것으로 둔다 — 내용을 감추지 않는 쪽이 안전하다. */
 	let day = $derived(1 + Math.round(progress * (LAST_WEEK - 1)));
 
 	onMount(() => {
+		/* 진도부터 읽는다. 움직임을 줄인 설정에서도 보여야 하므로 아래 조기 반환보다 앞이다. */
+		(async () => {
+			const prefixes = [...STOPS.map((s) => s.href), DETACHED.href].map(
+				(href) => '/' + href.split('/')[1] + '/',
+			);
+
+			/* 퀴즈 분모는 빌드가 내는 매니페스트에만 있다. 브라우저는 열어 본 적 없는
+			   문서에 퀴즈가 몇 개인지 알 방법이 없다. */
+			let totals = new Map();
+			try {
+				const res = await fetch('/quiz-manifest.json');
+				if (res.ok) totals = quizTotals(await res.json());
+			} catch {
+				/* 못 받으면 퀴즈 분모 없이 체크만 보여 준다. */
+			}
+
+			const next = new Map();
+			for (const prefix of prefixes) {
+				next.set(prefix, { ...summarize(prefix), quizTotal: totals.get(prefix) || 0 });
+			}
+			done = next;
+		})();
+
 		const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
 		if (still) {
 			progress = 1;
@@ -210,6 +249,11 @@
 						<p class="mt-3 mb-0 font-mono text-xs text-[var(--sl-color-gray-3)]">
 							<span class="mr-2 text-[var(--sl-color-gray-4)]">종료 조건 ·</span>{stop.done}
 						</p>
+						{#if line(stop.href)}
+							<p class="mt-1.5 mb-0 font-mono text-xs text-[var(--sl-color-text-accent)]">
+								<span class="mr-2 text-[var(--sl-color-gray-4)]">진도 ·</span>{line(stop.href)}
+							</p>
+						{/if}
 					</div>
 				</li>
 			{/each}
@@ -240,6 +284,11 @@
 			<p class="mt-3 mb-0 font-mono text-xs text-[var(--sl-color-gray-3)]">
 				<span class="mr-2 text-[var(--sl-color-gray-4)]">종료 조건 ·</span>{DETACHED.done}
 			</p>
+			{#if line(DETACHED.href)}
+				<p class="mt-1.5 mb-0 font-mono text-xs text-[var(--sl-color-text-accent)]">
+					<span class="mr-2 text-[var(--sl-color-gray-4)]">진도 ·</span>{line(DETACHED.href)}
+				</p>
+			{/if}
 		</div>
 	</div>
 

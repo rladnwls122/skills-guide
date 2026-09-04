@@ -17,6 +17,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeExternalLinks from 'rehype-external-links';
 
 import mdx from '@astrojs/mdx';
+import vercel from '@astrojs/vercel';
 import { iconifyUrl } from './src/mermaid-icons.mjs';
 /* Iconify 에 없는 AWS 서비스·리소스용 자체 팩. scripts/build-aws-icons.mjs 가
    AWS 공식 아이콘 패키지에서 뽑아 만든다. */
@@ -54,6 +55,18 @@ const splitView = {
   },
 };
 
+/* GFM 이 잠가 놓은 체크박스를 살리고 진도를 브라우저에 남긴다. 문서 쪽은 손대지
+   않는다 — 항목을 새로 쓸 때 문법을 따로 외우지 않아도 되게 하려는 것이다. */
+/** @type {import('astro').AstroIntegration} */
+const progress = {
+  name: 'progress',
+  hooks: {
+    'astro:config:setup': ({ injectScript }) => {
+      injectScript('page', `import '/src/scripts/progress.js';`);
+    },
+  },
+};
+
 /* 저장된 레일 폭·접힘 상태를 첫 페인트 전에 되돌린다. head 인라인이 아니면
    페이지를 넘길 때마다 기본 폭이 한 프레임 보였다가 바뀐다. */
 /* 접혀 있는 레일에는 저장된 폭을 다시 얹지 않는다 — 인라인 커스텀 속성이
@@ -74,7 +87,10 @@ export default defineConfig({
      범위 표기가 문단 안에서 짝 지어져 그 사이 전체가 취소선으로 렌더된다.
      내장 gfm 을 끄고 remark-gfm 을 singleTilde:false 로 직접 넣어 겹물결(~~)만
      취소선으로 남긴다 — 나머지 GFM 기능(표·작업 목록 등)은 그대로다. */
-  site: 'https://skills-learn.zenru.net', 
+  site: 'https://skills-learn.zenru.net',
+  /* 문서 139쪽은 그대로 정적으로 굽는다. 어댑터는 `/api/*` 만 함수로 만들기 위한 것이고,
+     그 경로들이 각자 `prerender = false` 를 선언한다. 진도 동기화가 쓰는 곳이다. */
+  adapter: vercel(),
   /* 외부 링크는 새 탭으로 연다 — 공식 문서를 열어 값을 찾다가 읽던 자리를
      잃지 않게 한다. 사이트 안 링크(`/part-1/...`)와 앵커는 대상이 아니다.
      `rel` 은 새 탭이 원본 창을 조작하지 못하게 막는 표준 조합이다. */
@@ -108,7 +124,7 @@ export default defineConfig({
       { name: 'aws', icons: awsIcons },
       { name: 'k8s', icons: k8sIcons },
     ],
-  }), mermaidFullscreen, splitView, scrollbars, starlight({
+  }), mermaidFullscreen, splitView, scrollbars, progress, starlight({
     title: 'skills-guide',
     description: '전국기능경기대회 클라우드컴퓨팅 한 달 완성 가이드',
     defaultLocale: 'root',
@@ -129,6 +145,7 @@ export default defineConfig({
       './src/styles/layout.css',
       './src/styles/scrollbar.css',
       './src/styles/codeblock-fullscreen.css',
+      './src/styles/progress.css',
       './src/styles/landing.css',
     ],
     /* subgraph 라벨의 <span class='icon--logos--*'> 를 정의하는 CSS.
@@ -143,6 +160,8 @@ export default defineConfig({
        패널에서만 감춘다(본문 제목에는 그대로 남는다). 파일 안 주석 참고. */
     components: {
       SiteTitle: './src/components/SiteTitle.astro',
+      /* 상단바 오른쪽에 로그인 단추를 붙이려고 감싼 것이다. 기본 소셜 아이콘은 그대로 렌더한다. */
+      SocialIcons: './src/components/SocialIcons.astro',
       TableOfContents: './src/components/TableOfContents.astro',
       MobileTableOfContents: './src/components/MobileTableOfContents.astro',
     },
@@ -156,9 +175,11 @@ export default defineConfig({
       starlightCodeblockFullscreen(),
       starlightSidebarTopics([
         {
+          /* 주제마다 아이콘을 하나씩 준다. 사이드바 주제 목록은 글자만 보면 전부 "PART N"
+             으로 시작해 구분이 안 된다 — 아이콘이 그 자리에서 무엇을 다루는지 말한다. */
           label: 'PART 0 — 컴퓨팅 기초',
           link: '/part-0/01-os-process/',
-          icon: 'puzzle',
+          icon: 'laptop',
           items: [{ label: 'Week 1', items: [{ autogenerate: { directory: 'part-0' } }] }],
         },
         {
@@ -170,31 +191,37 @@ export default defineConfig({
         {
           label: 'PART 1 — Foundation·IaC',
           link: '/part-1/06-terraform-vpc/',
+          icon: 'document',
           items: [{ label: 'Week 2', items: [{ autogenerate: { directory: 'part-1' } }] }],
         },
         {
           label: 'PART 2 — 1과제 · EKS·관측성',
           link: '/part-2/09-eksctl-cluster/',
+          icon: 'server',
           items: [{ label: 'Week 2', items: [{ autogenerate: { directory: 'part-2' } }] }],
         },
         {
           label: 'PART 3 — Hard Mode',
           link: '/part-3/13-private-eks-iam/',
+          icon: 'padlock',
           items: [{ label: 'Week 3', items: [{ autogenerate: { directory: 'part-3' } }] }],
         },
         {
           label: 'PART 4 — 2과제 모듈',
           link: '/part-4/14-serverless-event/',
+          icon: 'puzzle',
           items: [{ label: 'Week 3', items: [{ autogenerate: { directory: 'part-4' } }] }],
         },
         {
           label: 'PART 5 — 3과제 운영',
           link: '/part-5/21-task3-deploy/',
+          icon: 'analytics',
           items: [{ label: 'Week 4', items: [{ autogenerate: { directory: 'part-5' } }] }],
         },
         {
           label: 'PART 6 — Battle Drills',
           link: '/part-6/23-mutation-drill/',
+          icon: 'random',
           items: [{ label: 'Week 4', items: [{ autogenerate: { directory: 'part-6' } }] }],
         },
         {
@@ -202,6 +229,13 @@ export default defineConfig({
           link: '/reference/cheatsheet/',
           icon: 'open-book',
           items: [{ label: 'Reference', items: [{ autogenerate: { directory: 'reference' } }] }],
+        },
+        /* 문서가 아니라 도구다. Diátaxis 네 유형 어디에도 안 들어가므로 주제를 따로 준다. */
+        {
+          label: '진도',
+          link: '/progress/',
+          icon: 'approve-check',
+          items: [{ label: '진도', items: [{ label: '저장 상태', link: '/progress/' }] }],
         },
       ]),
       /* `#roadmap` 은 DayRail 컴포넌트가 다는 id 다. 검증기는 마크다운 제목에서만

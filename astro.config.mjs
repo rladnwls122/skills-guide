@@ -235,7 +235,15 @@ export default defineConfig({
           label: '진도',
           link: '/progress/',
           icon: 'approve-check',
-          items: [{ label: '진도', items: [{ label: '저장 상태', link: '/progress/' }] }],
+          items: [
+            {
+              label: '진도',
+              items: [
+                { label: '저장 상태', link: '/progress/' },
+                { label: '로그인', link: '/login/' },
+              ],
+            },
+          ],
         },
       ]),
       /* `#roadmap` 은 DayRail 컴포넌트가 다는 id 다. 검증기는 마크다운 제목에서만

@@ -177,6 +177,25 @@
 	cursor: pointer;
 }
 
+/* 링크지만 단추처럼 보여야 하는 것. 이동만 하므로 button 이 아니라 a 로 둔다 —
+   가운데 클릭으로 새 탭에 열리고 주소가 보이는 쪽이 맞다. */
+.progress-panel__link-button {
+	display: inline-block;
+	padding: 0.45rem 1rem;
+	border: 1px solid var(--sl-color-text-accent);
+	border-radius: 0.25rem;
+	background: var(--sl-color-text-accent);
+	color: var(--sl-color-black);
+	font-size: var(--sl-text-sm);
+	text-decoration: none;
+}
+
+.progress-panel__link-button.ghost {
+	background: none;
+	border-color: var(--sl-color-gray-5);
+	color: var(--sl-color-gray-2);
+}
+
 .progress-panel button.ghost {
 	background: none;
 	border-color: var(--sl-color-gray-5);

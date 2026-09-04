@@ -24,9 +24,6 @@
 	];
 
 	let signedIn = $state(null); // null = 아직 모른다
-	let mode = $state('login'); // 'login' | 'register'
-	let id = $state('');
-	let password = $state('');
 	let busy = $state(false);
 	let notice = $state('');
 	let rows = $state([]);
@@ -57,39 +54,6 @@
 
 	async function readSession() {
 		signedIn = await sessionId();
-	}
-
-	async function submit(event) {
-		event.preventDefault();
-		busy = true;
-		notice = '';
-		const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
-		try {
-			const res = await fetch(endpoint, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ id, password }),
-			});
-			const data = await res.json().catch(() => ({}));
-			if (!res.ok) {
-				notice = data.error || '실패했다';
-				return;
-			}
-			password = '';
-			signedIn = data.id;
-			/* 상단바가 같은 값을 보게 알린다. */
-			setSession(data.id);
-			/* 먼저 받아서 합치고, 합친 결과를 다시 보낸다. 이 기기에만 있던 진도가
-			   계정에도 올라가야 다음 기기에서 이어진다. */
-			await pull();
-			await push();
-			refresh();
-			notice = '';
-		} catch {
-			notice = '연결하지 못했다';
-		} finally {
-			busy = false;
-		}
 	}
 
 	async function signOut() {
@@ -146,47 +110,9 @@
 		<p class="progress-panel__muted">
 			로그인하지 않아도 진도는 이 브라우저에 남는다. 로그인은 그 값을 다른 기기에서 잇기 위한 것이다.
 		</p>
-		<form onsubmit={submit}>
-			<label>
-				아이디
-				<input
-					name="id"
-					bind:value={id}
-					autocomplete="username"
-					required
-					minlength="3"
-					maxlength="32"
-				/>
-			</label>
-			<label>
-				비밀번호
-				<input
-					type="password"
-					bind:value={password}
-					autocomplete={mode === 'login' ? 'current-password' : 'new-password'}
-					required
-					minlength="10"
-				/>
-			</label>
-			<p class="progress-panel__actions">
-				<button type="submit" disabled={busy}>{mode === 'login' ? '로그인' : '가입'}</button>
-				<button
-					type="button"
-					class="ghost"
-					onclick={() => {
-						mode = mode === 'login' ? 'register' : 'login';
-						notice = '';
-					}}
-				>
-					{mode === 'login' ? '계정 만들기' : '로그인으로'}
-				</button>
-			</p>
-		</form>
-		{#if mode === 'register'}
-			<p class="progress-panel__muted">
-				비밀번호는 10자 이상이다. 이메일을 받지 않으므로 <strong>잊으면 되돌릴 수 없다.</strong>
-			</p>
-		{/if}
+		<p class="progress-panel__actions">
+			<a class="progress-panel__link-button" href="/login/">로그인</a>
+		</p>
 	{/if}
 
 	{#if notice}

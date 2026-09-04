@@ -81,6 +81,18 @@ export async function throttle(id, ip) {
 	return counts.some((n) => n > ATTEMPT_MAX);
 }
 
+/**
+ * 주소만 센다. 가입처럼 대상 아이디가 없는 동작에 쓴다.
+ *
+ * 가입에 `throttle` 을 그대로 쓰면 아이디 축이 모두에게 공유되는 상수 하나가 되어,
+ * 누군가 15분 안에 열 번 가입하면 그 뒤로는 **아무도** 가입하지 못한다. 제한이
+ * 남용을 막는 대신 정상 사용자를 막는다.
+ */
+export async function throttleIp(scope, ip) {
+	const n = await store().incrWithTtl(`sg:try:${scope}:${ip}`, ATTEMPT_WINDOW);
+	return n > ATTEMPT_MAX;
+}
+
 export async function clearThrottle(id, ip) {
 	const db = store();
 	await Promise.all([db.del(`sg:try:id:${id}`), db.del(`sg:try:ip:${ip}`)]);
@@ -149,7 +161,24 @@ export function json(body, init = {}) {
 	});
 }
 
+/**
+ * 요청을 보낸 주소.
+ *
+ * `x-forwarded-for` 의 **첫** 항목을 쓰면 안 된다. 그 값은 클라이언트가 직접 넣을 수
+ * 있어서, 요청마다 다른 주소를 적어 보내는 것만으로 주소별 시도 제한이 무력해진다.
+ * 목록은 앞이 클라이언트가 주장한 값이고 뒤로 갈수록 실제 프록시가 덧붙인 값이다.
+ *
+ * 그래서 플랫폼이 직접 넣는 헤더를 먼저 쓰고, 없을 때만 `x-forwarded-for` 의 **끝**
+ * 항목으로 떨어진다. 끝 항목은 가장 가까운 프록시가 붙인 것이라 위조하기 어렵다.
+ */
 export function clientIp(request) {
-	const forwarded = request.headers.get('x-forwarded-for');
-	return (forwarded ? forwarded.split(',')[0] : '').trim() || 'unknown';
+	const h = request.headers;
+	const trusted = h.get('x-vercel-forwarded-for') || h.get('x-real-ip');
+	if (trusted) return trusted.trim();
+
+	const chain = (h.get('x-forwarded-for') || '')
+		.split(',')
+		.map((v) => v.trim())
+		.filter(Boolean);
+	return chain[chain.length - 1] || 'unknown';
 }

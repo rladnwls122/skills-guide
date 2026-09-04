@@ -13,7 +13,7 @@ import {
 	normalizeId,
 	sessionCookie,
 	startSession,
-	throttle,
+	throttleIp,
 } from '../../../lib/server/auth.js';
 
 export const prerender = false;
@@ -36,7 +36,7 @@ export async function POST({ request }) {
 	const password = String(body.password || '');
 	const ip = clientIp(request);
 
-	if (await throttle('register', ip)) {
+	if (await throttleIp('register', ip)) {
 		return json({ error: '가입 시도가 많다. 15분 뒤에 다시 한다' }, { status: 429 });
 	}
 

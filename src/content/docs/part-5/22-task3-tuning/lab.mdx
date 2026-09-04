@@ -124,7 +124,7 @@ export default function () {
      </TabItem>
    </Tabs>
 
-   관찰: `kubectl get hpa -w` — 정상 부하에서 이용률이 목표(75%) 근방에서 안정되는지.
+   관찰: `kubectl get hpa -w` — 정상 부하에서 이용률이 목표(60%) 근방에서 안정되는지.
 
 3. **② Spike** — 스텝 증가에 스케일이 따라붙는지
 
@@ -256,7 +256,8 @@ AI로 골격을 받는 것은 괜찮다 — 받은 뒤 쿼리를 직접 읽고 �
 | 이미지가 갱신 전 내용으로 나감 | 해당 키를 직접 GET, `x-cache` 헤더 | 무효화 실행 또는 short TTL 캐시 정책 | `terraform/cloudfront.tf` |
 | 정상 요청이 403 | WAF 콘솔(us-east-1) sampled requests | 문제 룰을 Count로 내리거나 `RuleActionOverrides` | `terraform/waf.tf` |
 | 비용 ratio 상단 초과 | 노드 수 추이 | HPA `maxReplicas`·NodePool `limits.cpu` 하향, `consolidateAfter` 단축 | `k8s/01-nodepool.yaml` |
-| 비용 ratio 하한 미달 | 노드 2대 미만 | `minReplicas` 상향 — 하한 아래는 0점 | 앱 매니페스트 HPA |
+| 유휴인데 노드가 2대 이상 | `kubectl get nodeclaims` 와 노드그룹 크기 | 차트 `replicas` 1 확인, zone spread 를 `ScheduleAnyway` 로, PDB 삭제 | `scripts/*.sh`, `k8s/1X-*.yaml` |
+| 부하 중에도 노드가 안 늘어 하한 미달 | `kubectl get hpa` 이용률이 목표 아래 | HPA 목표를 60%에서 40%로 하향 — 하한 0.50 아래는 0점 | 앱 매니페스트 HPA |
 | HPA 이용률이 `<unknown>` | `kubectl top pods` 응답 여부 | 파드에 `requests` 선언 (없으면 계산 불가) | 앱 매니페스트 `resources` |
 | Container Insights 사용률 패널이 빔 | 에이전트 로그의 `AccessDenied` | 에이전트 역할에 `CloudWatchAgentServerPolicy` 후 데몬셋 재시작 | IAM 역할 |
 | 캐시가 갱신 전 이미지를 계속 냄 | `x-cache` 헤더, 캐시 정책의 TTL | 무효화 후 short TTL 정책으로 교체 | `terraform/cloudfront.tf` |
@@ -319,11 +320,11 @@ AI로 골격을 받는 것은 괜찮다 — 받은 뒤 쿼리를 직접 읽고 �
      </TabItem>
    </Tabs>
 
-   `<unknown>/75%`가 보이면 metrics-server 문제이지 노브 문제가 아니다 — 노브를 바꾸기 전에 이것부터 배제한다.
+   `<unknown>/60%`가 보이면 metrics-server 문제이지 노브 문제가 아니다 — 노브를 바꾸기 전에 이것부터 배제한다.
 
 3. **노브를 하나만 바꾸고 시각을 기록한다**
 
-   예: `k8s/01-nodepool.yaml`을 열어 `limits.cpu`를 18에서 24로 고친 뒤 적용한다.
+   예: `k8s/01-nodepool.yaml`을 열어 `limits.cpu`를 12에서 16으로 고친 뒤 적용한다.
 
    <Tabs syncKey="shell">
      <TabItem label="PowerShell">
@@ -492,7 +493,7 @@ AI로 골격을 받는 것은 괜찮다 — 받은 뒤 쿼리를 직접 읽고 �
 - 배포: 스모크 6종 통과를 **T+50분 내**
 - 성능: soak 구간에서 user·product `p(90) < 200ms`, stress `p(90) < 1000ms`
 - 가용성: 3회차 전체 `http_req_failed < 10%`
-- 비용: 부하 전 구간 노드 2~9대, 부하 종료 5분 내 2대로 회수
+- 비용: 부하 전 구간 노드 1~7대, 부하 종료 5분 내 1대로 회수
 - 복구: 10종 중 7개 이상을 5분 내 복구
 
 네 개 중 세 개를 만족하면 통과, 두 개 이하면 실패 축만 다음 드릴에서 재도전한다.
@@ -524,7 +525,7 @@ AI로 골격을 받는 것은 괜찮다 — 받은 뒤 쿼리를 직접 읽고 �
 
    </details>
 
-2. 노드 상한을 9대에서 12대로 올리라면 어디를 고치고, 어디를 그대로 두나?
+2. 노드 상한을 6대에서 8대로 올리라면 어디를 고치고, 어디를 그대로 두나?
 
    <details>
    <summary>답 확인</summary>

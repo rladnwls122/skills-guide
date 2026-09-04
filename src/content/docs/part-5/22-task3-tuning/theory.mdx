@@ -12,6 +12,24 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 채점 구조와 배포 시점의 제약은 [21. 이론](/part-5/21-task3-deploy/theory/)에 있다. 이 문서는 **트래픽이 들어온 뒤의 판단**을 다룬다 — 무엇을 돌리고, 무엇을 건드리면 안 되고, 어떤 지표를 근거로 고르는가. 처음 보는 약어나 말은 [이 사이트의 말](/reference/glossary/)에 있다.
 
+## 읽고 오는 것 — 공식 문서 여섯 자리
+
+부하 중에는 문서를 찾을 시간이 없다. 그래서 지금 읽는다. 각 문서에서 **읽을 자리**만 적었다.
+
+**먼저 읽는다**
+
+- [파드에 CPU·메모리 리소스 할당](https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/) · CPU 요청이 초과될 때의 동작을 설명하는 부분. CPU limit 을 걸지 않는 판단의 근거다.
+- [MySQL — 옵티마이저가 인덱스를 쓰는 방식](https://dev.mysql.com/doc/refman/8.0/en/mysql-indexes.html) · WHERE 절과 인덱스의 관계를 설명하는 앞부분. 인덱스 하나가 성능 축을 좌우하는 이유가 여기 있다.
+- [CloudFront — 캐시 키와 캐시 정책](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/controlling-the-cache-key.html) · 캐시 키 구성 항목. 응답이 요청 값을 되돌려주는 API 를 왜 캐시할 수 없는지가 여기서 갈린다.
+
+**읽으면서 대조한다**
+
+- [RDS Proxy 개념](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy.html) · 커넥션 풀링과 다중화 항목. 파드가 늘어도 백엔드 커넥션이 늘지 않는 구조를 설명한다.
+- [WAF — Web ACL 규칙 평가 순서](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-processing.html) · 규칙 우선순위와 종료 동작 항목. 스코프다운과 텍스트 변환이 어느 층에서 도는지가 갈리는 자리다.
+- [k6 — 시나리오 실행기](https://grafana.com/docs/k6/latest/using-k6/scenarios/) · `ramping-vus` 와 `constant-arrival-rate` 두 항목. 부하 프로파일 3단이 이 두 실행기로 만들어진다.
+
+전 모듈 공통 문서 목록은 [자료 링크](/reference/links/#공식-문서-q-출력을-대조하는-정본)에 있다.
+
 ## requests 와 limits — 무엇이 배치를 정하고 무엇이 상한인가
 
 부하 운영에서 가장 많이 틀리는 지점이 이 둘의 역할이다. `requests`(요청량)는 파드가 뜨기 위해 노드에서 **예약하는 양**이고, `limits`(상한)는 그 컨테이너가 **쓸 수 있는 최대치**다.
@@ -24,15 +42,15 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 `requests`가 실제로 쓰이는 곳은 **둘뿐**이다.
 
-1. **스케줄링** — 어느 노드에 배치할지 정한다. t3.medium(allocatable 약 1930m)에 600m짜리 파드는 3개까지 들어간다.
+1. **스케줄링** — 어느 노드에 배치할지 정한다. t3.medium(allocatable 약 1930m)에 250m짜리 파드는 7개까지 들어간다.
 2. **HPA 이용률의 분모** — 이용률 = 현재 사용량 ÷ requests다([autoscaling-basics](/start/autoscaling-basics/#1-hpa--이용률의-분모는-requests다)). limits는 이 계산에 들어가지 않는다.
 
-이 둘 외에 `requests`가 실사용량을 제한하지는 않는다. requests를 0.1코어로 잡은 파드도 노드에 여유가 있으면 1코어를 쓴다. 그래서 requests를 낮추면 앱이 느려지는 것이 아니라, **같은 사용량에서 이용률이 커져 HPA가 더 빨리 늘린다.** requests 0.8코어인 파드가 1.0코어를 쓰면 이용률은 125%이고, 목표가 75%면 파드가 늘어난다.
+이 둘 외에 `requests`가 실사용량을 제한하지는 않는다. requests를 0.1코어로 잡은 파드도 노드에 여유가 있으면 1코어를 쓴다. 그래서 requests를 낮추면 앱이 느려지는 것이 아니라, **같은 사용량에서 이용률이 커져 HPA가 더 빨리 늘린다.** requests 0.8코어인 파드가 1.0코어를 쓰면 이용률은 125%이고, 목표가 60%면 파드가 늘어난다.
 
 :::note[사용량과 이용률은 다른 값이다]
-사용량은 절대값(`kubectl top pods`의 `1024m`)이고, 이용률은 그 값을 requests로 나눈 백분율(`kubectl get hpa`의 `125%/75%`)이다. requests를 바꾸면 사용량은 그대로인데 이용률만 움직인다 — 부하 중에 requests를 건드리면 지표가 통째로 재해석되므로, 노브 하나 규칙에서 이것이 가장 위험한 노브다.
+사용량은 절대값(`kubectl top pods`의 `1024m`)이고, 이용률은 그 값을 requests로 나눈 백분율(`kubectl get hpa`의 `125%/60%`)이다. requests를 바꾸면 사용량은 그대로인데 이용률만 움직인다 — 부하 중에 requests를 건드리면 지표가 통째로 재해석되므로, 노브 하나 규칙에서 이것이 가장 위험한 노브다.
 
-**requests가 선언되지 않으면 이용률 자체가 계산되지 않는다.** HPA가 `<unknown>/75%`를 띄우고 스케일이 걸리지 않는다.
+**requests가 선언되지 않으면 이용률 자체가 계산되지 않는다.** HPA가 `<unknown>/60%`를 띄우고 스케일이 걸리지 않는다.
 :::
 
 ### requests 와 limits 를 얼마나 벌릴 것인가
@@ -48,7 +66,7 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 CPU limit은 CFS 쿼터로 구현된다. 쿼터를 소진한 컨테이너는 다음 주기(기본 100ms)까지 강제로 멈춘다 — p99에 100ms 단위 지연이 그대로 꽂히고, 이는 0.2초 예산의 절반이다. `requests`만 선언하면 스케줄링은 요청량 기준으로 하면서 순간 버스트는 노드의 유휴 CPU가 흡수한다.
 
-t3.medium에 앱 3파드를 패킹하려면 파드당 600m가 실측 균형점이다.
+t3.medium 한 대에 시스템 파드 약 850m를 먼저 떼고 앱 3종을 얹으려면 파드당 250m가 균형점이다. allocatable 1930m의 약 13%다. requests를 작게 잡아도 CPU limit이 없으므로 실제 처리량은 그보다 크다.
 
 ### 메모리는 반대로 limit 을 반드시 건다
 
@@ -234,11 +252,15 @@ WAF 는 CloudFront 에 붙어 ALB 앞에 선다. 그래서 아무 조치 없이 
 
 협의회 회의록이 산정 방식을 확인해 줬다. **EC2 인스턴스 수를 주기적으로 확인해** 전체 경기 시간을 기준으로 점수를 매기고, 적게 쓸수록 높은 점수다 — 한 시점의 스냅숏이 아니라 시간 적분이므로 부하가 없는 구간에 노드를 줄여 두는 것도 그대로 점수다. 제시된 구성 외의 EC2에는 **패널티 점수**가 붙고, kubectl용 bastion을 세웠다면 그 EC2도 개수에 들어간다.
 
+점수 구조는 [21. 이론의 비용 최적화 절](/part-5/21-task3-deploy/theory/#비용-최적화--최소화가-아니라-밴드-맞추기)에 있다. 여기서는 부하 중에 그 값을 움직이는 노브를 본다.
+
 밴드 안에 머무는 구조는 세 층으로 만든다.
 
-- HPA 목표 이용률 75% — 파드를 뜨겁게 굴려 같은 트래픽을 더 적은 파드로 처리한다.
-- NodePool `limits.cpu` — 폭주 상한. HPA 전체 상한(3앱 × 9파드 × 600m ≈ 16.2 vCPU)을 수용하는 t3.medium 9대 = 18 vCPU.
-- Karpenter consolidation 30초 — 스파이크가 끝나면 빈 노드를 즉시 회수한다. PDB와 `budgets: nodes 1`이 회수 중 가용성을 지킨다.
+- HPA 목표 이용률 60% — 파드가 포화되기 전에 늘려 스케일 리드타임을 벌어 둔다.
+- NodePool `limits.cpu` — 폭주 상한. HPA 전체 상한(3앱 × 10파드 × 250m = 7.5 vCPU)에 데몬셋 오버헤드를 얹어 t3.medium 6대 = 12 vCPU.
+- Karpenter consolidation 30초 — 스파이크가 끝나면 빈 노드를 즉시 회수한다. `budgets` 의 `nodes: "1"`이 회수 중 가용성을 지킨다.
+
+유휴 1대에서 부하 최대 7대 사이를 오가는 구성이다. 그 안에서 실제로 어느 구간의 노드 시간이 큰지는 재 봐야 알 수 있고, 재는 절차가 [Drill 22](/part-5/22-task3-tuning/drill/)다.
 
 ```yaml
 # k8s/01-nodepool.yaml 발췌
@@ -250,7 +272,7 @@ spec:
           operator: In
           values: ["t3.medium"]        # 인스턴스 타입 고정 — 바꾸려면 여기만
   limits:
-    cpu: "18"                          # 폭주 상한: t3.medium 9대 몫
+    cpu: "12"                          # 폭주 상한: t3.medium 6대 몫
   disruption:
     consolidationPolicy: WhenEmptyOrUnderutilized
     consolidateAfter: 30s              # 빈 노드를 빨리 회수 → 비용 ratio
@@ -339,7 +361,7 @@ API 동작 경로에 CachingDisabled 캐시 정책을 쓰는 이유는?
 </Quiz>
 
 <Quiz title="requests 를 낮추면 앱이 느려지나">
-파드의 CPU `requests` 를 600m에서 200m로 낮췄다. 실제로 바뀌는 것을 모두 고르라.
+파드의 CPU `requests` 를 250m에서 100m로 낮췄다. 실제로 바뀌는 것을 모두 고르라.
 
 - [x] HPA 이용률이 커진다 — 같은 사용량을 더 작은 분모로 나누므로 스케일이 더 빨리 걸린다
 - [x] 한 노드에 더 많은 파드가 배치된다 — 스케줄러가 예약하는 양이 줄어든다

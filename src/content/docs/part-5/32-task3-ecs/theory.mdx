@@ -16,6 +16,25 @@ ENI(Elastic Network Interface)는 리소스에 붙는 가상 랜카드다([vpc-b
 
 ---
 
+## 0. 읽고 오는 것 — 공식 문서 다섯 자리
+
+EKS 를 아는 상태에서 ECS 로 넘어오는 문서다. 대응이 어긋나는 자리만 공식 문서로 확인하고 들어온다. 각 문서에서 **읽을 자리**만 적었다.
+
+**먼저 읽는다**
+
+- [ECS 캐패시티 공급자](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/cluster-capacity-providers.html) · 관리형 스케일링과 `targetCapacity` 항목. 인스턴스를 대는 층이 EKS 와 가장 크게 다른 자리다.
+- [ECS 서비스 오토스케일링](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-auto-scaling.html) · 대상 추적 정책 항목. 태스크 수를 조절하는 층이고 HPA 에 대응한다.
+- [태스크 정의의 CPU·메모리](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definition_parameters.html#container_definition_limits) · 컨테이너 수준의 `cpu` 와 `memory` 설명. 태스크 밀도가 인스턴스 수를 정한다.
+
+**읽으면서 대조한다**
+
+- [ALB 리스너 규칙의 고정 응답](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/listener-update-rules.html) · 규칙 액션 항목. 앱에 없는 403·404 를 인프라로 만드는 자리다.
+- [EC2 — 버스터블 인스턴스의 unlimited 모드](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/burstable-credits-baseline-concepts.html) · baseline 이용률 항목. 실기출이 지정한 c5 계열은 버스터블이 아니라는 점을 여기서 확인한다.
+
+비용 축의 점수 구조와 운영 수칙은 컴퓨팅 계층과 무관하게 같다. [21. 이론의 비용 최적화 절](/part-5/21-task3-deploy/theory/#비용-최적화--최소화가-아니라-밴드-맞추기)에 있다.
+
+---
+
 ## 1. ECS 개념을 EKS 와 대조한다
 
 이미 EKS 를 배웠다면 대응표가 가장 빠른 길이다.

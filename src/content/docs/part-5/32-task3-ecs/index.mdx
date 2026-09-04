@@ -141,12 +141,19 @@ import { FileTree, LinkButton, Card, CardGrid } from '@astrojs/starlight/compone
 
 ## 공식 문서
 
-- [Amazon ECS 개발자 안내서](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/) — 클러스터·태스크·서비스
-- [ECS 캐패시티 공급자](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/cluster-auto-scaling.html) — 노드 자동 조절
-- [ECS 서비스 오토스케일링](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-auto-scaling.html) — 태스크 수 조절
-- [WAF 정규식 패턴 세트](https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-type-regex-pattern-set.html) — 이메일 형식 검증
-- [aws_ecs_service](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_service) — Terraform 리소스
-- [aws_ecs_capacity_provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_capacity_provider) — Terraform 리소스
+전부 읽지 않는다. 각 문서에서 **읽을 자리**만 적었다. EKS 를 아는 상태에서 넘어오므로 대응이 어긋나는 자리만 본다.
+
+**모듈에 들어가기 전에 읽는다**
+
+- [Amazon ECS 개발자 안내서](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/) · 클러스터·태스크·서비스를 설명하는 앞부분. 세 이름이 각각 EKS 의 무엇에 대응하는지 먼저 맞춘다
+- [ECS 캐패시티 공급자](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/cluster-auto-scaling.html) · 관리형 스케일링과 `targetCapacity` 항목. 인스턴스를 대는 층이 EKS 와 가장 크게 다른 자리다
+- [ECS 서비스 오토스케일링](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-auto-scaling.html) · 대상 추적 정책 항목. 태스크 수를 조절하는 층이고 HPA 에 대응한다
+
+**실습 중 대조한다**
+
+- [WAF 정규식 패턴 세트](https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-type-regex-pattern-set.html) · 패턴 세트를 규칙에 붙이는 부분. 앱에 없는 이메일 검증을 인프라로 만들 때 연다
+- [aws_ecs_service](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_service) · `capacity_provider_strategy` 와 `load_balancer` 블록의 인자
+- [aws_ecs_capacity_provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_capacity_provider) · `managed_scaling` 블록의 인자
 
 ## 다음 단계
 

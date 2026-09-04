@@ -1,0 +1,329 @@
+---
+title: Drill 22 — 노드 시간을 재고 깎는다
+description: Lab 22 의 스택을 기준본으로 두고, 30초 주기로 running EC2 를 기록해 노드 시간을 적분한 뒤, SLO 를 지키면서 그 값을 20% 줄이는 훈련.
+sidebar:
+  order: 4
+---
+
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+> 문서 유형: tutorial
+
+[Lab 22](/part-5/22-task3-tuning/lab/)는 축이 넷이다. 여기는 하나다 — 비용이다.
+
+재는 대상은 비용 ratio 가 아니다. ratio 가 무엇 대비의 비율인지 과제지가 밝히지 않아 절대값을 맞출 수 없다. 통제할 수 있는 것은 분자뿐이고, 그 값이 **노드 시간**이다. 점수 구조와 운영 수칙 8조는 [21. 이론의 비용 최적화 절](/part-5/21-task3-deploy/theory/#비용-최적화--최소화가-아니라-밴드-맞추기)에 있다.
+
+:::caution[이 드릴은 출제 예측이 아니다]
+"노드 시간 20% 감축"이라는 요구는 예상 채점지에 없다. 12점짜리 비용 축을 훈련용 목표로 바꾼 것이다. 쓰는 기전(Karpenter consolidation, HPA `behavior`, 노드그룹 크기, 차트 `replicas`)은 전부 실재한다.
+:::
+
+:::note[과금]
+Lab 22 의 스택을 그대로 재사용한다. 새 리소스를 만들지 않는다. `aws ec2 describe-instances` 호출은 무료다.
+:::
+
+---
+
+## 0. 기준본 세우기
+
+Lab 22 드릴 B 의 스택과 부하 프로파일 하나를 그대로 쓴다. 새로 배포하지 않는다.
+
+측정 창은 **40분**으로 고정한다. 유휴 10분, 부하 20분, 부하 종료 후 10분이다. 회차마다 이 길이를 바꾸면 노드 시간을 비교할 수 없다.
+
+기준본 회차에서는 아무것도 바꾸지 않는다. 지금 구성이 얼마를 쓰는지 먼저 안다.
+
+---
+
+## 1. 노드 시간을 재는 법
+
+측정은 두 단계다. 30초 주기로 running EC2 수를 기록하고, 그 기록을 적분한다.
+
+**`kubectl get nodes` 를 쓰지 않는다.** 채점은 EC2 인스턴스 수를 세고, 클러스터 밖에 세운 EC2 도 그 수에 들어간다. `kubectl` 은 클러스터에 조인한 노드만 본다.
+
+<Steps>
+
+1. **샘플러를 별도 창에서 띄운다**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     while ($true) {
+       $n = aws ec2 describe-instances `
+         --filters "Name=instance-state-name,Values=running" `
+         --query "length(Reservations[].Instances[])" --output text
+       "$([DateTimeOffset]::Now.ToUnixTimeSeconds()),$n" | Add-Content nodes.csv
+       Start-Sleep 30
+     }
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     while true; do
+       n=$(aws ec2 describe-instances \
+         --filters Name=instance-state-name,Values=running \
+         --query 'length(Reservations[].Instances[])' --output text)
+       echo "$(date +%s),$n" >> nodes.csv
+       sleep 30
+     done
+     ```
+     </TabItem>
+   </Tabs>
+
+   인스턴스 타입으로 거르지 않는다. 계산에 없는 EC2 가 섞여 있으면 그것도 세어야 한다.
+
+2. **측정 창이 끝나면 적분한다**
+
+   <Tabs syncKey="shell">
+     <TabItem label="PowerShell">
+     ```powershell
+     $s = (Import-Csv nodes.csv -Header t,n | Measure-Object -Property n -Sum).Sum
+     "노드 시간 {0:N2} (샘플 {1}개)" -f ($s * 30 / 3600), (Get-Content nodes.csv).Count
+     ```
+     </TabItem>
+     <TabItem label="Bash (Linux/CloudShell)">
+     ```bash
+     awk -F, '{s+=$2} END {printf "노드 시간 %.2f (샘플 %d개)\n", s*30/3600, NR}' nodes.csv
+     ```
+     </TabItem>
+   </Tabs>
+
+   샘플 수가 80개(40분 ÷ 30초)에 못 미치면 창이 끊긴 것이다. 그 회차는 버린다.
+
+3. **구간별로도 나눠 본다**
+
+   유휴 10분·부하 20분·종료 후 10분의 몫을 따로 더한다. 어느 구간을 깎을지가 여기서 정해진다.
+
+</Steps>
+
+---
+
+## 2. 변동 요구
+
+**정답을 먼저 열지 않는다.**
+
+> 같은 부하 프로파일에서 세 앱의 SLO 를 지키면서 노드 시간을 기준본 대비 **20% 줄인다.** 유휴 구간의 running EC2 는 **1대**여야 하고, 부하 구간에는 최소 한 번 2대 이상으로 늘어야 한다.
+
+마지막 조건이 낯설다. 비용은 아끼는 방향으로도 실패한다 — ratio 하한 0.50 아래로 내려가면 12점이 통째로 0이다. 부하 구간에 노드가 전혀 늘지 않는 구성은 그 위험 신호다.
+
+### 요구에서 파생되는 것
+
+**"유휴 1대"** 는 부하 중에 돌리는 노브가 아니다. 배포 시점의 기본값 다섯 자리가 정한다. 그 목록은 [21. 이론](/part-5/21-task3-deploy/theory/#유휴-ec2-를-1대로-만드는-다섯-자리)에 있다.
+
+**"20% 감축"** 은 어느 구간에서 나오는지 기록이 정한다. 유휴 구간이 큰 몫이면 기본값 문제이고, 종료 후 구간이 크면 회수 속도 문제다. 부하 구간이 크면 파드 밀도 문제다.
+
+**"SLO 를 지키면서"** 가 게이트다. 노드 시간만 줄인 회차는 실패로 친다.
+
+---
+
+## 3. 이행 (타이머 30분)
+
+타이머를 걸고 시작한다. 다음은 절차가 아니라 **스스로 답해야 할 질문 목록**이다.
+
+- 기록에서 세 구간 중 어느 몫이 가장 큰가. 그 구간을 만드는 값은 무엇인가
+- 유휴에 노드가 2대 이상이면, 그 두 번째 노드 위에 무엇이 떠 있나
+- 부하 종료 후 노드가 남는 시간을 정하는 값은 둘이다. HPA 쪽과 Karpenter 쪽에 하나씩이다. 이름이 무엇인가
+- 파드를 더 촘촘히 담으려면 무엇을 바꾸나. 그 값이 HPA 이용률의 분모라는 사실이 어떤 부작용을 만드나
+- 노드 수를 줄일 때 가장 먼저 무너지는 지표는 무엇인가. 그것을 무엇으로 보나
+- 노브를 하나만 돌린다는 규칙은 여기서도 같다. 20% 를 한 번에 만들려다 무엇을 잃는가
+
+:::note[막히면 여기]
+- [Karpenter — Disruption](https://karpenter.sh/docs/concepts/disruption/)
+- [HorizontalPodAutoscaler — 스케일 동작 설정](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#configurable-scaling-behavior)
+- 노브와 증상의 대응은 [Lab 22 의 튜닝 노브 표](/part-5/22-task3-tuning/lab/#튜닝-노브-표)
+:::
+
+---
+
+## 4. 통과 기준
+
+<Steps>
+
+1. **유휴 구간의 running EC2 가 1대다**
+
+   측정 창 첫 10분의 샘플이 전부 `1` 이어야 한다.
+
+2. **노드 시간이 기준본 대비 20% 이상 줄었다**
+
+   두 회차의 `nodes.csv` 를 각각 적분해 비교한다.
+
+3. **세 앱의 SLO 가 유지된다**
+
+   부하 구간에서 user·product `p(90) < 200ms`, stress `p(90) < 1000ms`.
+
+4. **부하 종료 5분 안에 1대로 회수된다**
+
+   종료 후 10분 구간의 샘플이 5분 지점부터 `1` 이다.
+
+5. **부하 구간에 2대 이상으로 올라간 적이 있다**
+
+   ```bash
+   kubectl get nodeclaims
+   ```
+
+   비어 있으면 Karpenter 가 노드를 한 대도 붙이지 않은 것이다. 하한 위험 신호다.
+
+</Steps>
+
+**2번만 만족하고 3번이 깨지면 실패다.** 성능 12점과 비용 12점을 함께 잃는 구성이기 때문이다. 게이트가 절약보다 위라는 수칙이 여기서 판정 규칙이 된다.
+
+---
+
+## 5. 복기
+
+```
+## 노드 시간 드릴 회고 (날짜: )
+
+| 회차 | 유휴 노드 | 최대 노드 | 유휴 몫 | 부하 몫 | 종료 후 몫 | 합계 | user p90 | product p90 | stress p90 | 돌린 노브 |
+|---|---|---|---|---|---|---|---|---|---|---|
+
+- 가장 큰 몫이었던 구간과 그 이유:
+- 20% 를 만든 변경은 하나였나 여럿이었나. 여럿이면 각각의 기여를 어떻게 갈랐나:
+- SLO 가 먼저 흔들린 앱과 그때의 지표:
+```
+
+기여를 가르지 못했다면 다음 회차는 노브 하나로 다시 돈다. 원인을 모르는 20% 는 당일에 재현할 수 없다.
+
+---
+
+## 6. 고장 진단
+
+무엇을 고치는지가 아니라 **무엇을 보고 좁히는지**를 적었다.
+
+### 6-1. 유휴인데 노드가 2대 이상이다
+
+```bash
+kubectl get nodes -L karpenter.sh/nodepool
+```
+
+`karpenter.sh/nodepool` 열이 비어 있으면 노드그룹이 띄운 노드다. 노드그룹의 `minSize`·`desiredCapacity` 를 본다. 열에 값이 있으면 Karpenter 가 띄운 노드이므로 그 위의 파드로 넘어간다.
+
+```bash
+kubectl get pods -A --field-selector spec.nodeName=<노드 이름>
+```
+
+시스템 파드 하나만 남아 있으면 그 파드의 `replicas` 와 배치 제약을 본다. 차트 기본값 2가 남아 있는지, `topologySpreadConstraints` 가 `DoNotSchedule` 인지가 갈림길이다.
+
+파드가 하나도 없는데 노드가 남으면 회수가 멈춘 것이다.
+
+### 6-2. 파드가 없는데 노드가 회수되지 않는다
+
+```bash
+kubectl get nodeclaims
+kubectl -n kube-system logs deploy/karpenter --tail=50
+```
+
+로그에 축출을 막는 이유가 남는다. 확인할 자리는 셋이다 — PodDisruptionBudget, 파드의 `karpenter.sh/do-not-disrupt` 애너테이션, NodePool 의 `disruption.budgets` 다.
+
+`minAvailable: 1` 인 PDB 와 HPA `minReplicas: 1` 이 겹치면 파드 하나를 영원히 축출할 수 없다. 그 조합이 consolidation 을 정지시킨다.
+
+### 6-3. 노드 시간은 줄었는데 p90 이 무너졌다
+
+순서를 지켜 배제한다.
+
+```bash
+kubectl get hpa
+kubectl get pods -o wide | grep -i pending
+```
+
+이용률이 목표를 크게 넘고 파드 수가 상한에 붙어 있으면 `maxReplicas` 가 병목이다. 파드가 Pending 이면 NodePool `limits.cpu` 가 병목이다. 둘 다 아니면 앱 바깥이므로 DB 쪽으로 넘어간다 — RDS Proxy 의 borrow latency 와 인덱스를 본다.
+
+### 6-4. 부하를 걸었는데 노드가 늘지 않는다
+
+하한 0.50 을 밑돌 위험이 있는 상태다.
+
+```bash
+kubectl get hpa
+kubectl top pods
+```
+
+이용률이 `<unknown>` 이면 metrics-server 문제이지 튜닝 문제가 아니다. 이용률이 목표 아래에서 안정돼 있으면 파드가 애초에 늘 이유가 없는 것이다. 그때는 HPA 목표를 60%에서 40%로 낮춰 파드와 노드를 함께 늘린다.
+
+### 6-5. 기록에 노드 수가 `0` 이나 빈 값으로 찍힌다
+
+샘플러의 반복문은 명령이 실패해도 멈추지 않는다. 실패한 회차의 값이 그대로 CSV 에 들어가면 적분값이 실제보다 작아진다.
+
+명령 한 줄을 손으로 실행해 표준 오류를 본다.
+
+```bash
+aws ec2 describe-instances \
+  --filters Name=instance-state-name,Values=running \
+  --query 'length(Reservations[].Instances[])' --output text
+```
+
+자격 증명 만료와 리전 누락이 흔한 원인이다. `0` 이 연속으로 찍힌 구간이 있으면 그 회차는 버린다. 노드 시간을 낮게 만드는 방향의 오류라 그대로 두면 통과로 오판한다.
+
+---
+
+## 7. 변형 셀프 체크
+
+요구가 바뀌면 어느 자리가 움직이는지 먼저 답한 뒤 펼쳐 확인한다.
+
+1. 과제지가 인스턴스 타입을 `t3.medium` 에서 `c5.large` 로 바꾸면 어디를 고치나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   고치는 자리는 넷이다. 노드그룹의 `instanceType`, NodePool `requirements` 의 타입 목록과 `limits.cpu`, 앱 3종의 `requests`, HPA 의 `maxReplicas` 다.
+
+   c5.large 는 vCPU 2 · 메모리 4Gi 로 t3.medium 과 allocatable 이 사실상 같다. 그래서 숫자는 그대로 두고 타입 이름 두 자리만 바꾼다.
+
+   달라지는 것이 하나 있다. c5 는 버스터블이 아니라 크레딧 개념이 없다. CPU 100% 가 상시 가능하고 baseline 제한도 없다. 대신 시간당 단가가 다르므로 같은 노드 수라도 ratio 는 달라진다.
+
+   </details>
+
+2. 유휴 노드를 0대로 만들 수 있나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   못 한다. 노드가 0대면 coredns 와 metrics-server 가 뜰 자리가 없어 클러스터가 동작하지 않는다. HPA 도 이용률을 계산하지 못한다.
+
+   채점 쪽으로도 위험하다. ratio 하한 0.50 아래로 내려가면 비용 12점이 통째로 0이다. 최소는 1대이고, 그 1대를 유지하는 것이 이 드릴의 목표다.
+
+   </details>
+
+3. 측정 창을 40분에서 20분으로 줄이면 무엇이 왜곡되나?
+
+   <details>
+   <summary>답 확인</summary>
+
+   세 구간의 비율이다. 실제 경기는 유휴 60분과 부하 120분이라 유휴 몫이 3분의 1이다. 측정 창을 줄이면서 그 비율을 유지하지 않으면 유휴 구간의 무게가 실제와 달라진다.
+
+   그러면 회차끼리 비교할 수 없고, 실전 값을 추정할 수도 없다. 창을 줄이려면 세 구간을 같은 비율로 함께 줄인다.
+
+   </details>
+
+4. 노드 시간을 20% 줄였는데 stress 앱만 `p(90)` 이 1초를 넘었다. 통과인가?
+
+   <details>
+   <summary>답 확인</summary>
+
+   실패다. 통과 기준 3번이 깨졌다.
+
+   비용 12개 항목이 각각 세 앱의 performance 30% 이상을 함께 요구한다. 한 앱이 무너지면 성능 12점과 비용 12점을 같이 잃는다. 노드 시간을 20% 줄인 이득은 그 앞에서 의미가 없다.
+
+   되돌릴 것은 마지막에 돌린 노브 하나다. 여러 개를 함께 돌렸다면 무엇을 되돌려야 하는지 알 수 없고, 그것이 노브 하나 규칙을 지키는 이유다.
+
+   </details>
+
+---
+
+## 8. 정리
+
+<Steps>
+
+1. **부하부터 멈춘다.** k6 프로세스를 끝낸다.
+2. **샘플러를 멈춘다.** 그대로 두면 다음 회차 기록에 섞인다.
+3. `kubectl delete -f k8s/`
+4. `eksctl delete cluster -f eksctl/cluster.yaml`
+5. `terraform destroy`
+6. [잔존 리소스 점검](/reference/cleanup-check/)
+
+</Steps>
+
+`nodes.csv` 는 지우지 않는다. 회차 비교의 기준본이다.
+
+---
+
+## 다음 단계
+
+부하 중 장애 복구는 [Lab 22 의 드릴 D](/part-5/22-task3-tuning/lab/#드릴-d--부하-중-장애-10종)에 있다. 컴퓨팅 계층이 ECS 로 바뀌었을 때의 같은 판단은 [32. 3과제 ECS 경로](/part-5/32-task3-ecs/theory/)에 있다.

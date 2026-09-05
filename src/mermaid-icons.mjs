@@ -9,24 +9,22 @@
  * scripts/check-mermaid-icons.mjs 가 그 회귀를 막는다.
  */
 export const MERMAID_ICONS = {
+  // 실제로 도식이 쓰는 것만 둔다. 이 목록이 그대로 서브셋 URL 이 되고 그 CSS 가
+  // 모든 페이지에 걸리므로, 안 쓰는 이름 하나가 그대로 payload 다.
+  // 새 아이콘은 여기 이름을 먼저 더한다 — ECR 처럼 팩에 없는 것은 범용 'aws'
+  // 로고로 대체하되, 실제로 쓰게 되는 날 목록에 넣는다.
   logos: [
-    // ECR 은 Iconify logos 팩에 없다 — 범용 AWS 로고로 대체한다.
-    'aws',
     'aws-kms', 'aws-s3', 'aws-vpc', 'aws-eks', 'aws-ec2', 'aws-lambda',
     'aws-dynamodb', 'aws-iam', 'aws-cloudfront', 'aws-cloudwatch', 'aws-elb',
-    'aws-sqs', 'aws-sns', 'aws-eventbridge', 'aws-kinesis', 'aws-api-gateway',
-    'aws-ecs', 'aws-fargate', 'aws-rds', 'aws-route53', 'aws-secrets-manager',
-    'aws-xray', 'aws-step-functions', 'aws-cloudformation', 'aws-waf',
-    'aws-cognito', 'aws-elasticache', 'aws-glue', 'aws-cloudtrail',
+    'aws-sqs', 'aws-sns', 'aws-eventbridge', 'aws-kinesis',
+    'aws-fargate', 'aws-rds', 'aws-secrets-manager',
+    'aws-step-functions', 'aws-waf', 'aws-cloudtrail',
     'aws-config', 'aws-msk', 'aws-documentdb',
     'kubernetes', 'docker-icon', 'terraform-icon', 'prometheus', 'grafana',
-    'helm', 'nginx', 'apache-flink', 'opentelemetry',
+    'helm', 'opentelemetry',
   ],
   // AWS·제품 로고로 표현할 수 없는 개념(서브넷·계층·로그 등)에만 쓴다.
-  mdi: [
-    'lan-connect', 'layers-outline', 'script-text-outline', 'console-line',
-    'server-network', 'web', 'routes', 'card-text-outline',
-  ],
+  mdi: ['lan-connect', 'layers-outline', 'console-line', 'web'],
   // logos 팩에 없는 브랜드 로고. 단색이라 mdi처럼 색을 박아야 한다.
   'simple-icons': ['fluentbit'],
 };

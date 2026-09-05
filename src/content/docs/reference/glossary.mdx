@@ -170,6 +170,8 @@ aws elbv2 describe-load-balancers \
 | RTB | Route Table. 어느 대역을 어디로 보낼지 적은 표 | [vpc-basics](/start/vpc-basics/) |
 | ENI | Elastic Network Interface. 리소스에 붙는 가상 랜카드 | [vpc-basics](/start/vpc-basics/) |
 | TGW | Transit Gateway. 여러 VPC 를 잇는 가운데 허브 | [02 네트워크 이론](/part-0/02-network-basics/theory/) |
+| SG | Security Group. 리소스에 붙는 상태 기억형 방화벽 | [vpc-basics](/start/vpc-basics/) |
+| NACL | Network ACL. 서브넷에 붙는 상태 없는 방화벽 | [vpc-basics](/start/vpc-basics/) |
 
 ### 신원과 암호화
 
@@ -181,6 +183,9 @@ aws elbv2 describe-load-balancers \
 | CMK | Customer Managed Key. 직접 만들어 정책을 붙이는 키 | [kms-basics](/start/kms-basics/) |
 | SSE | Server-Side Encryption. 저장할 때 서버가 알아서 암호화 | [s3-basics](/start/s3-basics/) |
 | OAC | Origin Access Control. CloudFront 만 버킷을 읽게 하는 장치 | [s3-basics](/start/s3-basics/) |
+| DEK | Data Encryption Key. 데이터를 직접 암호화하는 키. CMK 가 이것을 감싼다 | [kms-basics](/start/kms-basics/) |
+| OIDC | OpenID Connect. 클러스터가 AWS 에 신원을 증명하는 규격. IRSA 의 바탕 | [eks-basics](/start/eks-basics/) |
+| BPA | Block Public Access. 버킷을 공개로 만드는 길을 네 갈래로 막는 설정 | [s3-basics](/start/s3-basics/) |
 
 ### 컨테이너와 쿠버네티스
 
@@ -191,6 +196,9 @@ aws elbv2 describe-load-balancers \
 | LBC | Load Balancer Controller. 쿠버네티스 설정으로 ALB 를 만드는 컨트롤러 | [loadbalancer-basics](/start/loadbalancer-basics/) |
 | PDB | PodDisruptionBudget. 한꺼번에 몇 개까지 내려도 되는지의 하한 | [k8s-basics](/start/k8s-basics/) |
 | HPA | Horizontal Pod Autoscaler. 파드 수를 지표로 조절한다 | [autoscaling-basics](/start/autoscaling-basics/) |
+| KEDA | 큐 길이 같은 외부 지표로 HPA 를 대신 몰아 주는 확장 | [autoscaling-basics](/start/autoscaling-basics/) |
+| CRD | Custom Resource Definition. 쿠버네티스에 새 리소스 종류를 더한다 | [observability-basics](/start/observability-basics/) |
+| ECR | Elastic Container Registry. AWS 의 컨테이너 이미지 저장소 | [docker-basics](/start/docker-basics/) |
 
 ### 트래픽과 데이터
 
@@ -201,6 +209,9 @@ aws elbv2 describe-load-balancers \
 | GSI | Global Secondary Index. 기본 키가 아닌 축으로 찾게 해 준다 | [dynamodb-basics](/start/dynamodb-basics/) |
 | ESM | Event Source Mapping. 스트림·큐를 Lambda 에 잇는 설정 | [serverless-basics](/start/serverless-basics/) |
 | IaC | Infrastructure as Code. 인프라를 코드로 정의한다 | [hcl-basics](/start/hcl-basics/) |
+| WAF | Web Application Firewall. 요청 내용을 보고 막는 방화벽 | [07 KMS·S3·CloudFront 이론](/part-1/07-kms-s3-cloudfront/theory/) |
+| KVS | CloudFront KeyValueStore. 함수가 재배포 없이 읽는 값 저장소 | [20 CDN Function 이론](/part-4/20-cdn-function/theory/) |
+| TTL | Time To Live. 캐시나 DNS 응답을 얼마나 두고 쓸지의 시간 | [03 DNS·HTTP·TLS 이론](/part-0/03-dns-http-tls/theory/) |
 
 ---
 

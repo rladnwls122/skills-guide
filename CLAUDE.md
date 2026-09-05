@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-전국기능경기대회 클라우드컴퓨팅 16일 완성 가이드를 담은 Astro Starlight 문서 사이트. Vercel 로 배포된다(https://skills-learn.zenru.net/). 애플리케이션 코드는 없고 `.mdx` 콘텐츠가 전부다 — 하는 일은 **문서 작성**과 **사이트 설정 조정** 둘 중 하나다.
+전국기능경기대회 클라우드컴퓨팅 한 달 완성 가이드를 담은 Astro Starlight 문서 사이트. Vercel 로 배포된다(https://skills-learn.zenru.net/). 애플리케이션 코드는 없고 `.mdx` 콘텐츠가 전부다 — 하는 일은 **문서 작성**과 **사이트 설정 조정** 둘 중 하나다.
 
 ## 콘텐츠 근거
 
@@ -15,7 +15,7 @@
 
 - **`npm run dev` 는 데몬화된다.** 이미 떠 있는지 먼저 확인한다. 종료는 `npx astro dev stop`. **새 `.mdx` 를 추가하면 재시작해야 한다** — 콘텐츠 컬렉션이 갱신되지 않아 404 가 난다.
 - **콘텐츠는 CRLF 다.** 스크립트로 `.mdx` 를 파싱하면 `\r` 부터 지운다. 코드 펜스에 ` ```hcl title="vpc.tf" ` 처럼 속성이 붙으므로 정규식이 줄 끝까지 받아야 한다.
-- **`docs/` 는 사이트에 발행되지 않는다.** 설계 근거를 남기는 곳이고, 콘텐츠는 `src/content/docs/` 다.
+- **`docs/` 는 사이트에 발행되지 않는다.** 설계 근거를 남기는 곳이고, 콘텐츠는 `src/content/docs/` 다. 스펙은 `superpowers/specs/`, 실행 계획은 `superpowers/plans/`, 감사 기록은 `reports/` 에 둔다.
 - Node 버전은 mise 로 고정한다(`.mise.toml`). 셸 통합이 없으면 `mise exec --` 를 앞에 붙인다. `npm run font` 는 python 이 필요하다.
 
 ## 규칙

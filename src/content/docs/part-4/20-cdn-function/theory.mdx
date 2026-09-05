@@ -20,7 +20,7 @@ S3 퍼블릭 차단·OAC 버킷 정책·순환 참조 같은 CloudFront 공통 �
 
 ## 1. CloudFront Functions vs Lambda@Edge — 4개 이벤트 훅
 
-CloudFront 가 요청을 처리하는 동안 코드가 끼어들 수 있는 지점은 이론상 넷이다. **viewer-request → (캐시 미스 시) origin-request → origin-response → viewer-response** 순이다. 그런데 CloudFront Functions 는 이 중 **viewer-request·viewer-response 둘만** 지원한다. mTLS 연결 단계 전용의 connection-request 도 있지만 이 모듈과는 무관하다. origin-request·origin-response는 **Lambda@Edge 전용**이다.
+CloudFront 가 요청을 처리하는 동안 코드가 끼어들 수 있는 지점은 이론상 넷이다. 순서는 **viewer-request → origin-request → origin-response → viewer-response** 다. 가운데 둘은 캐시 미스일 때만 돈다. 그런데 CloudFront Functions 는 **viewer-request·viewer-response 둘만** 지원한다. origin-request 와 origin-response 는 **Lambda@Edge 전용**이다. mTLS 연결 단계 전용의 connection-request 도 있지만 이 모듈과는 무관하다.
 
 ```mermaid
 flowchart LR
@@ -46,7 +46,7 @@ flowchart LR
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-CloudFront 의 훅 네 자리와 이 모듈이 쓰는 두 자리를 구분한다. ①viewer-request 와 ④viewer-response 는 CloudFront Functions 가 붙을 수 있는 자리고, 가운데 origin-request·origin-response 는 Lambda@Edge 전용이라 여기서는 쓰지 않는다. 배정은 ①에서 하고 쿠키 발급은 ④에서 한다 — 요청 단계에서 정한 값을 헤더로 남겨 응답 단계가 읽는 형태다.
+CloudFront 의 훅 네 자리와 이 모듈이 쓰는 두 자리를 구분한다. ①viewer-request 와 ④viewer-response 는 CloudFront Functions 가 붙을 수 있는 자리다. 가운데 origin-request·origin-response 는 Lambda@Edge 전용이라 여기서는 쓰지 않는다. 배정은 ①에서 하고 쿠키 발급은 ④에서 한다 — 요청 단계에서 정한 값을 헤더로 남겨 응답 단계가 읽는 형태다.
 
 </details>
 

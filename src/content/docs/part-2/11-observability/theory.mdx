@@ -152,7 +152,7 @@ Lua 를 몇 개로 나눌지도 세트마다 다르다. set-03 은 드롭·변�
 <details class="build-step">
 <summary>지금 확인하기 — 수집 범위가 세트마다 어떻게 다른가</summary>
 
-위 표의 첫 줄이 실제 파일에서 어떻게 생겼는지 두 세트를 나란히 본다. **정답지 파일을 읽기만 하므로 클러스터도 자격증명도 필요 없고 과금도 없다.**
+변형 포인트 표의 첫 줄(수집 대상 네임스페이스)이 실제 파일에서 어떻게 생겼는지 두 세트를 나란히 본다. **정답지 파일을 읽기만 하므로 클러스터도 자격증명도 필요 없고 과금도 없다.**
 
 <Tabs syncKey="shell">
   <TabItem label="PowerShell">
@@ -242,7 +242,12 @@ flowchart LR
 
 ### ① 정의
 
-한 Helm 차트가 여섯을 함께 설치한다 — Prometheus Operator·Prometheus·Alertmanager·node-exporter·kube-state-metrics·Grafana 다. CRD(`PrometheusRule`, `PodMonitor`, `ServiceMonitor`)로 룰/스크레이프 대상을 선언한다.
+한 Helm 차트가 여섯 컴포넌트를 함께 설치한다.
+
+- Prometheus Operator · Prometheus · Alertmanager
+- node-exporter · kube-state-metrics · Grafana
+
+알람 규칙과 수집 대상은 CRD 로 선언한다 — `PrometheusRule`·`PodMonitor`·`ServiceMonitor` 셋이다.
 
 ### ② 왜 (채점 관점)
 

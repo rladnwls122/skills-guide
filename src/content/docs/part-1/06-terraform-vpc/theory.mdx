@@ -221,7 +221,7 @@ local.public_subnet_keys
 
 ## 3. data source / aws_iam_policy_document
 
-**① 한 줄 정의** — data source 는 "만들지 않고 조회만" 하는 블록이고, `aws_iam_policy_document` 는 IAM/KMS/버킷 정책 JSON 을 HCL 로 조립해 주는 data source 다.
+**① 한 줄 정의** — data source 는 만들지 않고 조회만 하는 블록이다. `aws_iam_policy_document` 는 IAM·KMS·버킷 정책 JSON 을 HCL 로 조립하는 data source 다.
 
 **② 왜 필요한가 (채점 관점)** — 계정 ID 를 하드코딩하면 지급 계정이 바뀌는 순간 정책이 전부 어긋난다. `aws_caller_identity` 로 조회한다. 정책을 JSON 문자열로 쓰지 않고 `aws_iam_policy_document` 로 조립하는 이유는 [hcl-basics 의 정책 JSON 설명](/start/hcl-basics/)에 있다.
 
@@ -356,11 +356,11 @@ resource "aws_route_table_association" "public" {
 
 ## 5. VPC 아키텍처 (set-02 :badge[실측]{variant=note})
 
-**① 한 줄 정의** — `wskorea26-vpc`(172.16.0.0/16)에 AZ c/d 로 public 2 + private 2 서브넷을 두고, public 은 IGW 공용 RTB 1개, private 은 AZ별 NAT + AZ별 RTB 2개로 라우팅한다.
+**① 한 줄 정의** — `wskorea26-vpc`(172.16.0.0/16)는 AZ c/d 에 public 2 + private 2 서브넷을 둔다. public 은 IGW 를 쓰는 공용 RTB 1개로, private 은 AZ별 NAT 와 AZ별 RTB 2개로 라우팅한다.
 
 `/16` 같은 CIDR 표기, AZ(가용 영역), IGW·NAT GW·RTB(라우트 테이블)가 각각 무엇인지는 [vpc-basics](/start/vpc-basics/)에 정의가 있다. IGW 와 NAT GW 의 역할 차이만 다시 보려면 [그 문서의 IGW와 NAT GW 절](/start/vpc-basics/#igw와-nat-gw)로 간다.
 
-**② 왜 필요한가 (채점 관점)** — mark 1-1 은 CIDR 을, **mark 1-2 는 "RTB↔서브넷 연결"과 기본 라우트의 GatewayId(IGW)·NatGatewayId(NAT)를 그대로 검사**한다. 서브넷이 엉뚱한 RTB 에 붙어 있으면 인터넷이 되더라도 감점이다.
+**② 왜 필요한가 (채점 관점)** — mark 1-1 은 CIDR 을 검사한다. **mark 1-2 는 RTB↔서브넷 연결과 기본 라우트의 GatewayId(IGW)·NatGatewayId(NAT)를 그대로 본다.** 서브넷이 엉뚱한 RTB 에 붙어 있으면 인터넷이 되더라도 감점이다.
 
 **③ 핵심 원리**:
 
@@ -451,7 +451,7 @@ resource "aws_nat_gateway" "this" {
 
 합이 **20개**다. `terraform plan` 이 20 을 내지 않으면 빠뜨린 리소스가 있다는 뜻이라, 코드를 뒤지기 전에 이 수부터 센다.
 
-**⑤ 세트별 차이** — CIDR(172.16 vs 10.x), AZ 쌍(a/b vs c/d), 서브넷 수, NAT 개수(1개 공용 vs AZ별)가 바뀐다. 이 실측 코드는 전부 변수·locals 파생이라 tfvars 교체로 흡수된다.
+**⑤ 세트별 차이** — CIDR(172.16 vs 10.x), AZ 쌍(a/b vs c/d), 서브넷 수, NAT 개수가 바뀐다. NAT 는 공용 1개인 세트와 AZ별로 두는 세트가 갈린다. 이 실측 코드는 전부 변수·locals 파생이라 tfvars 교체로 흡수된다.
 
 <details class="build-step">
 <summary>지금 띄우기 — VPC 를 실제로 만든다 (과금 시작)</summary>
@@ -493,7 +493,7 @@ terraform apply
 
 ## 6. output → .env 영속화
 
-**① 한 줄 정의** — `output` 은 apply 결과값(ID·ARN·DNS)을 외부로 내보내는 통로이며, 대회에서는 이를 `.env` 파일로 박아 터미널이 끊겨도 재사용한다.
+**① 한 줄 정의** — `output` 은 apply 결과값(ID·ARN·DNS)을 외부로 내보내는 통로다. 대회에서는 이 값을 `.env` 파일로 박아 터미널이 끊겨도 재사용한다.
 
 **② 왜 필요한가 (채점 관점)** — 대회 환경은 재시동 시 파일이 초기화되고 CloudShell 세션이 끊긴다. eksctl YAML 렌더링·kubectl 치환·채점 확인 명령이 전부 output 값을 쓴다. 매번 콘솔에서 복사하면 그만큼 작성 시간을 잃는다. bastion 에는 Terraform 을 안 올리고 `outputs.json` 만 올려 jq 로 읽는 것이 저장소 규칙이다.
 

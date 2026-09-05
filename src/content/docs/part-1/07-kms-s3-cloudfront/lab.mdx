@@ -301,7 +301,7 @@ aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 --query "WebACLs[]
 
 **상황.** `unicorn-kms-s3`·`unicorn-kms-dynamodb`·`unicorn-kms-eks` 로 이름만 갈아 끼웠다. 개수도 셋이고 이름도 `unicorn-` 으로 시작하니 맞아 보인다.
 
-**판정.** 이건 `plan` 이 안 잡아 준다. **코드는 완벽하게 유효하고 apply 도 성공한다.** 틀린 것은 문법이 아니라 설계다.
+**판정.** 이건 `plan` 이 안 잡아 준다. **코드는 유효하고 apply 도 성공한다.** 틀린 것은 문법이 아니라 설계다.
 
 확인은 채점이 무엇을 찾는지로 한다.
 

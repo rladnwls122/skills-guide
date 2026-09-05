@@ -24,13 +24,13 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## 1. eksctl ClusterConfig 구조
 
-**① 한 줄 정의** — eksctl은 `ClusterConfig` YAML 한 장으로 EKS 컨트롤 플레인 + 노드그룹 + IAM 연동 + 애드온을 선언적으로 생성하는 공식 CLI다.
+**① 한 줄 정의** — eksctl 은 `ClusterConfig` YAML 한 장으로 EKS 를 선언적으로 만드는 공식 CLI 다. 컨트롤 플레인·노드그룹·IAM 연동·애드온이 그 한 장에 들어간다.
 
 컨트롤 플레인·데이터 플레인·노드그룹·애드온이 각각 무엇인지는 [eks-basics](/start/eks-basics/)에 정의가 있다.
 
 eksctl 이 실제로 하는 일은 CloudFormation 스택을 대신 짜는 것이다. YAML 한 장을 읽어 **클러스터 → OIDC/서비스 계정 → 노드그룹** 순으로 스택 세 벌을 만들고, 앞 단계가 끝나야 뒤 단계를 건다. 콘솔 클릭이나 `aws eks create-cluster` 로는 이 순서와 사이에 필요한 IAM 역할·보안 그룹을 사람이 직접 챙겨야 한다. 생성에 약 20분이 걸리는 것도 스택 세 벌이 직렬로 도는 시간이다.
 
-**② 왜 (채점 관점)** — 채점은 `aws eks describe-cluster / describe-nodegroup` 출력을 정확 비교한다(mark 5-1~5-3: 버전 1.35, 로그 5종, KMS 별칭, 서브넷 이름, 노드그룹 이름/타입/tags.Name). 콘솔 클릭보다 YAML 한 장이 재현·수정(30% 변동 대비)에 압도적으로 유리하다.
+**② 왜 (채점 관점)** — 채점은 `aws eks describe-cluster`·`describe-nodegroup` 출력을 정확 비교한다. mark 5-1~5-3 이 보는 값은 버전 1.35, 로그 5종, KMS 별칭, 서브넷 이름, 노드그룹 이름·타입·tags.Name 이다. 콘솔 클릭보다 YAML 한 장이 재현과 수정(30% 변동 대비)에 유리하다.
 
 **③ 원리**
 
@@ -243,11 +243,11 @@ kubectl 인증은 두 갈래 모두 Access Entry(`authenticationMode: API`)를 �
 
 ## 3. 노드그룹 2분할 (addon / app)
 
-**① 한 줄 정의** — 시스템 컴포넌트용 addon 노드그룹과 애플리케이션 전용 app 노드그룹으로 분리하고 label(+필요시 taint)로 스케줄을 통제한다.
+**① 한 줄 정의** — 시스템 컴포넌트용 addon 노드그룹과 애플리케이션 전용 app 노드그룹으로 나눈다. label 로, 필요하면 taint 까지 더해 스케줄을 통제한다.
 
 label·nodeSelector·taint·toleration·DaemonSet 이 각각 무엇인지는 [k8s-basics](/start/k8s-basics/)에 있다. 노드그룹 2분할이 전체 배치에서 차지하는 자리는 그 문서의 "실제로 쓰이는 배치" 절에 있다.
 
-**② 왜 (채점 관점)** — mark 5-3이 `describe-nodegroup`으로 노드그룹 이름·인스턴스 타입·**tags.Name**·서브넷을 검사하고, mark 5-4가 "kube-system 파드는 addon 노드, wskorea26 파드는 app 노드"를 `kubectl get pod -o wide`로 검사한다.
+**② 왜 (채점 관점)** — mark 5-3 이 `describe-nodegroup` 으로 노드그룹 이름·인스턴스 타입·**tags.Name**·서브넷을 검사한다. mark 5-4 는 파드가 제 노드에 떴는지를 `kubectl get pod -o wide` 로 본다. kube-system 파드는 addon 노드, wskorea26 파드는 app 노드다.
 
 **③ 원리**
 
@@ -356,7 +356,7 @@ set-02 에서 애드온 버전은 **지정하지 않는다**(작업규칙 2: EKS
 
 ## 4. `${VAR}` 플레이스홀더 치환
 
-**① 한 줄 정의** — cluster.yaml의 VPC/서브넷/SG/KMS/정책 ARN은 `${VAR}` 플레이스홀더로 두고, terraform output 값으로 치환한 `cluster.rendered.yaml`을 생성해 적용한다.
+**① 한 줄 정의** — `cluster.yaml` 의 VPC·서브넷·SG·KMS·정책 ARN 은 `${VAR}` 플레이스홀더로 둔다. terraform output 값으로 치환한 `cluster.rendered.yaml` 을 만들어 적용한다.
 
 **② 왜** — Terraform이 만든 리소스 ID는 apply 때마다 바뀐다. 하드코딩하면 재배포·30% 변동 대응이 불가능하다.
 

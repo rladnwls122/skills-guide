@@ -18,9 +18,9 @@ import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## 1. 전체 아키텍처 (백지 도식 훈련 — 이것이 정답 도식)
 
-**① 한 줄 정의** — User → CloudFront(정적=S3, 동적=/book*→ALB) → ALB(POST→Pod, GET→Lambda) → DynamoDB 구조의 콘서트 예매 플랫폼.
+**① 한 줄 정의** — 콘서트 예매 플랫폼이고 홉이 넷이다. CloudFront 가 정적은 S3 로, 동적(`/book*`)은 ALB 로 보낸다. ALB 는 POST 를 Pod 로, GET 을 Lambda 로 가른다. 저장소는 DynamoDB 다.
 
-**② 왜 (채점 관점)** — 30점 중 CloudFront 6.5 + Application 6 + EKS 5 = 17.5점이 이 그림 위에서 결정된다. 외울 것은 상자가 아니라 화살표다. 구간마다 **인증 방식**이 다르고, 그 방식 하나하나가 채점 항목이다. IRSA 는 파드에 AWS 권한을 주는 방식이다. 원리는 [eks-basics 의 IRSA 절](/start/eks-basics/#irsa와-eks-pod-identity)에 있다.
+**② 왜 (채점 관점)** — 30점 중 17.5점이 이 그림 위에서 결정된다. CloudFront 6.5, Application 6, EKS 5 다. 외울 것은 상자가 아니라 화살표다. 구간마다 **인증 방식**이 다르고, 그 방식 하나하나가 채점 항목이다. IRSA 는 파드에 AWS 권한을 주는 방식이다. 원리는 [eks-basics 의 IRSA 절](/start/eks-basics/#irsa와-eks-pod-identity)에 있다.
 
 **③ 정답 도식 — 매일 백지에 재현할 것. 화살표의 인증 주석까지가 정답이다.**
 
@@ -74,7 +74,7 @@ S3 쪽 화살표에 인증 수단이 둘인 이유는 목적이 다르기 때문
 
 ## 2. CloudFront 핵심 — 이중 Origin과 경로 재작성
 
-**① 한 줄 정의** — Origin 2개(ALB 커스텀/S3 OAC)를 가진 배포에서, viewer-request CloudFront Function이 POST /book만 /v1/book으로 재작성한다.
+**① 한 줄 정의** — 배포는 origin 을 둘 가진다 — ALB 커스텀 origin 과 S3 OAC origin 이다. viewer-request 자리의 CloudFront Function 이 `POST /book` 만 `/v1/book` 으로 재작성한다.
 
 S3 쪽 오리진이 OAC 로 비공개를 유지하는 구조는 [s3-basics 의 OAC 절](/start/s3-basics/#cloudfront-oac--원본을-비공개로-유지하는-구조)에 있다. ALB 쪽이 커스텀 헤더로 CloudFront 경유만 받는 구조는 [loadbalancer-basics 3-1 절](/start/loadbalancer-basics/#3-1-cloudfront-를-거친-요청만-받는다)에 있다.
 
@@ -157,7 +157,7 @@ CloudFront Function 과 이중 오리진 구성은 set-02 고유다. 다른 세�
 
 ## 3. 배포 10단계의 순서 논리
 
-**① 한 줄 정의** — 의존성 역순으로는 아무것도 못 만든다: 인프라(terraform) → 이미지 → 클러스터 → 컨트롤러 → 앱 → 관측성 → 검증 → 채점 → 정리.
+**① 한 줄 정의** — 의존성 역순으로는 아무것도 못 만든다. 순서는 인프라(terraform)·이미지·클러스터·컨트롤러·앱·관측성·검증·채점·정리 아홉 단계다.
 
 **② 왜** — 각 단계가 다음 단계의 입력을 만든다(output → env, ECR → 이미지, TG ARN → TGB). 순서가 꼬이면 되돌아가는 비용이 크다(eksctl 20분).
 
@@ -222,9 +222,9 @@ graph LR
 
 ## 4. 후보 세트 차이 — set-02·set-03·set-07
 
-**① 한 줄 정의** — 이 모듈과 이 커리큘럼의 PART-2는 set-02로 고정되어 있지만, 실제 1과제는 경기 시작 직전 수상 후보 **세 편(set-02·set-03·set-07) 중 하나**가 선정된다.
+**① 한 줄 정의** — 이 모듈과 PART-2 는 set-02 로 고정돼 있다. 그런데 실제 1과제는 경기 시작 직전에 수상 후보 **세 편(set-02·set-03·set-07) 중 하나**가 선정된다.
 
-**② 왜 (채점 관점)** — set-02 런북만 외우고 가면 WAF·심화 KMS 문항 전체(set-03) 또는 WAF·관측성(set-07)을 놓친다.
+**② 왜 (채점 관점)** — set-02 런북만 외우고 가면 놓치는 것이 있다. set-03 이면 WAF 와 심화 KMS 문항 전체, set-07 이면 WAF 와 관측성이다.
 
 세 세트 모두 EKS+ALB+CloudFront+DynamoDB+Lambda 구성은 같다. 갈리는 것은 WAF·관측성·KMS 키 정책 세 항목이고, 그 차이가 ③의 구성 차이 표다. 이 표를 모른 채 들어가면 처음 보는 요구사항으로 4시간을 시작한다.
 
@@ -263,7 +263,7 @@ set-02 의 관측성 부담은 정정으로 한 번 더 줄었다. "Pod 로그�
 
 ### 이 커리큘럼은 set-02 → set-07 이행을 이미 훈련시켰다 :badge[실측]{variant=note}
 
-위 표는 "세트가 바뀌면 무엇이 다른가"를 항목 단위로 본다. PART-1·2 의 각 모듈은 그것을 **손으로 옮기는 훈련**으로 나눠 이미 한 번씩 시켰다.
+세트 대조표는 "세트가 바뀌면 무엇이 다른가"를 항목 단위로 본다. PART-1·2 의 각 모듈은 그것을 **손으로 옮기는 훈련**으로 나눠 이미 한 번씩 시켰다.
 
 | 모듈 | 옮긴 것 |
 |---|---|

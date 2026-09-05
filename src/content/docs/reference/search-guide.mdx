@@ -110,7 +110,12 @@ kubectl explain deployment --api-version=apps/v1
 | EC2NodeClass | `karpenter.k8s.aws/v1` |
 | PodMonitor · PrometheusRule | `monitoring.coreos.com/v1` |
 
-내장 리소스의 정본은 [Kubernetes API 레퍼런스](https://kubernetes.io/docs/reference/kubernetes-api/)다([Deployment v1](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/) 같은 페이지가 리소스마다 하나씩 있다). CRD 는 만든 프로젝트 문서를 본다 — [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/targetgroupbinding/targetgroupbinding/), [KEDA Scalers](https://keda.sh/docs/latest/scalers/), [Karpenter NodePool](https://karpenter.sh/docs/concepts/nodepools/), [prometheus-operator API](https://prometheus-operator.dev/docs/api-reference/api/).
+내장 리소스의 정본은 [Kubernetes API 레퍼런스](https://kubernetes.io/docs/reference/kubernetes-api/)다([Deployment v1](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/deployment-v1/) 같은 페이지가 리소스마다 하나씩 있다). CRD 는 만든 프로젝트 문서를 본다.
+
+- [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/targetgroupbinding/targetgroupbinding/)
+- [KEDA Scalers](https://keda.sh/docs/latest/scalers/)
+- [Karpenter NodePool](https://karpenter.sh/docs/concepts/nodepools/)
+- [prometheus-operator API](https://prometheus-operator.dev/docs/api-reference/api/)
 
 ALB Ingress 어노테이션(`alb.ingress.kubernetes.io/listen-ports` 등)은 `kubectl explain` 이 못 잡는다. 어노테이션은 스키마가 아니라 문자열이다 — [Ingress annotations 문서](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/ingress/annotations/)에서 Ctrl+F 로 찾는다.
 

@@ -246,7 +246,7 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
    ls -l out.log err.log 2>/dev/null || echo "이번엔 전부 버렸다"
    ```
 
-   위 명령은 **일부러 전부 버린 것**이다. `/dev/null` 로 보내면 로그가 사라진다. 스크립트에 이 표현이 남아 있는지부터 본다.
+   `> /dev/null 2>&1` 은 출력을 **일부러 전부 버린다.** 로그가 사라지므로, 스크립트에 이 표현이 남아 있는지부터 본다.
 
 2. **프로세스가 실제로 도나** — 시작하자마자 죽었다면 로그가 짧다.
 

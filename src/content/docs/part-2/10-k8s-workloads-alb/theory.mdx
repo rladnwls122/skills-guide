@@ -26,11 +26,11 @@ CIDR 표기와 AZ(가용 영역)는 [vpc-basics](/start/vpc-basics/)에 있다. 
 
 ## 1. 프로덕션급 Deployment
 
-**① 한 줄 정의** — Deployment는 Pod 복제본을 선언적으로 유지하는 컨트롤러이며, 대회에서는 "고가용성 + 노드 배치 + 무중단"을 만족하는 스펙을 요구한다.
+**① 한 줄 정의** — Deployment 는 Pod 복제본을 선언적으로 유지하는 컨트롤러다. 대회는 고가용성·노드 배치·무중단을 함께 만족하는 스펙을 요구한다.
 
-Deployment·Pod·probe·ServiceAccount 는 [k8s-basics](/start/k8s-basics/)가 먼저 정의한다. 아래 표의 `requests`/`limits` 와 QoS 등급은 [그 문서의 requests / limits 절](/start/k8s-basics/#2-6-리소스-요청과-상한--requests--limits)에 있다.
+Deployment·Pod·probe·ServiceAccount 는 [k8s-basics](/start/k8s-basics/)가 먼저 정의한다. Deployment 스펙에 나오는 `requests`/`limits` 와 QoS 등급은 [그 문서의 requests / limits 절](/start/k8s-basics/#2-6-리소스-요청과-상한--requests--limits)에 있다.
 
-**② 왜 (채점 관점)** — mark 5-4가 wskorea26 파드의 노드 배치(app)를, mark 9-1~9-4가 실제 애플리케이션 동작을 검사한다. probe가 없으면 죽은 Pod가 타깃에 남아 9번 항목이 간헐 실패하고, 노드 배치가 틀리면 5-4 감점.
+**② 왜 (채점 관점)** — mark 5-4 가 wskorea26 파드의 노드 배치(app)를 검사한다. mark 9-1~9-4 는 실제 애플리케이션 동작을 본다. probe가 없으면 죽은 Pod가 타깃에 남아 9번 항목이 간헐 실패하고, 노드 배치가 틀리면 5-4 감점.
 
 **③ 원리 — set-02 deployment.yaml의 6대 요소**
 
@@ -95,7 +95,7 @@ set-02 실측값:
 <details class="build-step">
 <summary>지금 확인하기 — API 서버에 물어보되 저장하지는 않는다</summary>
 
-위 표의 값들이 실제로 받아들여지는지 API 서버에 물어본다. [09 실습](/part-2/09-eksctl-cluster/lab/)의 클러스터가 있어야 하고, `${ECR}` 을 치환한 `rendered/app/deployment.yaml` 이 있어야 한다. **저장하지 않으므로 파드는 뜨지 않는다.**
+변형 포인트 표의 값들이 실제로 받아들여지는지 API 서버에 물어본다. [09 실습](/part-2/09-eksctl-cluster/lab/)의 클러스터가 있어야 하고, `${ECR}` 을 치환한 `rendered/app/deployment.yaml` 이 있어야 한다. **저장하지 않으므로 파드는 뜨지 않는다.**
 
 ```bash
 kubectl apply --dry-run=server -f rendered/app/deployment.yaml
@@ -132,7 +132,7 @@ kubectl apply --dry-run=server -f rendered/app/deployment.yaml
 
 **① 한 줄 정의** — Helm은 k8s manifest 묶음(chart)을 값(values)으로 렌더링해 설치·업그레이드하는 패키지 매니저다.
 
-**② 왜** — LBC·kube-prometheus-stack 같은 대형 컴포넌트는 manifest 수십 장 — helm 없이는 대회 시간 내 불가능.
+**② 왜** — LBC 나 kube-prometheus-stack 은 manifest 가 수십 장이다. helm 없이는 대회 시간 안에 못 세운다.
 
 **③ 핵심 개념 / 필수 명령**
 
@@ -161,7 +161,7 @@ helm -n <ns> list / helm -n <ns> uninstall <release>
 
 ## 3. AWS Load Balancer Controller + TargetGroupBinding 패턴
 
-**① 한 줄 정의** — LBC(AWS Load Balancer Controller)는 클러스터 안의 k8s 리소스를 지켜보다가 ELB API 를 대신 호출하는 컨트롤러다.
+**① 한 줄 정의** — LBC(AWS Load Balancer Controller)는 클러스터 안의 k8s 리소스를 지켜본다. 그 선언을 보고 ELB API 를 대신 호출하는 컨트롤러다.
 
 CRD(CustomResourceDefinition)는 쿠버네티스에 새 리소스 종류를 추가하는 정의다. LBC 를 설치하면 이 컨트롤러가 읽을 CRD 들도 함께 들어온다.
 
@@ -301,7 +301,7 @@ helm repo update
 
 ## 4. ALB 리스너 규칙 — 헤더/메서드 조건 + Lambda 타깃
 
-**① 한 줄 정의** — 리스너(80/HTTP)의 기본 액션은 fixed-response 403, 규칙 2개가 CloudFront 커스텀 헤더를 검증해 POST는 Pod TG로, 그 외는 Lambda TG로 보낸다.
+**① 한 줄 정의** — 리스너(80/HTTP)의 기본 액션은 fixed-response 403 이다. 규칙 2개가 CloudFront 커스텀 헤더를 검증해, POST 는 Pod TG 로 그 외는 Lambda TG 로 보낸다.
 
 "CloudFront 를 거친 요청만 받는다"는 이 구성의 목적 자체는 [loadbalancer-basics 3-1 절](/start/loadbalancer-basics/#3-1-cloudfront-를-거친-요청만-받는다)에 있다.
 

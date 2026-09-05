@@ -24,7 +24,7 @@ ARN(Amazon Resource Name)은 AWS 리소스마다 붙는 전역 고유 이름이�
 
 ## 1. Envelope Encryption 과 CMK
 
-**① 한 줄 정의** — envelope encryption 은 데이터를 데이터 키(DEK)로 암호화하고, 그 DEK 를 다시 KMS 의 CMK 로 암호화해 보관하는 2단 구조다. 봉투 암호화·CMK·키 정책이라는 말 자체가 처음이면 [kms-basics](/start/kms-basics/)를 먼저 읽는다.
+**① 한 줄 정의** — envelope encryption 은 데이터를 데이터 키(DEK)로 암호화한다. 그 DEK 를 다시 KMS 의 CMK 로 암호화해 보관하는 2단 구조다. 봉투 암호화·CMK·키 정책이라는 말 자체가 처음이면 [kms-basics](/start/kms-basics/)를 먼저 읽는다.
 
 **② 왜 필요한가 (채점 관점)** — S3 SSE-KMS, DynamoDB SSE, EKS secrets 암호화가 전부 이 구조다. mark 는 "어떤 CMK 로 암호화됐는가"를 **alias 로 역조회**하므로 alias 이름 정확 일치가 점수다.
 
@@ -74,7 +74,7 @@ resource "aws_kms_alias" "s3" {
 
 </details>
 
-**④ 세트별 차이** — set-02 는 CMK 3개(s3/dynamodb/eks), set-03 은 5개(db/ecr/eks/bucket/function). "과제지가 이름을 준 서비스에만 CMK" 가 원칙.
+**④ 세트별 차이** — CMK 개수가 갈린다. set-02 는 3개(s3·dynamodb·eks), set-03 은 5개(db·ecr·eks·bucket·function)다. 원칙은 하나다 — 과제지가 이름을 준 서비스에만 CMK 를 만든다.
 
 <details class="build-step">
 <summary>지금 확인하기 — 채점이 쓰는 alias 역조회를 그대로 해 본다</summary>
@@ -108,7 +108,7 @@ resource "aws_kms_alias" "s3" {
 
 ## 2. 키 정책 구조 — admin vs use 분리
 
-**① 한 줄 정의** — 키 정책은 CMK 에 직접 붙는 리소스 정책으로, "키를 관리하는 statement(admin)"와 "키를 사용하는 statement(use)"를 분리해 쓴다.
+**① 한 줄 정의** — 키 정책은 CMK 에 직접 붙는 리소스 정책이다. 키를 관리하는 statement(admin)와 키를 사용하는 statement(use)를 분리해 쓴다.
 
 **② 왜 필요한가 (채점 관점)** — IAM 정책과 달리 KMS 는 **키 정책이 1차 관문이다.** 키 정책에 적힌 만큼만 통과하고, 계정 관리자라도 키 정책이 비어 있으면 그 키를 다루지 못한다.
 
@@ -171,9 +171,9 @@ data "aws_iam_policy_document" "kms_s3" {
 
 ## 3. 심화 — set-03 root-less 키 정책
 
-**① 한 줄 정의** — 유의사항이 "키 정책에 root principal 과 `kms:*` 액션 금지"를 걸면, 관리자 principal 을 `"*"` 로 두고 `kms:CallerAccount` 조건으로 계정 하나에 가둔 뒤 액션을 전부 나열해야 한다.
+**① 한 줄 정의** — 유의사항이 키 정책에 root principal 과 `kms:*` 액션을 금지할 때가 있다. 그러면 관리자 principal 을 `"*"` 로 두고 `kms:CallerAccount` 조건으로 계정 하나에 가둔다. 그리고 허용할 액션을 전부 나열한다.
 
-**② 왜 필요한가 (채점 관점)** — set-03 mark 의 check_kms 가 **정책 텍스트를 grep** 해서 `:root` 나 `kms:*` 가 있으면 실격 처리한다. 동시에 KMS 의 lockout safety check 를 통과해야 한다. 이 검사가 보는 것은 하나다 — **호출한 신원 본인에게 `kms:PutKeyPolicy` 가 허용되는가**. 그래서 관리 statement 에 `kms:Put*` 를 반드시 포함시키고, 나머지 관리·운영 액션도 개별 나열한다.
+**② 왜 필요한가 (채점 관점)** — set-03 mark 의 check_kms 가 **정책 텍스트를 grep** 한다. `:root` 나 `kms:*` 가 있으면 실격이다. 동시에 KMS 의 lockout safety check 를 통과해야 한다. 이 검사가 보는 것은 하나다 — **호출한 신원 본인에게 `kms:PutKeyPolicy` 가 허용되는가**. 그래서 관리 statement 에 `kms:Put*` 를 반드시 포함시키고, 나머지 관리·운영 액션도 개별 나열한다.
 
 principal 을 배포자 한 사람의 ARN 으로 좁히지 않는 이유는 채점 쪽에 있다. 과제지가 "미리 IAM 사용자를 만들어 그 신원으로 진행하라"고 말하지 않으면 채점자는 지급받은 root 로 접속한다. KMS 는 IAM 정책이 아니라 키 정책이 1차 관문이다. 관리자를 배포자 신원 하나로 잠그면 채점 스크립트 자신이 `describe-key`·`get-key-policy` 조차 못 해 KMS 항목이 통째로 0점이 된다. `"*"` + `kms:CallerAccount` 는 계정 밖 principal 을 막으면서 계정 안 신원 판단은 각자의 IAM 정책에 맡기므로, root 로 채점해도 통과한다.
 
@@ -297,11 +297,11 @@ encryption_configuration {
 
 ## 5. S3 보안 구성 — 퍼블릭 차단 4종 + SSE-KMS + BucketKey
 
-**① 한 줄 정의** — 정적 웹 버킷은 퍼블릭 액세스 4종을 전부 차단하고, CMK 로 SSE-KMS 암호화하되 BucketKey 로 KMS 호출을 줄인다.
+**① 한 줄 정의** — 정적 웹 버킷은 퍼블릭 액세스 4종을 전부 차단한다. 암호화는 CMK 를 쓰는 SSE-KMS 이고, BucketKey 로 KMS 호출을 줄인다.
 
 퍼블릭 액세스 차단이 접근 통제 4층 중 어디에 해당하는지, SSE-KMS 가 다른 암호화 방식과 무엇이 다른지는 [s3-basics](/start/s3-basics/)에 있다.
 
-**② 왜 필요한가 (채점 관점)** — mark 2-2 가 퍼블릭 차단 상태와 암호화 키를 검사하고, `get-bucket-policy-status` 가 `IsPublic: false` 를 반환하려면 OAC 버킷 정책이 있어야 한다. 버킷 이름은 `wskorea26-concert-bucket-<비번호>` — 비번호 변수화 필수.
+**② 왜 필요한가 (채점 관점)** — mark 2-2 가 퍼블릭 차단 상태와 암호화 키를 검사한다. `get-bucket-policy-status` 가 `IsPublic: false` 를 반환하려면 OAC 버킷 정책이 있어야 한다. 버킷 이름은 `wskorea26-concert-bucket-<비번호>` — 비번호 변수화 필수.
 
 **③ 핵심 원리** — set-02 s3.tf 실측:
 
@@ -365,7 +365,7 @@ resource "aws_s3_object" "static" {
 
 ## 6. CloudFront OAC + 버킷 정책 + 순환 참조 우회
 
-**① 한 줄 정의** — OAC(Origin Access Control)는 CloudFront 가 S3 에 SigV4 서명으로 접근하게 하는 장치이고, 버킷 정책은 `AWS:SourceArn = 배포 ARN` 조건으로 그 배포에게만 GetObject 를 허용한다. OAC 가 원본을 비공개로 유지하는 구조 자체는 [s3-basics 의 OAC 절](/start/s3-basics/#cloudfront-oac--원본을-비공개로-유지하는-구조)에 있다.
+**① 한 줄 정의** — OAC(Origin Access Control)는 CloudFront 가 S3 에 SigV4 서명으로 접근하게 하는 장치다. 버킷 정책은 `AWS:SourceArn = 배포 ARN` 조건으로 그 배포에게만 GetObject 를 허용한다. OAC 가 원본을 비공개로 유지하는 구조 자체는 [s3-basics 의 OAC 절](/start/s3-basics/#cloudfront-oac--원본을-비공개로-유지하는-구조)에 있다.
 
 **② 왜 필요한가 (채점 관점)** — "버킷 직접 접근 불가 + CloudFront 경유만 가능"이 정적 웹 채점의 표준형. 퍼블릭 차단 4종과 양립하는 유일한 정상 경로가 OAC 다.
 

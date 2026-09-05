@@ -18,7 +18,7 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 ## 실습 목표
 
 - [ ] 조회 패턴이 뒤집힌 요구를 읽고 파티션 키와 GSI 축을 다시 정한다
-- [ ] 파티션 키가 왜 이 모듈에서 가장 비싼 값인지, 삭제 방지가 왜 그 비용을 더 키우는지 확인한다
+- [ ] 파티션 키가 왜 이 모듈에서 가장 비싼 값인지, 삭제방지가 왜 그 비용을 더 키우는지 확인한다
 - [ ] 태그 덮어쓰기 정책에 **예외**를 두는 요구를 반영한다 — 코드가 아니라 도구 버전이 걸리는 경우를 판정한다
 - [ ] 로그 그룹 이름을 기본 규칙에서 지정 이름으로 옮긴다
 - [ ] `plan` 출력으로 in-place 와 재생성을 판정하고 파급을 센다
@@ -192,7 +192,7 @@ set-07 요구다. **정답 코드를 먼저 열지 않는다.**
 |---|---|---|
 | 4-1-A | 과금 모드, 파티션 키 | |
 | 4-1-A | GSI 이름·HASH·RANGE·투영 방식 | |
-| 4-1-A | 암호화 종류와 키 ARN, 삭제 방지 | |
+| 4-1-A | 암호화 종류와 키 ARN, 삭제방지 | |
 | 4-1-A | PITR 상태 | |
 | 5-1-A | 스캔 설정·태그 정책·암호화 종류 | |
 | 5-1-A | 리포지토리에 있는 태그 목록 | |
@@ -348,7 +348,7 @@ terraform validate
 
 기대: `hash_key` 줄 옆에 `# forces replacement`. 파티션 키는 테이블의 정체성이라 바꿀 수 없다.
 
-**여기서 apply 하면 막힌다.** 삭제 방지가 켜져 있기 때문이다.
+**여기서 apply 하면 막힌다.** 삭제방지가 켜져 있기 때문이다.
 
 ```
 Error: deleting DynamoDB Table: ValidationException:
@@ -359,11 +359,11 @@ Resource cannot be deleted because deletion protection is enabled.
 
 <Steps>
 
-1. **삭제 방지를 먼저 끈다** — 코드에서 `deletion_protection_enabled` 를 `false` 로 두고 apply 한다. 이때는 테이블이 안 죽는다. `~ update in-place` 다
+1. **삭제방지를 먼저 끈다** — 코드에서 `deletion_protection_enabled` 를 `false` 로 두고 apply 한다. 이때는 테이블이 안 죽는다. `~ update in-place` 다
 
 2. **그다음 파티션 키를 바꿔 apply 한다** — 이제 재생성이 통과한다
 
-3. **삭제 방지를 다시 켠다** — 채점 항목이므로 꺼 둔 채로 두면 감점이다
+3. **삭제방지를 다시 켠다** — 채점 항목이므로 꺼 둔 채로 두면 감점이다
 
 </Steps>
 
@@ -374,7 +374,7 @@ Resource cannot be deleted because deletion protection is enabled.
 - Lambda 실행 역할의 리소스 ARN 이 테이블 ARN 을 참조한다
 - 애플리케이션 코드가 파티션 키 이름을 문자열로 쓴다면 그것도 함께 고친다
 
-**교훈.** 01 의 VPC CIDR, 02 의 버킷 이름과 같은 자리다. 다만 여기엔 **삭제 방지라는 한 겹이 더 있다.** 비싼 값을 되돌리는 데 드는 시간에 "안전장치를 푸는 시간"이 더해진다는 것이 이 모듈이 더하는 교훈이다.
+**교훈.** 01 의 VPC CIDR, 02 의 버킷 이름과 같은 자리다. 다만 여기엔 **삭제방지라는 한 겹이 더 있다.** 비싼 값을 되돌리는 데 드는 시간에 "안전장치를 푸는 시간"이 더해진다는 것이 이 모듈이 더하는 교훈이다.
 
 과제지를 받으면 **테이블 이름과 파티션 키부터 확정하고 시작한다.**
 
@@ -494,7 +494,7 @@ terraform apply
 [09 실습](/part-2/09-eksctl-cluster/lab/)은 정답지 원본을 따로 apply 한다. **`~/set07-lab` 을 띄워 둔 채로 PART-2 를 시작하면 NAT 가 양쪽에서 과금된다.** 여기서 지운다.
 :::
 
-**삭제 방지를 먼저 끈다.** 이 순서를 지키지 않으면 destroy 가 중간에 멈춘다.
+**삭제방지를 먼저 끈다.** 이 순서를 지키지 않으면 destroy 가 중간에 멈춘다.
 
 <Steps>
 

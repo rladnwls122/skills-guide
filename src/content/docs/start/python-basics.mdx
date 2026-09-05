@@ -420,7 +420,7 @@ def save_student(table, row):
     average = Decimal(str(sum(scores.values()))) / Decimal(len(SCORE_FIELDS))
 ```
 
-앞에서 본 `Decimal` 이 여기서 실전으로 나온다. 이유가 셋 겹친다. 483 을 5로 나누면 `float` 은 96.60000000000001 을 주고, 채점은 96.6 을 기대하며, 애초에 boto3 가 `float` 저장을 거부한다.
+앞에서 본 `Decimal` 이 여기서 실전으로 나온다. 이유가 셋 겹친다. 483 을 5로 나누면 `float` 은 96.60000000000001 을 준다. 채점은 96.6 을 기대하고, 애초에 boto3 가 `float` 저장을 거부한다.
 
 `Decimal(str(...))` 처럼 문자열을 거치는 것도 이유가 있다. `Decimal(0.1)` 은 이미 부정확해진 `float` 을 받아 오차를 그대로 물려받는다. `Decimal("0.1")` 은 정확하다.
 

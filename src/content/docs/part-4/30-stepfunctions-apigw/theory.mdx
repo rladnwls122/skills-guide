@@ -306,7 +306,7 @@ resource "aws_api_gateway_integration" "get_inventory" {
 
 ### 7-1. 요청 템플릿
 
-```velocity
+```json
 {
   "TableName": "inventory",
   "Key": {
@@ -333,7 +333,7 @@ resource "aws_api_gateway_integration" "get_inventory" {
 
 VTL 에서 조건을 쓰고 상태코드를 바꾸도록 신호를 보낸다.
 
-```velocity
+```text
 #set($item = $input.params('item'))
 #if($item.startsWith("mysecret"))
   #set($context.responseOverride.status = 403)
@@ -374,7 +374,7 @@ DynamoDB 가 주는 응답은 이렇다.
 
 곧 `1000` 이라는 숫자만, 따옴표 없이 내야 한다.
 
-```velocity
+```text
 #set($item = $input.params('item'))
 #if($item.startsWith("mysecret"))
 #set($context.responseOverride.status = 403)

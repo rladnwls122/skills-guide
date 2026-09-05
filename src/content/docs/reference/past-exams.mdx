@@ -161,7 +161,7 @@ Hub 에 Public 서브넷 둘, Private 서브넷 둘, Firewall 서브넷 하나�
 
 **보안.** Network Firewall 이 들고 나는 모든 트래픽을 검사한다. 규칙은 Stateful Suricata 형식이다. `gj2025-app-vpc` 에서 `ifconfig.io` 로 나가는 HTTP·HTTPS 를 차단하되 Bastion 은 모두 허용한다. 로그는 FLOW 유형만 CloudWatch Logs 로 보낸다.
 
-**RDBMS.** MySQL 8.0.x, DB 이름 `day1`, 포트 3309, 일반·에러·감사 로그 수집, 고객관리형 키(CMK) 암호화, 삭제 방지, RDS Proxy 를 통해서만 수신한다.
+**RDBMS.** MySQL 8.0.x, DB 이름 `day1`, 포트 3309다. 일반·에러·감사 로그를 수집하고, 고객관리형 키(CMK)로 암호화하며, 삭제방지를 켠다. 트래픽은 RDS Proxy 를 통해서만 받는다.
 
 **컨테이너.** EKS 1.32 다. 노드그룹을 둘로 나눈다. `gj2025-eks-addon-nodegroup` 에 애드온을, `gj2025-eks-app-nodegroup` 에 애플리케이션을 둔다. DaemonSet 을 뺀 모든 애드온은 addon 노드그룹에 있어야 한다.
 

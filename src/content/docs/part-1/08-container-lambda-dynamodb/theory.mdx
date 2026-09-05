@@ -24,7 +24,7 @@ SSE(Server-Side Encryption)는 저장할 때 서버가 알아서 암호화하는
 
 ## 1. Dockerfile 베이스 이미지 선택
 
-**① 한 줄 정의** — 베이스 이미지는 컨테이너의 OS 레이어이며, 선택에 따라 취약점 스캔 가능 여부·TLS 신뢰 저장소·타임존 데이터가 결정된다. 이미지·레이어·`FROM` 같은 Dockerfile 기본기는 [docker-basics](/start/docker-basics/)에 있다.
+**① 한 줄 정의** — 베이스 이미지는 컨테이너의 OS 레이어다. 선택에 따라 취약점 스캔 가능 여부·TLS 신뢰 저장소·타임존 데이터가 결정된다. 이미지·레이어·`FROM` 같은 Dockerfile 기본기는 [docker-basics](/start/docker-basics/)에 있다.
 
 **② 왜 필요한가 (채점 관점)** — mark 3-1 은 "ECR 스캔 결과에 Critical/High 없음"을 검사한다. 그런데 **scratch 베이스는 ECR 기본 스캔이 아예 스캔하지 못한다**(`UNSUPPORTED_IMAGE`) — 취약점이 없어서가 아니라 OS 패키지 DB 가 없어서. 스캔 불가는 "스캔 통과"가 아니다.
 
@@ -48,7 +48,7 @@ flowchart TD
 <details class="diagram-note">
 <summary>이 도식이 보여주는 것</summary>
 
-베이스 이미지 선택이 만드는 결과를 갈라 놓았다. `scratch` 는 가볍지만 대가가 셋이다. ECR Basic 스캔이 안 되고, CA 번들이 없어 DynamoDB TLS 연결이 실패하며, zoneinfo 가 없어 시각이 UTC 로 저장된다 — 세 가지가 모두 채점 항목과 직접 부딪힌다. 고정 버전 alpine 은 셋을 각각 해결한다.
+베이스 이미지 선택이 만드는 결과를 갈라 놓았다. `scratch` 는 가볍지만 대가가 셋이다. ECR Basic 스캔이 안 되고, CA 번들이 없어 DynamoDB TLS 연결이 실패한다. zoneinfo 가 없어 시각도 UTC 로 저장된다. 셋 다 채점 항목과 직접 부딪힌다. 고정 버전 alpine 은 셋을 각각 해결한다.
 
 </details>
 
@@ -325,7 +325,7 @@ item[field] = Decimal(str(score))                              # 저장 시에�
 
 ### set-07 은 파티션 키가 다르다 :badge[실측]{variant=note}
 
-위 표의 "키 속성 이름" 줄은 한 칸짜리로 적혀 있지만 실제로는 이 모듈에서 가장 비싼 변경이다. [set-07 `dynamodb.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/terraform/dynamodb.tf)와 나란히 놓으면 이렇다.
+"키 속성 이름" 줄은 표에서 한 칸으로 적혀 있지만 실제로는 이 모듈에서 가장 비싼 변경이다. [set-07 `dynamodb.tf`](https://github.com/ishs-cloud-computing/skills-2026/blob/main/set-07/task-1/terraform/dynamodb.tf)와 나란히 놓으면 이렇다.
 
 | 항목 | set-02 | set-07 |
 |---|---|---|
@@ -338,7 +338,7 @@ item[field] = Decimal(str(score))                              # 저장 시에�
 
 **조회 패턴이 뒤집혔다.** set-02 는 "예약 하나를 고객으로 찾고, 콘서트별 최신순은 인덱스로" 였다. set-07 은 "예약 하나를 예약 번호로 찾고, 고객별 최신순은 인덱스로" 다. 그래서 `client_id` 가 테이블의 파티션 키 자리에서 GSI 의 파티션 키 자리로 옮겨 간다.
 
-**파티션 키는 만든 뒤에 못 바꾼다.** 테이블을 지우고 다시 만들어야 하고, 삭제 방지가 켜져 있으므로 **그것을 먼저 끄지 않으면 지워지지도 않는다.** 이 모듈에서 [06 의 VPC CIDR](/part-1/06-terraform-vpc/lab/)에 해당하는 값이 바로 이것이다.
+**파티션 키는 만든 뒤에 못 바꾼다.** 테이블을 지우고 다시 만들어야 하고, 삭제방지가 켜져 있으므로 **그것을 먼저 끄지 않으면 지워지지도 않는다.** 이 모듈에서 [06 의 VPC CIDR](/part-1/06-terraform-vpc/lab/)에 해당하는 값이 바로 이것이다.
 
 GSI 를 적는 문법도 두 가지가 함께 쓰인다.
 
@@ -373,7 +373,7 @@ global_secondary_index {
 <details class="build-step">
 <summary>지금 확인하기 — 채점이 테이블에서 무엇을 뽑아 가나</summary>
 
-`mark 4-1-A` 는 테이블 하나를 조회해 키·인덱스·암호화·삭제 방지를 한 번에 뽑는다. 그 조회를 그대로 해 본다. **읽기만 하므로 테이블을 만들거나 고치지 않는다.**
+`mark 4-1-A` 는 테이블 하나를 조회해 키·인덱스·암호화·삭제방지를 한 번에 뽑는다. 그 조회를 그대로 해 본다. **읽기만 하므로 테이블을 만들거나 고치지 않는다.**
 
 테이블이 아직 없어도 된다 — 없을 때 나오는 에러를 보는 것도 이 블록의 일부다.
 

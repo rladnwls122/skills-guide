@@ -129,6 +129,15 @@ export default defineConfig({
     description: '전국기능경기대회 클라우드컴퓨팅 한 달 완성 가이드',
     defaultLocale: 'root',
     locales: { root: { label: '한국어', lang: 'ko' } },
+    /* 상단바 오른쪽 GitHub 아이콘. SocialIcons 오버라이드가 <Default /> 를 그대로
+       렌더하므로, 여기 넣은 항목이 로그인 단추 왼쪽에 붙는다. */
+    social: [
+      {
+        icon: 'github',
+        label: 'GitHub',
+        href: 'https://github.com/rladnwls122/skills-guide',
+      },
+    ],
     customCss: [
       /* 레이어 순서를 먼저 선언해야 한다 — 뒤에 오는 파일들이 그 순서를 전제한다.
          자세한 것은 파일 안 주석. */

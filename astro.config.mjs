@@ -87,7 +87,7 @@ export default defineConfig({
      범위 표기가 문단 안에서 짝 지어져 그 사이 전체가 취소선으로 렌더된다.
      내장 gfm 을 끄고 remark-gfm 을 singleTilde:false 로 직접 넣어 겹물결(~~)만
      취소선으로 남긴다 — 나머지 GFM 기능(표·작업 목록 등)은 그대로다. */
-  site: 'https://skills-learn.zenru.net',
+  site: 'https://skills-2026-learn-module.vercel.app',
   /* 문서 139쪽은 그대로 정적으로 굽는다. 어댑터는 `/api/*` 만 함수로 만들기 위한 것이고,
      그 경로들이 각자 `prerender = false` 를 선언한다. 진도 동기화가 쓰는 곳이다. */
   adapter: vercel(),

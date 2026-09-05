@@ -2,7 +2,7 @@
 
 전국기능경기대회 클라우드컴퓨팅 한 달 완성 가이드 — Astro Starlight 문서 사이트.
 
-**사이트: [skills-learn.zenru.net](https://skills-learn.zenru.net/)** (Vercel 배포)
+**사이트: [skills-2026-learn-module.vercel.app](https://skills-2026-learn-module.vercel.app/)** (Vercel 배포)
 
 - 콘텐츠: `src/content/docs/` — `start/`(선수 학습) · `part-0`~`part-6`(주차별 모듈) · `reference/`
 - 설계 근거: `docs/` — 사이트에 발행되지 않는다. 스펙은 `superpowers/specs/`, 실행 계획은 `superpowers/plans/`, 감사 기록은 `reports/`
@@ -57,7 +57,7 @@ mise 셸 통합 없이 쓴다면 `npm run dev` 앞에 `mise exec --` 를 붙인�
 범위를 좁힐 수 있다 — `npm run check:read -- start/` 처럼 쓴다.
 
 문장·용어·문서 유형 규칙의 원본은 사이트 안에 있다:
-[문서 규칙](https://skills-learn.zenru.net/reference/style/).
+[문서 규칙](https://skills-2026-learn-module.vercel.app/reference/style/).
 
 ## 서체 서브셋
 

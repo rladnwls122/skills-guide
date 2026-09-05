@@ -126,6 +126,9 @@ export default defineConfig({
     ],
   }), mermaidFullscreen, splitView, scrollbars, progress, starlight({
     title: 'skills-guide',
+    /* 안 주면 Starlight 가 /favicon.svg 를 가리키는데 그 파일이 없어 페이지마다
+       404 가 하나씩 났다. 대회 로고에서 구운 180px PNG 를 쓴다. */
+    favicon: '/favicon.png',
     description: '전국기능경기대회 클라우드컴퓨팅 한 달 완성 가이드',
     defaultLocale: 'root',
     locales: { root: { label: '한국어', lang: 'ko' } },

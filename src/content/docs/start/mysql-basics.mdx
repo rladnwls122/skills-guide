@@ -385,6 +385,22 @@ RDS Proxy 는 앱과 DB 사이에 서서 접속을 모아 준다. 앱이 100개�
 
 **뒤 두 줄이 막혀 있다는 것이 3과제의 성격을 정한다.** 하드웨어로 밀어붙일 수 없으니 인덱스와 캐싱과 애플리케이션 계층 확장으로 풀어야 한다.
 
+### 5-5. DB 가 병목인지 어떻게 아나 :badge[강의]{variant=tip}
+
+응답이 느릴 때 DB 를 의심할 근거가 필요하다. 상태 값 두 묶음이 그 근거가 된다.
+
+```sql
+SHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_read%';
+SHOW GLOBAL STATUS LIKE 'Threads%';
+SHOW GLOBAL VARIABLES LIKE 'max_connections';
+```
+
+**버퍼 풀 적중률.** InnoDB 는 자주 읽는 페이지를 메모리에 올려 둔다. `Innodb_buffer_pool_read_requests` 가 전체 읽기 요청 수이고, `Innodb_buffer_pool_reads` 가 그중 디스크까지 내려간 횟수다. 뒤쪽 값의 비중이 커지면 데이터가 메모리에 안 남는다는 뜻이다.
+
+메모리를 늘릴 수 있으면 그것이 답이지만 `db.t3.micro` 고정 조건에서는 막혀 있다. 남는 방법은 읽는 양 자체를 줄이는 것이다 — 인덱스로 스캔 범위를 좁히면 같은 메모리에 더 많은 질의가 들어간다.
+
+**접속 수.** `Threads_connected` 가 `max_connections` 에 붙으면 5-2 의 `Error 1040` 이 곧 난다. `Threads_running` 은 그중 실제로 질의를 도는 수다. connected 는 많은데 running 이 적으면 앱이 접속만 붙들고 쓰지 않는 상태이므로, DB 가 아니라 풀 설정을 본다.
+
 ---
 
 ## ⑥ 흔한 실수

@@ -24,11 +24,16 @@ OUT_DIR = ROOT / "src" / "fonts"
 # 역할 → 원본 서체
 FONTS = [
     {
-        # 제목·본문(reading column) — 조선일보명조. 단일 굵기라 CSS 에서 400 만
-        # 선언하고 700 은 브라우저 합성에 맡긴다(korean-fonts.css 주석 참고).
-        "name": "chosun-sm",
-        "src": Path.home() / "Downloads" / "ChosunSm.TTF",
-        "hint": "ChosunSm.TTF 를 Downloads 에 두거나 이 경로를 고칠 것",
+        # 제목·본문(reading column) — 부크크명조. 굵기가 파일로 갈려 있어 두 벌을
+        # 같은 패밀리로 묶는다 — 제목이 합성 볼드가 아니라 진짜 Bold 로 나온다.
+        "name": "bookk-myungjo-400",
+        "src": Path.home() / "Downloads/BookkMyungjo/BookkMyungjo_Light.ttf",
+        "hint": "BookkMyungjo 를 Downloads/BookkMyungjo 에 두거나 이 경로를 고칠 것",
+    },
+    {
+        "name": "bookk-myungjo-700",
+        "src": Path.home() / "Downloads/BookkMyungjo/BookkMyungjo_Bold.ttf",
+        "hint": "BookkMyungjo 를 Downloads/BookkMyungjo 에 두거나 이 경로를 고칠 것",
     },
     {
         # UI 크롬 — Alegreya Sans(산세리프)의 한글 짝. 가변 굵기.
@@ -61,11 +66,17 @@ ALWAYS = set(
 )
 
 
+# 지방판(skills-guide-regional)은 이 서브셋을 그대로 가져다 쓴다 — 그쪽에만 있는
+# 음절이 시스템 폰트로 떨어지지 않도록 있으면 같이 훑는다.
+SIBLINGS = [ROOT.parent / "skills-guide-regional"]
+
+
 def used_chars() -> set[str]:
     chars: set[str] = set()
-    for pattern in ("src/content/docs/**/*.mdx", "*.md", "astro.config.mjs"):
-        for path in ROOT.glob(pattern):
-            chars |= set(path.read_text(encoding="utf-8"))
+    for root in [ROOT, *(s for s in SIBLINGS if s.is_dir())]:
+        for pattern in ("src/content/docs/**/*.mdx", "*.md", "astro.config.mjs"):
+            for path in root.glob(pattern):
+                chars |= set(path.read_text(encoding="utf-8"))
     return chars
 
 

@@ -7,7 +7,7 @@
 - 콘텐츠: `src/content/docs/` — `start/`(선수 학습) · `part-0`~`part-6`(주차별 모듈) · `reference/`
 - 설계 근거: `docs/` — 사이트에 발행되지 않는다. 스펙은 `superpowers/specs/`, 실행 계획은 `superpowers/plans/`, 감사 기록은 `reports/`
 - 디자인: [starlight-theme-exquisitus](https://github.com/anaxite/starlight-theme-exquisitus) — 팔레트·서체는 테마가 전담
-- 한글 서체: 제목·본문 조선일보명조 · UI Pretendard — `src/styles/korean-fonts.css`
+- 한글 서체: 제목·본문 부크크명조 · UI Pretendard — `src/styles/korean-fonts.css`
 
 ## 개발
 

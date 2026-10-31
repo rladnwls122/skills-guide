@@ -257,27 +257,27 @@ GSI 사본에 담을 속성 범위를 고른다.
 <Quiz title="GSI가 필요한 순간">
 기본 키가 `client_id` 인 예매 테이블에서 "공연 A 의 예매를 최신순으로" 조회해야 한다. 옳은 설계는?
 
-- [x] `concert_name` 을 HASH, `created_at` 을 RANGE 로 하는 GSI 를 만들고 그 인덱스를 Query 한다
-- [ ] Scan 으로 전부 읽고 파이썬에서 `sorted()` 로 정렬한다
-  > 결과는 같아 보이지만 읽은 양은 테이블 전체다. 요구가 "데이터베이스 레벨 정렬"이면 이 방식은 요구 위반이기도 하다.
-- [ ] 테이블 기본 키를 `concert_name` + `created_at` 로 바꾼다
-  > 그러면 사람 단위 조회가 사라진다. 기본 키는 항목을 식별하는 축이고, 다른 축의 조회는 키를 바꾸는 것이 아니라 GSI 로 푸는 것이 DynamoDB 설계다.
 - [ ] Scan 에 `FilterExpression` 으로 `concert_name` 조건을 준다
   > 필터는 전부 읽은 뒤에 걸러 낸다. 줄어드는 것은 돌려받는 결과 수이지 읽은 양이 아니다.
 
+- [ ] 테이블 기본 키를 `concert_name` + `created_at` 로 바꾼다
+  > 그러면 사람 단위 조회가 사라진다. 기본 키는 항목을 식별하는 축이고, 다른 축의 조회는 키를 바꾸는 것이 아니라 GSI 로 푸는 것이 DynamoDB 설계다.
+- [ ] Scan 으로 전부 읽고 파이썬에서 `sorted()` 로 정렬한다
+  > 결과는 같아 보이지만 읽은 양은 테이블 전체다. 요구가 "데이터베이스 레벨 정렬"이면 이 방식은 요구 위반이기도 하다.
+- [x] `concert_name` 을 HASH, `created_at` 을 RANGE 로 하는 GSI 를 만들고 그 인덱스를 Query 한다
 DynamoDB 는 조회 패턴을 먼저 정하고 그 패턴이 Query 로 풀리게 키를 설계한다. 기본 키로 답할 수 없는 질문이 생기면 GSI 를 만들어 **다른 키 조합의 사본**을 하나 더 둔다. 쓰기는 자동으로 복제되므로 애플리케이션이 두 곳에 넣을 일은 없다.
 </Quiz>
 
 <Quiz title="Query와 Scan의 비용">
 Query 와 Scan 에 대한 설명으로 옳은 것을 **모두** 고르시오.
 
-- [x] Query 는 파티션 키의 등호 조건이 반드시 필요하다
-- [x] Scan 의 `FilterExpression` 은 읽은 양을 줄이지 못한다
-- [ ] Scan 도 정렬 키 순서로 결과를 돌려준다
-  > 순서 보장이 없다. 정렬은 파티션 키가 정해진 뒤에야 성립하므로 Query 쪽 성질이다.
 - [ ] 항목이 적으면 Query 와 Scan 의 비용이 같으므로 아무거나 쓴다
   > 지금 적어도 데이터는 늘어난다. Scan 은 테이블 크기에 비례하므로 시간이 갈수록 벌어진다.
 
+- [x] Scan 의 `FilterExpression` 은 읽은 양을 줄이지 못한다
+- [ ] Scan 도 정렬 키 순서로 결과를 돌려준다
+  > 순서 보장이 없다. 정렬은 파티션 키가 정해진 뒤에야 성립하므로 Query 쪽 성질이다.
+- [x] Query 는 파티션 키의 등호 조건이 반드시 필요하다
 Query 는 **파티션 키로 좁힌 뒤 그 안에서만** 읽고, Scan 은 **전부 읽고 나서 거른다.** 이 차이가 비용과 지연을 가른다. 설계 단계에서 Scan 이 필요해졌다면 조회 패턴에 맞는 키나 GSI 가 빠진 것이다.
 </Quiz>
 
@@ -292,11 +292,11 @@ GSI Query 에서 최신순 결과를 얻으려면 `ScanIndexForward` 를 [[False
 <Quiz title="boto3 Decimal 함정">
 DynamoDB 항목에 파이썬 `float` 값을 넣으면 어떻게 되나?
 
-- [x] boto3 가 `TypeError: Float types are not supported` 로 저장을 거부한다
-- [ ] 값이 반올림되어 저장된다
-  > 조용히 값이 바뀌는 것이 아니라 예외로 죽는다. 그래서 오히려 발견하기 쉽다.
 - [ ] 문자열로 자동 변환되어 저장된다
   > 자동 변환은 없다. 숫자 타입으로 넣으려면 `Decimal` 이어야 한다.
+- [ ] 값이 반올림되어 저장된다
+  > 조용히 값이 바뀌는 것이 아니라 예외로 죽는다. 그래서 오히려 발견하기 쉽다.
+- [x] boto3 가 `TypeError: Float types are not supported` 로 저장을 거부한다
 - [ ] 저장은 되지만 Query 조건에서 매칭되지 않는다
 
 숫자는 넣을 때도 계산할 때도 `Decimal` 로 다룬다. `Decimal(str(x))` 처럼 문자열을 거쳐 만들어야 float 의 오차를 물려받지 않는다. 반대로 읽어 온 항목을 `json.dumps` 로 직렬화할 때는 `Decimal` 을 모르는 직렬화기가 `TypeError` 를 내므로 `default=str` 을 붙인다. 저장과 응답 양쪽에서 한 번씩 걸리는 함정이다.

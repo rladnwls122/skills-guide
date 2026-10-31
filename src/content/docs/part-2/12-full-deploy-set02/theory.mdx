@@ -315,15 +315,15 @@ set-02 의 관측성 부담은 정정으로 한 번 더 줄었다. "Pod 로그�
 <Quiz title="GET /book 을 재작성하지 않는 이유">
 CloudFront Function 이 `GET /book` 은 재작성하지 않는 이유를 모두 고르라.
 
-- [x] GET 은 ALB 규칙 p20 이 Lambda TG 로 보내는데, Lambda 는 경로를 무시하고 쿼리 스트링(`concert_name`)만 쓴다
-- [x] 앱(`POST /v1/book`)으로 갈 요청이 아니므로 재작성할 이유 자체가 없다
 - [ ] CloudFront Function 은 GET 요청의 `request.uri` 를 수정할 수 없다
   > 수정할 수 있다. 함수가 `request.method === 'POST'` 를 검사하는 것은 기술적 제약이 아니라 **설계 선택**이며, 이 조건을 빼면 GET 도 그대로 재작성되어 Lambda 가 엉뚱한 경로를 받는다.
-- [ ] GET 은 CachingOptimized 동작을 타므로 오리진까지 가지 않는다
-  > `/book*` 동작은 **CachingDisabled + AllViewerExceptHostHeader** 다. CachingOptimized 는 기본(S3) 동작 쪽.
 - [ ] GET 은 ALB 기본 액션(403)에 걸려 어차피 오리진에 도달하지 못한다
   > 403 은 커스텀 헤더가 **없을 때**의 기본 액션이다. CloudFront 경유 요청에는 `X-Origin-Verify` 가 주입되므로 규칙 p20 에 잡힌다.
 
+- [ ] GET 은 CachingOptimized 동작을 타므로 오리진까지 가지 않는다
+  > `/book*` 동작은 **CachingDisabled + AllViewerExceptHostHeader** 다. CachingOptimized 는 기본(S3) 동작 쪽.
+- [x] GET 은 ALB 규칙 p20 이 Lambda TG 로 보내는데, Lambda 는 경로를 무시하고 쿼리 스트링(`concert_name`)만 쓴다
+- [x] 앱(`POST /v1/book`)으로 갈 요청이 아니므로 재작성할 이유 자체가 없다
 제공된 book 바이너리는 `POST /v1/book` 과 `GET /health` 만 서빙하며 수정 금지다. 그런데 채점은 `https://<CF>/book` 으로 POST(9-1)·GET(9-2)·에러(9-3)를 때린다. 그래서 경로 재작성이 필요하고, 이 풀이는 그것을 CloudFront Function 에서 한다. GET 은 애초에 앱이 아닌 Lambda 가 처리한다. (ALB 리스너 규칙도 2025년 10월부터 URL 재작성을 지원하므로 유일한 방법은 아니다 — 다만 분기와 재작성을 한곳에 모으려고 CloudFront 를 쓴다.)
 
 ```javascript
@@ -349,14 +349,14 @@ function handler(event) {
 <Quiz title="viewer-request 재작성과 오리진">
 viewer-request 에서 URI 를 `/book` → `/v1/book` 으로 재작성해도 요청이 계속 ALB 오리진으로 가는 이유는?
 
-- [x] viewer-request 단계의 URI 재작성은 **cache behavior 를 다시 매칭하지 않는다**. 요청은 이미 `/book*` 동작에 매칭되어 오리진이 ALB 로 확정된 상태다
-- [ ] `/v1/book` 도 `/book*` 패턴에 매칭되기 때문
-  > 매칭되지 않는다(`/v1/book` 은 `/book` 으로 시작하지 않는다). 재매칭이 **일어나지 않는 것** 자체가 이유다 — 만약 재매칭됐다면 기본 동작(S3)으로 떨어졌을 것이다.
-- [ ] origin-request 함수가 다시 ALB 로 라우팅하기 때문
-  > 오리진은 behavior 가 정하며, 이 배포에는 origin-request 함수가 없다.
 - [ ] ALB 오리진이 이 배포의 기본 오리진이기 때문
   > 기본 동작(default cache behavior)의 오리진은 **S3** 다. ALB 는 `/book*` 동작 전용.
 
+- [x] viewer-request 단계의 URI 재작성은 **cache behavior 를 다시 매칭하지 않는다**. 요청은 이미 `/book*` 동작에 매칭되어 오리진이 ALB 로 확정된 상태다
+- [ ] origin-request 함수가 다시 ALB 로 라우팅하기 때문
+  > 오리진은 behavior 가 정하며, 이 배포에는 origin-request 함수가 없다.
+- [ ] `/v1/book` 도 `/book*` 패턴에 매칭되기 때문
+  > 매칭되지 않는다(`/v1/book` 은 `/book` 으로 시작하지 않는다). 재매칭이 **일어나지 않는 것** 자체가 이유다 — 만약 재매칭됐다면 기본 동작(S3)으로 떨어졌을 것이다.
 viewer-request 재작성은 behavior 재매칭을 유발하지 않는다. 이게 이 아키텍처가 성립하는 핵심 전제다.
 
 이해가 굳었는지 확인하는 한 줄: 만약 재매칭이 일어났다면 `/v1/book` 은 기본 동작으로 떨어져 S3 에서 `web/main/v1/book` 을 찾다가 404 가 났을 것이다.
@@ -365,14 +365,14 @@ viewer-request 재작성은 behavior 재매칭을 유발하지 않는다. 이게
 <Quiz title="이미지 빌드 위치">
 book 이미지 빌드를 VPC CloudShell 이 아니라 기본 CloudShell 에서 하는 이유는?
 
-- [x] VPC CloudShell 은 홈 디렉터리가 비영속이고 업로드/다운로드 메뉴를 쓸 수 없어 빌드 작업에 부적합하다 → 인터넷과 docker 가 있는 **기본 CloudShell** 에서 build/push 하고 스캔 Critical/High 0 을 확인한다
 - [ ] VPC CloudShell 은 인터넷이 없어 `alpine` 베이스 이미지를 pull 하지 못한다
   > 흔한 오해다. **NAT 가 걸린 프라이빗 서브넷의 VPC 환경은 퍼블릭 인터넷에 나간다** — set-02 의 `priv-subnet-d` 가 정확히 그 구성이라 pull 자체는 된다. (반대로 퍼블릭 서브넷에 띄운 VPC 환경은 퍼블릭 IP 가 없어 나가지 못한다.)
-- [ ] arm64 로 빌드되어 스캔과 호환되지 않는다
-  > 기본 CloudShell 이 amd64 네이티브인 것은 부수 효과이고, 스캔이 아키텍처 때문에 막히지는 않는다.
+- [x] VPC CloudShell 은 홈 디렉터리가 비영속이고 업로드/다운로드 메뉴를 쓸 수 없어 빌드 작업에 부적합하다 → 인터넷과 docker 가 있는 **기본 CloudShell** 에서 build/push 하고 스캔 Critical/High 0 을 확인한다
 - [ ] ECR 이 VPC 엔드포인트로만 열려 있어 push 가 안 된다 → 엔드포인트를 추가한다
   > push 는 막히지 않는다. VPC 환경에는 `ecr.api`·`ecr.dkr` 접근이 기본 제공된다.
 
+- [ ] arm64 로 빌드되어 스캔과 호환되지 않는다
+  > 기본 CloudShell 이 amd64 네이티브인 것은 부수 효과이고, 스캔이 아키텍처 때문에 막히지는 않는다.
 **기본 CloudShell**(인터넷 O, docker 내장, 홈 영속)에서 build/push 하고 스캔 Critical/High 0 을 확인한다. VPC CloudShell 을 못 쓰는 이유는 인터넷이 아니라 **작업 환경의 휘발성**이다.
 
 VPC CloudShell 의 용도는 따로 있다 — 9단계 채점(mark.sh)이다. private 엔드포인트 EKS API 에 닿아야 하므로 priv-subnet-d + `vpc-environment-sg` 로 띄운다. 업로드 메뉴를 쓸 수 없으므로 스크립트는 **heredoc 붙여넣기**로 넣는다.
@@ -381,14 +381,14 @@ VPC CloudShell 의 용도는 따로 있다 — 9단계 채점(mark.sh)이다. pr
 <Quiz title="정리(destroy) 순서">
 `terraform destroy` 까지 가는 정리 단계의 올바른 순서는?
 
-- [x] helm 릴리스 삭제 → `eksctl delete cluster` → DynamoDB 삭제방지 해제 → `terraform destroy`
-- [ ] `terraform destroy` → `eksctl delete cluster` → helm 릴리스 삭제
-  > 완전한 역순이다. Terraform 이 만든 VPC/서브넷/SG 를 먼저 지우면 클러스터와 ALB 가 고아가 되어 이후 삭제가 전부 실패한다.
-- [ ] `eksctl delete cluster` → helm 릴리스 삭제 → DynamoDB 삭제방지 해제 → `terraform destroy`
-  > 클러스터가 사라진 뒤에는 helm 이 붙을 API 서버가 없다. helm 이 만든 ALB 등 외부 리소스가 남아 VPC 삭제를 막는다.
 - [ ] helm 릴리스 삭제 → `terraform destroy` → `eksctl delete cluster`
   > destroy 가 VPC 를 못 지운다 — 클러스터의 ENI 가 서브넷을 붙잡고 있어 타임아웃으로 끝난다.
 
+- [ ] `eksctl delete cluster` → helm 릴리스 삭제 → DynamoDB 삭제방지 해제 → `terraform destroy`
+  > 클러스터가 사라진 뒤에는 helm 이 붙을 API 서버가 없다. helm 이 만든 ALB 등 외부 리소스가 남아 VPC 삭제를 막는다.
+- [x] helm 릴리스 삭제 → `eksctl delete cluster` → DynamoDB 삭제방지 해제 → `terraform destroy`
+- [ ] `terraform destroy` → `eksctl delete cluster` → helm 릴리스 삭제
+  > 완전한 역순이다. Terraform 이 만든 VPC/서브넷/SG 를 먼저 지우면 클러스터와 ALB 가 고아가 되어 이후 삭제가 전부 실패한다.
 **helm → eksctl → DDB 삭제방지 해제 → terraform destroy.** 만든 순서의 역순이다.
 
 ```bash

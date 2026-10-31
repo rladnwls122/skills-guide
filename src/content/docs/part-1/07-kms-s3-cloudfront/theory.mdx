@@ -993,14 +993,14 @@ aws wafv2 get-sampled-requests \
 <Quiz title="키 정책 — use 액션 골라내기">
 키 정책의 **use(사용)** statement 에 들어가는 액션을 모두 고르라.
 
-- [x] `kms:Decrypt`
+- [ ] `kms:PutKeyPolicy`
+  > 키 정책 자체를 갈아끼우는 관리(admin) 액션. use 쪽에 섞이면 "키를 쓰는 역할이 키 정책을 다시 쓸 수 있다"는 권한 상승이 된다.
+
 - [x] `kms:GenerateDataKey*`
 - [x] `kms:Encrypt`
 - [ ] `kms:ScheduleKeyDeletion`
   > 키 삭제 예약은 관리(admin) 액션이다. 사용자 역할에 이걸 주면 최소권한이 깨지고, 채점도 이 구조를 본다.
-- [ ] `kms:PutKeyPolicy`
-  > 키 정책 자체를 갈아끼우는 관리(admin) 액션. use 쪽에 섞이면 "키를 쓰는 역할이 키 정책을 다시 쓸 수 있다"는 권한 상승이 된다.
-
+- [x] `kms:Decrypt`
 **use**: `kms:Encrypt`, `kms:Decrypt`, `kms:GenerateDataKey*`, `kms:DescribeKey`, `kms:CreateGrant` — 키를 실제로 쓰는 역할/서비스 principal 에게.
 **admin**: `kms:Create*`, `kms:Put*`, `kms:Enable*`/`Disable*`, `kms:ScheduleKeyDeletion`, `kms:TagResource` — 계정 root 또는 배포자 IAM 신원에게.
 
@@ -1010,13 +1010,13 @@ aws wafv2 get-sampled-requests \
 <Quiz title="ECR 에 CMK 를 만들면 안 되는 이유">
 set-02 에서 ECR 에 전용 CMK 를 만들면 안 되는 이유는?
 
-- [x] 과제지에 ECR 용 CMK 이름이 없고 mark 3-1 은 `encryptionType == KMS` 만 검사한다 — CMK 를 만들면 유의사항 10 "불필요 리소스 생성" 감점
-- [ ] ECR 은 고객 관리 키(CMK)를 지원하지 않는다
-  > 지원한다. set-03 은 실제로 `wsc2026-ecr-kms` CMK 를 만들어 지정한다. 판단 기준은 기술적 가능 여부가 아니라 **과제지의 이름 명시 여부**다.
-- [ ] CMK 를 지정하면 `encryptionType` 이 `KMS` 가 아닌 값으로 나와 mark 3-1 검사에 실패한다
-  > 그럴듯하지만 사실이 아니다. CMK 를 지정해도 `encryptionType` 은 `KMS` 다. 감점 사유는 순전히 "요구되지 않은 리소스를 만들었다"는 것.
 - [ ] 계정당 CMK 개수 제한에 걸려 s3/dynamodb/eks 키를 못 만든다
 
+- [x] 과제지에 ECR 용 CMK 이름이 없고 mark 3-1 은 `encryptionType == KMS` 만 검사한다 — CMK 를 만들면 유의사항 10 "불필요 리소스 생성" 감점
+- [ ] CMK 를 지정하면 `encryptionType` 이 `KMS` 가 아닌 값으로 나와 mark 3-1 검사에 실패한다
+  > 그럴듯하지만 사실이 아니다. CMK 를 지정해도 `encryptionType` 은 `KMS` 다. 감점 사유는 순전히 "요구되지 않은 리소스를 만들었다"는 것.
+- [ ] ECR 은 고객 관리 키(CMK)를 지원하지 않는다
+  > 지원한다. set-03 은 실제로 `wsc2026-ecr-kms` CMK 를 만들어 지정한다. 판단 기준은 기술적 가능 여부가 아니라 **과제지의 이름 명시 여부**다.
 과제에 ECR 용 CMK 이름이 없고 mark 3-1 은 `encryptionType == KMS` 만 검사한다. 관리형 `aws/ecr` 로 충분하며, CMK 를 만들면 "불필요 리소스 생성" 감점(유의사항 10)이다.
 
 ```hcl
@@ -1032,15 +1032,15 @@ set-02 에서 CMK 를 만드는 대상은 과제지에 이름이 있는 셋뿐�
 <Quiz title="set-03 root-less 키 정책">
 set-03 유형(키 정책에 root principal·`kms:*` 금지)에 대해 옳은 것을 모두 고르라.
 
-- [x] `kms:*` 를 못 쓰므로 관리 액션을 개별 나열하되, 관리 statement 에 `kms:Put*` 가 있어야 KMS lockout safety check(호출 신원의 후속 `PutKeyPolicy` 가능 여부 검사)를 통과한다
-- [x] 관리자 principal 을 `"*"` 로 두고 `kms:CallerAccount` 조건으로 계정을 못 박으면, `:root` 문자열 없이 계정 위임과 같은 효과를 낸다
-- [ ] root principal 을 넣되 Condition 으로 제한하면 mark 의 grep 을 피할 수 있다
-  > set-03 mark 의 check_kms 는 정책 **텍스트를 grep** 한다. Condition 이 붙어 있든 말든 `:root` 문자열이 남으면 실격이다.
 - [ ] 관리 액션을 전부 빼면 "최소권한"이 되어 lockout safety check 도 함께 통과한다
   > 정반대다. KMS 는 키 정책에 관리 액션이 남아 있어야 apply 를 받아 준다. 관리 액션을 전부 빼면 그 키를 되돌릴 수 있는 신원이 사라지므로 KMS 가 정책 자체를 거부한다.
+- [x] 관리자 principal 을 `"*"` 로 두고 `kms:CallerAccount` 조건으로 계정을 못 박으면, `:root` 문자열 없이 계정 위임과 같은 효과를 낸다
 - [ ] 계정 위임만 있으면 서비스 principal 은 자동으로 키를 쓸 수 있다
   > `kms:CallerAccount` 조건은 서비스가 자기 이름으로 부르는 경로를 덮지 못한다. 키 소비자(EKS Pod 역할, Lambda 실행 역할, 서비스 principal)를 키 정책에 **직접** 나열해야 한다. set-03 은 db 키에 `book_pod`/`book_function` 역할을, bucket 키에 `cloudfront.amazonaws.com`(SourceAccount 조건)을, function 키에 `lambda.amazonaws.com`(EncryptionContext 조건)을 명시한다.
 
+- [ ] root principal 을 넣되 Condition 으로 제한하면 mark 의 grep 을 피할 수 있다
+  > set-03 mark 의 check_kms 는 정책 **텍스트를 grep** 한다. Condition 이 붙어 있든 말든 `:root` 문자열이 남으면 실격이다.
+- [x] `kms:*` 를 못 쓰므로 관리 액션을 개별 나열하되, 관리 statement 에 `kms:Put*` 가 있어야 KMS lockout safety check(호출 신원의 후속 `PutKeyPolicy` 가능 여부 검사)를 통과한다
 `kms:*` 를 못 쓰는 조건에서 관리 액션을 개별 나열해야 KMS lockout safety check 를 통과한다. 그리고 관리자 principal 은 `arn:...:root` 대신 `"*"` + `kms:CallerAccount` 조건으로 쓴다 — 문자열 `:root` 를 남기지 않으면서 계정 위임과 같은 효과를 낸다.
 
 계정 위임을 고르는 실무 이유: 과제지가 별도 IAM 사용자를 지시하지 않으면 채점자는 지급 계정 root 로 접속한다. 관리자를 배포자 신원 하나로 좁히면 채점 스크립트가 `get-key-policy` 조차 못 해 KMS 항목이 통째로 날아간다.
@@ -1062,14 +1062,14 @@ KMS 키 정책에 CloudFront 배포 ARN 을 직접 넣으면 `key → distributi
 <Quiz title="퍼블릭 차단 4종과 OAC">
 퍼블릭 액세스 차단 4종이 전부 true 인 버킷을 CloudFront 가 읽을 수 있는 이유는?
 
-- [x] OAC 가 SigV4 로 서명한 요청은 "퍼블릭"이 아니라 인증된 서비스 요청이고, 버킷 정책의 `AWS:SourceArn = 배포 ARN` Allow statement 가 그 요청만 허용하기 때문
-- [ ] OAI(Origin Access Identity)가 특별 IAM 사용자로서 퍼블릭 차단을 우회하기 때문
-  > OAI 는 구형 방식이고 SSE-KMS 와 궁합이 나쁘다. 현행 표준은 OAC(SigV4 서명)이며, 어느 쪽도 차단을 "우회"하는 게 아니라 정식 인증 요청으로 통과하는 것이다.
-- [ ] `block_public_policy` 만 false 로 두어야 CloudFront 용 버킷 정책을 붙일 수 있기 때문
-  > 4종 **전부 true** 가 mark 2-2 검사 대상이다. 하나라도 false 면 감점이고, OAC 버킷 정책은 애초에 퍼블릭 정책이 아니라 차단되지 않는다.
 - [ ] CloudFront 가 S3 웹사이트 호스팅 엔드포인트로 접근하기 때문
   > 웹사이트 엔드포인트는 퍼블릭 접근이 전제라 차단 4종과 양립하지 않는다. set-02 오리진은 `bucket_regional_domain_name`(REST 엔드포인트) + OAC 다.
 
+- [x] OAC 가 SigV4 로 서명한 요청은 "퍼블릭"이 아니라 인증된 서비스 요청이고, 버킷 정책의 `AWS:SourceArn = 배포 ARN` Allow statement 가 그 요청만 허용하기 때문
+- [ ] `block_public_policy` 만 false 로 두어야 CloudFront 용 버킷 정책을 붙일 수 있기 때문
+  > 4종 **전부 true** 가 mark 2-2 검사 대상이다. 하나라도 false 면 감점이고, OAC 버킷 정책은 애초에 퍼블릭 정책이 아니라 차단되지 않는다.
+- [ ] OAI(Origin Access Identity)가 특별 IAM 사용자로서 퍼블릭 차단을 우회하기 때문
+  > OAI 는 구형 방식이고 SSE-KMS 와 궁합이 나쁘다. 현행 표준은 OAC(SigV4 서명)이며, 어느 쪽도 차단을 "우회"하는 게 아니라 정식 인증 요청으로 통과하는 것이다.
 OAC 가 SigV4 로 서명한 요청은 인증된 서비스 요청이며, 버킷 정책의 `AWS:SourceArn = 배포 ARN` Allow statement 가 그 요청만 허용한다. 퍼블릭 차단 4종과 양립하는 유일한 정상 경로가 OAC 다.
 
 `get-bucket-policy-status` 가 `IsPublic: false` 를 반환하는 것도 이 구조 덕분이다. SSE-KMS 객체이므로 S3 가 대신 `kms:Decrypt` 를 호출하고, 그건 키 정책의 `cloudfront.amazonaws.com` + `aws:SourceAccount` statement 가 받아준다.
@@ -1078,25 +1078,25 @@ OAC 가 SigV4 로 서명한 요청은 인증된 서비스 요청이며, 버킷 �
 <Quiz title="WAF 스코프 고르기">
 CloudFront 배포에 WAF Web ACL을 연결하려 한다. scope와 생성 리전으로 옳은 것은?
 
+- [ ] scope `REGIONAL`, 리소스가 있는 서울에 생성
+  > scope 자체가 틀렸다. ALB에 직접 붙이는 경우라면 맞는 조합이지만, 질문은 **CloudFront** 배포 기준이다.
+
 - [x] scope `CLOUDFRONT`, us-east-1에 생성(provider alias 필수)
 - [ ] scope `CLOUDFRONT`, 리소스가 있는 서울(ap-northeast-2)에 생성
   > scope는 맞지만 리전이 틀렸다. `CLOUDFRONT` scope Web ACL은 **항상 us-east-1**에서만 만들 수 있다 — CloudFront가 글로벌 서비스이기 때문이다.
 - [ ] scope `REGIONAL`, us-east-1에 생성
   > `REGIONAL`은 ALB·API Gateway처럼 특정 리전에 있는 리소스에 붙일 때 쓴다. CloudFront는 글로벌 리소스이므로 `CLOUDFRONT` scope다.
-- [ ] scope `REGIONAL`, 리소스가 있는 서울에 생성
-  > scope 자체가 틀렸다. ALB에 직접 붙이는 경우라면 맞는 조합이지만, 질문은 **CloudFront** 배포 기준이다.
-
 CloudFront는 글로벌 서비스라 Web ACL도 `scope = "CLOUDFRONT"`, 리전은 항상 `us-east-1`(provider alias 필요)이다. ALB처럼 특정 리전 리소스에 직접 붙일 때만 `REGIONAL` + 그 리소스와 같은 리전을 쓴다. set-03·set-07은 둘 다 S3+ALB+Lambda를 CloudFront 하나로 묶어 앞단만 보호하므로 전부 `CLOUDFRONT` scope다.
 </Quiz>
 
 <Quiz title="관리형 규칙 오탐 대응">
 set-07 스타일로 `AWSManagedRulesCommonRuleSet`을 붙였는데, 정상적인 예약 요청 하나가 그룹 안의 `SizeRestrictions_BODY` 규칙에 걸려 403이 난다. 그룹의 나머지 보호(XSS·SQLi 등)는 그대로 유지하면서 이 규칙만 무력화하려면?
 
+- [ ] Web ACL의 `default_action`은 `allow`로 유지한 채 그 규칙만 삭제한다
+  > 관리형 규칙 그룹 안의 개별 규칙은 삭제할 수 없다 — 벤더(AWS)가 관리하는 그룹이라 규칙 목록 자체를 편집할 수 없고, override로만 행동을 바꿀 수 있다.
 - [x] `managed_rule_group_statement` 안에 `rule_action_override`로 `SizeRestrictions_BODY` 하나만 지정해 `count`로 바꾼다
 - [ ] 그 규칙 그룹의 `override_action`을 `count`로 바꾼다
   > `override_action`은 그룹 전체에 적용된다. `CommonRuleSet` 전체가 Count로 빠지면 XSS·SQLi 등 나머지 보호까지 전부 무력화된다.
-- [ ] Web ACL의 `default_action`은 `allow`로 유지한 채 그 규칙만 삭제한다
-  > 관리형 규칙 그룹 안의 개별 규칙은 삭제할 수 없다 — 벤더(AWS)가 관리하는 그룹이라 규칙 목록 자체를 편집할 수 없고, override로만 행동을 바꿀 수 있다.
 - [ ] rate_based_statement의 limit 값을 올린다
   > rate 규칙은 요청 빈도를 다루는 별개 규칙이다. `SizeRestrictions_BODY`는 요청 본문 크기를 보는 `CommonRuleSet` 안의 규칙이라 rate 규칙과 무관하다.
 
@@ -1116,28 +1116,28 @@ set-03처럼 직접 짠 리프 규칙(`sqli_match_statement` 등)은 규칙을 �
 <Quiz title="캐싱을 껐는데 쿼리스트링이 오리진에 안 간다">
 ALB 오리진 behavior 에 `Managed-CachingDisabled` 를 붙였다. 그런데 API 가 `?email=...` 없는 요청을 받았다고 한다. 원인은?
 
-- [x] 오리진 요청 정책을 지정하지 않았다 — 캐시 정책과 별개 체계다
+- [ ] 경로 패턴이 S3 오리진에 걸렸다
+  > 그러면 응답이 API 가 아니라 S3 에서 온다. 증상이 다르다.
+
 - [ ] `CachingDisabled` 가 쿼리스트링을 지운다
   > 지우는 것이 아니다. 캐시 정책은 무엇을 캐시 키에 넣을지만 정한다. 전달 여부를 정하는 것은 다른 정책이다.
 - [ ] 무효화를 하지 않았다
   > 캐시를 껐으므로 무효화할 캐시가 없다.
-- [ ] 경로 패턴이 S3 오리진에 걸렸다
-  > 그러면 응답이 API 가 아니라 S3 에서 온다. 증상이 다르다.
-
+- [x] 오리진 요청 정책을 지정하지 않았다 — 캐시 정책과 별개 체계다
 **두 정책이 독립이다.** 캐시 정책은 **캐시 키**를, 오리진 요청 정책은 **오리진에 전달할 것**을 정한다. 캐시 키에 넣지 않으면서 전달할 수 있고 그 반대도 된다. ALB 오리진은 `CachingDisabled` 와 `AllViewer` 를 **한 쌍으로** 붙인다.
 </Quiz>
 
 <Quiz title="리다이렉션이라고 했지 차단이라고 안 했다">
 "HTTP 접근 시에도 HTTPS 로 **리다이렉션** 되어 HTTPS 로만 접근할 수 있도록" 이라는 요구다. `viewer_protocol_policy` 에 무엇을 넣나?
 
-- [x] `redirect-to-https`
-- [ ] `https-only`
-  > HTTP 를 301/302 로 넘기지 않고 403 으로 거절한다. "HTTPS 로만"은 만족하지만 "리다이렉션"이 없어 그 항목을 잃는다.
 - [ ] `allow-all` 에 WAF 로 HTTP 차단
   > 차단은 리다이렉션이 아니다. 그리고 WAF 는 프로토콜이 아니라 요청 내용을 본다.
 - [ ] 기본 behavior 에만 `redirect-to-https`
   > behavior 마다 따로 설정한다. `/v1/*` 같은 좁은 behavior 가 남으면 그 경로만 HTTP 가 통한다.
 
+- [ ] `https-only`
+  > HTTP 를 301/302 로 넘기지 않고 403 으로 거절한다. "HTTPS 로만"은 만족하지만 "리다이렉션"이 없어 그 항목을 잃는다.
+- [x] `redirect-to-https`
 **`redirect-to-https` 다.** 세 값의 차이가 이 문항의 전부다 — `allow-all` 은 HTTP 를 그대로 받고, `https-only` 는 403 으로 막고, `redirect-to-https` 만 넘긴다.
 
 그리고 **상태코드를 실제로 확인한다.** 리다이렉트 코드는 배포 설정과 브라우저에 따라 301 과 302 가 갈리고, 검증하는 쪽이 둘 중 하나를 기대할 수 있다.
@@ -1150,14 +1150,14 @@ curl -sI http://<배포도메인>/ | head -1
 <Quiz title="presigned URL 을 엣지에서 만든다">
 `/preview?img=<이름>` 요청에 S3 presigned URL 을 3분 만기로 돌려주라는 요구다. 무엇으로 구현하나?
 
-- [x] `us-east-1` 에 만든 Lambda@Edge — 서명에 자격증명과 SDK 가 필요하다
-- [ ] CloudFront Functions
-  > 네트워크 호출도 AWS SDK 도 쓸 수 없다. presigned URL 서명이 불가능하다. 헤더 조작·리다이렉트 정도가 그쪽 몫이다.
 - [ ] 서울 리전에 만든 Lambda@Edge
   > CloudFront 에 붙일 함수는 `us-east-1` 에만 만들 수 있다. 다른 리전이면 연결 자체가 안 된다.
 - [ ] ALB 뒤의 일반 Lambda
   > 동작은 하겠지만 CloudFront behavior 에 붙지 않는다. 요구가 엣지 실행을 지정했다.
 
+- [ ] CloudFront Functions
+  > 네트워크 호출도 AWS SDK 도 쓸 수 없다. presigned URL 서명이 불가능하다. 헤더 조작·리다이렉트 정도가 그쪽 몫이다.
+- [x] `us-east-1` 에 만든 Lambda@Edge — 서명에 자격증명과 SDK 가 필요하다
 **`us-east-1` 의 Lambda@Edge 다.** 실행 시간 1ms 미만에 네트워크 호출이 없는 CloudFront Functions 로는 서명을 못 만든다. **AWS API 를 불러야 하면 Lambda@Edge** 라는 기준으로 가른다.
 
 연결에는 `$LATEST` 가 아니라 게시된 버전 번호가 필요하다 — 코드를 고칠 때마다 새 버전을 게시하고 다시 연결해야 반영된다.
@@ -1166,7 +1166,6 @@ curl -sI http://<배포도메인>/ | head -1
 <Quiz title="WAF 를 붙이기 전에 확인하는 것">
 취약한 앱을 주고 "공격 시 403" 을 요구했다. 채점 스크립트는 ALB 뿐 아니라 **EC2 공인 IP 로도** 같은 공격 문자열을 쏜다. EC2 쪽 결과는 어때야 하나?
 
-- [x] 주입이 성공해야 한다 — WAF 를 거치지 않는 경로이고, 취약점이 실재한다는 증거다
 - [ ] 403 이어야 한다
   > EC2 직접 호출은 ALB 를 거치지 않아 WAF 가 개입할 수 없다. 여기서 403 이면 앱이 죽었거나 다른 곳에서 막힌 것이다.
 - [ ] 500 이어야 한다
@@ -1174,6 +1173,7 @@ curl -sI http://<배포도메인>/ | head -1
 - [ ] 어느 쪽이든 상관없다
   > 채점 항목이다. "취약하다"와 "ALB 로는 막힌다"가 짝으로 확인된다.
 
+- [x] 주입이 성공해야 한다 — WAF 를 거치지 않는 경로이고, 취약점이 실재한다는 증거다
 **EC2 직접은 성공, ALB 경유는 403 이다.** 둘이 반대여야 취약점을 찾아 막았다는 증명이 된다.
 
 그래서 관리형 SQLi 규칙을 붙인 것으로 끝내지 않는다. 채점이 쏘는 **그 문자열 두 개**(`admin'--` 와 `id=1 OR 1=1`)를 직접 쏴 403 을 확인하고, 안 걸리면 커스텀 규칙을 더한다.

@@ -483,11 +483,11 @@ eksctl create cluster -f cluster.rendered.yaml --dry-run
 <Quiz title="set-02 가 IRSA 를 쓰는 이유">
 set-02 에서 Pod Identity 대신 IRSA 를 쓰는 결정적 이유는?
 
+- [ ] Pod Identity 를 쓰면 Access Entry(`authenticationMode: API`)로 kubectl 인증을 할 수 없기 때문
+  > 축이 다르다. Access Entry 는 **사람/도구의 kubectl 접근**용이고 set-02·set-03 둘 다 공통으로 쓴다. Pod 자격증명 방식과는 무관하다.
 - [x] Pod Identity 는 `eks-pod-identity-agent` DaemonSet 이 app 노드를 포함한 전 노드에 뜨는데, mark 5-4 가 "kube-system 파드(aws-node/kube-proxy 제외)는 전부 addon 노드"를 검사하기 때문
 - [ ] 해당 EKS 버전이 Pod Identity 를 아직 지원하지 않기 때문
   > 지원한다. set-03/07 은 같은 계열에서 Pod Identity 를 정상적으로 쓴다. 순전히 5-4 노드 배치 검사 때문의 선택이다.
-- [ ] Pod Identity 를 쓰면 Access Entry(`authenticationMode: API`)로 kubectl 인증을 할 수 없기 때문
-  > 축이 다르다. Access Entry 는 **사람/도구의 kubectl 접근**용이고 set-02·set-03 둘 다 공통으로 쓴다. Pod 자격증명 방식과는 무관하다.
 - [ ] IRSA 가 Pod Identity 보다 신형이고 AWS 권장 방식이기 때문
   > 신형은 Pod Identity 쪽이다. 채점 조건이 없다면 set-03/07 처럼 Pod Identity 가 권장된다.
 
@@ -501,13 +501,13 @@ Terraform 준비물도 갈린다: IRSA 는 IAM **정책**(`attachPolicyARNs` 로
 <Quiz title="mark 5-2 의 서브넷 검사">
 mark 5-2 는 클러스터 서브넷의 무엇을 검사하고, cluster.yaml 은 어떻게 대응하는가?
 
-- [x] 등록된 서브넷의 **Name 태그**를 정확 비교한다 → `vpc.subnets.private` 에 `wskorea26-priv-subnet-c/d` 2개만 이름 키와 함께 등록
 - [ ] 서브넷 ID 목록을 비교한다 → public 2 + private 2, 총 4개를 전부 등록
   > 서브넷 ID 는 apply 마다 바뀌므로 채점 기준이 될 수 없다. 게다가 public 서브넷까지 등록하면 이름 비교 대상이 늘어 오히려 틀린다.
-- [ ] 서브넷 CIDR 을 비교한다 → `vpc.cidr` 만 맞추면 된다
-  > `vpc.cidr` 은 기존 VPC 를 재사용할 때 참고값일 뿐이고, 검사 대상은 클러스터에 실제 등록된 서브넷이다.
+- [x] 등록된 서브넷의 **Name 태그**를 정확 비교한다 → `vpc.subnets.private` 에 `wskorea26-priv-subnet-c/d` 2개만 이름 키와 함께 등록
 - [ ] AZ 분산 여부만 본다 → 서로 다른 AZ 의 서브넷 2개 이상이면 통과
 
+- [ ] 서브넷 CIDR 을 비교한다 → `vpc.cidr` 만 맞추면 된다
+  > `vpc.cidr` 은 기존 VPC 를 재사용할 때 참고값일 뿐이고, 검사 대상은 클러스터에 실제 등록된 서브넷이다.
 등록된 서브넷의 **Name 태그**를 정확 비교한다(`wskorea26-priv-subnet-c` / `wskorea26-priv-subnet-d`). cluster.yaml 의 `vpc.subnets.private` 에 priv 서브넷 2개만 이름 키와 함께 등록한다.
 
 같은 `vpc` 블록에서 두 필드를 함께 챙긴다.
@@ -532,11 +532,11 @@ mark 5-3 이 함께 보는 것: 노드그룹 이름, 인스턴스 타입, tags.N
 <Quiz title="disableDefaultAddons 를 빼면">
 `addonsConfig.disableDefaultAddons: true` 를 넣지 않으면 어떤 채점 항목이 왜 깨지는가?
 
-- [x] mark 5-4 — 최신 eksctl 이 kube-system 에 기본 설치하는 metrics-server 에 nodeSelector 가 없어 app 노드로 스케줄될 수 있다
-- [ ] mark 5-3 — 기본 애드온이 노드그룹의 `tags.Name` 을 덮어쓴다
-  > 애드온은 노드그룹 태그를 건드리지 않는다. tags.Name 함정은 Launch Template TagSpecifications 쪽 이야기다.
 - [ ] mark 5-1 — 기본 애드온이 클러스터 로깅 5종 중 일부를 비활성화한다
   > 로깅 5종은 `cloudWatch.clusterLogging` 이 단독으로 정한다. 애드온과 무관.
+- [ ] mark 5-3 — 기본 애드온이 노드그룹의 `tags.Name` 을 덮어쓴다
+  > 애드온은 노드그룹 태그를 건드리지 않는다. tags.Name 함정은 Launch Template TagSpecifications 쪽 이야기다.
+- [x] mark 5-4 — 최신 eksctl 이 kube-system 에 기본 설치하는 metrics-server 에 nodeSelector 가 없어 app 노드로 스케줄될 수 있다
 - [ ] 아무것도 깨지지 않는다 — 설치 시간을 줄이는 최적화 옵션일 뿐이다
   > Deployment 형 애드온은 노드를 고정하지 않으면 아무 노드로나 간다. 자동 설치는 그 통제를 벗어나므로 5-4 위험이 실재한다.
 
@@ -566,14 +566,14 @@ addons:
 <Quiz title="rendered.yaml 적용 전 검사">
 `cluster.rendered.yaml` 을 eksctl 에 넘기기 전 반드시 해야 하는 검사는?
 
-- [x] `${VAR}` 치환 누락 검사 — `grep '\${' cluster.rendered.yaml`(PowerShell 은 `Select-String '\$\{'`), **출력이 없어야** 정상
 - [ ] `eksctl create cluster --dry-run` — 치환 누락은 dry-run 이 잡아준다
   > dry-run 은 스키마 위주라 미치환 문자열을 그냥 "값"으로 받아들이고 넘어갈 수 있다. 실제로는 생성 도중 엉뚱한 에러로 죽는다.
-- [ ] `kubectl apply --dry-run=client -f cluster.rendered.yaml`
-  > ClusterConfig 는 k8s API 오브젝트가 아니라 eksctl 전용 스키마다. kubectl 은 이 파일을 알지 못한다.
 - [ ] `terraform validate` 로 output 값이 전부 채워졌는지 확인
   > validate 는 HCL 문법만 본다. 렌더링된 YAML 은 Terraform 의 관심사가 아니다.
 
+- [x] `${VAR}` 치환 누락 검사 — `grep '\${' cluster.rendered.yaml`(PowerShell 은 `Select-String '\$\{'`), **출력이 없어야** 정상
+- [ ] `kubectl apply --dry-run=client -f cluster.rendered.yaml`
+  > ClusterConfig 는 k8s API 오브젝트가 아니라 eksctl 전용 스키마다. kubectl 은 이 파일을 알지 못한다.
 `${VAR}` 치환 누락 검사다. 하나라도 남으면 eksctl 이 그 문자열을 리소스 이름으로 그대로 받아 원인을 짚기 어려운 에러를 낸다.
 
 **클러스터 생성에 약 20분**이 걸린다(CloudFormation 스택: 클러스터 → OIDC/SA → 노드그룹 순). 되돌리는 비용이 가장 비싼 실수다.

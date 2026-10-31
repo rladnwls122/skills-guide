@@ -166,65 +166,65 @@ helm show values grafana-community/loki --version 18.7.1 | grep -nE 'port|otlp|s
 <Quiz title="제공 Dockerfile 결함">
 제공된 Dockerfile을 그대로 써서 log-generator를 빌드하면 어떻게 되고, 무엇을 지켜야 하나?
 
-- [x] flask 미설치 + requirements.txt 없음 → Pod가 CrashLoop. 자체 Dockerfile로 빌드하되 제공 `app.py`는 수정 금지(당일 제공본이 고쳐져 있으면 제공본 우선)
 - [ ] `app.py` 상단에 `pip install flask`를 실행하는 코드를 넣어 런타임에 설치한다
   > 제공 `app.py`는 수정 금지 대상이다. 결함은 Dockerfile 쪽에서 고친다.
-- [ ] requirements.txt만 추가하면 제공 Dockerfile이 자동으로 설치한다
-  > 제공 Dockerfile에는 `pip install -r requirements.txt` 단계 자체가 없다. 파일만 추가해도 설치되지 않는다.
 - [ ] 베이스 이미지를 `python:slim`으로 바꾸면 flask가 포함되어 해결된다
 
+- [x] flask 미설치 + requirements.txt 없음 → Pod가 CrashLoop. 자체 Dockerfile로 빌드하되 제공 `app.py`는 수정 금지(당일 제공본이 고쳐져 있으면 제공본 우선)
+- [ ] requirements.txt만 추가하면 제공 Dockerfile이 자동으로 설치한다
+  > 제공 Dockerfile에는 `pip install -r requirements.txt` 단계 자체가 없다. 파일만 추가해도 설치되지 않는다.
 고치는 곳과 건드리면 안 되는 곳을 구분하는 문제다. Dockerfile은 자체 작성, `app.py`는 원본 유지.
 </Quiz>
 
 <Quiz title="k8s_namespace_name 라벨의 출처">
 채점 LogQL이 `{k8s_namespace_name="o11y"}`로 조회된다. 이 라벨이 존재하게 만드는 메커니즘을 **모두** 고르시오.
 
-- [x] filelog의 `container` 파서가 파일 경로에서 `k8s.namespace.name`을 리소스 속성으로 추출
+- [ ] Grafana 데이터소스의 derived field가 점(`.`)을 밑줄(`_`)로 치환
+
 - [x] Loki 3.x의 OTLP 인제스트가 그 리소스 속성을 인덱스 라벨 `k8s_namespace_name`으로 자동 승격
 - [ ] otlphttp exporter의 `resource_to_telemetry_conversion`이 리소스 속성을 라벨로 변환
   > Loki 쪽 자동 승격으로 이미 해결된다. 이 옵션은 메트릭 파이프라인의 설정이다.
-- [ ] Grafana 데이터소스의 derived field가 점(`.`)을 밑줄(`_`)로 치환
-
+- [x] filelog의 `container` 파서가 파일 경로에서 `k8s.namespace.name`을 리소스 속성으로 추출
 OTel 쪽 추출과 Loki 쪽 승격의 **합작**이다. 둘 중 하나라도 빠지면 채점 쿼리의 라벨 셀렉터가 아무것도 반환하지 않는다.
 </Quiz>
 
 <Quiz title="본문에 파서를 더 얹으면">
 OTel filelog 파이프라인에서 로그 본문(body)에 파서를 하나 더 얹어 필드를 추출하면 왜 위험한가?
 
-- [x] body의 원본 JSON 한 줄이 변형되면 채점 쿼리의 `| json` 파싱이 깨진다 — `container` 파서 외 본문 변형 금지
 - [ ] 추출된 필드가 Loki에서 인덱스 라벨로 자동 승격돼 카디널리티(라벨이 가질 수 있는 서로 다른 값의 가짓수)가 폭발한다
   > 자동 승격 대상은 **리소스 속성**이다. 로그 속성은 승격되지 않으므로 카디널리티 문제는 생기지 않는다. 진짜 문제는 body 훼손이다.
 - [ ] 파서 체인이 길어져 콜렉터 CPU가 올라가 로그가 유실된다
   > 성능 이슈일 수는 있으나 채점이 깨지는 이유는 아니다.
 - [ ] level 값이 소문자로 정규화되어 `level="ERROR"` 조건에 걸리지 않는다
 
+- [x] body의 원본 JSON 한 줄이 변형되면 채점 쿼리의 `| json` 파싱이 깨진다 — `container` 파서 외 본문 변형 금지
 `container` 파서는 CRI 포맷(타임스탬프/스트림 접두어)을 벗기고 파일 경로에서 k8s 메타데이터를 뽑는 데까지만 관여하고, **body는 앱이 찍은 원본 JSON 한 줄 그대로** 남긴다. Loki에서 `| json`이 그 원본을 파싱한다.
 </Quiz>
 
 <Quiz title="TargetGroupBinding apply 실패">
 `TargetGroupBinding` apply가 실패한다. 순서 관점에서 원인은?
 
-- [x] TGB는 LBC(AWS Load Balancer Controller)가 제공하는 CRD라서, LBC helm 설치 전에는 CRD가 없어 apply할 수 없다
 - [ ] terraform이 ALB/TG를 아직 만들지 않아 참조할 ARN이 없어서
   > 그것도 순서 문제지만 오류 메시지가 다르다. `no matches for kind "TargetGroupBinding"`은 리소스 타입 자체가 없다는 뜻, 즉 CRD 부재 신호다.
-- [ ] 대상 Pod가 아직 Ready가 아니라 타깃 등록이 되지 않아서
-  > TGB apply 자체는 성공하고, 타깃이 unhealthy로 남을 뿐이다.
 - [ ] TGB는 클러스터 스코프 리소스라 네임스페이스를 지정하면 실패해서
 
+- [ ] 대상 Pod가 아직 Ready가 아니라 타깃 등록이 되지 않아서
+  > TGB apply 자체는 성공하고, 타깃이 unhealthy로 남을 뿐이다.
+- [x] TGB는 LBC(AWS Load Balancer Controller)가 제공하는 CRD라서, LBC helm 설치 전에는 CRD가 없어 apply할 수 없다
 순서 의존: LBC helm 설치 → CRD 등록 → TGB apply. ALB/TG 이름이 채점 대상이므로 LBC Ingress(이름 지정 불가) 대신 terraform ALB + TGB 패턴을 쓰는데, 그 대가가 이 순서 제약이다.
 </Quiz>
 
 <Quiz title="No Data 패널">
 Grafana Log Overview의 패널 하나가 No Data다. 코드 수정 없이 통과시키는 방법은?
 
-- [x] 해당 레벨로 `/log?level=...`를 호출해 데이터를 만든 뒤 채점받는다 — info/warn/error 3레벨을 모두 미리 호출해 두는 것이 정석
 - [ ] 패널의 시간 범위를 24시간으로 늘려 과거 데이터를 잡는다
   > 그 레벨의 로그가 애초에 생성된 적이 없으면 범위를 늘려도 없다.
-- [ ] legendFormat을 `{level="ERROR"}` 형태로 바꾸면 표시된다
-  > 범례 형식은 No Data와 무관하고, 오히려 그 형태로 뜨면 그 자체가 오답이다. legendFormat은 `{{level}}`을 유지한다.
 - [ ] No Data 패널을 삭제해 감점을 피한다
   > Log Overview는 3패널 요구다. 삭제하면 패널 누락으로 오답이다.
 
+- [ ] legendFormat을 `{level="ERROR"}` 형태로 바꾸면 표시된다
+  > 범례 형식은 No Data와 무관하고, 오히려 그 형태로 뜨면 그 자체가 오답이다. legendFormat은 `{{level}}`을 유지한다.
+- [x] 해당 레벨로 `/log?level=...`를 호출해 데이터를 만든 뒤 채점받는다 — info/warn/error 3레벨을 모두 미리 호출해 두는 것이 정석
 Grafana는 웹 수동 채점 항목이 있고, **No Data 패널이 하나라도 있으면 오답**이다. 채점 전 3레벨 데이터를 미리 만들어 두고, ALB 타깃이 healthy인지도 `curl /healthz`로 확인한다. level 값은 **대문자 ERROR**다.
 </Quiz>
 

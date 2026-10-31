@@ -355,13 +355,13 @@ Alertmanager 도 같은 구조다. set-02 가 끈 이유는 "필요 없어서"�
 <Quiz title="/metrics 없는 앱의 알람 소스">
 제공 앱 바이너리가 `/metrics`를 노출하지 않는데 HighErrorRate 알람(에러율 5%/1m)을 만들어야 한다. 데이터 소스를 어떻게 확보하나?
 
-- [x] Fluent Bit `log_to_metrics` 필터로 액세스 로그에서 requests/errors counter를 만들고, `prometheus_exporter` OUTPUT(:2021)을 PodMonitor로 Prometheus에 수집시킨다
-- [ ] Grafana cloudwatch datasource로 CloudWatch Logs Insights 쿼리를 알람 조건에 건다
-  > Grafana 관리형 알림이라면 CloudWatch datasource 로도 평가할 수 있다. 다만 이 과제의 채점 대상은 **PrometheusRule(PromQL)** 이고, Grafana datasource 는 그 룰의 입력이 되지 못한다.
-- [ ] kube-state-metrics가 이미 HTTP 상태코드별 카운터를 노출하므로 그대로 쓴다
-  > kube-state-metrics는 Deployment/Pod 같은 k8s 오브젝트 상태만 노출한다. 애플리케이션 HTTP 코드는 없다.
 - [ ] 앱 컨테이너에 exporter 사이드카를 붙이고 앱 코드에 `/metrics` 핸들러를 추가한다
 
+- [ ] Grafana cloudwatch datasource로 CloudWatch Logs Insights 쿼리를 알람 조건에 건다
+  > Grafana 관리형 알림이라면 CloudWatch datasource 로도 평가할 수 있다. 다만 이 과제의 채점 대상은 **PrometheusRule(PromQL)** 이고, Grafana datasource 는 그 룰의 입력이 되지 못한다.
+- [x] Fluent Bit `log_to_metrics` 필터로 액세스 로그에서 requests/errors counter를 만들고, `prometheus_exporter` OUTPUT(:2021)을 PodMonitor로 Prometheus에 수집시킨다
+- [ ] kube-state-metrics가 이미 HTTP 상태코드별 카운터를 노출하므로 그대로 쓴다
+  > kube-state-metrics는 Deployment/Pod 같은 k8s 오브젝트 상태만 노출한다. 애플리케이션 HTTP 코드는 없다.
 Fluent Bit `log_to_metrics` 필터로 액세스 로그에서 requests/errors counter를 생성 → `prometheus_exporter :2021` → PodMonitor로 Prometheus에 수집시킨다 (set-03 패턴). 제공 바이너리는 수정 대상이 아니므로, 이미 흐르고 있는 stdout 로그를 메트릭으로 바꾸는 것이 유일한 경로다. 이 파이프라인이 끊기면 트래픽 패널과 HighErrorRate/HighLatency 알람이 통째로 No Data가 된다.
 </Quiz>
 
@@ -376,24 +376,24 @@ Fluent Bit `log_to_metrics` 필터로 액세스 로그에서 requests/errors cou
 <Quiz title="Fluent Bit이 workload 노드에 안 뜰 때">
 Fluent Bit DaemonSet이 addon 노드에는 떴는데 workload 노드에는 파드가 하나도 없다. 원인과 수정은?
 
-- [x] workload 노드그룹의 taint(`NoSchedule`) 때문 — DaemonSet 파드 스펙에 `tolerations: [operator: Exists]`를 추가한다
 - [ ] DaemonSet의 `replicas`를 노드 수만큼 올리지 않아서
   > DaemonSet에는 `replicas` 필드가 없다. 스케줄 가능한 노드마다 자동으로 1개씩 뜬다.
-- [ ] fluent-bit SA에 Pod Identity 연결이 빠져서
-  > 인증 누락은 `logs:PutLogEvents` 실패로 나타난다. 파드는 정상적으로 스케줄된다.
 - [ ] hostPath `/var/log` 마운트 권한이 없어서
   > 마운트 실패면 파드가 그 노드에 생성은 되고 Error/CrashLoop 상태가 된다. 파드 자체가 없다는 건 스케줄 단계 문제다.
 
+- [x] workload 노드그룹의 taint(`NoSchedule`) 때문 — DaemonSet 파드 스펙에 `tolerations: [operator: Exists]`를 추가한다
+- [ ] fluent-bit SA에 Pod Identity 연결이 빠져서
+  > 인증 누락은 `logs:PutLogEvents` 실패로 나타난다. 파드는 정상적으로 스케줄된다.
 workload 노드그룹의 taint(`NoSchedule`) 때문이다. DaemonSet 스펙에 `tolerations: [operator: Exists]`를 추가한다. 앱 파드는 workload 노드에 있으므로, 여기에 Fluent Bit이 안 뜨면 앱 로그가 아예 수집되지 않는다 — 대표 실수.
 </Quiz>
 
 <Quiz title="대시보드가 import 되지 않을 때">
 Grafana에 dashboard.json을 ConfigMap으로 넣었는데 대시보드가 보이지 않는다. 점검할 것을 **모두** 고르시오.
 
-- [x] ConfigMap에 `grafana_dashboard=1` 라벨이 붙어 있는가
-- [x] 대시보드 sidecar의 `searchNamespace`가 ConfigMap의 네임스페이스를 포함하는가
 - [ ] kps values의 `additionalDataSources`에 대시보드 uid를 등록했는가
   > `additionalDataSources`는 datasource(prometheus/alertmanager/cloudwatch) 프로비저닝용이다. 대시보드 import 경로와 무관하다.
+- [x] ConfigMap에 `grafana_dashboard=1` 라벨이 붙어 있는가
+- [x] 대시보드 sidecar의 `searchNamespace`가 ConfigMap의 네임스페이스를 포함하는가
 - [ ] Grafana 파드를 재시작했는가
   > sidecar가 라벨을 watch해 실시간으로 import하므로 재시작은 필요 없다. 라벨이 없으면 재시작해도 안 뜬다.
 
@@ -403,13 +403,13 @@ Grafana에 dashboard.json을 ConfigMap으로 넣었는데 대시보드가 보이
 <Quiz title="Go duration을 histogram에 넣기">
 Go 로그가 `duration=136.048µs`, `89.8ms`, `1m30s`처럼 단위 붙은 문자열을 찍는다. 이걸 `log_to_metrics` histogram에 넣으려면?
 
-- [x] histogram `Value_field`는 숫자만 받으므로, Lua에서 단위표(ns/µs/us/ms/s + `NmM.Ns` 패턴 별도)로 초 단위 float(`duration_seconds`)로 변환해 넣는다
-- [ ] parsers.conf의 `Types duration:float`로 캐스팅하면 된다
-  > `136.048µs`는 뒤에 단위 문자가 붙어 있어 float 캐스팅이 실패하거나 단위를 잃은 값이 된다. 문자열 파싱이 먼저다.
 - [ ] Prometheus recording rule로 단위를 나눠 초 단위로 만든다
   > 값이 histogram에 들어가지 못하면 recording rule이 참조할 시계열 자체가 없다. 변환은 Fluent Bit 단계에서 끝나야 한다.
 - [ ] Go의 duration은 이미 초 단위 실수라 그대로 넣어도 된다
 
+- [ ] parsers.conf의 `Types duration:float`로 캐스팅하면 된다
+  > `136.048µs`는 뒤에 단위 문자가 붙어 있어 float 캐스팅이 실패하거나 단위를 잃은 값이 된다. 문자열 파싱이 먼저다.
+- [x] histogram `Value_field`는 숫자만 받으므로, Lua에서 단위표(ns/µs/us/ms/s + `NmM.Ns` 패턴 별도)로 초 단위 float(`duration_seconds`)로 변환해 넣는다
 histogram의 `Value_field`는 숫자여야 하므로 초 단위 float로 변환한다. Lua에서 단위표(ns/µs/us/ms/s)를 두고, `1m30s` 같은 `NmM.Ns` 패턴은 별도로 처리한다(set-03 `prepare.lua`). 결과를 `duration_seconds` 필드로 넣고 histogram의 `Value_field`가 이를 가리킨다.
 </Quiz>
 

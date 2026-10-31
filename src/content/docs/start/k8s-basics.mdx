@@ -299,10 +299,10 @@ kind(Docker 필요)로 1노드 클러스터를 띄워 명령을 손에 익힌다
 <Quiz title="왜 Pod 대신 Deployment인가">
 Pod을 직접 만들지 않고 Deployment로 만드는 이유를 **모두** 고르시오.
 
-- [x] Pod이 죽어도 ReplicaSet이 개수를 유지한다 (자가 복구)
-- [x] 롤링 업데이트와 롤백이 가능하다
 - [ ] Deployment로 만든 Pod만 Service의 라벨 셀렉터에 잡힌다
   > Service는 **라벨만** 본다. 누가 만들었는지는 상관없다 — 라벨만 맞으면 직접 만든 Pod도 그대로 엔드포인트에 등록된다.
+- [x] 롤링 업데이트와 롤백이 가능하다
+- [x] Pod이 죽어도 ReplicaSet이 개수를 유지한다 (자가 복구)
 - [ ] 단독 Pod은 Namespace에 속할 수 없어 `-n` 지정이 불가능하다
   > 모든 Pod은 Namespace에 속한다. Deployment와 무관한 성질이다.
 
@@ -312,11 +312,11 @@ Pod을 직접 만들지 않고 Deployment로 만드는 이유를 **모두** 고�
 <Quiz title="ConfigMap을 고쳤는데 반영이 안 될 때">
 ConfigMap을 수정했는데 Pod의 환경변수가 예전 값 그대로다. 무엇을 해야 하나?
 
-- [x] `kubectl rollout restart deploy/<name>` — Pod을 새로 띄워 값을 다시 주입한다
-- [ ] `kubectl apply -f configmap.yaml` 을 한 번 더 실행한다
-  > ConfigMap 자체는 이미 갱신되어 있다. 문제는 **이미 떠 있는 Pod**이 옛 값을 들고 있다는 것이므로, ConfigMap을 다시 적용해도 아무 변화가 없다.
 - [ ] `kubectl delete pod -l app=<name>` 으로 Pod을 지운다
   > 결과적으로는 새 Pod이 뜨므로 값은 반영된다. 다만 한꺼번에 죽여 순단이 생기고 PDB·롤링 전략을 우회한다 — `rollout restart` 가 순차 교체라 안전하다.
+- [ ] `kubectl apply -f configmap.yaml` 을 한 번 더 실행한다
+  > ConfigMap 자체는 이미 갱신되어 있다. 문제는 **이미 떠 있는 Pod**이 옛 값을 들고 있다는 것이므로, ConfigMap을 다시 적용해도 아무 변화가 없다.
+- [x] `kubectl rollout restart deploy/<name>` — Pod을 새로 띄워 값을 다시 주입한다
 - [ ] ConfigMap에 `reloadOnChange: true` 를 추가한다
 
 **환경변수 주입(`envFrom.configMapRef`)은 Pod 시작 시점에 딱 한 번 일어난다.** 이후 ConfigMap이 바뀌어도 실행 중인 컨테이너의 환경변수는 절대 바뀌지 않는다. `kubectl rollout restart deploy/<name>` 으로 Pod을 순차 재생성해야 한다. (참고: **볼륨 마운트**로 주입한 경우는 파일 내용이 자동 갱신되지만, 앱이 파일을 다시 읽어야 의미가 있다.)
@@ -325,13 +325,13 @@ ConfigMap을 수정했는데 Pod의 환경변수가 예전 값 그대로다. 무
 <Quiz title="대회에서 Ingress를 쓰지 않는 이유">
 대회에서 앱을 외부에 노출할 때 Ingress를 쓰지 않는 이유는?
 
+- [ ] Ingress로는 ALB 이름도 타깃그룹 이름도 지정할 수 없기 때문
+
 - [x] Ingress가 만드는 타깃그룹은 이름을 지정할 수 없어 "타깃그룹 이름 채점"을 통과할 수 없다. 대신 Terraform으로 ALB와 타깃그룹을 만들고 TargetGroupBinding으로 Pod IP를 직접 등록한다
 - [ ] Ingress를 쓰면 AWS Load Balancer Controller를 추가로 설치해야 하는데 그 시간이 아깝기 때문
   > LBC는 **어느 쪽이든 필요하다**. TargetGroupBinding을 읽어 Pod IP를 타깃그룹에 등록해 주는 것도 LBC다. 설치 여부가 아니라 **타깃그룹 이름을 누가 정하느냐**가 갈림길이다.
 - [ ] Ingress는 ClusterIP Service를 백엔드로 쓸 수 없어 NodePort로 바꿔야 하기 때문
   > 타깃 타입 `ip` 모드에서는 ClusterIP Service를 그대로 쓴다. NodePort가 필수였던 것은 `instance` 모드 이야기다.
-- [ ] Ingress로는 ALB 이름도 타깃그룹 이름도 지정할 수 없기 때문
-
 채점이 **타깃그룹의 이름**을 보기 때문이다. ALB 이름은 `alb.ingress.kubernetes.io/load-balancer-name` 애노테이션으로 맞출 수 있지만, 타깃그룹 이름을 정하는 애노테이션은 없다 — 컨트롤러가 `k8s-` 로 시작하는 이름을 자동으로 짓는다. 그래서 ALB와 타깃그룹은 **Terraform으로 이름까지 정해서** 만들고, 그 타깃그룹에 `TargetGroupBinding`으로 Service 뒤의 Pod IP를 직접 등록한다. 흐름: CloudFront → ALB(Terraform) → TargetGroup ← TargetGroupBinding ← Service(ClusterIP) → Pod.
 </Quiz>
 
@@ -339,12 +339,12 @@ ConfigMap을 수정했는데 Pod의 환경변수가 예전 값 그대로다. 무
 Pod이 `CrashLoopBackOff` 다. 가장 먼저 실행할 두 명령은? **모두** 고르시오.
 
 - [x] `kubectl describe pod <pod>` — Events 섹션에서 이미지 pull 실패·스케줄 실패·probe 실패 원인을 본다
-- [x] `kubectl logs <pod> --previous` — 죽기 직전 컨테이너의 로그를 본다
 - [ ] `kubectl exec -it <pod> -- sh` — 컨테이너 안에 들어가 확인한다
   > 컨테이너가 계속 죽는 중이라 붙을 대상이 없다. `error: unable to upgrade connection` 만 보고 시간을 버린다.
 - [ ] `kubectl logs <pod>` — 현재 컨테이너 로그를 본다
   > 재시작 대기(BackOff) 중에는 현재 컨테이너가 없거나 방금 시작된 상태라 로그가 비어 있기 쉽다. 원인은 **죽기 직전** 로그에 있으므로 `--previous` 가 필요하다.
 
+- [x] `kubectl logs <pod> --previous` — 죽기 직전 컨테이너의 로그를 본다
 `describe` 의 **Events 섹션이 디버깅 1순위**다. ImagePullBackOff, Insufficient cpu, Readiness probe failed 가 전부 여기 찍힌다. 그다음이 `logs --previous` — 앱이 왜 스스로 종료했는지는 죽기 직전 로그에만 남는다.
 </Quiz>
 

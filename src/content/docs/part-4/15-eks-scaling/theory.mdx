@@ -157,14 +157,14 @@ helm show values kedacore/keda --version 2.20.1 | grep -nE 'tolerations|nodeSele
 <Quiz title="Node ≥ 2 가 나오는 계산">
 채점 기대 "Max App Nodes ≥ 2"는 어떤 숫자 계산에서 나오나?
 
+- [ ] Multi-AZ 요구가 있어 2개 AZ에 최소 1대씩 배치되기 때문
+  > topologySpreadConstraints를 걸지 않았으므로 AZ 분산이 노드 수를 강제하지 않는다.
+
 - [x] Pod requests 500m × 5 Pod = 2.5 vCPU > t3.medium allocatable ~1.9 vCPU → 한 대에 다 못 들어가 Pending 발생 → Karpenter가 2대째를 프로비저닝
 - [ ] queueLength 5에 메시지 100건이면 목표 Pod가 20이고, 노드당 10 Pod씩 배치되어 2대가 된다
   > 목표 20은 ScaledObject `max 5`에서 캡된다. 실제로 뜨는 Pod는 5개이고, 노드 수는 Pod 수가 아니라 requests 합으로 결정된다.
 - [ ] NodePool에 최소 노드 수 2가 설정돼 있어서
   > Karpenter NodePool에는 최소 노드 수 개념이 없다. 노드는 Pending Pod가 있을 때만 생긴다.
-- [ ] Multi-AZ 요구가 있어 2개 AZ에 최소 1대씩 배치되기 때문
-  > topologySpreadConstraints를 걸지 않았으므로 AZ 분산이 노드 수를 강제하지 않는다.
-
 `requests`를 줄이면 5 Pod가 한 대에 다 들어가 노드가 안 늘어나고, "Node ≥ 2"가 깨진다. 이 채점 항목은 리소스 요청량으로 설계된 것이다.
 </Quiz>
 
@@ -179,14 +179,14 @@ HPA `behavior.scaleDown.stabilizationWindowSeconds`를 명시하지 않으면 �
 <Quiz title="KEDA의 SQS 조회 자격증명">
 KEDA가 `skm-order-queue`의 큐 길이를 폴링할 때 쓰는 자격증명은?
 
+- [ ] 노드 인스턴스 프로파일(노드 역할)에 붙인 SQS 권한
+  > 그 노드의 모든 Pod가 SQS 권한을 얻는다. 최소권한 위반이며 IRSA를 쓰는 이유가 사라진다.
+
 - [x] `identityOwner: operator` — keda-operator SA에 연결된 IRSA(skm-keda-policy)
 - [ ] `identityOwner: workload` — 스케일 대상인 order-processor Pod의 SA IRSA
   > 대표 오개념. 큐를 읽는 주체는 앱 Pod가 아니라 KEDA 오퍼레이터다. workload로 두면 앱 SA에 SQS 권한이 없어 메트릭 조회가 실패하고 스케일아웃이 아예 일어나지 않는다.
 - [ ] TriggerAuthentication에 Secret으로 넣은 액세스 키/시크릿
   > 정적 키는 최소권한·자격증명 관리 양쪽에서 감점 소지다. IRSA로 해결되는 문제다.
-- [ ] 노드 인스턴스 프로파일(노드 역할)에 붙인 SQS 권한
-  > 그 노드의 모든 Pod가 SQS 권한을 얻는다. 최소권한 위반이며 IRSA를 쓰는 이유가 사라진다.
-
 SQS 조회 자격증명은 keda-operator SA의 IRSA에서 가져온다. 앱 Pod의 권한과는 무관하다.
 </Quiz>
 
@@ -312,23 +312,23 @@ set-07에서는 `pollingInterval`을 **지우는 것**이 정답이었다. `minR
 <Quiz title="pollingInterval을 지워야 하나 둬야 하나">
 set-07 module-3에서는 ScaledObject의 `pollingInterval`을 삭제하는 것이 정답이었다. set-08 module-4에서 같은 판단을 적용하면?
 
-- [x] 틀린다 — set-08은 `minReplicaCount: 0`이라 0↔1 활성화를 KEDA 오퍼레이터가 트리거를 직접 폴링해 판단하므로 `pollingInterval`이 실제 감지 지연을 결정하고, 과제지가 15초 이하를 요구한다
-- [ ] 맞는다 — `pollingInterval`은 어떤 경우에도 HPA 폴링에 밀려 무효인 필드다
-  > 무효가 되는 건 `minReplicaCount ≥ 1`일 때뿐이다. min 0에서는 활성화 판단 주체가 HPA가 아니라 KEDA 오퍼레이터다.
-- [ ] 맞는다 — Fargate에서는 폴링 주기 설정이 무시되기 때문
-  > 컨트롤러가 어디에 뜨는지와 폴링 주기는 무관하다.
 - [ ] 둘 다 상관없다 — 채점은 min·max만 보므로
   > 과제지가 `pollingInterval 15초 이하`를 명시하고, 채점 4-4가 ScaledObject YAML 전문을 덤프해 확인한다.
 
+- [ ] 맞는다 — `pollingInterval`은 어떤 경우에도 HPA 폴링에 밀려 무효인 필드다
+  > 무효가 되는 건 `minReplicaCount ≥ 1`일 때뿐이다. min 0에서는 활성화 판단 주체가 HPA가 아니라 KEDA 오퍼레이터다.
+- [x] 틀린다 — set-08은 `minReplicaCount: 0`이라 0↔1 활성화를 KEDA 오퍼레이터가 트리거를 직접 폴링해 판단하므로 `pollingInterval`이 실제 감지 지연을 결정하고, 과제지가 15초 이하를 요구한다
+- [ ] 맞는다 — Fargate에서는 폴링 주기 설정이 무시되기 때문
+  > 컨트롤러가 어디에 뜨는지와 폴링 주기는 무관하다.
 **필드의 유효 여부가 다른 필드 값에 달려 있는 사례**다. 세트가 바뀌면 외운 값이 아니라 `minReplicaCount`가 0인지부터 본다.
 </Quiz>
 
 <Quiz title="컨트롤러를 Fargate에 올리는 이유">
 KEDA·Karpenter를 Fargate 프로파일로 띄우는 구조가 해결하는 문제는?
 
-- [x] Karpenter가 EC2 노드를 만드는 컨트롤러인데 정작 자신이 앉을 노드가 필요하다는 닭-달걀 문제 — Fargate는 Pod마다 컴퓨트를 주므로 관리형 노드그룹 없이 컨트롤러를 띄울 수 있다
 - [ ] Fargate가 EC2보다 저렴해서 컨트롤러 비용을 줄이려는 것
   > 비용 최적화가 아니라 부트스트랩 구조의 문제다. 실제로 상시 구동 워크로드는 Fargate가 더 비싼 경우가 많다.
+- [x] Karpenter가 EC2 노드를 만드는 컨트롤러인데 정작 자신이 앉을 노드가 필요하다는 닭-달걀 문제 — Fargate는 Pod마다 컴퓨트를 주므로 관리형 노드그룹 없이 컨트롤러를 띄울 수 있다
 - [ ] KEDA가 EC2 노드에서는 SQS를 폴링할 수 없기 때문
   > set-07 module-3의 KEDA는 EC2 노드그룹 위에서 정상적으로 폴링한다.
 - [ ] Fargate에서만 IRSA를 쓸 수 있기 때문
@@ -340,14 +340,14 @@ set-07은 같은 문제를 "채점이 1/1/1로 고정한 addon 노드그룹"으�
 <Quiz title="워커 Pod가 계속 Pending이다">
 워커 Deployment에 nodeSelector `karpenter.sh/nodepool=skills-sqs-nodepool, skills-nodepool=event-worker`를 걸었는데 Karpenter가 노드를 띄운 뒤에도 Pod가 Pending이다. 가장 먼저 볼 곳은?
 
-- [x] NodePool의 `spec.template.metadata.labels`에 `skills-nodepool=event-worker`가 선언돼 있는지 — Karpenter가 노드에 붙여 주는 라벨이라 선언이 없으면 셀렉터 두 개 중 하나가 영원히 안 맞는다
 - [ ] Fargate 프로파일 셀렉터에 `skills-sqs` 네임스페이스를 추가해야 한다
   > 반대다. 워커는 Fargate가 아니라 Karpenter EC2 노드에서 돌아야 하므로 `skills-sqs`를 프로파일에 넣으면 요구사항 위반이다.
-- [ ] `karpenter.sh/nodepool` 라벨을 노드에 수동으로 붙인다
-  > 그 라벨은 Karpenter가 자동으로 붙인다. 수동으로 붙이면 다음 노드에서 또 막힌다.
 - [ ] EC2NodeClass의 이름을 nodeSelector 값과 맞춘다
   > nodeSelector가 참조하는 것은 NodePool 이름과 사용자 정의 라벨이지 EC2NodeClass 이름이 아니다.
 
+- [ ] `karpenter.sh/nodepool` 라벨을 노드에 수동으로 붙인다
+  > 그 라벨은 Karpenter가 자동으로 붙인다. 수동으로 붙이면 다음 노드에서 또 막힌다.
+- [x] NodePool의 `spec.template.metadata.labels`에 `skills-nodepool=event-worker`가 선언돼 있는지 — Karpenter가 노드에 붙여 주는 라벨이라 선언이 없으면 셀렉터 두 개 중 하나가 영원히 안 맞는다
 셀렉터가 두 개면 **양쪽 라벨이 모두 노드에 실제로 붙어야** 한다. `karpenter.sh/nodepool`은 Karpenter가 자동으로 붙이지만 `skills-nodepool=event-worker`는 NodePool 템플릿에 직접 선언해야 생긴다.
 </Quiz>
 

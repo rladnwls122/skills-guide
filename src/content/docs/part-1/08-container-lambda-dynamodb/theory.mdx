@@ -686,13 +686,13 @@ environment {
 scratch 베이스가 mark 3-1 과 런타임에서 문제가 되는 이유를 모두 고르라.
 
 - [x] ECR 기본 스캔이 OS 패키지 DB 가 없어 아예 스캔하지 못한다(`UNSUPPORTED_IMAGE`) — **스캔 불가는 스캔 통과가 아니다**
-- [x] CA 번들이 없어 DynamoDB TLS 연결이 실패한다
-- [x] zoneinfo 가 없어 `TZ=Asia/Seoul` 이 무시되고 created_at 이 UTC 로 저장된다
-- [ ] scratch 는 `USER` 지시어를 지원하지 않아 비루트 실행이 불가능하다
-  > `USER 10001` 처럼 UID 숫자로는 쓸 수 있다. 진짜 문제는 `adduser` 를 돌릴 셸·유틸이 없다는 것이지 지시어 지원 여부가 아니다.
 - [ ] 이미지 크기가 커져 ECR 저장 비용과 push 시간이 늘어난다
   > scratch 는 오히려 최소 크기다. 크기가 아니라 "스캔 불가 + 런타임 의존물(CA·zoneinfo) 부재"가 감점 원인이다.
 
+- [x] zoneinfo 가 없어 `TZ=Asia/Seoul` 이 무시되고 created_at 이 UTC 로 저장된다
+- [ ] scratch 는 `USER` 지시어를 지원하지 않아 비루트 실행이 불가능하다
+  > `USER 10001` 처럼 UID 숫자로는 쓸 수 있다. 진짜 문제는 `adduser` 를 돌릴 셸·유틸이 없다는 것이지 지시어 지원 여부가 아니다.
+- [x] CA 번들이 없어 DynamoDB TLS 연결이 실패한다
 scratch 는 세 곳에서 동시에 깨진다.
 
 - ECR 기본 스캔이 scratch 를 스캔하지 못해 스캔 결과 검증이 불가하다.
@@ -718,15 +718,15 @@ ENV TZ=Asia/Seoul
 <Quiz title="ECR 스캔 High 대응과 태그">
 ECR 스캔에서 High 가 나왔다. 옳은 대응을 모두 고르라.
 
-- [x] Dockerfile 에 `RUN apk upgrade --no-cache` 를 추가해 재빌드·재푸시한다
-- [x] push 하는 태그는 요구된 것(`stable` 또는 `v1.0.0`)만 — `latest` 를 함께 push 하지 않는다
-- [ ] `scan_on_push = false` 로 바꿔 스캔을 끈다
-  > mark 3-1 은 scanOnPush **설정 자체**를 검사한다. 끄는 순간 그 항목부터 0점이다.
 - [ ] 베이스를 `scratch` 로 바꾼다 — OS 패키지가 없으면 취약점도 없다
   > 스캔 불가는 스캔 통과가 아니다. ECR Basic 스캔이 결과를 못 내고, CA 번들·zoneinfo 부재로 런타임까지 깨진다.
+- [x] Dockerfile 에 `RUN apk upgrade --no-cache` 를 추가해 재빌드·재푸시한다
+- [ ] `scan_on_push = false` 로 바꿔 스캔을 끈다
+  > mark 3-1 은 scanOnPush **설정 자체**를 검사한다. 끄는 순간 그 항목부터 0점이다.
 - [ ] 태그를 `latest` 로 통일해 재푸시하면 스캔 결과가 갱신된다
   > 태그 통일은 스캔과 무관하고, 요구되지 않은 `latest` 태그는 "불필요 리소스 생성" 감점이다.
 
+- [x] push 하는 태그는 요구된 것(`stable` 또는 `v1.0.0`)만 — `latest` 를 함께 push 하지 않는다
 `RUN apk upgrade --no-cache` 를 추가하고 재빌드·재푸시한다(set-02 README 실측 대응). 태그는 요구된 것만 — 습관적으로 `latest` 를 추가 push 하면 감점이다.
 
 확인 명령:
@@ -744,9 +744,9 @@ aws ecr describe-image-scan-findings --repository-name wskorea26-book-repo --ima
 <Quiz title="데이터베이스 레벨 최신순 조회">
 "콘서트별 예매를 **데이터베이스 레벨** 최신순으로 조회" 요구를 충족하는 설계 + 호출 조합은?
 
-- [x] GSI `concert_name-created_at-index`(HASH `concert_name` + RANGE `created_at`, projection ALL) + `table.query(IndexName=..., KeyConditionExpression=Key("concert_name").eq(...), ScanIndexForward=False)`
 - [ ] `table.scan()` 으로 전부 읽고 파이썬에서 `sorted(items, key=..., reverse=True)`
   > 요구가 "데이터베이스 레벨" 정렬이다. 애플리케이션 정렬은 요구 위반이고, Scan 은 비용·지연도 최악이다.
+- [x] GSI `concert_name-created_at-index`(HASH `concert_name` + RANGE `created_at`, projection ALL) + `table.query(IndexName=..., KeyConditionExpression=Key("concert_name").eq(...), ScanIndexForward=False)`
 - [ ] 같은 GSI 를 쓰되 `ScanIndexForward=True`
   > `True` 는 RANGE 키 오름차순(= 과거순)이다. 최신순은 `False`.
 - [ ] 테이블 PK 를 `concert_name`, SK 를 `created_at` 으로 바꾸고 테이블을 직접 Query
@@ -763,14 +763,14 @@ GSI `concert_name-created_at-index`(HASH `concert_name` + RANGE `created_at`, pr
 <Quiz title="json.dumps 옵션 함정">
 Lambda 에서 `json.dumps(body)` 를 옵션 없이 쓰면 mark 9-2 가 실패할 수 있다. 실패 원인을 모두 고르라.
 
-- [x] `ensure_ascii` 기본값이 True 라 비ASCII 가 `\uXXXX` 로 이스케이프되어 기대 출력(`akaね`)과 불일치한다
-- [x] DynamoDB 가 돌려준 dict 의 키 순서를 기대 출력 순서로 재조립하지 않으면 문자열 비교가 깨진다
-- [x] Decimal 값이 그대로 남아 있으면 직렬화가 `TypeError` 로 실패한다 — `default=str` 이 필요하다
-- [ ] `indent=2` 를 주지 않으면 한 줄로 나와 비교에 실패한다
-  > 기대 출력도 한 줄 JSON 이다. 오히려 `indent` 를 주면 불일치가 된다.
 - [ ] `json.dumps` 결과를 `.encode()` 하지 않으면 ALB 가 본문을 깨뜨린다
   > `body` 는 문자열로 반환하면 되고, `isBase64Encoded: False` 만 맞으면 ALB 통합이 알아서 처리한다.
 
+- [ ] `indent=2` 를 주지 않으면 한 줄로 나와 비교에 실패한다
+  > 기대 출력도 한 줄 JSON 이다. 오히려 `indent` 를 주면 불일치가 된다.
+- [x] `ensure_ascii` 기본값이 True 라 비ASCII 가 `\uXXXX` 로 이스케이프되어 기대 출력(`akaね`)과 불일치한다
+- [x] Decimal 값이 그대로 남아 있으면 직렬화가 `TypeError` 로 실패한다 — `default=str` 이 필요하다
+- [x] DynamoDB 가 돌려준 dict 의 키 순서를 기대 출력 순서로 재조립하지 않으면 문자열 비교가 깨진다
 `json.dumps(body, ensure_ascii=False, default=str)` + 키 순서 재조립이 정답 세트다.
 
 ```python
@@ -798,14 +798,14 @@ item[field] = Decimal(str(score))                              # 저장 시에�
 <Quiz title="테이블 설계를 어디서 시작하나">
 "앱 동작에 맞게 테이블을 설계하라"는 요구를 받았다. 무엇부터 정하나?
 
-- [x] 앱이 무엇을 묻는지 — 질의 목록을 먼저 적고 키를 거기에 맞춘다
 - [ ] 저장할 데이터의 구조
   > 관계형의 순서다. DynamoDB 는 질의를 나중에 자유롭게 쓸 수 없어 순서가 반대다.
-- [ ] 예상 트래픽에 맞는 용량 모드
-  > 키가 정해진 뒤의 문제다. 대회에서는 온디맨드로 두고 넘어간다.
 - [ ] 필요할 만한 GSI 를 미리 두세 개
   > 기본 키로 답할 수 없는 질의가 나온 뒤에 만드는 것이 GSI 다.
 
+- [x] 앱이 무엇을 묻는지 — 질의 목록을 먼저 적고 키를 거기에 맞춘다
+- [ ] 예상 트래픽에 맞는 용량 모드
+  > 키가 정해진 뒤의 문제다. 대회에서는 온디맨드로 두고 넘어간다.
 **접근 패턴이 먼저다.** 질의를 적고(1) 표로 정리해(2) 가장 잦은 것을 기본 키로 만든 뒤(3) 남은 것을 GSI 로 만든다(4). 운영 지표에 `Scan` 이 보이면 그 축의 인덱스가 없다는 신호다.
 
 질의 목록은 문제지에만 있지 않다 — 바이너리의 라우트와 환경변수가 설계를 바꾼다([Go 앱 읽기](/start/go-app-basics/#3-2-라우트를-뽑는다)).
@@ -814,14 +814,14 @@ item[field] = Decimal(str(score))                              # 저장 시에�
 <Quiz title="GSI 프로젝션과 응답 시간">
 응답 시간이 채점 항목인 조회 API 에 GSI 를 붙인다. 프로젝션을 `KEYS_ONLY` 로 두면 어떻게 되나?
 
-- [x] 인덱스에서 키만 나와, 본문을 얻으려 기본 테이블을 한 번 더 읽는다
-- [ ] 조회가 실패한다
-  > 실패하지 않는다. 느려질 뿐이라 오히려 찾기 어렵다.
-- [ ] 저장 비용이 늘어난다
-  > 반대다. 담는 것이 적어 저장은 가장 싸다. 대가로 내는 것은 시간이다.
 - [ ] 정렬 키를 쓸 수 없게 된다
   > 키는 어느 프로젝션에서든 인덱스에 들어 있다.
 
+- [x] 인덱스에서 키만 나와, 본문을 얻으려 기본 테이블을 한 번 더 읽는다
+- [ ] 저장 비용이 늘어난다
+  > 반대다. 담는 것이 적어 저장은 가장 싸다. 대가로 내는 것은 시간이다.
+- [ ] 조회가 실패한다
+  > 실패하지 않는다. 느려질 뿐이라 오히려 찾기 어렵다.
 **읽기가 두 번 간다.** 응답 시간이 걸린 항목이면 `ALL` 로 둔다 — 인덱스만으로 답이 끝난다. 저장이 늘지만 대회 규모에서는 무시할 만하다.
 </Quiz>
 
